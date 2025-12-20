@@ -1,0 +1,239 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+input CreateDriverDto {
+  certifications: [String!]
+  currentVehicleId: String
+  dateOfBirth: String
+  email: String!
+  employeeId: String
+  employmentStatus: String
+  firstName: String!
+  hireDate: String
+  lastName: String!
+  licenseClass: String
+  licenseExpiryDate: String!
+  licenseNumber: String!
+  metadata: JSON
+  phone: String!
+}
+
+input CreateJobDto {
+  customerEmail: String
+  customerName: String!
+  customerPhone: String
+  deliveryAddress: String!
+  deliveryLocation: JSON
+  estimatedDuration: Float
+  notes: String
+  pickupAddress: String!
+  pickupLocation: JSON
+  priority: String
+  quantity: Int
+  specialInstructions: String
+  timeWindowEnd: String!
+  timeWindowStart: String!
+  volume: Float
+  weight: Float
+}
+
+input CreateVehicleDto {
+  capacityVolumeM3: Float
+  capacityWeightKg: Float
+  currentOdometerKm: Float
+  fuelType: String!
+  lastMaintenanceDate: String
+  licensePlate: String!
+  make: String!
+  metadata: JSON
+  model: String!
+  nextMaintenanceKm: Float
+  vehicleType: String!
+  vin: String
+  year: Int!
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+type Driver {
+  averageRating: Float
+  certifications: [String!]!
+  createdAt: DateTime!
+  currentVehicle: Vehicle
+  currentVehicleId: ID
+  dateOfBirth: DateTime
+  email: String!
+  employeeId: String
+  employmentStatus: String!
+  firstName: String!
+  fullName: String!
+  hireDate: DateTime!
+  id: ID!
+  lastName: String!
+  licenseClass: String
+  licenseExpiryDate: DateTime!
+  licenseNumber: String!
+  phone: String!
+  status: String!
+  totalDeliveries: Int!
+  totalDistanceKm: Float!
+  totalHoursDriven: Float!
+  updatedAt: DateTime!
+}
+
+"""
+The `JSON` scalar type represents JSON values as specified by [ECMA-404](http://www.ecma-international.org/publications/files/ECMA-ST/ECMA-404.pdf).
+"""
+scalar JSON
+
+type Job {
+  actualDuration: Float
+  assignedRouteId: String
+  completedAt: DateTime
+  createdAt: DateTime!
+  customerEmail: String
+  customerName: String!
+  customerPhone: String
+  deliveryAddress: String!
+  estimatedDuration: Float
+  id: ID!
+  notes: String
+  pickupAddress: String!
+  priority: String!
+  quantity: Int
+  specialInstructions: String
+  status: String!
+  timeWindowEnd: DateTime!
+  timeWindowStart: DateTime!
+  updatedAt: DateTime!
+  volume: Float
+  weight: Float
+}
+
+type Mutation {
+  createDriver(data: CreateDriverDto!): Driver!
+
+  """Create a new job"""
+  createJob(input: CreateJobDto!): Job!
+
+  """Create a new vehicle"""
+  createVehicle(input: CreateVehicleDto!): Vehicle!
+  deleteDriver(id: String!): Boolean!
+
+  """Delete a job (soft delete)"""
+  deleteJob(id: ID!): Boolean!
+
+  """Delete a vehicle (soft delete)"""
+  deleteVehicle(id: ID!): Boolean!
+  updateDriver(data: UpdateDriverDto!, id: String!): Driver!
+
+  """Update a job"""
+  updateJob(id: ID!, input: UpdateJobDto!): Job!
+
+  """Update a vehicle"""
+  updateVehicle(id: ID!, input: UpdateVehicleDto!): Vehicle!
+}
+
+type Query {
+  driver(id: String!): Driver!
+  drivers: [Driver!]!
+
+  """Get a single job by ID"""
+  job(id: ID!): Job!
+
+  """Get all jobs, optionally filtered by status or priority"""
+  jobs(
+    """Filter by priority"""
+    priority: String
+
+    """Filter by status"""
+    status: String
+  ): [Job!]!
+
+  """Get all pending jobs"""
+  pendingJobs: [Job!]!
+
+  """Get a single vehicle by ID"""
+  vehicle(id: ID!): Vehicle!
+
+  """Get all vehicles, optionally filtered by status or type"""
+  vehicles(
+    """Filter by status"""
+    status: String
+
+    """Filter by vehicle type"""
+    type: String
+  ): [Vehicle!]!
+
+  """Get vehicles that need maintenance"""
+  vehiclesNeedingMaintenance: [Vehicle!]!
+}
+
+input UpdateDriverDto {
+  averageRating: Float
+  status: String
+  totalDeliveries: Float
+  totalDistanceKm: Float
+  totalHoursDriven: Float
+}
+
+input UpdateJobDto {
+  completedAt: String
+  customerEmail: String
+  customerName: String
+  customerPhone: String
+  deliveryAddress: String
+  deliveryLocation: JSON
+  estimatedDuration: Float
+  notes: String
+  pickupAddress: String
+  pickupLocation: JSON
+  priority: String
+  quantity: Int
+  specialInstructions: String
+  status: String
+  timeWindowEnd: String
+  timeWindowStart: String
+  volume: Float
+  weight: Float
+}
+
+input UpdateVehicleDto {
+  capacityVolumeM3: Float
+  capacityWeightKg: Float
+  currentOdometerKm: Float
+  fuelType: String
+  lastMaintenanceDate: String
+  licensePlate: String
+  make: String
+  metadata: JSON
+  model: String
+  nextMaintenanceKm: Float
+  status: String
+  vehicleType: String
+  vin: String
+  year: Int
+}
+
+type Vehicle {
+  capacityVolumeM3: Float
+  capacityWeightKg: Float
+  createdAt: DateTime!
+  currentOdometerKm: Float!
+  fuelType: String!
+  id: ID!
+  lastMaintenanceDate: DateTime
+  licensePlate: String!
+  make: String!
+  model: String!
+  nextMaintenanceKm: Float
+  status: String!
+  updatedAt: DateTime!
+  vehicleType: String!
+  vin: String
+  year: Int!
+}

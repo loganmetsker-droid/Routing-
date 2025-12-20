@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: timescale/timescaledb:latest-pg15
+    container_name: routing-dispatch-db-dev
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: routing_dispatch
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: routing-dispatch-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data_dev:/data
+
+  routing-service:
+    build:
+      context: ../../routing-service
+      dockerfile: Dockerfile
+    container_name: routing-dispatch-routing-service-dev
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/routing_dispatch
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ../../routing-service/app:/app/app
+    restart: unless-stopped
+
+volumes:
+  postgres_data_dev:
+  redis_data_dev:
