@@ -180,10 +180,10 @@ export default function DriversPage() {
             <TableBody>
               {data?.drivers?.length > 0 ? (
                 data.drivers.map((driver: any) => (
-                  <motion.tr
+                  <TableRow
                     key={driver.id}
+                    component={motion.tr}
                     variants={item}
-                    component={TableRow}
                     sx={{
                       '&:hover': { bgcolor: 'action.hover' },
                       transition: 'background-color 0.2s',
@@ -227,7 +227,7 @@ export default function DriversPage() {
                         <Edit fontSize="small" />
                       </IconButton>
                     </TableCell>
-                  </motion.tr>
+                  </TableRow>
                 ))
               ) : (
                 <TableRow>
