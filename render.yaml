@@ -3,7 +3,7 @@ services:
     name: routing-dispatch-backend
     runtime: node
     rootDir: backend
-    buildCommand: npm ci && npm run build
+    buildCommand: npm install --legacy-peer-deps && npm run build
     startCommand: npm run start:prod
     envVars:
       - key: NODE_ENV
