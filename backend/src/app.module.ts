@@ -54,18 +54,20 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
       useFactory: graphqlConfig,
     }),
 
-    // BullMQ - Job Queue Management
-    BullModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        redis: {
-          host: configService.get('REDIS_HOST', 'localhost'),
-          port: configService.get('REDIS_PORT', 6379),
-          password: configService.get('REDIS_PASSWORD'),
-        },
-      }),
-    }),
+    // BullMQ - Job Queue Management (optional - disable if no Redis)
+    ...(process.env.REDIS_HOST ? [
+      BullModule.forRootAsync({
+        imports: [ConfigModule],
+        inject: [ConfigService],
+        useFactory: (configService: ConfigService) => ({
+          redis: {
+            host: configService.get('REDIS_HOST', 'localhost'),
+            port: configService.get('REDIS_PORT', 6379),
+            password: configService.get('REDIS_PASSWORD'),
+          },
+        }),
+      })
+    ] : []),
 
     // Health checks and monitoring
     TerminusModule,
