@@ -19,7 +19,6 @@ COPY package*.json ./
 RUN npm install --legacy-peer-deps
 COPY . .
 RUN npm run build
-RUN npm prune --production
 
 # Production stage
 FROM base AS production
