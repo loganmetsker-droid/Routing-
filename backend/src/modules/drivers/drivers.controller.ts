@@ -24,10 +24,12 @@ import { Driver } from './entities/driver.entity';
 import { Shift } from './entities/shift.entity';
 import { CreateDriverDto } from './dto/create-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
+import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('drivers')
 @Controller('api/drivers')
 @ApiBearerAuth()
+@Public()
 export class DriversController {
   constructor(private readonly driversService: DriversService) {}
 

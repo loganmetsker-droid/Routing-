@@ -148,6 +148,7 @@ export default function DriversPage() {
           color="primary"
           startIcon={<Add />}
           onClick={() => handleOpenDialog()}
+          data-testid="add-driver-button"
           sx={{
             textTransform: 'none',
             borderRadius: 2,
@@ -268,6 +269,7 @@ export default function DriversPage() {
           <Box sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
             <TextField
               label="First Name"
+              name="firstName"
               value={formData.firstName}
               onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
               fullWidth
@@ -275,6 +277,7 @@ export default function DriversPage() {
             />
             <TextField
               label="Last Name"
+              name="lastName"
               value={formData.lastName}
               onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
               fullWidth
@@ -282,6 +285,7 @@ export default function DriversPage() {
             />
             <TextField
               label="Email"
+              name="email"
               type="email"
               value={formData.email}
               onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -290,6 +294,7 @@ export default function DriversPage() {
             />
             <TextField
               label="Phone"
+              name="phone"
               value={formData.phone}
               onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
               fullWidth
@@ -297,6 +302,7 @@ export default function DriversPage() {
             />
             <TextField
               label="License Number"
+              name="licenseNumber"
               value={formData.licenseNumber}
               onChange={(e) => setFormData({ ...formData, licenseNumber: e.target.value })}
               fullWidth
@@ -304,6 +310,7 @@ export default function DriversPage() {
             />
             <TextField
               label="Status"
+              name="status"
               select
               value={formData.status}
               onChange={(e) => setFormData({ ...formData, status: e.target.value })}
@@ -323,6 +330,7 @@ export default function DriversPage() {
             onClick={handleSubmit}
             variant="contained"
             disabled={submitting}
+            data-testid="save-driver-button"
             startIcon={submitting ? <CircularProgress size={16} /> : null}
           >
             {submitting ? 'Saving...' : editingDriver ? 'Update' : 'Create'}

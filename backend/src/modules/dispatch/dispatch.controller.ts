@@ -24,10 +24,12 @@ import { DispatchWorker } from './dispatch.worker';
 import { Route, RouteStatus } from './entities/route.entity';
 import { CreateRouteDto } from './dto/create-route.dto';
 import { UpdateRouteDto } from './dto/update-route.dto';
+import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('dispatch')
 @Controller('api/dispatch')
 @ApiBearerAuth()
+@Public()
 export class DispatchController {
   constructor(
     private readonly dispatchService: DispatchService,

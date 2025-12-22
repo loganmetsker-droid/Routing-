@@ -247,7 +247,12 @@ export default function Dashboard() {
                       <Typography color="textSecondary" variant="body2" gutterBottom>
                         {stat.title}
                       </Typography>
-                      <Typography variant="h4" fontWeight={700} sx={{ color: stat.color }}>
+                      <Typography
+                        variant="h4"
+                        fontWeight={700}
+                        sx={{ color: stat.color }}
+                        data-testid={`${stat.title.toLowerCase().replace(/ /g, '-')}-count`}
+                      >
                         {isLoading ? '...' : stat.value}
                         <Typography component="span" variant="body1" color="textSecondary" sx={{ ml: 1 }}>
                           / {stat.total}

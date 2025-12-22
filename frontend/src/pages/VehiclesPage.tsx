@@ -184,6 +184,7 @@ export default function VehiclesPage() {
           color="primary"
           startIcon={<Add />}
           onClick={() => handleOpenDialog()}
+          data-testid="add-vehicle-button"
           sx={{ textTransform: 'none', borderRadius: 2 }}
         >
           Add Vehicle
@@ -331,6 +332,7 @@ export default function VehiclesPage() {
               <Grid item xs={12} sm={6}>
                 <TextField
                   label="Make"
+                  name="make"
                   value={formData.make}
                   onChange={(e) => setFormData({ ...formData, make: e.target.value })}
                   fullWidth
@@ -340,6 +342,7 @@ export default function VehiclesPage() {
               <Grid item xs={12} sm={6}>
                 <TextField
                   label="Model"
+                  name="model"
                   value={formData.model}
                   onChange={(e) => setFormData({ ...formData, model: e.target.value })}
                   fullWidth
@@ -349,6 +352,7 @@ export default function VehiclesPage() {
               <Grid item xs={12} sm={6}>
                 <TextField
                   label="Year"
+                  name="year"
                   type="number"
                   value={formData.year}
                   onChange={(e) => setFormData({ ...formData, year: parseInt(e.target.value) })}
@@ -359,6 +363,7 @@ export default function VehiclesPage() {
               <Grid item xs={12} sm={6}>
                 <TextField
                   label="License Plate"
+                  name="licensePlate"
                   value={formData.licensePlate}
                   onChange={(e) => setFormData({ ...formData, licensePlate: e.target.value })}
                   fullWidth
@@ -434,6 +439,7 @@ export default function VehiclesPage() {
             onClick={handleSubmit}
             variant="contained"
             disabled={submitting}
+            data-testid="save-vehicle-button"
             startIcon={submitting ? <CircularProgress size={16} /> : null}
           >
             {submitting ? 'Saving...' : editingVehicle ? 'Update' : 'Create'}

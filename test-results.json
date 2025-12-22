@@ -1,0 +1,1678 @@
+{
+  "config": {
+    "configFile": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\playwright.config.ts",
+    "rootDir": "C:/Users/lmets/OneDrive/Desktop/my-awesome-project/e2e-tests",
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "reporter": [
+      [
+        "html",
+        null
+      ],
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "test-results.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "quiet": false,
+    "projects": [
+      {
+        "outputDir": "C:/Users/lmets/OneDrive/Desktop/my-awesome-project/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium",
+        "name": "chromium",
+        "testDir": "C:/Users/lmets/OneDrive/Desktop/my-awesome-project/e2e-tests",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      },
+      {
+        "outputDir": "C:/Users/lmets/OneDrive/Desktop/my-awesome-project/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "firefox",
+        "name": "firefox",
+        "testDir": "C:/Users/lmets/OneDrive/Desktop/my-awesome-project/e2e-tests",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      },
+      {
+        "outputDir": "C:/Users/lmets/OneDrive/Desktop/my-awesome-project/test-results",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "webkit",
+        "name": "webkit",
+        "testDir": "C:/Users/lmets/OneDrive/Desktop/my-awesome-project/e2e-tests",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.57.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "full-app-test.spec.ts",
+      "file": "full-app-test.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Full App E2E Tests",
+          "file": "full-app-test.spec.ts",
+          "line": 5,
+          "column": 6,
+          "specs": [
+            {
+              "title": "1. Add a new driver and verify it persists",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 21076,
+                      "error": {
+                        "message": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"name\"]')\u001b[22m\n",
+                        "stack": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"name\"]')\u001b[22m\n\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:25:16",
+                        "location": {
+                          "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                          "column": 16,
+                          "line": 25
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 23 |\u001b[39m     \u001b[36mconst\u001b[39m driverLicense \u001b[33m=\u001b[39m \u001b[32m`DL${Date.now()}`\u001b[39m\u001b[33m;\u001b[39m\n \u001b[90m 24 |\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 25 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"name\"]'\u001b[39m\u001b[33m,\u001b[39m driverName)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 26 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"email\"]'\u001b[39m\u001b[33m,\u001b[39m driverEmail)\u001b[33m;\u001b[39m\n \u001b[90m 27 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"phone\"]'\u001b[39m\u001b[33m,\u001b[39m driverPhone)\u001b[33m;\u001b[39m\n \u001b[90m 28 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"licenseNumber\"]'\u001b[39m\u001b[33m,\u001b[39m driverLicense)\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                            "column": 16,
+                            "line": 25
+                          },
+                          "message": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"name\"]')\u001b[22m\n\n\n  23 |     const driverLicense = `DL${Date.now()}`;\n  24 |\n> 25 |     await page.fill('input[name=\"name\"]', driverName);\n     |                ^\n  26 |     await page.fill('input[name=\"email\"]', driverEmail);\n  27 |     await page.fill('input[name=\"phone\"]', driverPhone);\n  28 |     await page.fill('input[name=\"licenseNumber\"]', driverLicense);\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:25:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-22T03:50:53.094Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-88abf-iver-and-verify-it-persists-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-88abf-iver-and-verify-it-persists-chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-88abf-iver-and-verify-it-persists-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                        "column": 16,
+                        "line": 25
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75dd0890e1863fab42bd-b403b707ab0fb89de5d9",
+              "file": "full-app-test.spec.ts",
+              "line": 11,
+              "column": 7
+            },
+            {
+              "title": "2. Add a new vehicle and assign to driver",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 18847,
+                      "error": {
+                        "message": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"licensePlate\"]')\u001b[22m\n",
+                        "stack": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"licensePlate\"]')\u001b[22m\n\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:67:16",
+                        "location": {
+                          "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                          "column": 16,
+                          "line": 67
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 65 |\u001b[39m     \u001b[36mconst\u001b[39m vehicleYear \u001b[33m=\u001b[39m \u001b[32m'2023'\u001b[39m\u001b[33m;\u001b[39m\n \u001b[90m 66 |\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 67 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"licensePlate\"]'\u001b[39m\u001b[33m,\u001b[39m vehiclePlate)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 68 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"make\"]'\u001b[39m\u001b[33m,\u001b[39m vehicleMake)\u001b[33m;\u001b[39m\n \u001b[90m 69 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"model\"]'\u001b[39m\u001b[33m,\u001b[39m vehicleModel)\u001b[33m;\u001b[39m\n \u001b[90m 70 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"year\"]'\u001b[39m\u001b[33m,\u001b[39m vehicleYear)\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                            "column": 16,
+                            "line": 67
+                          },
+                          "message": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"licensePlate\"]')\u001b[22m\n\n\n  65 |     const vehicleYear = '2023';\n  66 |\n> 67 |     await page.fill('input[name=\"licensePlate\"]', vehiclePlate);\n     |                ^\n  68 |     await page.fill('input[name=\"make\"]', vehicleMake);\n  69 |     await page.fill('input[name=\"model\"]', vehicleModel);\n  70 |     await page.fill('input[name=\"year\"]', vehicleYear);\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:67:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-22T03:51:15.559Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-29349-ehicle-and-assign-to-driver-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-29349-ehicle-and-assign-to-driver-chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-29349-ehicle-and-assign-to-driver-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                        "column": 16,
+                        "line": 67
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75dd0890e1863fab42bd-76ec47bce91ff2b8cbb4",
+              "file": "full-app-test.spec.ts",
+              "line": 53,
+              "column": 7
+            },
+            {
+              "title": "3. Add customers with validated addresses",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 18770,
+                      "error": {
+                        "message": "TimeoutError: page.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button:has-text(\"Add\")')\u001b[22m\n",
+                        "stack": "TimeoutError: page.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button:has-text(\"Add\")')\u001b[22m\n\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:91:16",
+                        "location": {
+                          "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                          "column": 16,
+                          "line": 91
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 89 |\u001b[39m\n \u001b[90m 90 |\u001b[39m     \u001b[90m// Click \"Add Customer\" or \"Add Job\"\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 91 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(\u001b[32m'button:has-text(\"Add\")'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 92 |\u001b[39m\n \u001b[90m 93 |\u001b[39m     \u001b[90m// Test multiple real addresses\u001b[39m\n \u001b[90m 94 |\u001b[39m     \u001b[36mconst\u001b[39m customers \u001b[33m=\u001b[39m [\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                            "column": 16,
+                            "line": 91
+                          },
+                          "message": "TimeoutError: page.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button:has-text(\"Add\")')\u001b[22m\n\n\n  89 |\n  90 |     // Click \"Add Customer\" or \"Add Job\"\n> 91 |     await page.click('button:has-text(\"Add\")');\n     |                ^\n  92 |\n  93 |     // Test multiple real addresses\n  94 |     const customers = [\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:91:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-22T03:51:35.253Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-f4cc2-rs-with-validated-addresses-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-f4cc2-rs-with-validated-addresses-chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-f4cc2-rs-with-validated-addresses-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                        "column": 16,
+                        "line": 91
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75dd0890e1863fab42bd-8a7cb8881b05aff1fe43",
+              "file": "full-app-test.spec.ts",
+              "line": 85,
+              "column": 7
+            },
+            {
+              "title": "4. Create and optimize routes",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 18879,
+                      "error": {
+                        "message": "TimeoutError: page.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button:has-text(\"Create Route\")')\u001b[22m\n",
+                        "stack": "TimeoutError: page.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button:has-text(\"Create Route\")')\u001b[22m\n\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:149:16",
+                        "location": {
+                          "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                          "column": 16,
+                          "line": 149
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 147 |\u001b[39m\n \u001b[90m 148 |\u001b[39m     \u001b[90m// Click \"Create Route\" or \"Optimize Route\"\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 149 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(\u001b[32m'button:has-text(\"Create Route\")'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 150 |\u001b[39m\n \u001b[90m 151 |\u001b[39m     \u001b[90m// Fill in route details\u001b[39m\n \u001b[90m 152 |\u001b[39m     \u001b[36mconst\u001b[39m routeName \u001b[33m=\u001b[39m \u001b[32m`Route ${Date.now()}`\u001b[39m\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                            "column": 16,
+                            "line": 149
+                          },
+                          "message": "TimeoutError: page.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button:has-text(\"Create Route\")')\u001b[22m\n\n\n  147 |\n  148 |     // Click \"Create Route\" or \"Optimize Route\"\n> 149 |     await page.click('button:has-text(\"Create Route\")');\n      |                ^\n  150 |\n  151 |     // Fill in route details\n  152 |     const routeName = `Route ${Date.now()}`;\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:149:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-22T03:51:54.823Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-f9689--Create-and-optimize-routes-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-f9689--Create-and-optimize-routes-chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-f9689--Create-and-optimize-routes-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                        "column": 16,
+                        "line": 149
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75dd0890e1863fab42bd-107976689cc8e53bfdc7",
+              "file": "full-app-test.spec.ts",
+              "line": 143,
+              "column": 7
+            },
+            {
+              "title": "5. Assign optimized route to driver",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 4,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 18925,
+                      "error": {
+                        "message": "TimeoutError: locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"route-card\"]').first()\u001b[22m\n",
+                        "stack": "TimeoutError: locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"route-card\"]').first()\u001b[22m\n\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:194:21",
+                        "location": {
+                          "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                          "column": 21,
+                          "line": 194
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 192 |\u001b[39m     \u001b[90m// Find a route that needs assignment\u001b[39m\n \u001b[90m 193 |\u001b[39m     \u001b[36mconst\u001b[39m routeCard \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'[data-testid=\"route-card\"]'\u001b[39m)\u001b[33m.\u001b[39mfirst()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 194 |\u001b[39m     \u001b[36mawait\u001b[39m routeCard\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                     \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 195 |\u001b[39m\n \u001b[90m 196 |\u001b[39m     \u001b[90m// Click \"Assign Driver\" button\u001b[39m\n \u001b[90m 197 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(\u001b[32m'button:has-text(\"Assign Driver\")'\u001b[39m)\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                            "column": 21,
+                            "line": 194
+                          },
+                          "message": "TimeoutError: locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"route-card\"]').first()\u001b[22m\n\n\n  192 |     // Find a route that needs assignment\n  193 |     const routeCard = page.locator('[data-testid=\"route-card\"]').first();\n> 194 |     await routeCard.click();\n      |                     ^\n  195 |\n  196 |     // Click \"Assign Driver\" button\n  197 |     await page.click('button:has-text(\"Assign Driver\")');\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:194:21"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-22T03:52:14.527Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-712aa-n-optimized-route-to-driver-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-712aa-n-optimized-route-to-driver-chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-712aa-n-optimized-route-to-driver-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                        "column": 21,
+                        "line": 194
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75dd0890e1863fab42bd-81591af243c2c82bb705",
+              "file": "full-app-test.spec.ts",
+              "line": 187,
+              "column": 7
+            },
+            {
+              "title": "6. End-to-end workflow: Driver → Vehicle → Customer → Route → Assignment",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 5,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 21245,
+                      "error": {
+                        "message": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"name\"]')\u001b[22m\n",
+                        "stack": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"name\"]')\u001b[22m\n\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:222:16",
+                        "location": {
+                          "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                          "column": 16,
+                          "line": 222
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 220 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(\u001b[32m'text=Drivers'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 221 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(\u001b[32m'button:has-text(\"Add Driver\")'\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 222 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"name\"]'\u001b[39m\u001b[33m,\u001b[39m \u001b[32m`E2E Driver ${timestamp}`\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 223 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"email\"]'\u001b[39m\u001b[33m,\u001b[39m \u001b[32m`e2e${timestamp}@test.com`\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 224 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"phone\"]'\u001b[39m\u001b[33m,\u001b[39m \u001b[32m'555-999-8888'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 225 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"licenseNumber\"]'\u001b[39m\u001b[33m,\u001b[39m \u001b[32m`E2E${timestamp}`\u001b[39m)\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                            "column": 16,
+                            "line": 222
+                          },
+                          "message": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"name\"]')\u001b[22m\n\n\n  220 |     await page.click('text=Drivers');\n  221 |     await page.click('button:has-text(\"Add Driver\")');\n> 222 |     await page.fill('input[name=\"name\"]', `E2E Driver ${timestamp}`);\n      |                ^\n  223 |     await page.fill('input[name=\"email\"]', `e2e${timestamp}@test.com`);\n  224 |     await page.fill('input[name=\"phone\"]', '555-999-8888');\n  225 |     await page.fill('input[name=\"licenseNumber\"]', `E2E${timestamp}`);\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:222:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-22T03:52:34.296Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-be929-stomer-→-Route-→-Assignment-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-be929-stomer-→-Route-→-Assignment-chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-be929-stomer-→-Route-→-Assignment-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                        "column": 16,
+                        "line": 222
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75dd0890e1863fab42bd-e41c6ac53e18935ac7da",
+              "file": "full-app-test.spec.ts",
+              "line": 216,
+              "column": 7
+            },
+            {
+              "title": "7. Verify data persistence after browser refresh",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium",
+                  "projectName": "chromium",
+                  "results": [
+                    {
+                      "workerIndex": 6,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 19335,
+                      "error": {
+                        "message": "TimeoutError: locator.textContent: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"driver-count\"]')\u001b[22m\n",
+                        "stack": "TimeoutError: locator.textContent: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"driver-count\"]')\u001b[22m\n\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:297:82",
+                        "location": {
+                          "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                          "column": 82,
+                          "line": 297
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 295 |\u001b[39m\n \u001b[90m 296 |\u001b[39m     \u001b[90m// Get counts of existing data\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 297 |\u001b[39m     \u001b[36mconst\u001b[39m driverCountBefore \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'[data-testid=\"driver-count\"]'\u001b[39m)\u001b[33m.\u001b[39mtextContent()\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                                                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 298 |\u001b[39m     \u001b[36mconst\u001b[39m vehicleCountBefore \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'[data-testid=\"vehicle-count\"]'\u001b[39m)\u001b[33m.\u001b[39mtextContent()\u001b[33m;\u001b[39m\n \u001b[90m 299 |\u001b[39m     \u001b[36mconst\u001b[39m routeCountBefore \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'[data-testid=\"route-count\"]'\u001b[39m)\u001b[33m.\u001b[39mtextContent()\u001b[33m;\u001b[39m\n \u001b[90m 300 |\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                            "column": 82,
+                            "line": 297
+                          },
+                          "message": "TimeoutError: locator.textContent: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"driver-count\"]')\u001b[22m\n\n\n  295 |\n  296 |     // Get counts of existing data\n> 297 |     const driverCountBefore = await page.locator('[data-testid=\"driver-count\"]').textContent();\n      |                                                                                  ^\n  298 |     const vehicleCountBefore = await page.locator('[data-testid=\"vehicle-count\"]').textContent();\n  299 |     const routeCountBefore = await page.locator('[data-testid=\"route-count\"]').textContent();\n  300 |\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:297:82"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-22T03:52:56.357Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-39e57-tence-after-browser-refresh-chromium\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-39e57-tence-after-browser-refresh-chromium\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-39e57-tence-after-browser-refresh-chromium\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                        "column": 82,
+                        "line": 297
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75dd0890e1863fab42bd-282f749ba5708520baac",
+              "file": "full-app-test.spec.ts",
+              "line": 291,
+              "column": 7
+            },
+            {
+              "title": "1. Add a new driver and verify it persists",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [
+                    {
+                      "workerIndex": 7,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 23906,
+                      "error": {
+                        "message": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"name\"]')\u001b[22m\n",
+                        "stack": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"name\"]')\u001b[22m\n\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:25:16",
+                        "location": {
+                          "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                          "column": 16,
+                          "line": 25
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 23 |\u001b[39m     \u001b[36mconst\u001b[39m driverLicense \u001b[33m=\u001b[39m \u001b[32m`DL${Date.now()}`\u001b[39m\u001b[33m;\u001b[39m\n \u001b[90m 24 |\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 25 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"name\"]'\u001b[39m\u001b[33m,\u001b[39m driverName)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 26 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"email\"]'\u001b[39m\u001b[33m,\u001b[39m driverEmail)\u001b[33m;\u001b[39m\n \u001b[90m 27 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"phone\"]'\u001b[39m\u001b[33m,\u001b[39m driverPhone)\u001b[33m;\u001b[39m\n \u001b[90m 28 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"licenseNumber\"]'\u001b[39m\u001b[33m,\u001b[39m driverLicense)\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                            "column": 16,
+                            "line": 25
+                          },
+                          "message": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"name\"]')\u001b[22m\n\n\n  23 |     const driverLicense = `DL${Date.now()}`;\n  24 |\n> 25 |     await page.fill('input[name=\"name\"]', driverName);\n     |                ^\n  26 |     await page.fill('input[name=\"email\"]', driverEmail);\n  27 |     await page.fill('input[name=\"phone\"]', driverPhone);\n  28 |     await page.fill('input[name=\"licenseNumber\"]', driverLicense);\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:25:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-22T03:53:16.924Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-88abf-iver-and-verify-it-persists-firefox\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-88abf-iver-and-verify-it-persists-firefox\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-88abf-iver-and-verify-it-persists-firefox\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                        "column": 16,
+                        "line": 25
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75dd0890e1863fab42bd-9b75ef7c19abe6027240",
+              "file": "full-app-test.spec.ts",
+              "line": 11,
+              "column": 7
+            },
+            {
+              "title": "2. Add a new vehicle and assign to driver",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [
+                    {
+                      "workerIndex": 8,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 20691,
+                      "error": {
+                        "message": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"licensePlate\"]')\u001b[22m\n",
+                        "stack": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"licensePlate\"]')\u001b[22m\n\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:67:16",
+                        "location": {
+                          "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                          "column": 16,
+                          "line": 67
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 65 |\u001b[39m     \u001b[36mconst\u001b[39m vehicleYear \u001b[33m=\u001b[39m \u001b[32m'2023'\u001b[39m\u001b[33m;\u001b[39m\n \u001b[90m 66 |\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 67 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"licensePlate\"]'\u001b[39m\u001b[33m,\u001b[39m vehiclePlate)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 68 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"make\"]'\u001b[39m\u001b[33m,\u001b[39m vehicleMake)\u001b[33m;\u001b[39m\n \u001b[90m 69 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"model\"]'\u001b[39m\u001b[33m,\u001b[39m vehicleModel)\u001b[33m;\u001b[39m\n \u001b[90m 70 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"year\"]'\u001b[39m\u001b[33m,\u001b[39m vehicleYear)\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                            "column": 16,
+                            "line": 67
+                          },
+                          "message": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"licensePlate\"]')\u001b[22m\n\n\n  65 |     const vehicleYear = '2023';\n  66 |\n> 67 |     await page.fill('input[name=\"licensePlate\"]', vehiclePlate);\n     |                ^\n  68 |     await page.fill('input[name=\"make\"]', vehicleMake);\n  69 |     await page.fill('input[name=\"model\"]', vehicleModel);\n  70 |     await page.fill('input[name=\"year\"]', vehicleYear);\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:67:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-22T03:53:43.328Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-29349-ehicle-and-assign-to-driver-firefox\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-29349-ehicle-and-assign-to-driver-firefox\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-29349-ehicle-and-assign-to-driver-firefox\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                        "column": 16,
+                        "line": 67
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75dd0890e1863fab42bd-08255bf7de19b8043a89",
+              "file": "full-app-test.spec.ts",
+              "line": 53,
+              "column": 7
+            },
+            {
+              "title": "3. Add customers with validated addresses",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [
+                    {
+                      "workerIndex": 9,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 20433,
+                      "error": {
+                        "message": "TimeoutError: page.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button:has-text(\"Add\")')\u001b[22m\n",
+                        "stack": "TimeoutError: page.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button:has-text(\"Add\")')\u001b[22m\n\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:91:16",
+                        "location": {
+                          "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                          "column": 16,
+                          "line": 91
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 89 |\u001b[39m\n \u001b[90m 90 |\u001b[39m     \u001b[90m// Click \"Add Customer\" or \"Add Job\"\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 91 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(\u001b[32m'button:has-text(\"Add\")'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 92 |\u001b[39m\n \u001b[90m 93 |\u001b[39m     \u001b[90m// Test multiple real addresses\u001b[39m\n \u001b[90m 94 |\u001b[39m     \u001b[36mconst\u001b[39m customers \u001b[33m=\u001b[39m [\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                            "column": 16,
+                            "line": 91
+                          },
+                          "message": "TimeoutError: page.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button:has-text(\"Add\")')\u001b[22m\n\n\n  89 |\n  90 |     // Click \"Add Customer\" or \"Add Job\"\n> 91 |     await page.click('button:has-text(\"Add\")');\n     |                ^\n  92 |\n  93 |     // Test multiple real addresses\n  94 |     const customers = [\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:91:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-22T03:54:06.077Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-f4cc2-rs-with-validated-addresses-firefox\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-f4cc2-rs-with-validated-addresses-firefox\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-f4cc2-rs-with-validated-addresses-firefox\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                        "column": 16,
+                        "line": 91
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75dd0890e1863fab42bd-af9eb4366510c1c3eaf5",
+              "file": "full-app-test.spec.ts",
+              "line": 85,
+              "column": 7
+            },
+            {
+              "title": "4. Create and optimize routes",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [
+                    {
+                      "workerIndex": 10,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 19497,
+                      "error": {
+                        "message": "TimeoutError: page.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button:has-text(\"Create Route\")')\u001b[22m\n",
+                        "stack": "TimeoutError: page.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button:has-text(\"Create Route\")')\u001b[22m\n\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:149:16",
+                        "location": {
+                          "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                          "column": 16,
+                          "line": 149
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 147 |\u001b[39m\n \u001b[90m 148 |\u001b[39m     \u001b[90m// Click \"Create Route\" or \"Optimize Route\"\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 149 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(\u001b[32m'button:has-text(\"Create Route\")'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 150 |\u001b[39m\n \u001b[90m 151 |\u001b[39m     \u001b[90m// Fill in route details\u001b[39m\n \u001b[90m 152 |\u001b[39m     \u001b[36mconst\u001b[39m routeName \u001b[33m=\u001b[39m \u001b[32m`Route ${Date.now()}`\u001b[39m\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                            "column": 16,
+                            "line": 149
+                          },
+                          "message": "TimeoutError: page.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button:has-text(\"Create Route\")')\u001b[22m\n\n\n  147 |\n  148 |     // Click \"Create Route\" or \"Optimize Route\"\n> 149 |     await page.click('button:has-text(\"Create Route\")');\n      |                ^\n  150 |\n  151 |     // Fill in route details\n  152 |     const routeName = `Route ${Date.now()}`;\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:149:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-22T03:54:28.041Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-f9689--Create-and-optimize-routes-firefox\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-f9689--Create-and-optimize-routes-firefox\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-f9689--Create-and-optimize-routes-firefox\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                        "column": 16,
+                        "line": 149
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75dd0890e1863fab42bd-e74bda559676a9589131",
+              "file": "full-app-test.spec.ts",
+              "line": 143,
+              "column": 7
+            },
+            {
+              "title": "5. Assign optimized route to driver",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [
+                    {
+                      "workerIndex": 11,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 19476,
+                      "error": {
+                        "message": "TimeoutError: locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"route-card\"]').first()\u001b[22m\n",
+                        "stack": "TimeoutError: locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"route-card\"]').first()\u001b[22m\n\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:194:21",
+                        "location": {
+                          "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                          "column": 21,
+                          "line": 194
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 192 |\u001b[39m     \u001b[90m// Find a route that needs assignment\u001b[39m\n \u001b[90m 193 |\u001b[39m     \u001b[36mconst\u001b[39m routeCard \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'[data-testid=\"route-card\"]'\u001b[39m)\u001b[33m.\u001b[39mfirst()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 194 |\u001b[39m     \u001b[36mawait\u001b[39m routeCard\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                     \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 195 |\u001b[39m\n \u001b[90m 196 |\u001b[39m     \u001b[90m// Click \"Assign Driver\" button\u001b[39m\n \u001b[90m 197 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(\u001b[32m'button:has-text(\"Assign Driver\")'\u001b[39m)\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                            "column": 21,
+                            "line": 194
+                          },
+                          "message": "TimeoutError: locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"route-card\"]').first()\u001b[22m\n\n\n  192 |     // Find a route that needs assignment\n  193 |     const routeCard = page.locator('[data-testid=\"route-card\"]').first();\n> 194 |     await routeCard.click();\n      |                     ^\n  195 |\n  196 |     // Click \"Assign Driver\" button\n  197 |     await page.click('button:has-text(\"Assign Driver\")');\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:194:21"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-22T03:54:48.850Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-712aa-n-optimized-route-to-driver-firefox\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-712aa-n-optimized-route-to-driver-firefox\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-712aa-n-optimized-route-to-driver-firefox\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                        "column": 21,
+                        "line": 194
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75dd0890e1863fab42bd-fa4fd645cceffaa966d1",
+              "file": "full-app-test.spec.ts",
+              "line": 187,
+              "column": 7
+            },
+            {
+              "title": "6. End-to-end workflow: Driver → Vehicle → Customer → Route → Assignment",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [
+                    {
+                      "workerIndex": 12,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 23465,
+                      "error": {
+                        "message": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"name\"]')\u001b[22m\n",
+                        "stack": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"name\"]')\u001b[22m\n\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:222:16",
+                        "location": {
+                          "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                          "column": 16,
+                          "line": 222
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 220 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(\u001b[32m'text=Drivers'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 221 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(\u001b[32m'button:has-text(\"Add Driver\")'\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 222 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"name\"]'\u001b[39m\u001b[33m,\u001b[39m \u001b[32m`E2E Driver ${timestamp}`\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 223 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"email\"]'\u001b[39m\u001b[33m,\u001b[39m \u001b[32m`e2e${timestamp}@test.com`\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 224 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"phone\"]'\u001b[39m\u001b[33m,\u001b[39m \u001b[32m'555-999-8888'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 225 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"licenseNumber\"]'\u001b[39m\u001b[33m,\u001b[39m \u001b[32m`E2E${timestamp}`\u001b[39m)\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                            "column": 16,
+                            "line": 222
+                          },
+                          "message": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"name\"]')\u001b[22m\n\n\n  220 |     await page.click('text=Drivers');\n  221 |     await page.click('button:has-text(\"Add Driver\")');\n> 222 |     await page.fill('input[name=\"name\"]', `E2E Driver ${timestamp}`);\n      |                ^\n  223 |     await page.fill('input[name=\"email\"]', `e2e${timestamp}@test.com`);\n  224 |     await page.fill('input[name=\"phone\"]', '555-999-8888');\n  225 |     await page.fill('input[name=\"licenseNumber\"]', `E2E${timestamp}`);\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:222:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-22T03:55:09.581Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-be929-stomer-→-Route-→-Assignment-firefox\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-be929-stomer-→-Route-→-Assignment-firefox\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-be929-stomer-→-Route-→-Assignment-firefox\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                        "column": 16,
+                        "line": 222
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75dd0890e1863fab42bd-10baa247dfbb470ab244",
+              "file": "full-app-test.spec.ts",
+              "line": 216,
+              "column": 7
+            },
+            {
+              "title": "7. Verify data persistence after browser refresh",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "firefox",
+                  "projectName": "firefox",
+                  "results": [
+                    {
+                      "workerIndex": 13,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 19469,
+                      "error": {
+                        "message": "TimeoutError: locator.textContent: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"driver-count\"]')\u001b[22m\n",
+                        "stack": "TimeoutError: locator.textContent: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"driver-count\"]')\u001b[22m\n\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:297:82",
+                        "location": {
+                          "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                          "column": 82,
+                          "line": 297
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 295 |\u001b[39m\n \u001b[90m 296 |\u001b[39m     \u001b[90m// Get counts of existing data\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 297 |\u001b[39m     \u001b[36mconst\u001b[39m driverCountBefore \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'[data-testid=\"driver-count\"]'\u001b[39m)\u001b[33m.\u001b[39mtextContent()\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                                                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 298 |\u001b[39m     \u001b[36mconst\u001b[39m vehicleCountBefore \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'[data-testid=\"vehicle-count\"]'\u001b[39m)\u001b[33m.\u001b[39mtextContent()\u001b[33m;\u001b[39m\n \u001b[90m 299 |\u001b[39m     \u001b[36mconst\u001b[39m routeCountBefore \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'[data-testid=\"route-count\"]'\u001b[39m)\u001b[33m.\u001b[39mtextContent()\u001b[33m;\u001b[39m\n \u001b[90m 300 |\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                            "column": 82,
+                            "line": 297
+                          },
+                          "message": "TimeoutError: locator.textContent: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"driver-count\"]')\u001b[22m\n\n\n  295 |\n  296 |     // Get counts of existing data\n> 297 |     const driverCountBefore = await page.locator('[data-testid=\"driver-count\"]').textContent();\n      |                                                                                  ^\n  298 |     const vehicleCountBefore = await page.locator('[data-testid=\"vehicle-count\"]').textContent();\n  299 |     const routeCountBefore = await page.locator('[data-testid=\"route-count\"]').textContent();\n  300 |\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:297:82"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-22T03:55:34.315Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-39e57-tence-after-browser-refresh-firefox\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-39e57-tence-after-browser-refresh-firefox\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-39e57-tence-after-browser-refresh-firefox\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                        "column": 82,
+                        "line": 297
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75dd0890e1863fab42bd-620029eccabfceacace0",
+              "file": "full-app-test.spec.ts",
+              "line": 291,
+              "column": 7
+            },
+            {
+              "title": "1. Add a new driver and verify it persists",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "webkit",
+                  "projectName": "webkit",
+                  "results": [
+                    {
+                      "workerIndex": 14,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 18273,
+                      "error": {
+                        "message": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"name\"]')\u001b[22m\n",
+                        "stack": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"name\"]')\u001b[22m\n\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:25:16",
+                        "location": {
+                          "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                          "column": 16,
+                          "line": 25
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 23 |\u001b[39m     \u001b[36mconst\u001b[39m driverLicense \u001b[33m=\u001b[39m \u001b[32m`DL${Date.now()}`\u001b[39m\u001b[33m;\u001b[39m\n \u001b[90m 24 |\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 25 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"name\"]'\u001b[39m\u001b[33m,\u001b[39m driverName)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 26 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"email\"]'\u001b[39m\u001b[33m,\u001b[39m driverEmail)\u001b[33m;\u001b[39m\n \u001b[90m 27 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"phone\"]'\u001b[39m\u001b[33m,\u001b[39m driverPhone)\u001b[33m;\u001b[39m\n \u001b[90m 28 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"licenseNumber\"]'\u001b[39m\u001b[33m,\u001b[39m driverLicense)\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                            "column": 16,
+                            "line": 25
+                          },
+                          "message": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"name\"]')\u001b[22m\n\n\n  23 |     const driverLicense = `DL${Date.now()}`;\n  24 |\n> 25 |     await page.fill('input[name=\"name\"]', driverName);\n     |                ^\n  26 |     await page.fill('input[name=\"email\"]', driverEmail);\n  27 |     await page.fill('input[name=\"phone\"]', driverPhone);\n  28 |     await page.fill('input[name=\"licenseNumber\"]', driverLicense);\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:25:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-22T03:55:55.061Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-88abf-iver-and-verify-it-persists-webkit\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-88abf-iver-and-verify-it-persists-webkit\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-88abf-iver-and-verify-it-persists-webkit\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                        "column": 16,
+                        "line": 25
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75dd0890e1863fab42bd-838380cb6428c7521a78",
+              "file": "full-app-test.spec.ts",
+              "line": 11,
+              "column": 7
+            },
+            {
+              "title": "2. Add a new vehicle and assign to driver",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "webkit",
+                  "projectName": "webkit",
+                  "results": [
+                    {
+                      "workerIndex": 15,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 18023,
+                      "error": {
+                        "message": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"licensePlate\"]')\u001b[22m\n",
+                        "stack": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"licensePlate\"]')\u001b[22m\n\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:67:16",
+                        "location": {
+                          "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                          "column": 16,
+                          "line": 67
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 65 |\u001b[39m     \u001b[36mconst\u001b[39m vehicleYear \u001b[33m=\u001b[39m \u001b[32m'2023'\u001b[39m\u001b[33m;\u001b[39m\n \u001b[90m 66 |\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 67 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"licensePlate\"]'\u001b[39m\u001b[33m,\u001b[39m vehiclePlate)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 68 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"make\"]'\u001b[39m\u001b[33m,\u001b[39m vehicleMake)\u001b[33m;\u001b[39m\n \u001b[90m 69 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"model\"]'\u001b[39m\u001b[33m,\u001b[39m vehicleModel)\u001b[33m;\u001b[39m\n \u001b[90m 70 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"year\"]'\u001b[39m\u001b[33m,\u001b[39m vehicleYear)\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                            "column": 16,
+                            "line": 67
+                          },
+                          "message": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"licensePlate\"]')\u001b[22m\n\n\n  65 |     const vehicleYear = '2023';\n  66 |\n> 67 |     await page.fill('input[name=\"licensePlate\"]', vehiclePlate);\n     |                ^\n  68 |     await page.fill('input[name=\"make\"]', vehicleMake);\n  69 |     await page.fill('input[name=\"model\"]', vehicleModel);\n  70 |     await page.fill('input[name=\"year\"]', vehicleYear);\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:67:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-22T03:56:14.192Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-29349-ehicle-and-assign-to-driver-webkit\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-29349-ehicle-and-assign-to-driver-webkit\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-29349-ehicle-and-assign-to-driver-webkit\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                        "column": 16,
+                        "line": 67
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75dd0890e1863fab42bd-bd189d66e14f1a66d9fb",
+              "file": "full-app-test.spec.ts",
+              "line": 53,
+              "column": 7
+            },
+            {
+              "title": "3. Add customers with validated addresses",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "webkit",
+                  "projectName": "webkit",
+                  "results": [
+                    {
+                      "workerIndex": 16,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 18226,
+                      "error": {
+                        "message": "TimeoutError: page.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button:has-text(\"Add\")')\u001b[22m\n",
+                        "stack": "TimeoutError: page.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button:has-text(\"Add\")')\u001b[22m\n\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:91:16",
+                        "location": {
+                          "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                          "column": 16,
+                          "line": 91
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 89 |\u001b[39m\n \u001b[90m 90 |\u001b[39m     \u001b[90m// Click \"Add Customer\" or \"Add Job\"\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 91 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(\u001b[32m'button:has-text(\"Add\")'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m    |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 92 |\u001b[39m\n \u001b[90m 93 |\u001b[39m     \u001b[90m// Test multiple real addresses\u001b[39m\n \u001b[90m 94 |\u001b[39m     \u001b[36mconst\u001b[39m customers \u001b[33m=\u001b[39m [\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                            "column": 16,
+                            "line": 91
+                          },
+                          "message": "TimeoutError: page.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button:has-text(\"Add\")')\u001b[22m\n\n\n  89 |\n  90 |     // Click \"Add Customer\" or \"Add Job\"\n> 91 |     await page.click('button:has-text(\"Add\")');\n     |                ^\n  92 |\n  93 |     // Test multiple real addresses\n  94 |     const customers = [\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:91:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-22T03:56:33.201Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-f4cc2-rs-with-validated-addresses-webkit\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-f4cc2-rs-with-validated-addresses-webkit\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-f4cc2-rs-with-validated-addresses-webkit\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                        "column": 16,
+                        "line": 91
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75dd0890e1863fab42bd-c9eb8b2de7a4b35e056d",
+              "file": "full-app-test.spec.ts",
+              "line": 85,
+              "column": 7
+            },
+            {
+              "title": "4. Create and optimize routes",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "webkit",
+                  "projectName": "webkit",
+                  "results": [
+                    {
+                      "workerIndex": 17,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 17872,
+                      "error": {
+                        "message": "TimeoutError: page.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button:has-text(\"Create Route\")')\u001b[22m\n",
+                        "stack": "TimeoutError: page.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button:has-text(\"Create Route\")')\u001b[22m\n\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:149:16",
+                        "location": {
+                          "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                          "column": 16,
+                          "line": 149
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 147 |\u001b[39m\n \u001b[90m 148 |\u001b[39m     \u001b[90m// Click \"Create Route\" or \"Optimize Route\"\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 149 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(\u001b[32m'button:has-text(\"Create Route\")'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 150 |\u001b[39m\n \u001b[90m 151 |\u001b[39m     \u001b[90m// Fill in route details\u001b[39m\n \u001b[90m 152 |\u001b[39m     \u001b[36mconst\u001b[39m routeName \u001b[33m=\u001b[39m \u001b[32m`Route ${Date.now()}`\u001b[39m\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                            "column": 16,
+                            "line": 149
+                          },
+                          "message": "TimeoutError: page.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('button:has-text(\"Create Route\")')\u001b[22m\n\n\n  147 |\n  148 |     // Click \"Create Route\" or \"Optimize Route\"\n> 149 |     await page.click('button:has-text(\"Create Route\")');\n      |                ^\n  150 |\n  151 |     // Fill in route details\n  152 |     const routeName = `Route ${Date.now()}`;\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:149:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-22T03:56:52.434Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-f9689--Create-and-optimize-routes-webkit\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-f9689--Create-and-optimize-routes-webkit\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-f9689--Create-and-optimize-routes-webkit\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                        "column": 16,
+                        "line": 149
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75dd0890e1863fab42bd-8d7c100eb837297674a8",
+              "file": "full-app-test.spec.ts",
+              "line": 143,
+              "column": 7
+            },
+            {
+              "title": "5. Assign optimized route to driver",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "webkit",
+                  "projectName": "webkit",
+                  "results": [
+                    {
+                      "workerIndex": 18,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 17203,
+                      "error": {
+                        "message": "TimeoutError: locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"route-card\"]').first()\u001b[22m\n",
+                        "stack": "TimeoutError: locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"route-card\"]').first()\u001b[22m\n\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:194:21",
+                        "location": {
+                          "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                          "column": 21,
+                          "line": 194
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 192 |\u001b[39m     \u001b[90m// Find a route that needs assignment\u001b[39m\n \u001b[90m 193 |\u001b[39m     \u001b[36mconst\u001b[39m routeCard \u001b[33m=\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'[data-testid=\"route-card\"]'\u001b[39m)\u001b[33m.\u001b[39mfirst()\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 194 |\u001b[39m     \u001b[36mawait\u001b[39m routeCard\u001b[33m.\u001b[39mclick()\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                     \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 195 |\u001b[39m\n \u001b[90m 196 |\u001b[39m     \u001b[90m// Click \"Assign Driver\" button\u001b[39m\n \u001b[90m 197 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(\u001b[32m'button:has-text(\"Assign Driver\")'\u001b[39m)\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                            "column": 21,
+                            "line": 194
+                          },
+                          "message": "TimeoutError: locator.click: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"route-card\"]').first()\u001b[22m\n\n\n  192 |     // Find a route that needs assignment\n  193 |     const routeCard = page.locator('[data-testid=\"route-card\"]').first();\n> 194 |     await routeCard.click();\n      |                     ^\n  195 |\n  196 |     // Click \"Assign Driver\" button\n  197 |     await page.click('button:has-text(\"Assign Driver\")');\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:194:21"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-22T03:57:10.973Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-712aa-n-optimized-route-to-driver-webkit\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-712aa-n-optimized-route-to-driver-webkit\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-712aa-n-optimized-route-to-driver-webkit\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                        "column": 21,
+                        "line": 194
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75dd0890e1863fab42bd-9cecadcc9c32e080ce73",
+              "file": "full-app-test.spec.ts",
+              "line": 187,
+              "column": 7
+            },
+            {
+              "title": "6. End-to-end workflow: Driver → Vehicle → Customer → Route → Assignment",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "webkit",
+                  "projectName": "webkit",
+                  "results": [
+                    {
+                      "workerIndex": 19,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 17646,
+                      "error": {
+                        "message": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"name\"]')\u001b[22m\n",
+                        "stack": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"name\"]')\u001b[22m\n\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:222:16",
+                        "location": {
+                          "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                          "column": 16,
+                          "line": 222
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 220 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(\u001b[32m'text=Drivers'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 221 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mclick(\u001b[32m'button:has-text(\"Add Driver\")'\u001b[39m)\u001b[33m;\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 222 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"name\"]'\u001b[39m\u001b[33m,\u001b[39m \u001b[32m`E2E Driver ${timestamp}`\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 223 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"email\"]'\u001b[39m\u001b[33m,\u001b[39m \u001b[32m`e2e${timestamp}@test.com`\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 224 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"phone\"]'\u001b[39m\u001b[33m,\u001b[39m \u001b[32m'555-999-8888'\u001b[39m)\u001b[33m;\u001b[39m\n \u001b[90m 225 |\u001b[39m     \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mfill(\u001b[32m'input[name=\"licenseNumber\"]'\u001b[39m\u001b[33m,\u001b[39m \u001b[32m`E2E${timestamp}`\u001b[39m)\u001b[33m;\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                            "column": 16,
+                            "line": 222
+                          },
+                          "message": "TimeoutError: page.fill: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('input[name=\"name\"]')\u001b[22m\n\n\n  220 |     await page.click('text=Drivers');\n  221 |     await page.click('button:has-text(\"Add Driver\")');\n> 222 |     await page.fill('input[name=\"name\"]', `E2E Driver ${timestamp}`);\n      |                ^\n  223 |     await page.fill('input[name=\"email\"]', `e2e${timestamp}@test.com`);\n  224 |     await page.fill('input[name=\"phone\"]', '555-999-8888');\n  225 |     await page.fill('input[name=\"licenseNumber\"]', `E2E${timestamp}`);\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:222:16"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-22T03:57:28.804Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-be929-stomer-→-Route-→-Assignment-webkit\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-be929-stomer-→-Route-→-Assignment-webkit\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-be929-stomer-→-Route-→-Assignment-webkit\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                        "column": 16,
+                        "line": 222
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75dd0890e1863fab42bd-3e117d132aa1156086a8",
+              "file": "full-app-test.spec.ts",
+              "line": 216,
+              "column": 7
+            },
+            {
+              "title": "7. Verify data persistence after browser refresh",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "webkit",
+                  "projectName": "webkit",
+                  "results": [
+                    {
+                      "workerIndex": 20,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 17387,
+                      "error": {
+                        "message": "TimeoutError: locator.textContent: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"driver-count\"]')\u001b[22m\n",
+                        "stack": "TimeoutError: locator.textContent: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"driver-count\"]')\u001b[22m\n\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:297:82",
+                        "location": {
+                          "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                          "column": 82,
+                          "line": 297
+                        },
+                        "snippet": "\u001b[0m \u001b[90m 295 |\u001b[39m\n \u001b[90m 296 |\u001b[39m     \u001b[90m// Get counts of existing data\u001b[39m\n\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 297 |\u001b[39m     \u001b[36mconst\u001b[39m driverCountBefore \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'[data-testid=\"driver-count\"]'\u001b[39m)\u001b[33m.\u001b[39mtextContent()\u001b[33m;\u001b[39m\n \u001b[90m     |\u001b[39m                                                                                  \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\n \u001b[90m 298 |\u001b[39m     \u001b[36mconst\u001b[39m vehicleCountBefore \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'[data-testid=\"vehicle-count\"]'\u001b[39m)\u001b[33m.\u001b[39mtextContent()\u001b[33m;\u001b[39m\n \u001b[90m 299 |\u001b[39m     \u001b[36mconst\u001b[39m routeCountBefore \u001b[33m=\u001b[39m \u001b[36mawait\u001b[39m page\u001b[33m.\u001b[39mlocator(\u001b[32m'[data-testid=\"route-count\"]'\u001b[39m)\u001b[33m.\u001b[39mtextContent()\u001b[33m;\u001b[39m\n \u001b[90m 300 |\u001b[39m\u001b[0m"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                            "column": 82,
+                            "line": 297
+                          },
+                          "message": "TimeoutError: locator.textContent: Timeout 15000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('[data-testid=\"driver-count\"]')\u001b[22m\n\n\n  295 |\n  296 |     // Get counts of existing data\n> 297 |     const driverCountBefore = await page.locator('[data-testid=\"driver-count\"]').textContent();\n      |                                                                                  ^\n  298 |     const vehicleCountBefore = await page.locator('[data-testid=\"vehicle-count\"]').textContent();\n  299 |     const routeCountBefore = await page.locator('[data-testid=\"route-count\"]').textContent();\n  300 |\n    at C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts:297:82"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2025-12-22T03:57:47.108Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-39e57-tence-after-browser-refresh-webkit\\test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-39e57-tence-after-browser-refresh-webkit\\video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\test-results\\full-app-test-Full-App-E2E-39e57-tence-after-browser-refresh-webkit\\error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "C:\\Users\\lmets\\OneDrive\\Desktop\\my-awesome-project\\e2e-tests\\full-app-test.spec.ts",
+                        "column": 82,
+                        "line": 297
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "75dd0890e1863fab42bd-10f6e05d4c776ec7aff3",
+              "file": "full-app-test.spec.ts",
+              "line": 291,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2025-12-22T03:50:52.518Z",
+    "duration": 432045.23199999996,
+    "expected": 0,
+    "skipped": 0,
+    "unexpected": 21,
+    "flaky": 0
+  }
+}
