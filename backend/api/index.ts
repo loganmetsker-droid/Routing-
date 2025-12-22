@@ -1,20 +1,25 @@
+// Vercel Serverless Function Handler for NestJS
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { ExpressAdapter } from '@nestjs/platform-express';
 import { AppModule } from '../src/app.module';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import express from 'express';
 
-let cachedApp: any;
+const expressApp = express();
+const adapter = new ExpressAdapter(expressApp);
+let app: any;
 
-async function bootstrap() {
-  if (!cachedApp) {
-    const app = await NestFactory.create(AppModule, {
-      logger: ['error', 'warn', 'log'],
+async function getApp() {
+  if (!app) {
+    app = await NestFactory.create(AppModule, adapter, {
+      logger: false, // Disable logging in serverless
     });
 
-    // Global validation pipe
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
-        forbidNonWhitelisted: true,
+        forbidNonWhitelisted: false,
         transform: true,
         transformOptions: {
           enableImplicitConversion: true,
@@ -23,22 +28,17 @@ async function bootstrap() {
       }),
     );
 
-    // CORS configuration - allow all origins for testing
     app.enableCors({
       origin: '*',
       credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
     });
 
     await app.init();
-    cachedApp = app;
   }
-  return cachedApp;
+  return expressApp;
 }
 
-export default async (req: any, res: any) => {
-  const app = await bootstrap();
-  const server = app.getHttpAdapter().getInstance();
-  return server(req, res);
-};
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const server = await getApp();
+  server(req, res);
+}
