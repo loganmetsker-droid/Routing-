@@ -1,0 +1,53 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e6]: Routing & Dispatch SaaS
+    - navigation [ref=e7]:
+      - generic [ref=e9]:
+        - generic [ref=e11]: Fleet Manager
+        - separator [ref=e12]
+        - list [ref=e13]:
+          - listitem [ref=e14]:
+            - link "Dashboard" [ref=e15] [cursor=pointer]:
+              - /url: /
+              - img [ref=e17]
+              - generic [ref=e20]: Dashboard
+          - listitem [ref=e21]:
+            - link "Drivers" [ref=e22] [cursor=pointer]:
+              - /url: /drivers
+              - img [ref=e24]
+              - generic [ref=e27]: Drivers
+          - listitem [ref=e28]:
+            - link "Vehicles" [ref=e29] [cursor=pointer]:
+              - /url: /vehicles
+              - img [ref=e31]
+              - generic [ref=e34]: Vehicles
+          - listitem [ref=e35]:
+            - link "Routes" [active] [ref=e36] [cursor=pointer]:
+              - /url: /routes
+              - img [ref=e38]
+              - generic [ref=e41]: Routes
+          - listitem [ref=e42]:
+            - link "Jobs" [ref=e43] [cursor=pointer]:
+              - /url: /jobs
+              - img [ref=e45]
+              - generic [ref=e48]: Jobs
+        - separator [ref=e49]
+        - list [ref=e50]:
+          - listitem [ref=e51]:
+            - button "Logout" [ref=e52] [cursor=pointer]:
+              - img [ref=e54]
+              - generic [ref=e57]: Logout
+    - main [ref=e58]:
+      - generic [ref=e61]:
+        - heading "Routes" [level=4] [ref=e62]
+        - generic [ref=e63]:
+          - generic [ref=e66]:
+            - heading "Available Routes" [level=6] [ref=e67]
+            - list [ref=e68]
+          - paragraph [ref=e73]: Select a route to view on map
+  - generic [ref=e74]: "0"
+```
