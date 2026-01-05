@@ -37,6 +37,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    // GraphQL endpoint
+    if (url === '/graphql' && method === 'POST') {
+      const { query, variables } = req.body as any;
+
+      // Handle createDriver mutation
+      if (query && query.includes('createDriver')) {
+        const { input } = variables;
+        const driver = {
+          id: `temp-${Date.now()}`,
+          ...input,
+          status: input.status || 'ACTIVE',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        return res.status(200).json({
+          data: { createDriver: driver }
+        });
+      }
+
+      // Handle drivers query
+      if (query && query.includes('query') && query.includes('drivers')) {
+        return res.status(200).json({
+          data: { drivers: [] }
+        });
+      }
+
+      return res.status(200).json({
+        data: null,
+        errors: [{ message: 'Query not implemented' }]
+      });
+    }
+
     // Get all drivers
     if (url === '/api/drivers' && method === 'GET') {
       // Temporary mock data until database is fixed
