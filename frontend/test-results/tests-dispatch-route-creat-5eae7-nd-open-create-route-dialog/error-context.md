@@ -1,0 +1,116 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e6]: Routing & Dispatch SaaS
+    - navigation [ref=e7]:
+      - generic [ref=e9]:
+        - generic [ref=e11]: Fleet Manager
+        - separator [ref=e12]
+        - list [ref=e13]:
+          - listitem [ref=e14]:
+            - link [ref=e15] [cursor=pointer]:
+              - /url: /
+              - img [ref=e17]
+              - generic [ref=e20]: Dashboard
+          - listitem [ref=e21]:
+            - link [ref=e22] [cursor=pointer]:
+              - /url: /drivers
+              - img [ref=e24]
+              - generic [ref=e27]: Drivers
+          - listitem [ref=e28]:
+            - link [ref=e29] [cursor=pointer]:
+              - /url: /vehicles
+              - img [ref=e31]
+              - generic [ref=e34]: Vehicles
+          - listitem [ref=e35]:
+            - link [ref=e36] [cursor=pointer]:
+              - /url: /routes
+              - img [ref=e38]
+              - generic [ref=e41]: Routes
+          - listitem [ref=e42]:
+            - link [ref=e43] [cursor=pointer]:
+              - /url: /dispatches
+              - img [ref=e45]
+              - generic [ref=e48]: Dispatch
+          - listitem [ref=e49]:
+            - link [ref=e50] [cursor=pointer]:
+              - /url: /jobs
+              - img [ref=e52]
+              - generic [ref=e55]: Jobs
+        - separator [ref=e56]
+        - list [ref=e57]:
+          - listitem [ref=e58]:
+            - button [ref=e59] [cursor=pointer]:
+              - img [ref=e61]
+              - generic [ref=e64]: Logout
+    - main [ref=e65]:
+      - generic [ref=e68]:
+        - generic [ref=e69]:
+          - heading [level=4] [ref=e70]: Route Dispatch
+          - button [ref=e71] [cursor=pointer]:
+            - img [ref=e73]
+            - text: Create New Route
+        - generic [ref=e75]:
+          - generic [ref=e78]:
+            - generic [ref=e79]:
+              - img [ref=e80]
+              - heading [level=6] [ref=e82]: Active Routes
+            - heading [level=3] [ref=e83]: "0"
+          - generic [ref=e86]:
+            - generic [ref=e87]:
+              - img [ref=e88]
+              - heading [level=6] [ref=e91]: Pending Jobs
+            - heading [level=3] [ref=e92]: "3"
+          - generic [ref=e95]:
+            - generic [ref=e96]:
+              - img [ref=e97]
+              - heading [level=6] [ref=e99]: Available Vehicles
+            - heading [level=3] [ref=e100]: "0"
+          - generic [ref=e103]:
+            - generic [ref=e104]:
+              - img [ref=e105]
+              - heading [level=6] [ref=e107]: Available Drivers
+            - heading [level=3] [ref=e108]: "0"
+        - tablist [ref=e112]:
+          - tab [selected] [ref=e113] [cursor=pointer]: All Routes
+          - tab [ref=e114] [cursor=pointer]: Pending Jobs
+          - tab [ref=e115] [cursor=pointer]: Completed Routes
+        - alert [ref=e119]:
+          - img [ref=e121]
+          - generic [ref=e123]: No routes created yet. Click "Create New Route" to get started!
+  - generic [ref=e124]: "0"
+  - dialog "Create Optimized Route" [ref=e127]:
+    - heading "Create Optimized Route" [level=2] [ref=e128]
+    - generic [ref=e130]:
+      - generic [ref=e131]:
+        - generic [ref=e133]:
+          - img [ref=e135]:
+            - generic [ref=e137]: "1"
+          - generic [ref=e139]: Select Vehicle
+        - generic [ref=e143]:
+          - img [ref=e145]:
+            - generic [ref=e147]: "2"
+          - generic [ref=e149]: Assign Driver
+        - generic [ref=e153]:
+          - img [ref=e155]:
+            - generic [ref=e157]: "3"
+          - generic [ref=e159]: Choose Jobs
+        - generic [ref=e163]:
+          - img [ref=e165]:
+            - generic [ref=e167]: "4"
+          - generic [ref=e169]: Review & Create
+      - generic [ref=e170]:
+        - generic: Select Vehicle
+        - generic [ref=e171]:
+          - combobox [ref=e172] [cursor=pointer]
+          - textbox
+          - img
+          - group:
+            - generic: Select Vehicle
+    - generic [ref=e173]:
+      - button "Cancel" [ref=e174] [cursor=pointer]: Cancel
+      - button "Next" [disabled]
+```
