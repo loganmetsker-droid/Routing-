@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard';
 import DriversPage from './pages/DriversPage';
 import VehiclesPage from './pages/VehiclesPage';
 import RoutesPage from './pages/RoutesPage';
+import DispatchesPage from './pages/DispatchesPage';
 import JobsPage from './pages/JobsPage';
 import LoginPage from './pages/LoginPage';
 
@@ -16,6 +17,7 @@ function App() {
         <Route path="drivers" element={<DriversPage />} />
         <Route path="vehicles" element={<VehiclesPage />} />
         <Route path="routes" element={<RoutesPage />} />
+        <Route path="dispatches" element={<DispatchesPage />} />
         <Route path="jobs" element={<JobsPage />} />
       </Route>
     </Routes>

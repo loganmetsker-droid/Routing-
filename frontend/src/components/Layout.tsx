@@ -21,6 +21,7 @@ import {
   DriveEta as VehiclesIcon,
   Person as DriversIcon,
   Route as RoutesIcon,
+  LocalShipping as DispatchIcon,
   Work as JobsIcon,
   Logout as LogoutIcon,
 } from '@mui/icons-material';
@@ -32,6 +33,7 @@ const menuItems = [
   { text: 'Drivers', icon: <DriversIcon />, path: '/drivers' },
   { text: 'Vehicles', icon: <VehiclesIcon />, path: '/vehicles' },
   { text: 'Routes', icon: <RoutesIcon />, path: '/routes' },
+  { text: 'Dispatch', icon: <DispatchIcon />, path: '/dispatches' },
   { text: 'Jobs', icon: <JobsIcon />, path: '/jobs' },
 ];
 
