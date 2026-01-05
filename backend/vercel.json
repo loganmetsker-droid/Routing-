@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "installCommand": "npm install --legacy-peer-deps && npm install express",
+  "installCommand": "npm install pg",
   "builds": [
     {
       "src": "api/index.ts",
