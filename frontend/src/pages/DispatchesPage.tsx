@@ -30,6 +30,9 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Checkbox,
+  FormGroup,
+  FormControlLabel,
 } from '@mui/material';
 import {
   LocalShipping,
@@ -45,10 +48,8 @@ import {
 import { useDrivers, useVehicles } from '../graphql/hooks';
 
 // Simple geographic clustering algorithm
-const optimizeRoutes = (jobs: any[], vehicles: any[]) => {
-  const availableVehicles = vehicles.filter((v: any) => v.status === 'AVAILABLE');
-
-  if (availableVehicles.length === 0 || jobs.length === 0) {
+const optimizeRoutes = (jobs: any[], selectedVehicles: any[]) => {
+  if (selectedVehicles.length === 0 || jobs.length === 0) {
     return [];
   }
 
@@ -81,13 +82,13 @@ const optimizeRoutes = (jobs: any[], vehicles: any[]) => {
   const regions = Object.keys(jobsByRegion);
 
   regions.forEach((region, index) => {
-    if (index < availableVehicles.length) {
-      const vehicle = availableVehicles[index];
+    if (index < selectedVehicles.length) {
+      const vehicle = selectedVehicles[index];
       const regionJobs = jobsByRegion[region];
 
       // Calculate total weight and check capacity
       const totalWeight = regionJobs.reduce((sum, job) => sum + (job.weight || 0), 0);
-      const vehicleCapacity = vehicle.capacityWeightKg || 1000;
+      const vehicleCapacity = vehicle.capacityWeightKg || vehicle.capacity || 1000;
 
       // Estimate distance (simplified - in production use real routing API)
       const estimatedDistance = regionJobs.length * 8 + 5; // ~8km per stop + 5km base
@@ -113,10 +114,12 @@ const optimizeRoutes = (jobs: any[], vehicles: any[]) => {
 
 export default function DispatchesPage() {
   const [tab, setTab] = useState(0);
+  const [vehicleSelectionOpen, setVehicleSelectionOpen] = useState(false);
   const [optimizeDialogOpen, setOptimizeDialogOpen] = useState(false);
   const [assignDriverDialogOpen, setAssignDriverDialogOpen] = useState(false);
   const [selectedRouteForDriver, setSelectedRouteForDriver] = useState<any>(null);
   const [selectedDriverId, setSelectedDriverId] = useState('');
+  const [selectedVehicleIds, setSelectedVehicleIds] = useState<string[]>([]);
   const [routes, setRoutes] = useState<any[]>([]);
   const [optimizedRoutes, setOptimizedRoutes] = useState<any[]>([]);
   const [jobs, setJobs] = useState<any[]>([]);
@@ -127,6 +130,7 @@ export default function DispatchesPage() {
 
   const drivers = driversData?.drivers || [];
   const vehicles = vehiclesData?.vehicles || [];
+  const availableVehicles = vehicles.filter((v: any) => v.status === 'AVAILABLE');
 
   // Mock jobs data with better geographic distribution
   useEffect(() => {
@@ -206,13 +210,29 @@ export default function DispatchesPage() {
     ]);
   }, []);
 
+  const handleOpenVehicleSelection = () => {
+    setVehicleSelectionOpen(true);
+  };
+
+  const handleToggleVehicle = (vehicleId: string) => {
+    if (selectedVehicleIds.includes(vehicleId)) {
+      setSelectedVehicleIds(selectedVehicleIds.filter(id => id !== vehicleId));
+    } else {
+      setSelectedVehicleIds([...selectedVehicleIds, vehicleId]);
+    }
+  };
+
   const handleOptimizeRoutes = () => {
+    setVehicleSelectionOpen(false);
     setLoading(true);
 
     // Simulate optimization calculation
     setTimeout(() => {
       const pendingJobs = jobs.filter(j => j.status === 'pending');
-      const optimized = optimizeRoutes(pendingJobs, vehicles);
+      const selectedVehicles = availableVehicles.filter((v: any) =>
+        selectedVehicleIds.includes(v.id)
+      );
+      const optimized = optimizeRoutes(pendingJobs, selectedVehicles);
       setOptimizedRoutes(optimized);
       setLoading(false);
       setOptimizeDialogOpen(true);
@@ -304,6 +324,8 @@ export default function DispatchesPage() {
     }
   };
 
+  const pendingJobsCount = jobs.filter(j => j.status === 'pending').length;
+
   return (
     <Box sx={{ p: 3 }}>
       {/* Header */}
@@ -314,18 +336,18 @@ export default function DispatchesPage() {
         <Button
           variant="contained"
           startIcon={<AutoAwesome />}
-          onClick={handleOptimizeRoutes}
-          disabled={jobs.filter(j => j.status === 'pending').length === 0 || loading}
+          onClick={handleOpenVehicleSelection}
+          disabled={pendingJobsCount === 0 || availableVehicles.length === 0}
           sx={{ textTransform: 'none', borderRadius: 2 }}
         >
-          {loading ? 'Optimizing...' : 'Auto-Optimize Routes'}
+          Auto-Optimize Routes
         </Button>
       </Box>
 
       {/* Info Alert */}
       <Alert severity="info" icon={<TrendingUp />} sx={{ mb: 3 }}>
-        <strong>Smart Routing:</strong> The system automatically assigns vehicles to territories based on geographic optimization.
-        No overlapping routes - maximizing efficiency! You assign drivers to optimized routes.
+        <strong>Smart Routing:</strong> Select which vehicles to use today, then the system automatically assigns them to territories based on geographic optimization.
+        No overlapping routes - maximizing efficiency!
       </Alert>
 
       {/* Stats Cards */}
@@ -351,7 +373,7 @@ export default function DispatchesPage() {
                 <Typography color="white" variant="h6">Pending Jobs</Typography>
               </Box>
               <Typography variant="h3" color="white" fontWeight={700}>
-                {jobs.filter(j => j.status === 'pending').length}
+                {pendingJobsCount}
               </Typography>
             </CardContent>
           </Card>
@@ -364,7 +386,7 @@ export default function DispatchesPage() {
                 <Typography color="white" variant="h6">Available Vehicles</Typography>
               </Box>
               <Typography variant="h3" color="white" fontWeight={700}>
-                {vehicles?.filter((v: any) => v.status === 'AVAILABLE').length || 0}
+                {availableVehicles.length}
               </Typography>
             </CardContent>
           </Card>
@@ -593,6 +615,91 @@ export default function DispatchesPage() {
         </Grid>
       )}
 
+      {/* Vehicle Selection Dialog */}
+      <Dialog
+        open={vehicleSelectionOpen}
+        onClose={() => setVehicleSelectionOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <LocalShipping color="primary" />
+            Select Vehicles for Today's Routes
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mb: 3 }}>
+            Choose which vehicles to use for today's deliveries. The system will optimize routes based on your selection.
+          </Alert>
+
+          {availableVehicles.length === 0 ? (
+            <Alert severity="warning">
+              No available vehicles. Please add vehicles in the Vehicles page and set their status to "Available".
+            </Alert>
+          ) : (
+            <FormGroup>
+              {availableVehicles.map((vehicle: any) => (
+                <FormControlLabel
+                  key={vehicle.id}
+                  control={
+                    <Checkbox
+                      checked={selectedVehicleIds.includes(vehicle.id)}
+                      onChange={() => handleToggleVehicle(vehicle.id)}
+                    />
+                  }
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 1 }}>
+                      <Box sx={{ flex: 1 }}>
+                        <Typography variant="body1" fontWeight={600}>
+                          {vehicle.make} {vehicle.model}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {vehicle.licensePlate} • Capacity: {vehicle.capacityWeightKg || vehicle.capacity || 1000}kg
+                        </Typography>
+                      </Box>
+                      <Chip
+                        label={vehicle.vehicleType || 'TRUCK'}
+                        size="small"
+                        variant="outlined"
+                      />
+                    </Box>
+                  }
+                  sx={{
+                    border: '1px solid',
+                    borderColor: selectedVehicleIds.includes(vehicle.id) ? 'primary.main' : 'divider',
+                    borderRadius: 1,
+                    mb: 1,
+                    p: 1,
+                    backgroundColor: selectedVehicleIds.includes(vehicle.id) ? 'action.selected' : 'transparent',
+                  }}
+                />
+              ))}
+            </FormGroup>
+          )}
+
+          <Box sx={{ mt: 2, p: 2, bgcolor: 'background.paper', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
+            <Typography variant="body2" color="text.secondary">
+              <strong>Selected:</strong> {selectedVehicleIds.length} vehicle{selectedVehicleIds.length !== 1 ? 's' : ''}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              <strong>Pending Jobs:</strong> {pendingJobsCount}
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setVehicleSelectionOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={handleOptimizeRoutes}
+            disabled={selectedVehicleIds.length === 0}
+            startIcon={loading ? undefined : <AutoAwesome />}
+          >
+            {loading ? 'Optimizing...' : 'Optimize Routes'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Optimization Dialog */}
       <Dialog
         open={optimizeDialogOpen}
@@ -686,7 +793,7 @@ export default function DispatchesPage() {
         <DialogTitle>Assign Driver to Route</DialogTitle>
         <DialogContent>
           {selectedRouteForDriver && (
-            <Box sx={{ mb: 3 }}>
+            <Box sx={{ mb: 3, mt: 1 }}>
               <Typography variant="body2" color="text.secondary" gutterBottom>
                 <strong>Route:</strong> {selectedRouteForDriver.region.toUpperCase()} Territory
               </Typography>
