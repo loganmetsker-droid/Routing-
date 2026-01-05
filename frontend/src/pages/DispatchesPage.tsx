@@ -23,7 +23,6 @@ import {
   Tabs,
   Tab,
   Alert,
-  CircularProgress,
   Divider,
   Table,
   TableBody,
@@ -33,12 +32,10 @@ import {
   TableRow,
 } from '@mui/material';
 import {
-  Add,
   LocalShipping,
   Person,
   Route as RouteIcon,
   Map,
-  CheckCircle,
   Schedule,
   PlayArrow,
   AutoAwesome,
@@ -126,7 +123,7 @@ export default function DispatchesPage() {
   const [loading, setLoading] = useState(false);
 
   const { data: driversData, loading: driversLoading } = useDrivers();
-  const { data: vehiclesData, loading: vehiclesLoading } = useVehicles();
+  const { data: vehiclesData } = useVehicles();
 
   const drivers = driversData?.drivers || [];
   const vehicles = vehiclesData?.vehicles || [];
