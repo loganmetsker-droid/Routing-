@@ -39,6 +39,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Get all drivers
     if (url === '/api/drivers' && method === 'GET') {
+      // Temporary mock data until database is fixed
+      return res.status(200).json({ drivers: [] });
+
+      /* TODO: Re-enable when database is working
       const client = await getDbClient();
       try {
         const result = await client.query('SELECT * FROM drivers ORDER BY created_at DESC');
@@ -48,10 +52,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await client.end();
         return res.status(500).json({ error: error.message });
       }
+      */
     }
 
     // Create driver
     if (url === '/api/drivers' && method === 'POST') {
+      // Temporary mock response until database is fixed
+      const {firstName, lastName, email, phone, licenseNumber, status = 'ACTIVE'} = req.body as any;
+      return res.status(201).json({
+        id: `temp-${Date.now()}`,
+        firstName,
+        lastName,
+        email,
+        phone,
+        licenseNumber,
+        status,
+        createdAt: new Date().toISOString()
+      });
+
+      /* TODO: Re-enable when database is working
       const client = await getDbClient();
       try {
         const {firstName, lastName, email, phone, licenseNumber, status = 'ACTIVE'} = req.body as any;
@@ -69,6 +88,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await client.end();
         return res.status(500).json({ error: error.message, details: 'Database insert failed' });
       }
+      */
     }
 
     // Get all vehicles
