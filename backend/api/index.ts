@@ -2,6 +2,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { Client } from 'pg';
 
+// In-memory storage (persists during serverless function warm-up)
+const driversStore: any[] = [];
+const vehiclesStore: any[] = [];
+
 // Database connection
 const DATABASE_URL = process.env.DATABASE_URL || '';
 
@@ -45,12 +49,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (query && query.includes('createDriver')) {
         const { input } = variables;
         const driver = {
-          id: `temp-${Date.now()}`,
+          id: `driver-${Date.now()}`,
           ...input,
           status: input.status || 'ACTIVE',
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         };
+        driversStore.push(driver);
         return res.status(200).json({
           data: { createDriver: driver }
         });
@@ -59,7 +64,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Handle drivers query
       if (query && query.includes('query') && query.includes('drivers')) {
         return res.status(200).json({
-          data: { drivers: [] }
+          data: { drivers: driversStore }
+        });
+      }
+
+      // Handle createVehicle mutation
+      if (query && query.includes('createVehicle')) {
+        const { input } = variables;
+        const vehicle = {
+          id: `vehicle-${Date.now()}`,
+          ...input,
+          status: input.status || 'AVAILABLE',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        vehiclesStore.push(vehicle);
+        return res.status(200).json({
+          data: { createVehicle: vehicle }
+        });
+      }
+
+      // Handle vehicles query
+      if (query && query.includes('query') && query.includes('vehicles')) {
+        return res.status(200).json({
+          data: { vehicles: vehiclesStore }
         });
       }
 
@@ -71,8 +99,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Get all drivers
     if (url === '/api/drivers' && method === 'GET') {
-      // Temporary mock data until database is fixed
-      return res.status(200).json({ drivers: [] });
+      // Return in-memory drivers
+      return res.status(200).json({ drivers: driversStore });
 
       /* TODO: Re-enable when database is working
       const client = await getDbClient();
