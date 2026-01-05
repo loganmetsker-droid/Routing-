@@ -11,7 +11,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField,
   Select,
   MenuItem,
   FormControl,
@@ -21,7 +20,6 @@ import {
   ListItem,
   ListItemText,
   ListItemIcon,
-  IconButton,
   Tabs,
   Tab,
   Alert,
@@ -29,7 +27,6 @@ import {
   Stepper,
   Step,
   StepLabel,
-  Tooltip,
 } from '@mui/material';
 import {
   Add,
@@ -38,11 +35,8 @@ import {
   Route as RouteIcon,
   Map,
   CheckCircle,
-  Warning,
   Schedule,
-  SwapHoriz,
   PlayArrow,
-  Stop,
 } from '@mui/icons-material';
 import { useDrivers, useVehicles } from '../graphql/hooks';
 
@@ -57,8 +51,13 @@ export default function DispatchesPage() {
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const { drivers, loading: driversLoading } = useDrivers();
-  const { vehicles, loading: vehiclesLoading } = useVehicles();
+  const driversQuery = useDrivers();
+  const vehiclesQuery = useVehicles();
+
+  const drivers = (driversQuery as any).drivers || [];
+  const vehicles = (vehiclesQuery as any).vehicles || [];
+  const driversLoading = (driversQuery as any).loading || false;
+  const vehiclesLoading = (vehiclesQuery as any).loading || false;
 
   // Mock jobs data for now
   useEffect(() => {
