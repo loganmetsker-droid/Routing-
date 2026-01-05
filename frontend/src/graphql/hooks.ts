@@ -62,13 +62,25 @@ export const useVehiclesNeedingMaintenance = () => {
 
 export const useCreateVehicle = () => {
   return useMutation(CREATE_VEHICLE, {
-    refetchQueries: [{ query: GET_VEHICLES }],
+    refetchQueries: [
+      { query: GET_VEHICLES },
+      { query: GET_VEHICLES_BY_TYPE, variables: { type: 'truck' } },
+      { query: GET_VEHICLES_BY_TYPE, variables: { type: 'van' } },
+      { query: GET_VEHICLES_BY_TYPE, variables: { type: 'car' } },
+      { query: GET_VEHICLES_NEEDING_MAINTENANCE },
+    ],
   });
 };
 
 export const useUpdateVehicle = () => {
   return useMutation(UPDATE_VEHICLE, {
-    refetchQueries: [{ query: GET_VEHICLES }],
+    refetchQueries: [
+      { query: GET_VEHICLES },
+      { query: GET_VEHICLES_BY_TYPE, variables: { type: 'truck' } },
+      { query: GET_VEHICLES_BY_TYPE, variables: { type: 'van' } },
+      { query: GET_VEHICLES_BY_TYPE, variables: { type: 'car' } },
+      { query: GET_VEHICLES_NEEDING_MAINTENANCE },
+    ],
   });
 };
 
