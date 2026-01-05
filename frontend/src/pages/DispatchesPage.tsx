@@ -51,13 +51,11 @@ export default function DispatchesPage() {
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const driversQuery = useDrivers();
-  const vehiclesQuery = useVehicles();
+  const { data: driversData, loading: driversLoading } = useDrivers();
+  const { data: vehiclesData, loading: vehiclesLoading } = useVehicles();
 
-  const drivers = (driversQuery as any).drivers || [];
-  const vehicles = (vehiclesQuery as any).vehicles || [];
-  const driversLoading = (driversQuery as any).loading || false;
-  const vehiclesLoading = (vehiclesQuery as any).loading || false;
+  const drivers = driversData?.drivers || [];
+  const vehicles = vehiclesData?.vehicles || [];
 
   // Mock jobs data for now
   useEffect(() => {
