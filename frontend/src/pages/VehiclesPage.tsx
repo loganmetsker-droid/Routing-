@@ -267,7 +267,7 @@ export default function VehiclesPage() {
                         </Typography>
                         {vehicle.capacity && (
                           <Typography variant="caption" color="textSecondary">
-                            Capacity: <strong>{vehicle.capacity} lbs</strong>
+                            Capacity: <strong>{vehicle.capacity} kg</strong>
                           </Typography>
                         )}
                       </Box>
@@ -407,11 +407,12 @@ export default function VehiclesPage() {
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
-                  label="Capacity (lbs)"
+                  label="Capacity (kg)"
                   type="number"
                   value={formData.capacity}
                   onChange={(e) => setFormData({ ...formData, capacity: parseInt(e.target.value) })}
                   fullWidth
+                  helperText="Vehicle weight capacity in kilograms"
                 />
               </Grid>
               <Grid item xs={12}>

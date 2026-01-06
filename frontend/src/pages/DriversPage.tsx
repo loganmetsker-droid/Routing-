@@ -19,9 +19,10 @@ import {
   MenuItem,
   CircularProgress,
   Avatar,
+  Grid,
 } from '@mui/material';
-import { Add, Edit, Person } from '@mui/icons-material';
-import { useDrivers, useCreateDriver, useUpdateDriver } from '../graphql/hooks';
+import { Add, Edit, Person, Delete } from '@mui/icons-material';
+import { useDrivers, useCreateDriver, useUpdateDriver, useVehicles } from '../graphql/hooks';
 import { motion } from 'framer-motion';
 import { useState } from 'react';
 
@@ -42,6 +43,7 @@ const item = {
 
 export default function DriversPage() {
   const { data, loading } = useDrivers();
+  const { data: vehiclesData } = useVehicles();
   const [createDriver] = useCreateDriver();
   const [updateDriver] = useUpdateDriver();
 
@@ -53,9 +55,14 @@ export default function DriversPage() {
     email: '',
     phone: '',
     licenseNumber: '',
+    licenseType: 'CLASS_C',
+    assignedVehicleId: '',
+    notes: '',
     status: 'ACTIVE',
   });
   const [submitting, setSubmitting] = useState(false);
+
+  const vehicles = vehiclesData?.vehicles || [];
 
   const handleOpenDialog = (driver?: any) => {
     if (driver) {
@@ -66,6 +73,9 @@ export default function DriversPage() {
         email: driver.email || '',
         phone: driver.phone || '',
         licenseNumber: driver.licenseNumber || '',
+        licenseType: driver.licenseType || 'CLASS_C',
+        assignedVehicleId: driver.assignedVehicleId || '',
+        notes: driver.notes || '',
         status: driver.status || 'ACTIVE',
       });
     } else {
@@ -76,6 +86,9 @@ export default function DriversPage() {
         email: '',
         phone: '',
         licenseNumber: '',
+        licenseType: 'CLASS_C',
+        assignedVehicleId: '',
+        notes: '',
         status: 'ACTIVE',
       });
     }
@@ -172,8 +185,8 @@ export default function DriversPage() {
               <TableRow>
                 <TableCell sx={{ fontWeight: 600 }}>Driver</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Phone</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Email</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>License Number</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>License Type</TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>Assigned Vehicle</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>Actions</TableCell>
               </TableRow>
@@ -199,12 +212,44 @@ export default function DriversPage() {
                           <Typography variant="body1" fontWeight={500}>
                             {driver.firstName} {driver.lastName}
                           </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {driver.email}
+                          </Typography>
                         </Box>
                       </Box>
                     </TableCell>
                     <TableCell>{driver.phone || 'N/A'}</TableCell>
-                    <TableCell>{driver.email || 'N/A'}</TableCell>
-                    <TableCell>{driver.licenseNumber || 'N/A'}</TableCell>
+                    <TableCell>
+                      <Chip
+                        label={driver.licenseType || 'CLASS_C'}
+                        size="small"
+                        variant="outlined"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      {driver.assignedVehicleId ? (
+                        (() => {
+                          const assignedVehicle = vehicles.find((v: any) => v.id === driver.assignedVehicleId);
+                          return assignedVehicle ? (
+                            <Typography variant="body2">
+                              {assignedVehicle.make} {assignedVehicle.model}
+                              <br />
+                              <Typography variant="caption" color="text.secondary">
+                                {assignedVehicle.licensePlate}
+                              </Typography>
+                            </Typography>
+                          ) : (
+                            <Typography variant="body2" color="text.secondary">
+                              Vehicle not found
+                            </Typography>
+                          );
+                        })()
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          Not assigned
+                        </Typography>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Chip
                         label={driver.status}
@@ -307,6 +352,43 @@ export default function DriversPage() {
               onChange={(e) => setFormData({ ...formData, licenseNumber: e.target.value })}
               fullWidth
               required
+            />
+            <TextField
+              label="License Type"
+              name="licenseType"
+              select
+              value={formData.licenseType}
+              onChange={(e) => setFormData({ ...formData, licenseType: e.target.value })}
+              fullWidth
+            >
+              <MenuItem value="CLASS_A">Class A (CDL)</MenuItem>
+              <MenuItem value="CLASS_B">Class B (CDL)</MenuItem>
+              <MenuItem value="CLASS_C">Class C</MenuItem>
+            </TextField>
+            <TextField
+              label="Assigned Vehicle"
+              name="assignedVehicleId"
+              select
+              value={formData.assignedVehicleId}
+              onChange={(e) => setFormData({ ...formData, assignedVehicleId: e.target.value })}
+              fullWidth
+            >
+              <MenuItem value="">None</MenuItem>
+              {vehicles.map((vehicle: any) => (
+                <MenuItem key={vehicle.id} value={vehicle.id}>
+                  {vehicle.make} {vehicle.model} - {vehicle.licensePlate}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              label="Notes"
+              name="notes"
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              fullWidth
+              multiline
+              rows={3}
+              placeholder="Additional notes about the driver..."
             />
             <TextField
               label="Status"

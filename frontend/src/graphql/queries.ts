@@ -1,5 +1,36 @@
 import { gql } from '@apollo/client';
 
+// Customer Queries
+export const GET_CUSTOMERS = gql`
+  query GetCustomers {
+    customers {
+      id
+      name
+      address
+      businessName
+      notes
+      exceptions
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
+export const GET_CUSTOMER = gql`
+  query GetCustomer($id: ID!) {
+    customer(id: $id) {
+      id
+      name
+      address
+      businessName
+      notes
+      exceptions
+      createdAt
+      updatedAt
+    }
+  }
+`;
+
 // Driver Queries
 export const GET_DRIVERS = gql`
   query GetDrivers {

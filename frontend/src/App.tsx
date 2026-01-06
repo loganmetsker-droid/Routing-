@@ -3,6 +3,7 @@ import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import DriversPage from './pages/DriversPage';
 import VehiclesPage from './pages/VehiclesPage';
+import CustomersPage from './pages/CustomersPage';
 import RoutesPage from './pages/RoutesPage';
 import DispatchesPage from './pages/DispatchesPage';
 import JobsPage from './pages/JobsPage';
@@ -16,6 +17,7 @@ function App() {
         <Route index element={<Dashboard />} />
         <Route path="drivers" element={<DriversPage />} />
         <Route path="vehicles" element={<VehiclesPage />} />
+        <Route path="customers" element={<CustomersPage />} />
         <Route path="routes" element={<RoutesPage />} />
         <Route path="dispatches" element={<DispatchesPage />} />
         <Route path="jobs" element={<JobsPage />} />

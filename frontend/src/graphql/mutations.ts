@@ -1,5 +1,40 @@
 import { gql } from '@apollo/client';
 
+// Customer Mutations
+export const CREATE_CUSTOMER = gql`
+  mutation CreateCustomer($input: CreateCustomerInput!) {
+    createCustomer(createCustomerInput: $input) {
+      id
+      name
+      address
+      businessName
+      notes
+      exceptions
+    }
+  }
+`;
+
+export const UPDATE_CUSTOMER = gql`
+  mutation UpdateCustomer($id: ID!, $input: UpdateCustomerInput!) {
+    updateCustomer(id: $id, updateCustomerInput: $input) {
+      id
+      name
+      address
+      businessName
+      notes
+      exceptions
+    }
+  }
+`;
+
+export const DELETE_CUSTOMER = gql`
+  mutation DeleteCustomer($id: ID!) {
+    deleteCustomer(id: $id) {
+      id
+    }
+  }
+`;
+
 // Driver Mutations
 export const CREATE_DRIVER = gql`
   mutation CreateDriver($input: CreateDriverInput!) {
