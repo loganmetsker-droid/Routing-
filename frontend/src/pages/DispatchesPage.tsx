@@ -34,7 +34,6 @@ import {
   FormGroup,
   FormControlLabel,
   IconButton,
-  Tooltip,
 } from '@mui/material';
 import {
   LocalShipping,
