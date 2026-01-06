@@ -32,19 +32,8 @@ import { MapContainer, TileLayer, Polyline, Marker, Popup } from 'react-leaflet'
 import { LatLngExpression } from 'leaflet';
 import { motion } from 'framer-motion';
 import { useVehicles, useCustomers } from '../graphql/hooks';
+import { generateRoute } from '../services/api';
 import 'leaflet/dist/leaflet.css';
-
-// Placeholder function for backend route generation
-const generateRouteAPI = async (vehicleId: string, stops: any[]) => {
-  // TODO: Replace with actual backend API call
-  // POST /api/routes/generate
-  console.log('Generating route for vehicle:', vehicleId, 'with stops:', stops);
-  return {
-    success: true,
-    route: stops,
-    optimized: true,
-  };
-};
 
 // Route colors for visualization
 const ROUTE_COLORS = [
@@ -198,12 +187,19 @@ export default function RoutingPage() {
     newRoute.totalMiles = stats.totalMiles;
     newRoute.estimatedTime = stats.estimatedTime;
 
-    // Call placeholder API
-    await generateRouteAPI(selectedVehicle.id, newRoute.stops);
+    try {
+      // Call backend API - map customer IDs to job IDs
+      const jobIds = selectedCustomers.map(c => c.id);
+      const response = await generateRoute(selectedVehicle.id, jobIds);
+      console.log('Route created:', response.route);
 
-    setRoutes([...routes, newRoute]);
-    setSelectedVehicle(null);
-    setSelectedCustomers([]);
+      setRoutes([...routes, newRoute]);
+      setSelectedVehicle(null);
+      setSelectedCustomers([]);
+    } catch (error) {
+      console.error('Failed to generate route:', error);
+      alert('Failed to generate route. Please try again.');
+    }
   };
 
   const handleOptimizeRoute = (routeId: string) => {
