@@ -5,6 +5,7 @@ import DriversPage from './pages/DriversPage';
 import VehiclesPage from './pages/VehiclesPage';
 import CustomersPage from './pages/CustomersPage';
 import RoutesPage from './pages/RoutesPage';
+import RoutePlanningPage from './pages/RoutePlanningPage';
 import DispatchesPage from './pages/DispatchesPage';
 import JobsPage from './pages/JobsPage';
 import LoginPage from './pages/LoginPage';
@@ -19,6 +20,7 @@ function App() {
         <Route path="vehicles" element={<VehiclesPage />} />
         <Route path="customers" element={<CustomersPage />} />
         <Route path="routes" element={<RoutesPage />} />
+        <Route path="route-planning" element={<RoutePlanningPage />} />
         <Route path="dispatches" element={<DispatchesPage />} />
         <Route path="jobs" element={<JobsPage />} />
       </Route>

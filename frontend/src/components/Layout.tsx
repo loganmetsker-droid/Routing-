@@ -22,6 +22,7 @@ import {
   Person as DriversIcon,
   People as CustomersIcon,
   Route as RoutesIcon,
+  Map as RoutePlanningIcon,
   LocalShipping as DispatchIcon,
   Work as JobsIcon,
   Logout as LogoutIcon,
@@ -35,6 +36,7 @@ const menuItems = [
   { text: 'Vehicles', icon: <VehiclesIcon />, path: '/vehicles' },
   { text: 'Customers', icon: <CustomersIcon />, path: '/customers' },
   { text: 'Routes', icon: <RoutesIcon />, path: '/routes' },
+  { text: 'Route Planning', icon: <RoutePlanningIcon />, path: '/route-planning' },
   { text: 'Dispatch', icon: <DispatchIcon />, path: '/dispatches' },
   { text: 'Jobs', icon: <JobsIcon />, path: '/jobs' },
 ];
