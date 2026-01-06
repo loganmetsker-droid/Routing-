@@ -19,9 +19,8 @@ import {
   MenuItem,
   CircularProgress,
   Avatar,
-  Grid,
 } from '@mui/material';
-import { Add, Edit, Person, Delete } from '@mui/icons-material';
+import { Add, Edit, Person } from '@mui/icons-material';
 import { useDrivers, useCreateDriver, useUpdateDriver, useVehicles } from '../graphql/hooks';
 import { motion } from 'framer-motion';
 import { useState } from 'react';

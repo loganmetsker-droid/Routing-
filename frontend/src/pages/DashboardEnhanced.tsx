@@ -350,7 +350,7 @@ export default function Dashboard() {
 
               {/* Route Legend */}
               <Box sx={{ mb: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                {mapRoutes.slice(0, 6).map((route: any, index: number) => (
+                {mapRoutes.slice(0, 6).map((route: any) => (
                   <Chip
                     key={route.id}
                     label={`${route.vehicle} (${route.vehiclePlate})`}
