@@ -33,54 +33,31 @@ import {
   Checkbox,
   FormGroup,
   FormControlLabel,
-  IconButton,
-  Tooltip,
 } from '@mui/material';
 import {
   LocalShipping,
   Person,
   Route as RouteIcon,
-  Map as MapIcon,
+  Map,
   Schedule,
   PlayArrow,
   AutoAwesome,
   TrendingUp,
   Warning,
-  Visibility,
-  Edit,
-  DragIndicator,
 } from '@mui/icons-material';
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
 import { useDrivers, useVehicles } from '../graphql/hooks';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
 
-// Fix Leaflet default marker icons
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-});
-
-// Mock geocoding - in production use real geocoding API
-const geocodeAddress = (address: string): [number, number] => {
-  const hash = address.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  // San Francisco Bay Area bounds
-  const lat = 37.3 + (hash % 100) / 200; // 37.3 - 37.8
-  const lng = -122.5 + (hash % 100) / 200; // -122.5 - -122.0
-  return [lat, lng];
-};
-
-// Geographic clustering algorithm
+// Simple geographic clustering algorithm
 const optimizeRoutes = (jobs: any[], selectedVehicles: any[]) => {
   if (selectedVehicles.length === 0 || jobs.length === 0) {
     return [];
   }
 
+  // Group jobs by geographic region (simplified - in production use proper geocoding)
   const jobsByRegion: { [key: string]: any[] } = {};
 
   jobs.forEach(job => {
+    // Simple region detection based on address keywords
     const address = job.deliveryAddress.toLowerCase();
     let region = 'central';
 
@@ -100,6 +77,7 @@ const optimizeRoutes = (jobs: any[], selectedVehicles: any[]) => {
     jobsByRegion[region].push(job);
   });
 
+  // Assign vehicles to regions
   const optimizedRoutes: any[] = [];
   const regions = Object.keys(jobsByRegion);
 
@@ -108,23 +86,19 @@ const optimizeRoutes = (jobs: any[], selectedVehicles: any[]) => {
       const vehicle = selectedVehicles[index];
       const regionJobs = jobsByRegion[region];
 
-      // Add geocoded coordinates to jobs
-      const jobsWithCoords = regionJobs.map(job => ({
-        ...job,
-        pickupCoords: geocodeAddress(job.pickupAddress),
-        deliveryCoords: geocodeAddress(job.deliveryAddress),
-      }));
-
+      // Calculate total weight and check capacity
       const totalWeight = regionJobs.reduce((sum, job) => sum + (job.weight || 0), 0);
       const vehicleCapacity = vehicle.capacityWeightKg || vehicle.capacity || 1000;
-      const estimatedDistance = regionJobs.length * 8 + 5;
-      const estimatedDuration = regionJobs.length * 25 + 20;
+
+      // Estimate distance (simplified - in production use real routing API)
+      const estimatedDistance = regionJobs.length * 8 + 5; // ~8km per stop + 5km base
+      const estimatedDuration = regionJobs.length * 25 + 20; // ~25min per stop + 20min base
 
       optimizedRoutes.push({
         vehicleId: vehicle.id,
         vehicle: vehicle,
         region: region,
-        jobs: jobsWithCoords,
+        jobs: regionJobs,
         totalWeight: totalWeight,
         capacity: vehicleCapacity,
         utilizationPercent: Math.round((totalWeight / vehicleCapacity) * 100),
@@ -142,9 +116,7 @@ export default function DispatchesPage() {
   const [tab, setTab] = useState(0);
   const [vehicleSelectionOpen, setVehicleSelectionOpen] = useState(false);
   const [optimizeDialogOpen, setOptimizeDialogOpen] = useState(false);
-  const [routeDetailOpen, setRouteDetailOpen] = useState(false);
   const [assignDriverDialogOpen, setAssignDriverDialogOpen] = useState(false);
-  const [selectedRouteForDetail, setSelectedRouteForDetail] = useState<any>(null);
   const [selectedRouteForDriver, setSelectedRouteForDriver] = useState<any>(null);
   const [selectedDriverId, setSelectedDriverId] = useState('');
   const [selectedVehicleIds, setSelectedVehicleIds] = useState<string[]>([]);
@@ -160,7 +132,7 @@ export default function DispatchesPage() {
   const vehicles = vehiclesData?.vehicles || [];
   const availableVehicles = vehicles.filter((v: any) => v.status === 'AVAILABLE');
 
-  // Mock jobs data
+  // Mock jobs data with better geographic distribution
   useEffect(() => {
     setJobs([
       {
@@ -254,6 +226,7 @@ export default function DispatchesPage() {
     setVehicleSelectionOpen(false);
     setLoading(true);
 
+    // Simulate optimization calculation
     setTimeout(() => {
       const pendingJobs = jobs.filter(j => j.status === 'pending');
       const selectedVehicles = availableVehicles.filter((v: any) =>
@@ -267,11 +240,12 @@ export default function DispatchesPage() {
   };
 
   const handleApproveOptimization = () => {
+    // Convert optimized routes to actual routes
     const newRoutes = optimizedRoutes.map(opt => ({
       id: `route-${Date.now()}-${Math.random()}`,
       vehicleId: opt.vehicleId,
       vehicle: opt.vehicle,
-      driverId: null,
+      driverId: null, // Will be assigned by user
       driver: null,
       region: opt.region,
       jobIds: opt.jobs.map((j: any) => j.id),
@@ -287,6 +261,7 @@ export default function DispatchesPage() {
 
     setRoutes([...routes, ...newRoutes]);
 
+    // Update job statuses
     const assignedJobIds = optimizedRoutes.flatMap(opt => opt.jobs.map((j: any) => j.id));
     setJobs(jobs.map(job =>
       assignedJobIds.includes(job.id)
@@ -296,12 +271,6 @@ export default function DispatchesPage() {
 
     setOptimizeDialogOpen(false);
     setOptimizedRoutes([]);
-    setTab(2); // Switch to "Awaiting Drivers" tab
-  };
-
-  const handleViewRouteDetail = (route: any) => {
-    setSelectedRouteForDetail(route);
-    setRouteDetailOpen(true);
   };
 
   const handleOpenDriverAssignment = (route: any) => {
@@ -324,7 +293,6 @@ export default function DispatchesPage() {
     setAssignDriverDialogOpen(false);
     setSelectedRouteForDriver(null);
     setSelectedDriverId('');
-    setTab(0); // Switch to "Optimized Routes" tab
   };
 
   const getStatusColor = (status: string) => {
@@ -378,7 +346,8 @@ export default function DispatchesPage() {
 
       {/* Info Alert */}
       <Alert severity="info" icon={<TrendingUp />} sx={{ mb: 3 }}>
-        <strong>Smart Routing:</strong> Select vehicles, optimize routes, view on map, assign drivers, and dispatch!
+        <strong>Smart Routing:</strong> Select which vehicles to use today, then the system automatically assigns them to territories based on geographic optimization.
+        No overlapping routes - maximizing efficiency!
       </Alert>
 
       {/* Stats Cards */}
@@ -504,26 +473,36 @@ export default function DispatchesPage() {
                       </Grid>
                     </Grid>
 
+                    <Divider sx={{ my: 2 }} />
+
+                    <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+                      Deliveries:
+                    </Typography>
+                    {route.jobs.slice(0, 3).map((job: any) => (
+                      <Typography key={job.id} variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                        • {job.customerName}
+                      </Typography>
+                    ))}
+                    {route.jobs.length > 3 && (
+                      <Typography variant="caption" color="text.secondary">
+                        + {route.jobs.length - 3} more
+                      </Typography>
+                    )}
+
                     <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
-                      <Button
-                        size="small"
-                        startIcon={<Visibility />}
-                        variant="outlined"
-                        onClick={() => handleViewRouteDetail(route)}
-                        sx={{ textTransform: 'none' }}
-                      >
-                        View on Map
-                      </Button>
                       {route.status === 'planned' && (
                         <Button
                           size="small"
                           startIcon={<PlayArrow />}
-                          variant="contained"
+                          variant="outlined"
                           sx={{ textTransform: 'none' }}
                         >
                           Start Route
                         </Button>
                       )}
+                      <Button size="small" variant="text" sx={{ textTransform: 'none' }}>
+                        View Details
+                      </Button>
                     </Box>
                   </CardContent>
                 </Card>
@@ -545,7 +524,7 @@ export default function DispatchesPage() {
               jobs.filter(j => j.status === 'pending').map((job) => (
                 <ListItem key={job.id} divider>
                   <ListItemIcon>
-                    <MapIcon color="primary" />
+                    <Map color="primary" />
                   </ListItemIcon>
                   <ListItemText
                     primary={
@@ -567,7 +546,7 @@ export default function DispatchesPage() {
                           Delivery: {job.deliveryAddress}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
-                          Window: {job.timeWindowStart} - {job.timeWindowEnd} | Weight: {job.weight}kg
+                          Window: {job.timeWindowStart} - {job.timeWindowEnd} | Weight: {job.weight}kg | Volume: {job.volume}m³
                         </Typography>
                       </>
                     }
@@ -612,31 +591,22 @@ export default function DispatchesPage() {
 
                     <Box sx={{ mb: 2 }}>
                       <Typography variant="body2" color="text.secondary" gutterBottom>
-                        <strong>Vehicle:</strong> {route.vehicle?.make} {route.vehicle?.model}
+                        <strong>Vehicle:</strong> {route.vehicle?.make} {route.vehicle?.model} ({route.vehicle?.licensePlate})
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
                         <strong>Capacity Utilization:</strong> {route.utilizationPercent}%
                       </Typography>
                     </Box>
 
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                      <Button
-                        variant="outlined"
-                        startIcon={<Visibility />}
-                        onClick={() => handleViewRouteDetail(route)}
-                        sx={{ textTransform: 'none', flex: 1 }}
-                      >
-                        View Map
-                      </Button>
-                      <Button
-                        variant="contained"
-                        startIcon={<Person />}
-                        onClick={() => handleOpenDriverAssignment(route)}
-                        sx={{ textTransform: 'none', flex: 1 }}
-                      >
-                        Assign Driver
-                      </Button>
-                    </Box>
+                    <Button
+                      fullWidth
+                      variant="contained"
+                      startIcon={<Person />}
+                      onClick={() => handleOpenDriverAssignment(route)}
+                      sx={{ textTransform: 'none' }}
+                    >
+                      Assign Driver
+                    </Button>
                   </CardContent>
                 </Card>
               </Grid>
@@ -659,13 +629,13 @@ export default function DispatchesPage() {
           </Box>
         </DialogTitle>
         <DialogContent>
-          <Alert severity="info" sx={{ mb: 3, mt: 1 }}>
-            Choose which vehicles to use for today's deliveries.
+          <Alert severity="info" sx={{ mb: 3 }}>
+            Choose which vehicles to use for today's deliveries. The system will optimize routes based on your selection.
           </Alert>
 
           {availableVehicles.length === 0 ? (
             <Alert severity="warning">
-              No available vehicles. Add vehicles and set status to "Available".
+              No available vehicles. Please add vehicles in the Vehicles page and set their status to "Available".
             </Alert>
           ) : (
             <FormGroup>
@@ -723,14 +693,14 @@ export default function DispatchesPage() {
             variant="contained"
             onClick={handleOptimizeRoutes}
             disabled={selectedVehicleIds.length === 0}
-            startIcon={<AutoAwesome />}
+            startIcon={loading ? undefined : <AutoAwesome />}
           >
-            Optimize Routes
+            {loading ? 'Optimizing...' : 'Optimize Routes'}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Optimization Results Dialog */}
+      {/* Optimization Dialog */}
       <Dialog
         open={optimizeDialogOpen}
         onClose={() => !loading && setOptimizeDialogOpen(false)}
@@ -745,7 +715,8 @@ export default function DispatchesPage() {
         </DialogTitle>
         <DialogContent>
           <Alert severity="success" sx={{ mb: 3 }}>
-            System optimized {optimizedRoutes.length} routes. Review and approve.
+            System has automatically optimized {optimizedRoutes.length} routes based on geographic territories.
+            Review and approve to create these routes.
           </Alert>
 
           <TableContainer>
@@ -808,138 +779,6 @@ export default function DispatchesPage() {
             disabled={optimizedRoutes.some(r => r.isOverCapacity)}
           >
             Approve & Create Routes
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Route Detail Dialog with Map */}
-      <Dialog
-        open={routeDetailOpen}
-        onClose={() => setRouteDetailOpen(false)}
-        maxWidth="lg"
-        fullWidth
-      >
-        <DialogTitle>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Box>
-              <Typography variant="h6">
-                {selectedRouteForDetail?.region.toUpperCase()} Territory Route
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {selectedRouteForDetail?.vehicle?.make} {selectedRouteForDetail?.vehicle?.model}
-              </Typography>
-            </Box>
-            <Chip
-              label={`${selectedRouteForDetail?.jobCount} stops`}
-              color="primary"
-            />
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          <Grid container spacing={3}>
-            {/* Map */}
-            <Grid item xs={12} md={8}>
-              <Paper sx={{ height: 500, position: 'relative' }}>
-                {selectedRouteForDetail && (
-                  <MapContainer
-                    center={selectedRouteForDetail.jobs[0]?.deliveryCoords || [37.7749, -122.4194]}
-                    zoom={11}
-                    style={{ height: '100%', width: '100%' }}
-                  >
-                    <TileLayer
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                    />
-
-                    {/* Route polyline */}
-                    <Polyline
-                      positions={selectedRouteForDetail.jobs.map((job: any) => job.deliveryCoords)}
-                      color={getRegionColor(selectedRouteForDetail.region)}
-                      weight={3}
-                      opacity={0.7}
-                    />
-
-                    {/* Stop markers */}
-                    {selectedRouteForDetail.jobs.map((job: any, index: number) => (
-                      <Marker key={job.id} position={job.deliveryCoords}>
-                        <Popup>
-                          <strong>Stop #{index + 1}</strong><br />
-                          {job.customerName}<br />
-                          {job.deliveryAddress}<br />
-                          <em>Window: {job.timeWindowStart} - {job.timeWindowEnd}</em>
-                        </Popup>
-                      </Marker>
-                    ))}
-                  </MapContainer>
-                )}
-              </Paper>
-            </Grid>
-
-            {/* Stop List */}
-            <Grid item xs={12} md={4}>
-              <Typography variant="h6" gutterBottom>
-                Stop Sequence
-              </Typography>
-              <List dense>
-                {selectedRouteForDetail?.jobs.map((job: any, index: number) => (
-                  <ListItem
-                    key={job.id}
-                    sx={{
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      borderRadius: 1,
-                      mb: 1,
-                    }}
-                  >
-                    <ListItemIcon>
-                      <Chip
-                        label={index + 1}
-                        size="small"
-                        sx={{
-                          bgcolor: getRegionColor(selectedRouteForDetail.region),
-                          color: 'white',
-                        }}
-                      />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={job.customerName}
-                      secondary={
-                        <>
-                          {job.deliveryAddress}<br />
-                          <Chip label={job.priority} size="small" color={getPriorityColor(job.priority) as any} sx={{ mt: 0.5 }} />
-                        </>
-                      }
-                    />
-                    <IconButton size="small">
-                      <DragIndicator />
-                    </IconButton>
-                  </ListItem>
-                ))}
-              </List>
-
-              <Divider sx={{ my: 2 }} />
-
-              <Box>
-                <Typography variant="body2" color="text.secondary">
-                  <strong>Total Distance:</strong> ~{selectedRouteForDetail?.totalDistanceKm} km
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  <strong>Estimated Time:</strong> ~{selectedRouteForDetail?.totalDurationMinutes} min
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  <strong>Total Weight:</strong> {selectedRouteForDetail?.totalWeight}kg
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  <strong>Utilization:</strong> {selectedRouteForDetail?.utilizationPercent}%
-                </Typography>
-              </Box>
-            </Grid>
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setRouteDetailOpen(false)}>Close</Button>
-          <Button variant="outlined" startIcon={<Edit />}>
-            Edit Route
           </Button>
         </DialogActions>
       </Dialog>
