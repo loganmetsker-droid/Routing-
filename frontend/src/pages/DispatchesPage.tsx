@@ -975,15 +975,25 @@ export default function DispatchesPage() {
             >
               {driversLoading ? (
                 <MenuItem disabled>Loading drivers...</MenuItem>
+              ) : drivers && drivers.length > 0 ? (
+                drivers
+                  .filter((d: any) => d.status === 'ACTIVE' || d.status === 'Active')
+                  .map((driver: any) => (
+                    <MenuItem key={driver.id} value={driver.id}>
+                      {driver.firstName} {driver.lastName} ({driver.email})
+                    </MenuItem>
+                  ))
               ) : (
-                drivers?.filter((d: any) => d.status === 'ACTIVE').map((driver: any) => (
-                  <MenuItem key={driver.id} value={driver.id}>
-                    {driver.firstName} {driver.lastName} ({driver.email})
-                  </MenuItem>
-                ))
+                <MenuItem disabled>No drivers available</MenuItem>
               )}
             </Select>
           </FormControl>
+
+          {!driversLoading && drivers && drivers.filter((d: any) => d.status === 'ACTIVE' || d.status === 'Active').length === 0 && (
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              No active drivers available. Please go to the Drivers page and set driver status to "ACTIVE" or create new drivers.
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setAssignDriverDialogOpen(false)}>Cancel</Button>
