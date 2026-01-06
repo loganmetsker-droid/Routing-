@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   Box,
   Typography,
@@ -73,7 +73,7 @@ interface Route {
 }
 
 // Placeholder geocoding function
-const geocodeAddress = async (address: string): Promise<{ lat: number; lng: number }> => {
+const geocodeAddress = async (): Promise<{ lat: number; lng: number }> => {
   // TODO: Replace with actual geocoding service (Google Maps, Mapbox, etc.)
   // For now, return random coordinates in USA
   const baseLat = 39.8283;
@@ -171,7 +171,7 @@ export default function RoutingPage() {
     // Geocode customer addresses
     const stopsWithCoords = await Promise.all(
       selectedCustomers.map(async (customer, index) => {
-        const coords = await geocodeAddress(customer.address);
+        const coords = await geocodeAddress();
         return {
           id: `stop-${Date.now()}-${index}`,
           customerId: customer.id,
