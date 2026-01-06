@@ -164,15 +164,31 @@ export default function Dashboard() {
       // Find assigned vehicle
       const assignedVehicle = vehicles.find((v: any) => v.id === route.vehicleId);
 
+      // Extract positions from either waypoints or jobs
+      let positions = [];
+      if (route.waypoints && route.waypoints.length > 0) {
+        positions = route.waypoints;
+      } else if (route.jobs && route.jobs.length > 0) {
+        // For routes from Dispatch page with jobs containing deliveryCoords
+        positions = route.jobs
+          .filter((job: any) => job.deliveryCoords)
+          .map((job: any) => ({
+            lat: job.deliveryCoords[0],
+            lng: job.deliveryCoords[1],
+            latitude: job.deliveryCoords[0],
+            longitude: job.deliveryCoords[1],
+          }));
+      }
+
       return {
         id: route.id,
-        positions: route.waypoints || [],
+        positions: positions,
         color: ROUTE_COLORS[index % ROUTE_COLORS.length],
         status: route.status,
         vehicle: assignedVehicle ? `${assignedVehicle.make} ${assignedVehicle.model}` : 'Unassigned',
         vehiclePlate: assignedVehicle?.licensePlate || 'N/A',
-        totalDistance: route.totalDistance || 0,
-        stopCount: (route.waypoints || []).length,
+        totalDistance: route.totalDistanceKm || route.totalDistance || 0,
+        stopCount: positions.length,
       };
     });
   }, [routesData, vehiclesData]);
@@ -185,7 +201,11 @@ export default function Dashboard() {
         firstRoute.lng || firstRoute.longitude || -122.4194
       ];
     }
-    return [37.7749, -122.4194]; // San Francisco default
+    return [37.7749, -122.4194]; // San Francisco, California, USA default
+  }, [mapRoutes]);
+
+  const mapZoom = useMemo(() => {
+    return mapRoutes.length > 0 ? 12 : 5; // Zoom in when routes exist, wider view otherwise
   }, [mapRoutes]);
 
   // Recent jobs for table
@@ -387,7 +407,7 @@ export default function Dashboard() {
               >
                 <MapContainer
                   center={mapCenter}
-                  zoom={12}
+                  zoom={mapZoom}
                   style={{ height: '100%', width: '100%' }}
                   scrollWheelZoom={true}
                 >
