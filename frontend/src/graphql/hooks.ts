@@ -1,29 +1,28 @@
 // GraphQL hooks disabled - using REST API via src/services/api.ts
-// Stub implementations to prevent build errors
 
-export const useCustomers = () => ({ data: { customers: [] }, loading: false, error: null });
-export const useCustomer = () => ({ data: null, loading: false, error: null });
-export const useCreateCustomer = () => [() => {}, { loading: false }];
-export const useUpdateCustomer = () => [() => {}, { loading: false }];
-export const useDeleteCustomer = () => [() => {}, { loading: false }];
+export const useCustomers = () => ({ data: { customers: [] }, loading: false, error: null, refetch: async () => {} });
+export const useCustomer = (id?: string) => ({ data: null, loading: false, error: null, refetch: async () => {} });
+export const useCreateCustomer = () => [async () => {}, { loading: false }] as const;
+export const useUpdateCustomer = () => [async () => {}, { loading: false }] as const;
+export const useDeleteCustomer = () => [async () => {}, { loading: false }] as const;
 
-export const useDrivers = () => ({ data: { drivers: [] }, loading: false, error: null });
-export const useDriver = () => ({ data: null, loading: false, error: null });
-export const useCreateDriver = () => [() => {}, { loading: false }];
-export const useUpdateDriver = () => [() => {}, { loading: false }];
+export const useDrivers = () => ({ data: { drivers: [] }, loading: false, error: null, refetch: async () => {} });
+export const useDriver = (id?: string) => ({ data: null, loading: false, error: null, refetch: async () => {} });
+export const useCreateDriver = () => [async () => {}, { loading: false }] as const;
+export const useUpdateDriver = () => [async () => {}, { loading: false }] as const;
 
-export const useVehicles = () => ({ data: { vehicles: [] }, loading: false, error: null });
-export const useVehiclesByType = () => ({ data: { vehicles: [] }, loading: false, error: null });
-export const useVehiclesNeedingMaintenance = () => ({ data: { vehicles: [] }, loading: false, error: null });
-export const useCreateVehicle = () => [() => {}, { loading: false }];
-export const useUpdateVehicle = () => [() => {}, { loading: false }];
+export const useVehicles = () => ({ data: { vehicles: [] }, loading: false, error: null, refetch: async () => {} });
+export const useVehiclesByType = (type?: string) => ({ data: { vehicles: [] }, loading: false, error: null, refetch: async () => {} });
+export const useVehiclesNeedingMaintenance = () => ({ data: { vehicles: [] }, loading: false, error: null, refetch: async () => {} });
+export const useCreateVehicle = () => [async () => {}, { loading: false }] as const;
+export const useUpdateVehicle = () => [async () => {}, { loading: false }] as const;
 
-export const useJobs = () => ({ data: { jobs: [] }, loading: false, error: null });
-export const useCreateJob = () => [() => {}, { loading: false }];
-export const useUpdateJob = () => [() => {}, { loading: false }];
+export const useJobs = () => ({ data: { jobs: [] }, loading: false, error: null, refetch: async () => {} });
+export const useCreateJob = () => [async () => {}, { loading: false }] as const;
+export const useUpdateJob = () => [async () => {}, { loading: false }] as const;
 
-export const useRoutes = () => ({ data: { routes: [] }, loading: false, error: null });
-export const useRoute = () => ({ data: null, loading: false, error: null });
-export const useCreateRoute = () => [() => {}, { loading: false }];
+export const useRoutes = () => ({ data: { routes: [] }, loading: false, error: null, refetch: async () => {} });
+export const useRoute = (id?: string) => ({ data: { route: null }, loading: false, error: null, refetch: async () => {} });
+export const useCreateRoute = () => [async () => {}, { loading: false }] as const;
 
-export const useLogin = () => [() => {}, { loading: false }];
+export const useLogin = () => [async () => {}, { loading: false }] as const;
