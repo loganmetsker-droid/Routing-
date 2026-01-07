@@ -1,27 +1,65 @@
-// Standalone Express API for Vercel Serverless
+// Standalone Express API for Vercel Serverless with MongoDB
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { Client } from 'pg';
+import { MongoClient } from 'mongodb';
 
-// In-memory storage (persists during serverless function warm-up)
-const driversStore: any[] = [];
-const vehiclesStore: any[] = [];
+const MONGODB_URI = process.env.MONGODB_URI || '';
+const DB_NAME = 'routing-saas';
 
-// Database connection
-const DATABASE_URL = process.env.DATABASE_URL || '';
+let cachedClient: MongoClient | null = null;
 
 async function getDbClient() {
-  const client = new Client({
-    connectionString: DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+  if (cachedClient) {
+    return cachedClient;
+  }
+
+  if (!MONGODB_URI) {
+    throw new Error('MONGODB_URI not configured');
+  }
+
+  const client = new MongoClient(MONGODB_URI, {
+    serverSelectionTimeoutMS: 5000,
   });
+
   await client.connect();
+  cachedClient = client;
+
+  // Create indexes
+  const db = client.db(DB_NAME);
+  await db.collection('jobs').createIndex({ id: 1 }, { unique: true });
+  await db.collection('routes').createIndex({ id: 1 }, { unique: true });
+  await db.collection('vehicles').createIndex({ id: 1 }, { unique: true });
+  await db.collection('drivers').createIndex({ id: 1 }, { unique: true });
+
+  // Initialize defaults
+  const vehiclesCount = await db.collection('vehicles').countDocuments();
+  if (vehiclesCount === 0) {
+    await db.collection('vehicles').insertMany([
+      { id: 'v1', name: 'Truck 1', type: 'box_truck', capacity: 1000, status: 'available' },
+      { id: 'v2', name: 'Van 1', type: 'cargo_van', capacity: 500, status: 'available' },
+      { id: 'v3', name: 'Truck 2', type: 'box_truck', capacity: 1000, status: 'available' }
+    ]);
+  }
+
+  const driversCount = await db.collection('drivers').countDocuments();
+  if (driversCount === 0) {
+    await db.collection('drivers').insertMany([
+      { id: 'd1', name: 'John Doe', status: 'available' },
+      { id: 'd2', name: 'Jane Smith', status: 'available' },
+      { id: 'd3', name: 'Bob Wilson', status: 'available' }
+    ]);
+  }
+
   return client;
+}
+
+function generateId() {
+  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Set CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
@@ -32,247 +70,253 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const method = req.method || 'GET';
 
   try {
+    const client = await getDbClient();
+    const db = client.db(DB_NAME);
+
     // Health check
-    if (url === '/health/ping' || url === '/health') {
+    if (url === '/health' || url === '/health/ping') {
       return res.status(200).json({
         status: 'ok',
-        timestamp: new Date().toISOString(),
-        database: DATABASE_URL ? 'configured' : 'not configured'
+        database: 'connected',
+        timestamp: new Date().toISOString()
       });
     }
 
-    // GraphQL endpoint
-    if (url === '/graphql' && method === 'POST') {
-      const { query, variables } = req.body as any;
+    // ============================================================================
+    // JOBS API
+    // ============================================================================
 
-      // Handle createDriver mutation
-      if (query && query.includes('createDriver')) {
-        const { input } = variables;
-        const driver = {
-          id: `driver-${Date.now()}`,
-          ...input,
-          status: input.status || 'ACTIVE',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-        driversStore.push(driver);
-        return res.status(200).json({
-          data: { createDriver: driver }
-        });
+    // Get all jobs
+    if (url === '/api/jobs' && method === 'GET') {
+      const jobs = await db.collection('jobs').find({}).toArray();
+      return res.status(200).json({ jobs });
+    }
+
+    // Create job
+    if (url === '/api/jobs' && method === 'POST') {
+      const { customerName, pickupAddress, deliveryAddress, timeWindow, priority } = req.body as any;
+
+      if (!customerName || !pickupAddress || !deliveryAddress) {
+        return res.status(400).json({ error: 'Missing required fields' });
       }
 
-      // Handle drivers query
-      if (query && query.includes('query') && query.includes('drivers')) {
-        return res.status(200).json({
-          data: { drivers: driversStore }
-        });
+      const job = {
+        id: generateId(),
+        customerName,
+        pickupAddress,
+        deliveryAddress,
+        timeWindow: timeWindow || { start: new Date().toISOString(), end: new Date(Date.now() + 3600000).toISOString() },
+        priority: priority || 'normal',
+        status: 'pending',
+        createdAt: new Date().toISOString()
+      };
+
+      await db.collection('jobs').insertOne(job);
+      return res.status(201).json({ job });
+    }
+
+    // Update job
+    if (url.startsWith('/api/jobs/') && method === 'PATCH') {
+      const id = url.split('/api/jobs/')[1];
+      const { status, assignedRouteId } = req.body as any;
+
+      const updates: any = {};
+      if (status) updates.status = status;
+      if (assignedRouteId) updates.assignedRouteId = assignedRouteId;
+
+      const result = await db.collection('jobs').findOneAndUpdate(
+        { id },
+        { $set: updates },
+        { returnDocument: 'after' }
+      );
+
+      if (!result) {
+        return res.status(404).json({ error: 'Job not found' });
       }
 
-      // Handle createVehicle mutation
-      if (query && query.includes('createVehicle')) {
-        const { input } = variables;
-        const vehicle = {
-          id: `vehicle-${Date.now()}`,
-          ...input,
-          status: input.status || 'AVAILABLE',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-        vehiclesStore.push(vehicle);
-        return res.status(200).json({
-          data: { createVehicle: vehicle }
-        });
+      return res.status(200).json({ job: result });
+    }
+
+    // ============================================================================
+    // ROUTES API
+    // ============================================================================
+
+    // Get all routes
+    if (url === '/api/routes' && method === 'GET') {
+      const routes = await db.collection('routes').find({}).toArray();
+      return res.status(200).json({ routes });
+    }
+
+    // Create route
+    if (url === '/api/routes' && method === 'POST') {
+      const { vehicleId, jobIds } = req.body as any;
+
+      if (!vehicleId || !jobIds || jobIds.length === 0) {
+        return res.status(400).json({ error: 'vehicleId and jobIds required' });
       }
 
-      // Handle vehicles query
-      if (query && query.includes('query') && query.includes('vehicles')) {
-        return res.status(200).json({
-          data: { vehicles: vehiclesStore }
-        });
+      const vehicle = await db.collection('vehicles').findOne({ id: vehicleId });
+      if (!vehicle) {
+        return res.status(404).json({ error: 'Vehicle not found' });
       }
 
-      // Handle assignDriverToVehicle mutation
-      if (query && query.includes('assignDriverToVehicle')) {
-        const { driverId, vehicleId } = variables;
-        const driver = driversStore.find(d => d.id === driverId);
-        const vehicle = vehiclesStore.find(v => v.id === vehicleId);
+      const jobs = await db.collection('jobs').find({ id: { $in: jobIds } }).toArray();
+      if (jobs.length === 0) {
+        return res.status(400).json({ error: 'No valid jobs found' });
+      }
 
-        if (!driver || !vehicle) {
-          return res.status(200).json({
-            data: null,
-            errors: [{ message: 'Driver or vehicle not found' }]
-          });
+      const route = {
+        id: generateId(),
+        vehicleId,
+        jobIds,
+        status: 'planned',
+        totalDistance: Math.random() * 50 + 10,
+        totalDuration: Math.random() * 120 + 30,
+        createdAt: new Date().toISOString()
+      };
+
+      await db.collection('routes').insertOne(route);
+
+      // Update jobs to assigned
+      await db.collection('jobs').updateMany(
+        { id: { $in: jobIds } },
+        { $set: { status: 'assigned', assignedRouteId: route.id } }
+      );
+
+      return res.status(201).json({ route });
+    }
+
+    // Assign driver to route
+    if (url.match(/^\/api\/routes\/[^\/]+\/assign$/) && method === 'POST') {
+      const id = url.split('/api/routes/')[1].split('/assign')[0];
+      const { driverId } = req.body as any;
+
+      const route = await db.collection('routes').findOne({ id });
+      if (!route) {
+        return res.status(404).json({ error: 'Route not found' });
+      }
+
+      const driver = await db.collection('drivers').findOne({ id: driverId });
+      if (!driver) {
+        return res.status(404).json({ error: 'Driver not found' });
+      }
+
+      const updatedRoute = await db.collection('routes').findOneAndUpdate(
+        { id },
+        {
+          $set: {
+            driverId,
+            status: 'dispatched',
+            dispatchedAt: new Date().toISOString()
+          }
+        },
+        { returnDocument: 'after' }
+      );
+
+      await db.collection('drivers').updateOne(
+        { id: driverId },
+        { $set: { status: 'on_route' } }
+      );
+
+      await db.collection('vehicles').updateOne(
+        { id: route.vehicleId },
+        { $set: { status: 'in_route' } }
+      );
+
+      const jobIds = route.jobIds || [];
+      await db.collection('jobs').updateMany(
+        { id: { $in: jobIds } },
+        { $set: { status: 'in_progress' } }
+      );
+
+      return res.status(200).json({ route: updatedRoute });
+    }
+
+    // Update route status
+    if (url.match(/^\/api\/routes\/[^\/]+$/) && method === 'PATCH') {
+      const id = url.split('/api/routes/')[1];
+      const { status } = req.body as any;
+
+      const route = await db.collection('routes').findOne({ id });
+      if (!route) {
+        return res.status(404).json({ error: 'Route not found' });
+      }
+
+      const updates: any = { status };
+      if (status === 'completed') {
+        updates.completedAt = new Date().toISOString();
+
+        // Update vehicle and driver
+        await db.collection('vehicles').updateOne(
+          { id: route.vehicleId },
+          { $set: { status: 'available' } }
+        );
+
+        if (route.driverId) {
+          await db.collection('drivers').updateOne(
+            { id: route.driverId },
+            { $set: { status: 'available' } }
+          );
         }
 
-        // Update driver's current vehicle
-        driver.currentVehicleId = vehicleId;
-        driver.updatedAt = new Date().toISOString();
-
-        return res.status(200).json({
-          data: {
-            assignDriverToVehicle: {
-              driver,
-              vehicle
-            }
-          }
-        });
+        // Update jobs
+        const jobIds = route.jobIds || [];
+        await db.collection('jobs').updateMany(
+          { id: { $in: jobIds } },
+          { $set: { status: 'completed' } }
+        );
       }
 
-      // Handle createRoute mutation
-      if (query && query.includes('createRoute')) {
-        const { input } = variables;
-        const route = {
-          id: `route-${Date.now()}`,
-          vehicleId: input.vehicleId,
-          driverId: input.driverId || null,
-          jobIds: input.jobIds || [],
-          status: 'planned',
-          totalDistanceKm: 0,
-          totalDurationMinutes: 0,
-          jobCount: (input.jobIds || []).length,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-          plannedStart: input.plannedStart || new Date().toISOString(),
-          notes: input.notes || ''
-        };
+      const updatedRoute = await db.collection('routes').findOneAndUpdate(
+        { id },
+        { $set: updates },
+        { returnDocument: 'after' }
+      );
 
-        // Store route (in-memory for now)
-        if (!global.routesStore) global.routesStore = [];
-        global.routesStore.push(route);
+      return res.status(200).json({ route: updatedRoute });
+    }
 
-        return res.status(200).json({
-          data: { createRoute: route }
-        });
-      }
+    // ============================================================================
+    // VEHICLES & DRIVERS API
+    // ============================================================================
 
-      // Handle routes query
-      if (query && query.includes('query') && query.includes('routes')) {
-        return res.status(200).json({
-          data: { routes: global.routesStore || [] }
-        });
-      }
-
-      // Handle jobs query
-      if (query && query.includes('query') && query.includes('jobs')) {
-        return res.status(200).json({
-          data: { jobs: global.jobsStore || [] }
-        });
-      }
-
-      // Handle createJob mutation
-      if (query && query.includes('createJob')) {
-        const { input } = variables;
-        const job = {
-          id: `job-${Date.now()}`,
-          ...input,
-          status: input.status || 'pending',
-          priority: input.priority || 'normal',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-
-        if (!global.jobsStore) global.jobsStore = [];
-        global.jobsStore.push(job);
-
-        return res.status(200).json({
-          data: { createJob: job }
-        });
-      }
-
-      return res.status(200).json({
-        data: null,
-        errors: [{ message: 'Query not implemented' }]
-      });
+    // Get all vehicles
+    if (url === '/api/vehicles' && method === 'GET') {
+      const vehicles = await db.collection('vehicles').find({}).toArray();
+      return res.status(200).json({ vehicles });
     }
 
     // Get all drivers
     if (url === '/api/drivers' && method === 'GET') {
-      // Return in-memory drivers
-      return res.status(200).json({ drivers: driversStore });
-
-      /* TODO: Re-enable when database is working
-      const client = await getDbClient();
-      try {
-        const result = await client.query('SELECT * FROM drivers ORDER BY created_at DESC');
-        await client.end();
-        return res.status(200).json({ drivers: result.rows });
-      } catch (error: any) {
-        await client.end();
-        return res.status(500).json({ error: error.message });
-      }
-      */
+      const drivers = await db.collection('drivers').find({}).toArray();
+      return res.status(200).json({ drivers });
     }
 
-    // Create driver
-    if (url === '/api/drivers' && method === 'POST') {
-      // Temporary mock response until database is fixed
-      const {firstName, lastName, email, phone, licenseNumber, status = 'ACTIVE'} = req.body as any;
-      return res.status(201).json({
-        id: `temp-${Date.now()}`,
-        firstName,
-        lastName,
-        email,
-        phone,
-        licenseNumber,
-        status,
-        createdAt: new Date().toISOString()
+    // ============================================================================
+    // SSE ENDPOINT
+    // ============================================================================
+
+    if (url === '/stream-route' && method === 'GET') {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+
+      const clientId = `${Date.now()}-${Math.random()}`;
+      res.write(`data: ${JSON.stringify({ type: 'connected', clientId })}\n\n`);
+
+      // Keep connection alive with heartbeat
+      const heartbeat = setInterval(() => {
+        res.write(`:heartbeat\n\n`);
+      }, 30000);
+
+      req.on('close', () => {
+        clearInterval(heartbeat);
       });
 
-      /* TODO: Re-enable when database is working
-      const client = await getDbClient();
-      try {
-        const {firstName, lastName, email, phone, licenseNumber, status = 'ACTIVE'} = req.body as any;
-
-        const result = await client.query(
-          `INSERT INTO drivers (first_name, last_name, email, phone, license_number, status, license_expiry_date, employment_status)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-           RETURNING *`,
-          [firstName, lastName, email, phone, licenseNumber, status, '2027-12-31', 'active']
-        );
-
-        await client.end();
-        return res.status(201).json(result.rows[0]);
-      } catch (error: any) {
-        await client.end();
-        return res.status(500).json({ error: error.message, details: 'Database insert failed' });
-      }
-      */
+      return;
     }
 
-    // Get all vehicles
-    if (url === '/api/vehicles' || url === '/vehicles') {
-      const client = await getDbClient();
-      try {
-        const result = await client.query('SELECT * FROM vehicles ORDER BY created_at DESC');
-        await client.end();
-        return res.status(200).json({ vehicles: result.rows });
-      } catch (error: any) {
-        await client.end();
-        return res.status(500).json({ error: error.message });
-      }
-    }
-
-    // Create vehicle
-    if ((url === '/api/vehicles' || url === '/vehicles') && method === 'POST') {
-      const client = await getDbClient();
-      try {
-        const {make, model, year, licensePlate, vehicleType = 'TRUCK', status = 'AVAILABLE'} = req.body as any;
-
-        const result = await client.query(
-          `INSERT INTO vehicles (make, model, year, license_plate, vehicle_type, status)
-           VALUES ($1, $2, $3, $4, $5, $6)
-           RETURNING *`,
-          [make, model, year, licensePlate, vehicleType, status]
-        );
-
-        await client.end();
-        return res.status(201).json(result.rows[0]);
-      } catch (error: any) {
-        await client.end();
-        return res.status(500).json({ error: error.message, details: 'Vehicle insert failed' });
-      }
-    }
-
+    // Default 404
     return res.status(404).json({
       error: 'Not Found',
       url: url,
@@ -280,6 +324,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
   } catch (error: any) {
+    console.error('API Error:', error);
     return res.status(500).json({
       error: 'Internal Server Error',
       message: error.message
