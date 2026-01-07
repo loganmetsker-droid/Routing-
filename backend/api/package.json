@@ -3,5 +3,9 @@
   "version": "1.0.0",
   "dependencies": {
     "mongodb": "^6.3.0"
+  },
+  "devDependencies": {
+    "@vercel/node": "^3.0.0",
+    "@types/node": "^20.0.0"
   }
 }
