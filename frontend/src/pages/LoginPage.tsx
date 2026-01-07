@@ -23,14 +23,8 @@ export default function LoginPage() {
     setError('');
 
     try {
-      const { data } = await login({
-        variables: { email, password },
-      });
-
-      if (data?.login?.token) {
-        localStorage.setItem('authToken', data.login.token);
-        navigate('/');
-      }
+      await login({ email, password });
+      navigate('/');
     } catch (err: any) {
       setError(err.message || 'Login failed');
     }
