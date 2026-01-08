@@ -1,11 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Box, Paper, Typography, ToggleButtonGroup, ToggleButton } from '@mui/material';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import { useQuery, gql } from '@apollo/client';
-import { format } from 'date-fns';
 
 const GET_JOB_HISTORY = gql`
   query JobHistory($start: DateTime!, $end: DateTime!) {
@@ -69,7 +68,7 @@ export default function CalendarView() {
     return { start, end };
   });
 
-  const { data, loading, refetch } = useQuery(GET_JOB_HISTORY, {
+  const { data } = useQuery(GET_JOB_HISTORY, {
     variables: {
       start: dateRange.start.toISOString(),
       end: dateRange.end.toISOString(),
