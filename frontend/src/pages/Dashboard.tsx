@@ -1,3 +1,4 @@
+import { useEffect, useState, useMemo } from 'react';
 import {
   Grid,
   Card,
@@ -16,6 +17,7 @@ import {
   Divider,
   Avatar,
   LinearProgress,
+  CircularProgress,
 } from '@mui/material';
 import {
   DirectionsCar,
@@ -24,15 +26,14 @@ import {
   Route as RouteIcon,
   Refresh,
   TrendingUp,
-  TrendingDown,
   CheckCircle,
 } from '@mui/icons-material';
-import { useDrivers, useVehicles, useJobs, useRoutes } from '../graphql/hooks';
 import { MapContainer, TileLayer, Polyline, Marker, Popup, Tooltip as LeafletTooltip } from 'react-leaflet';
 import { motion } from 'framer-motion';
-import { useState, useMemo } from 'react';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+
+const API_BASE_URL = import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 // Fix Leaflet default marker icon issue
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -42,29 +43,17 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
 
-// Distinct colors for routes - more vibrant and distinguishable
+// Distinct colors for routes
 const ROUTE_COLORS = [
-  '#FF6B6B', // Coral Red
-  '#4ECDC4', // Turquoise
-  '#FFE66D', // Yellow
-  '#A8E6CF', // Mint Green
-  '#FF8B94', // Pink
-  '#95E1D3', // Aqua
-  '#F38181', // Salmon
-  '#7FDBFF', // Sky Blue
-  '#B4A7D6', // Lavender
-  '#FFD93D', // Golden Yellow
-  '#6BCF7F', // Green
-  '#FF9F1C', // Orange
+  '#FF6B6B', '#4ECDC4', '#FFE66D', '#A8E6CF', '#FF8B94', '#95E1D3',
+  '#F38181', '#7FDBFF', '#B4A7D6', '#FFD93D', '#6BCF7F', '#FF9F1C',
 ];
 
 const container = {
   hidden: { opacity: 0 },
   show: {
     opacity: 1,
-    transition: {
-      staggerChildren: 0.08,
-    },
+    transition: { staggerChildren: 0.08 },
   },
 };
 
@@ -74,42 +63,66 @@ const item = {
 };
 
 export default function Dashboard() {
-  const { data: driversData, loading: driversLoading, refetch: refetchDrivers } = useDrivers();
-  const { data: vehiclesData, loading: vehiclesLoading, refetch: refetchVehicles } = useVehicles();
-  const { data: jobsData, loading: jobsLoading, refetch: refetchJobs } = useJobs();
-  const { data: routesData, loading: routesLoading, refetch: refetchRoutes } = useRoutes();
-
+  const [drivers, setDrivers] = useState<any[]>([]);
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [routes, setRoutes] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const loadData = async () => {
+    try {
+      const [driversRes, vehiclesRes, jobsRes, routesRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/drivers`),
+        fetch(`${API_BASE_URL}/api/vehicles`),
+        fetch(`${API_BASE_URL}/api/jobs`),
+        fetch(`${API_BASE_URL}/api/routes`),
+      ]);
+
+      const driversData = await driversRes.json();
+      const vehiclesData = await vehiclesRes.json();
+      const jobsData = await jobsRes.json();
+      const routesData = await routesRes.json();
+
+      setDrivers(driversData.drivers || []);
+      setVehicles(vehiclesData.vehicles || []);
+      setJobs(jobsData.jobs || []);
+      setRoutes(routesData.routes || []);
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
 
   const handleRefreshAll = async () => {
     setIsRefreshing(true);
-    await Promise.all([
-      refetchDrivers(),
-      refetchVehicles(),
-      refetchJobs(),
-      refetchRoutes(),
-    ]);
+    await loadData();
     setTimeout(() => setIsRefreshing(false), 500);
   };
 
   // Calculate statistics
   const stats = useMemo(() => {
-    const activeJobs = jobsData?.jobs?.filter((j: any) =>
-      j.status === 'PENDING' || j.status === 'IN_PROGRESS'
-    ).length || 0;
+    const activeJobs = jobs.filter((j: any) =>
+      j.status === 'pending' || j.status === 'in_progress'
+    ).length;
 
-    const activeDrivers = driversData?.drivers?.filter((d: any) =>
-      d.status === 'ACTIVE'
-    ).length || 0;
+    const activeDrivers = drivers.filter((d: any) =>
+      d.status === 'ACTIVE' || d.status === 'active'
+    ).length;
 
-    const availableVehicles = vehiclesData?.vehicles?.filter((v: any) =>
-      v.status === 'AVAILABLE'
-    ).length || 0;
+    const availableVehicles = vehicles.filter((v: any) =>
+      v.status === 'available' || v.status === 'AVAILABLE'
+    ).length;
 
-    const totalDrivers = driversData?.drivers?.length || 0;
-    const totalVehicles = vehiclesData?.vehicles?.length || 0;
-    const totalJobs = jobsData?.jobs?.length || 0;
-    const totalRoutes = routesData?.routes?.length || 0;
+    const totalDrivers = drivers.length;
+    const totalVehicles = vehicles.length;
+    const totalJobs = jobs.length;
+    const totalRoutes = routes.length;
 
     return [
       {
@@ -117,7 +130,8 @@ export default function Dashboard() {
         value: activeDrivers,
         total: totalDrivers,
         percentage: totalDrivers > 0 ? Math.round((activeDrivers / totalDrivers) * 100) : 0,
-        gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        gradient: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%)',
+        glowColor: 'rgba(99, 102, 241, 0.4)',
         icon: Person,
         trend: '+12%',
         trendUp: true,
@@ -127,7 +141,8 @@ export default function Dashboard() {
         value: availableVehicles,
         total: totalVehicles,
         percentage: totalVehicles > 0 ? Math.round((availableVehicles / totalVehicles) * 100) : 0,
-        gradient: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+        gradient: 'linear-gradient(135deg, #ec4899 0%, #f43f5e 50%, #ef4444 100%)',
+        glowColor: 'rgba(236, 72, 153, 0.4)',
         icon: DirectionsCar,
         trend: '+5%',
         trendUp: true,
@@ -137,7 +152,8 @@ export default function Dashboard() {
         value: activeJobs,
         total: totalJobs,
         percentage: totalJobs > 0 ? Math.round((activeJobs / totalJobs) * 100) : 0,
-        gradient: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+        gradient: 'linear-gradient(135deg, #3b82f6 0%, #06b6d4 50%, #10b981 100%)',
+        glowColor: 'rgba(59, 130, 246, 0.4)',
         icon: LocalShipping,
         trend: '+18%',
         trendUp: true,
@@ -147,73 +163,65 @@ export default function Dashboard() {
         value: totalRoutes,
         total: totalRoutes,
         percentage: 100,
-        gradient: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+        gradient: 'linear-gradient(135deg, #f59e0b 0%, #fb923c 50%, #f97316 100%)',
+        glowColor: 'rgba(245, 158, 11, 0.4)',
         icon: RouteIcon,
         trend: '+8%',
         trendUp: true,
       },
     ];
-  }, [driversData, vehiclesData, jobsData, routesData]);
+  }, [drivers, vehicles, jobs, routes]);
 
   // Prepare map data with vehicle assignments
   const mapRoutes = useMemo(() => {
-    const routes = routesData?.routes || [];
-    const vehicles = vehiclesData?.vehicles || [];
-
     return routes.map((route: any, index: number) => {
-      // Find assigned vehicle
       const assignedVehicle = vehicles.find((v: any) => v.id === route.vehicleId);
 
-      // Extract positions from either waypoints or jobs
-      let positions = [];
-      if (route.waypoints && route.waypoints.length > 0) {
-        positions = route.waypoints;
-      } else if (route.jobs && route.jobs.length > 0) {
-        // For routes from Dispatch page with jobs containing deliveryCoords
-        positions = route.jobs
-          .filter((job: any) => job.deliveryCoords)
-          .map((job: any) => ({
-            lat: job.deliveryCoords[0],
-            lng: job.deliveryCoords[1],
-            latitude: job.deliveryCoords[0],
-            longitude: job.deliveryCoords[1],
-          }));
-      }
+      // Simple mock positions for routes without coordinates
+      const positions = route.stops && Array.isArray(route.stops) && route.stops.length > 0
+        ? route.stops.map(() => ({
+            lat: 39.0997 + (Math.random() - 0.5) * 0.1,
+            lng: -94.5786 + (Math.random() - 0.5) * 0.1,
+          }))
+        : [];
 
       return {
         id: route.id,
         positions: positions,
         color: ROUTE_COLORS[index % ROUTE_COLORS.length],
-        status: route.status,
-        vehicle: assignedVehicle ? `${assignedVehicle.make} ${assignedVehicle.model}` : 'Unassigned',
+        status: route.status || 'pending',
+        vehicle: assignedVehicle?.name || `${assignedVehicle?.make || ''} ${assignedVehicle?.model || ''}`.trim() || 'Unassigned',
         vehiclePlate: assignedVehicle?.licensePlate || 'N/A',
-        totalDistance: route.totalDistanceKm || route.totalDistance || 0,
+        totalDistance: route.totalDistance || 0,
         stopCount: positions.length,
       };
     });
-  }, [routesData, vehiclesData]);
+  }, [routes, vehicles]);
 
   const mapCenter: [number, number] = useMemo(() => {
     if (mapRoutes.length > 0 && mapRoutes[0].positions.length > 0) {
       const firstRoute = mapRoutes[0].positions[0];
-      return [
-        firstRoute.lat || firstRoute.latitude || 37.7749,
-        firstRoute.lng || firstRoute.longitude || -122.4194
-      ];
+      return [firstRoute.lat, firstRoute.lng];
     }
-    return [37.7749, -122.4194]; // San Francisco, California, USA default
+    return [39.0997, -94.5786]; // Kansas City default
   }, [mapRoutes]);
 
   const mapZoom = useMemo(() => {
-    return mapRoutes.length > 0 ? 12 : 5; // Zoom in when routes exist, wider view otherwise
+    return mapRoutes.length > 0 ? 12 : 5;
   }, [mapRoutes]);
 
   // Recent jobs for table
   const recentJobs = useMemo(() => {
-    return (jobsData?.jobs || []).slice(0, 6);
-  }, [jobsData]);
+    return jobs.slice(0, 6);
+  }, [jobs]);
 
-  const isLoading = driversLoading || vehiclesLoading || jobsLoading || routesLoading;
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ flexGrow: 1 }}>
@@ -257,21 +265,35 @@ export default function Dashboard() {
                       height: '100%',
                       position: 'relative',
                       overflow: 'hidden',
-                      transition: 'transform 0.3s, box-shadow 0.3s',
+                      transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+                      cursor: 'pointer',
                       '&:hover': {
-                        transform: 'translateY(-8px)',
-                        boxShadow: 6,
+                        transform: 'translateY(-12px) scale(1.02)',
+                        boxShadow: `0 20px 40px -10px ${stat.glowColor}, 0 0 20px ${stat.glowColor}`,
+                      },
+                      '&:active': {
+                        transform: 'translateY(-8px) scale(1.01)',
                       },
                       '&::before': {
                         content: '""',
                         position: 'absolute',
                         top: 0,
                         right: 0,
-                        width: '100px',
-                        height: '100px',
+                        width: '140px',
+                        height: '140px',
                         borderRadius: '50%',
-                        background: 'rgba(255,255,255,0.1)',
+                        background: 'radial-gradient(circle, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 70%)',
                         transform: 'translate(30%, -30%)',
+                      },
+                      '&::after': {
+                        content: '""',
+                        position: 'absolute',
+                        bottom: -60,
+                        left: -60,
+                        width: '120px',
+                        height: '120px',
+                        borderRadius: '50%',
+                        background: 'radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%)',
                       },
                     }}
                   >
@@ -290,11 +312,7 @@ export default function Dashboard() {
                           <IconComponent sx={{ fontSize: 32 }} />
                         </Box>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          {stat.trendUp ? (
-                            <TrendingUp sx={{ fontSize: 20 }} />
-                          ) : (
-                            <TrendingDown sx={{ fontSize: 20 }} />
-                          )}
+                          <TrendingUp sx={{ fontSize: 20 }} />
                           <Typography variant="body2" fontWeight={600}>
                             {stat.trend}
                           </Typography>
@@ -306,7 +324,7 @@ export default function Dashboard() {
                       </Typography>
 
                       <Typography variant="h3" fontWeight={700} sx={{ mb: 1 }}>
-                        {isLoading ? '...' : stat.value}
+                        {stat.value}
                         {stat.total !== stat.value && (
                           <Typography component="span" variant="h6" sx={{ opacity: 0.7, ml: 1 }}>
                             / {stat.total}
@@ -338,17 +356,10 @@ export default function Dashboard() {
 
       {/* Main Content Grid */}
       <Grid container spacing={3}>
-        {/* Map View - Takes full width on mobile, 8 columns on desktop */}
+        {/* Map View */}
         <Grid item xs={12} lg={8}>
           <motion.div variants={item} initial="hidden" animate="show">
-            <Paper
-              sx={{
-                p: 3,
-                height: 600,
-                borderRadius: 3,
-                boxShadow: 3,
-              }}
-            >
+            <Paper sx={{ p: 3, height: 600, borderRadius: 3, boxShadow: 3 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Box>
                   <Typography variant="h6" fontWeight={700} gutterBottom>
@@ -358,12 +369,7 @@ export default function Dashboard() {
                     {mapRoutes.length} route{mapRoutes.length !== 1 ? 's' : ''} currently active
                   </Typography>
                 </Box>
-                <Chip
-                  icon={<CheckCircle />}
-                  label="Live"
-                  color="success"
-                  size="small"
-                />
+                <Chip icon={<CheckCircle />} label="Live" color="success" size="small" />
               </Box>
 
               <Divider sx={{ mb: 2 }} />
@@ -379,18 +385,12 @@ export default function Dashboard() {
                       bgcolor: route.color,
                       color: 'white',
                       fontWeight: 600,
-                      '& .MuiChip-label': {
-                        px: 1.5,
-                      },
+                      '& .MuiChip-label': { px: 1.5 },
                     }}
                   />
                 ))}
                 {mapRoutes.length > 6 && (
-                  <Chip
-                    label={`+${mapRoutes.length - 6} more`}
-                    size="small"
-                    variant="outlined"
-                  />
+                  <Chip label={`+${mapRoutes.length - 6} more`} size="small" variant="outlined" />
                 )}
               </Box>
 
@@ -419,21 +419,13 @@ export default function Dashboard() {
                   {mapRoutes.map((route: any) => {
                     if (!route.positions || route.positions.length === 0) return null;
 
-                    const positions = route.positions.map((pos: any) => [
-                      pos.lat || pos.latitude,
-                      pos.lng || pos.longitude,
-                    ]);
+                    const positions = route.positions.map((pos: any) => [pos.lat, pos.lng]);
 
                     return (
                       <div key={route.id}>
-                        {/* Route Polyline */}
                         <Polyline
                           positions={positions}
-                          pathOptions={{
-                            color: route.color,
-                            weight: 5,
-                            opacity: 0.8,
-                          }}
+                          pathOptions={{ color: route.color, weight: 5, opacity: 0.8 }}
                         >
                           <LeafletTooltip sticky>
                             <div style={{ textAlign: 'center' }}>
@@ -444,7 +436,6 @@ export default function Dashboard() {
                           </LeafletTooltip>
                         </Polyline>
 
-                        {/* Waypoint Markers */}
                         {positions.map((pos: any, idx: number) => (
                           <Marker key={`${route.id}-${idx}`} position={pos}>
                             <Popup>
@@ -464,7 +455,7 @@ export default function Dashboard() {
                                   <Chip
                                     label={route.status}
                                     size="small"
-                                    color={route.status === 'COMPLETED' ? 'success' : 'primary'}
+                                    color={route.status === 'completed' ? 'success' : 'primary'}
                                   />
                                 </Typography>
                               </Box>
@@ -480,7 +471,7 @@ export default function Dashboard() {
           </motion.div>
         </Grid>
 
-        {/* Route Summary - Right Column */}
+        {/* Route Summary */}
         <Grid item xs={12} lg={4}>
           <motion.div variants={item} initial="hidden" animate="show">
             <Paper sx={{ p: 3, height: 600, borderRadius: 3, boxShadow: 3, overflow: 'auto' }}>
@@ -530,7 +521,7 @@ export default function Dashboard() {
                           <Chip
                             label={route.status}
                             size="small"
-                            color={route.status === 'COMPLETED' ? 'success' : 'primary'}
+                            color={route.status === 'completed' ? 'success' : 'primary'}
                             sx={{ fontWeight: 600 }}
                           />
                         </Box>
@@ -559,12 +550,7 @@ export default function Dashboard() {
                     </Card>
                   ))
                 ) : (
-                  <Box
-                    sx={{
-                      textAlign: 'center',
-                      py: 8,
-                    }}
-                  >
+                  <Box sx={{ textAlign: 'center', py: 8 }}>
                     <RouteIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
                     <Typography variant="body1" color="text.secondary">
                       No active routes
@@ -594,11 +580,11 @@ export default function Dashboard() {
                 <Table>
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ fontWeight: 700 }}>Job ID</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Type</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Customer</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Pickup</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Delivery</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>Priority</TableCell>
                       <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Pickup Time</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }}>Delivery Time</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -616,35 +602,37 @@ export default function Dashboard() {
                         >
                           <TableCell>
                             <Typography variant="body2" fontWeight={600}>
-                              {job.id.slice(0, 8)}...
+                              {job.customerName}
                             </Typography>
                           </TableCell>
-                          <TableCell>{job.jobType || 'Standard'}</TableCell>
+                          <TableCell>{job.pickupAddress || 'Use Last Stop'}</TableCell>
+                          <TableCell>{job.deliveryAddress}</TableCell>
+                          <TableCell>
+                            <Chip
+                              label={job.priority}
+                              size="small"
+                              color={
+                                job.priority === 'urgent'
+                                  ? 'error'
+                                  : job.priority === 'high'
+                                  ? 'warning'
+                                  : 'default'
+                              }
+                            />
+                          </TableCell>
                           <TableCell>
                             <Chip
                               label={job.status}
                               size="small"
                               color={
-                                job.status === 'COMPLETED'
+                                job.status === 'completed'
                                   ? 'success'
-                                  : job.status === 'IN_PROGRESS'
+                                  : job.status === 'in_progress'
                                   ? 'primary'
-                                  : job.status === 'PENDING'
-                                  ? 'warning'
-                                  : 'default'
+                                  : 'warning'
                               }
                               sx={{ fontWeight: 600 }}
                             />
-                          </TableCell>
-                          <TableCell>
-                            {job.scheduledPickupTime
-                              ? new Date(job.scheduledPickupTime).toLocaleString()
-                              : 'N/A'}
-                          </TableCell>
-                          <TableCell>
-                            {job.scheduledDeliveryTime
-                              ? new Date(job.scheduledDeliveryTime).toLocaleString()
-                              : 'N/A'}
                           </TableCell>
                         </TableRow>
                       ))

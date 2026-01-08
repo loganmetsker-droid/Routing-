@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -21,9 +22,9 @@ import {
   Avatar,
 } from '@mui/material';
 import { Add, Edit, Person } from '@mui/icons-material';
-import { useDrivers, useCreateDriver, useUpdateDriver, useVehicles } from '../graphql/hooks';
 import { motion } from 'framer-motion';
-import { useState } from 'react';
+
+const API_BASE_URL = import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const container = {
   hidden: { opacity: 0 },
@@ -41,11 +42,9 @@ const item = {
 };
 
 export default function DriversPage() {
-  const { data, loading } = useDrivers();
-  const { data: vehiclesData } = useVehicles();
-  const [createDriver] = useCreateDriver();
-  const [updateDriver] = useUpdateDriver();
-
+  const [drivers, setDrivers] = useState<any[]>([]);
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingDriver, setEditingDriver] = useState<any>(null);
   const [formData, setFormData] = useState({
@@ -61,7 +60,40 @@ export default function DriversPage() {
   });
   const [submitting, setSubmitting] = useState(false);
 
-  const vehicles = vehiclesData?.vehicles || [];
+  const loadDrivers = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/drivers`);
+      const data = await response.json();
+      setDrivers(data.drivers || []);
+    } catch (error) {
+      console.error('Error loading drivers:', error);
+    }
+  };
+
+  const loadVehicles = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/vehicles`);
+      const data = await response.json();
+      setVehicles(data.vehicles || []);
+    } catch (error) {
+      console.error('Error loading vehicles:', error);
+    }
+  };
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      await Promise.all([loadDrivers(), loadVehicles()]);
+    } catch (error) {
+      console.error('Error loading data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
 
   const handleOpenDialog = (driver?: any) => {
     if (driver) {
@@ -103,20 +135,20 @@ export default function DriversPage() {
     setSubmitting(true);
     try {
       if (editingDriver) {
-        await updateDriver({
-          variables: {
-            id: editingDriver.id,
-            input: formData,
-          },
+        await fetch(`${API_BASE_URL}/api/drivers/${editingDriver.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
         });
       } else {
-        await createDriver({
-          variables: {
-            input: formData,
-          },
+        await fetch(`${API_BASE_URL}/api/drivers`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
         });
       }
       handleCloseDialog();
+      await loadDrivers();
     } catch (error) {
       console.error('Error saving driver:', error);
     } finally {
@@ -191,8 +223,8 @@ export default function DriversPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {data?.drivers?.length > 0 ? (
-                data.drivers.map((driver: any) => (
+              {drivers.length > 0 ? (
+                drivers.map((driver: any) => (
                   <TableRow
                     key={driver.id}
                     component={motion.tr}

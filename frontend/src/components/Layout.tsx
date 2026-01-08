@@ -14,6 +14,7 @@ import {
   ListItemText,
   Divider,
   Container,
+  Tooltip,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -22,29 +23,31 @@ import {
   Person as DriversIcon,
   People as CustomersIcon,
   Route as RoutesIcon,
-  Map as RoutePlanningIcon,
   LocalShipping as DispatchIcon,
   Work as JobsIcon,
   Logout as LogoutIcon,
+  Brightness4 as DarkModeIcon,
+  Brightness7 as LightModeIcon,
 } from '@mui/icons-material';
+import { useThemeMode } from '../contexts/ThemeContext';
 
 const drawerWidth = 240;
 
 const menuItems = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
+  { text: 'Jobs', icon: <JobsIcon />, path: '/jobs' },
+  { text: 'Routing', icon: <RoutesIcon />, path: '/routing' },
+  { text: 'Dispatch', icon: <DispatchIcon />, path: '/dispatches' },
   { text: 'Drivers', icon: <DriversIcon />, path: '/drivers' },
   { text: 'Vehicles', icon: <VehiclesIcon />, path: '/vehicles' },
   { text: 'Customers', icon: <CustomersIcon />, path: '/customers' },
-  { text: 'Routes', icon: <RoutesIcon />, path: '/routes' },
-  { text: 'Route Planning', icon: <RoutePlanningIcon />, path: '/route-planning' },
-  { text: 'Dispatch', icon: <DispatchIcon />, path: '/dispatches' },
-  { text: 'Jobs', icon: <JobsIcon />, path: '/jobs' },
 ];
 
 export function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const { mode, toggleTheme } = useThemeMode();
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -110,9 +113,26 @@ export function Layout() {
           >
             <MenuIcon />
           </IconButton>
-          <Typography variant="h6" noWrap component="div">
+          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
             Routing & Dispatch SaaS
           </Typography>
+          <Tooltip title={mode === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}>
+            <IconButton
+              onClick={toggleTheme}
+              color="inherit"
+              sx={{
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                '&:hover': {
+                  transform: 'rotate(180deg) scale(1.1)',
+                },
+                '&:active': {
+                  transform: 'rotate(180deg) scale(0.95)',
+                },
+              }}
+            >
+              {mode === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
+            </IconButton>
+          </Tooltip>
         </Toolbar>
       </AppBar>
 

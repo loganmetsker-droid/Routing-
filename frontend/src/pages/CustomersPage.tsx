@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -20,9 +21,12 @@ import {
   Chip,
 } from '@mui/material';
 import { Add, Edit, Delete, Business, Person } from '@mui/icons-material';
-import { useCustomers, useCreateCustomer, useUpdateCustomer, useDeleteCustomer } from '../graphql/hooks';
 import { motion } from 'framer-motion';
-import { useState } from 'react';
+import AddressInput from '../components/forms/AddressInput';
+import { Address } from '../types/address';
+import { formatAddress, parseLegacyAddress } from '../utils/addressValidation';
+
+const API_BASE_URL = import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const container = {
   hidden: { opacity: 0 },
@@ -39,19 +43,10 @@ const item = {
   show: { x: 0, opacity: 1 },
 };
 
-// Placeholder address validation function
-const validateAddress = async (address: string): Promise<boolean> => {
-  // TODO: Implement actual address validation
-  // For now, just check if address is not empty
-  return address.trim().length > 0;
-};
 
 export default function CustomersPage() {
-  const { data, loading } = useCustomers();
-  const [createCustomer] = useCreateCustomer();
-  const [updateCustomer] = useUpdateCustomer();
-  const [deleteCustomer] = useDeleteCustomer();
-
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<any>(null);
@@ -63,8 +58,32 @@ export default function CustomersPage() {
     notes: '',
     exceptions: '',
   });
+  const [addressData, setAddressData] = useState<Address>({
+    line1: '',
+    line2: null,
+    city: '',
+    state: '',
+    zip: '',
+  });
+  const [addressValid, setAddressValid] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [addressError, setAddressError] = useState('');
+
+  const loadCustomers = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE_URL}/api/customers`);
+      const data = await response.json();
+      setCustomers(data.customers || []);
+    } catch (error) {
+      console.error('Error loading customers:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadCustomers();
+  }, []);
 
   const handleOpenDialog = (customer?: any) => {
     if (customer) {
@@ -76,6 +95,15 @@ export default function CustomersPage() {
         notes: customer.notes || '',
         exceptions: customer.exceptions || '',
       });
+      // Parse legacy address if exists
+      const parsed = parseLegacyAddress(customer.address || '');
+      setAddressData({
+        line1: parsed.line1 || '',
+        line2: parsed.line2 || null,
+        city: parsed.city || '',
+        state: parsed.state || '',
+        zip: parsed.zip || '',
+      });
     } else {
       setEditingCustomer(null);
       setFormData({
@@ -85,15 +113,16 @@ export default function CustomersPage() {
         notes: '',
         exceptions: '',
       });
+      setAddressData({ line1: '', line2: null, city: '', state: '', zip: '' });
     }
-    setAddressError('');
+    setAddressValid(false);
     setOpenDialog(true);
   };
 
   const handleCloseDialog = () => {
     setOpenDialog(false);
     setEditingCustomer(null);
-    setAddressError('');
+    setAddressValid(false);
   };
 
   const handleOpenDeleteDialog = (customer: any) => {
@@ -107,30 +136,33 @@ export default function CustomersPage() {
   };
 
   const handleSubmit = async () => {
-    // Validate address
-    const isValidAddress = await validateAddress(formData.address);
-    if (!isValidAddress) {
-      setAddressError('Please enter a valid address');
+    if (!addressValid) {
       return;
     }
 
     setSubmitting(true);
     try {
+      const customerData = {
+        ...formData,
+        address: formatAddress(addressData),
+        addressStructured: addressData,
+      };
+
       if (editingCustomer) {
-        await updateCustomer({
-          variables: {
-            id: editingCustomer.id,
-            input: formData,
-          },
+        await fetch(`${API_BASE_URL}/api/customers/${editingCustomer.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(customerData),
         });
       } else {
-        await createCustomer({
-          variables: {
-            input: formData,
-          },
+        await fetch(`${API_BASE_URL}/api/customers`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(customerData),
         });
       }
       handleCloseDialog();
+      await loadCustomers();
     } catch (error) {
       console.error('Error saving customer:', error);
     } finally {
@@ -143,12 +175,11 @@ export default function CustomersPage() {
 
     setSubmitting(true);
     try {
-      await deleteCustomer({
-        variables: {
-          id: deletingCustomer.id,
-        },
+      await fetch(`${API_BASE_URL}/api/customers/${deletingCustomer.id}`, {
+        method: 'DELETE',
       });
       handleCloseDeleteDialog();
+      await loadCustomers();
     } catch (error) {
       console.error('Error deleting customer:', error);
     } finally {
@@ -213,8 +244,8 @@ export default function CustomersPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {data?.customers?.length > 0 ? (
-                data.customers.map((customer: any) => (
+              {customers.length > 0 ? (
+                customers.map((customer: any) => (
                   <TableRow
                     key={customer.id}
                     component={motion.tr}
@@ -349,19 +380,12 @@ export default function CustomersPage() {
               required
               placeholder="John Doe"
             />
-            <TextField
+            <AddressInput
               label="Address"
-              name="address"
-              value={formData.address}
-              onChange={(e) => {
-                setFormData({ ...formData, address: e.target.value });
-                setAddressError('');
-              }}
-              fullWidth
+              value={addressData}
+              onChange={setAddressData}
+              onValidationChange={setAddressValid}
               required
-              error={!!addressError}
-              helperText={addressError || 'Full delivery address'}
-              placeholder="123 Main St, City, State, ZIP"
             />
             <TextField
               label="Business Name"
@@ -401,7 +425,7 @@ export default function CustomersPage() {
           <Button
             onClick={handleSubmit}
             variant="contained"
-            disabled={submitting}
+            disabled={submitting || !formData.name || !addressValid}
             data-testid="save-customer-button"
             startIcon={submitting ? <CircularProgress size={16} /> : null}
           >

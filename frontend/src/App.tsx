@@ -4,11 +4,14 @@ import Dashboard from './pages/Dashboard';
 import DriversPage from './pages/DriversPage';
 import VehiclesPage from './pages/VehiclesPage';
 import CustomersPage from './pages/CustomersPage';
-import RoutesPage from './pages/RoutesPage';
-import RoutePlanningPage from './pages/RoutePlanningPage';
+import RoutingPage from './pages/RoutingPage';
 import DispatchesPage from './pages/DispatchesPage';
 import JobsPage from './pages/JobsPage';
 import LoginPage from './pages/LoginPage';
+
+// Legacy route pages (kept for backwards compatibility)
+import RoutesPage from './pages/RoutesPage';
+import RoutePlanningPage from './pages/RoutePlanningPage';
 
 function App() {
   return (
@@ -16,13 +19,15 @@ function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<Layout />}>
         <Route index element={<Dashboard />} />
+        <Route path="jobs" element={<JobsPage />} />
+        <Route path="routing" element={<RoutingPage />} />
+        <Route path="dispatches" element={<DispatchesPage />} />
         <Route path="drivers" element={<DriversPage />} />
         <Route path="vehicles" element={<VehiclesPage />} />
         <Route path="customers" element={<CustomersPage />} />
+        {/* Legacy routes - redirect or keep for backwards compatibility */}
         <Route path="routes" element={<RoutesPage />} />
         <Route path="route-planning" element={<RoutePlanningPage />} />
-        <Route path="dispatches" element={<DispatchesPage />} />
-        <Route path="jobs" element={<JobsPage />} />
       </Route>
     </Routes>
   );

@@ -78,6 +78,7 @@ type Driver {
   licenseExpiryDate: DateTime!
   licenseNumber: String!
   phone: String!
+  roles: [String!]!
   status: String!
   totalDeliveries: Int!
   totalDistanceKm: Float!

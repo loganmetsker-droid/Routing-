@@ -46,27 +46,60 @@ export class Job {
   @Field({ nullable: true })
   customerEmail?: string;
 
+  // Legacy address fields (kept for backward compatibility)
   @Column({ name: 'pickup_address', length: 500 })
   @Field()
   pickupAddress: string;
-
-  @Column({
-    name: 'pickup_location',
-    type: 'jsonb',
-    nullable: true,
-  })
-  pickupLocation?: any;
 
   @Column({ name: 'delivery_address', length: 500 })
   @Field()
   deliveryAddress: string;
 
+  // Structured address fields
+  @Column({
+    name: 'pickup_address_structured',
+    type: 'jsonb',
+    nullable: true,
+    comment: 'Structured pickup address: { line1, line2, city, state, zip }',
+  })
+  pickupAddressStructured?: {
+    line1: string;
+    line2: string | null;
+    city: string;
+    state: string;
+    zip: string;
+  };
+
+  @Column({
+    name: 'delivery_address_structured',
+    type: 'jsonb',
+    nullable: true,
+    comment: 'Structured delivery address: { line1, line2, city, state, zip }',
+  })
+  deliveryAddressStructured?: {
+    line1: string;
+    line2: string | null;
+    city: string;
+    state: string;
+    zip: string;
+  };
+
+  // Geocoded locations
+  @Column({
+    name: 'pickup_location',
+    type: 'jsonb',
+    nullable: true,
+    comment: 'Pickup coordinates: { lat, lng }',
+  })
+  pickupLocation?: { lat: number; lng: number };
+
   @Column({
     name: 'delivery_location',
     type: 'jsonb',
     nullable: true,
+    comment: 'Delivery coordinates: { lat, lng }',
   })
-  deliveryLocation?: any;
+  deliveryLocation?: { lat: number; lng: number };
 
   @Column({ name: 'time_window_start', type: 'timestamp with time zone' })
   @Field()

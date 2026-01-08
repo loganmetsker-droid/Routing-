@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -17,6 +17,7 @@ import {
   IconButton,
   Divider,
   Alert,
+  CircularProgress,
 } from '@mui/material';
 import {
   Add,
@@ -31,9 +32,9 @@ import {
 import { MapContainer, TileLayer, Polyline, Marker, Popup } from 'react-leaflet';
 import { LatLngExpression } from 'leaflet';
 import { motion } from 'framer-motion';
-import { useVehicles, useCustomers } from '../graphql/hooks';
-import { generateRoute } from '../services/api';
 import 'leaflet/dist/leaflet.css';
+
+const API_BASE_URL = import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 // Route colors for visualization
 const ROUTE_COLORS = [
@@ -141,16 +142,34 @@ const calculateRouteStats = (stops: Stop[]) => {
 };
 
 export default function RoutingPage() {
-  const { data: vehiclesData } = useVehicles();
-  const { data: customersData } = useCustomers();
-
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [routes, setRoutes] = useState<Route[]>([]);
   const [selectedVehicle, setSelectedVehicle] = useState<any>(null);
   const [selectedCustomers, setSelectedCustomers] = useState<any[]>([]);
   const [draggedStopId, setDraggedStopId] = useState<string | null>(null);
 
-  const vehicles = vehiclesData?.vehicles || [];
-  const customers = customersData?.customers || [];
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        const [vehiclesRes, customersRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/api/vehicles`),
+          fetch(`${API_BASE_URL}/api/customers`)
+        ]);
+        const vehiclesData = await vehiclesRes.json();
+        const customersData = await customersRes.json();
+        setVehicles(vehiclesData.vehicles || []);
+        setCustomers(customersData.customers || []);
+      } catch (error) {
+        console.error('Error loading data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, []);
 
   const handleAddRoute = async () => {
     if (!selectedVehicle || selectedCustomers.length === 0) {
@@ -173,10 +192,12 @@ export default function RoutingPage() {
       })
     );
 
+    const vehicleName = selectedVehicle.name || `${selectedVehicle.make || ''} ${selectedVehicle.model || ''}`.trim() || 'Unknown Vehicle';
+
     const newRoute: Route = {
       id: `route-${Date.now()}`,
       vehicleId: selectedVehicle.id,
-      vehicleName: `${selectedVehicle.make} ${selectedVehicle.model}`,
+      vehicleName,
       stops: stopsWithCoords,
       color: ROUTE_COLORS[routes.length % ROUTE_COLORS.length],
       totalMiles: 0,
@@ -188,10 +209,24 @@ export default function RoutingPage() {
     newRoute.estimatedTime = stats.estimatedTime;
 
     try {
-      // Call backend API - map customer IDs to job IDs
-      const jobIds = selectedCustomers.map(c => c.id);
-      const response = await generateRoute(selectedVehicle.id, jobIds);
-      console.log('Route created:', response.route);
+      // Create a general route (without jobs) using the new backend endpoint
+      const response = await fetch(`${API_BASE_URL}/api/routes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `Route for ${vehicleName}`,
+          vehicleId: selectedVehicle.id,
+          stops: selectedCustomers.map(c => c.address),
+          status: 'planned',
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create route');
+      }
+
+      const data = await response.json();
+      console.log('Route created:', data.route);
 
       setRoutes([...routes, newRoute]);
       setSelectedVehicle(null);
@@ -283,6 +318,14 @@ export default function RoutingPage() {
     ? [routes[0].stops[0].lat, routes[0].stops[0].lng]
     : [39.8283, -98.5795]; // Center of USA
 
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -305,9 +348,10 @@ export default function RoutingPage() {
                 value={selectedVehicle}
                 onChange={(_, newValue) => setSelectedVehicle(newValue)}
                 options={vehicles}
-                getOptionLabel={(vehicle) =>
-                  `${vehicle.make} ${vehicle.model} - ${vehicle.licensePlate}`
-                }
+                getOptionLabel={(vehicle) => {
+                  const name = vehicle.name || `${vehicle.make || ''} ${vehicle.model || ''}`.trim();
+                  return vehicle.licensePlate ? `${name} - ${vehicle.licensePlate}` : name;
+                }}
                 renderInput={(params) => (
                   <TextField
                     {...params}

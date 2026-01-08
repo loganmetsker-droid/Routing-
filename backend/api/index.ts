@@ -96,14 +96,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (url === '/api/jobs' && method === 'POST') {
       const { customerName, pickupAddress, deliveryAddress, timeWindow, priority } = req.body as any;
 
-      if (!customerName || !pickupAddress || !deliveryAddress) {
-        return res.status(400).json({ error: 'Missing required fields' });
+      if (!customerName || !deliveryAddress) {
+        return res.status(400).json({ error: 'Missing required fields: customerName and deliveryAddress' });
       }
 
       const job = {
         id: generateId(),
         customerName,
-        pickupAddress,
+        pickupAddress: pickupAddress || '',
         deliveryAddress,
         timeWindow: timeWindow || { start: new Date().toISOString(), end: new Date(Date.now() + 3600000).toISOString() },
         priority: priority || 'normal',
@@ -149,41 +149,69 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Create route
     if (url === '/api/routes' && method === 'POST') {
-      const { vehicleId, jobIds } = req.body as any;
+      const { vehicleId, jobIds, name, driverId, stops, status } = req.body as any;
 
-      if (!vehicleId || !jobIds || jobIds.length === 0) {
-        return res.status(400).json({ error: 'vehicleId and jobIds required' });
+      // Support both job-based routes and general routes
+      if (jobIds && jobIds.length > 0) {
+        // Job-based route creation
+        if (!vehicleId) {
+          return res.status(400).json({ error: 'vehicleId required for job-based routes' });
+        }
+
+        const vehicle = await db.collection('vehicles').findOne({ id: vehicleId });
+        if (!vehicle) {
+          return res.status(404).json({ error: 'Vehicle not found' });
+        }
+
+        const jobs = await db.collection('jobs').find({ id: { $in: jobIds } }).toArray();
+        if (jobs.length === 0) {
+          return res.status(400).json({ error: 'No valid jobs found' });
+        }
+
+        const route = {
+          id: generateId(),
+          name: name || `Route ${generateId().substring(0, 8)}`,
+          vehicleId,
+          driverId: driverId || null,
+          jobIds,
+          stops: stops || [],
+          status: status || 'planned',
+          totalDistance: Math.random() * 50 + 10,
+          totalDuration: Math.random() * 120 + 30,
+          createdAt: new Date().toISOString()
+        };
+
+        await db.collection('routes').insertOne(route);
+
+        // Update jobs to assigned
+        await db.collection('jobs').updateMany(
+          { id: { $in: jobIds } },
+          { $set: { status: 'assigned', assignedRouteId: route.id } }
+        );
+
+        return res.status(201).json({ route });
+      } else {
+        // General route creation (no jobs)
+        if (!name) {
+          return res.status(400).json({ error: 'name required for general routes' });
+        }
+
+        const route = {
+          id: generateId(),
+          name,
+          vehicleId: vehicleId || null,
+          driverId: driverId || null,
+          jobIds: [],
+          stops: stops || [],
+          status: status || 'pending',
+          totalDistance: 0,
+          totalDuration: 0,
+          createdAt: new Date().toISOString()
+        };
+
+        await db.collection('routes').insertOne(route);
+        return res.status(201).json({ route });
       }
-
-      const vehicle = await db.collection('vehicles').findOne({ id: vehicleId });
-      if (!vehicle) {
-        return res.status(404).json({ error: 'Vehicle not found' });
-      }
-
-      const jobs = await db.collection('jobs').find({ id: { $in: jobIds } }).toArray();
-      if (jobs.length === 0) {
-        return res.status(400).json({ error: 'No valid jobs found' });
-      }
-
-      const route = {
-        id: generateId(),
-        vehicleId,
-        jobIds,
-        status: 'planned',
-        totalDistance: Math.random() * 50 + 10,
-        totalDuration: Math.random() * 120 + 30,
-        createdAt: new Date().toISOString()
-      };
-
-      await db.collection('routes').insertOne(route);
-
-      // Update jobs to assigned
-      await db.collection('jobs').updateMany(
-        { id: { $in: jobIds } },
-        { $set: { status: 'assigned', assignedRouteId: route.id } }
-      );
-
-      return res.status(201).json({ route });
     }
 
     // Assign driver to route
@@ -232,17 +260,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ route: updatedRoute });
     }
 
-    // Update route status
+    // Update route
     if (url.match(/^\/api\/routes\/[^\/]+$/) && method === 'PATCH') {
       const id = url.split('/api/routes/')[1];
-      const { status } = req.body as any;
+      const { status, name, vehicleId, driverId, stops } = req.body as any;
 
       const route = await db.collection('routes').findOne({ id });
       if (!route) {
         return res.status(404).json({ error: 'Route not found' });
       }
 
-      const updates: any = { status };
+      const updates: any = {};
+      if (status !== undefined) updates.status = status;
+      if (name !== undefined) updates.name = name;
+      if (vehicleId !== undefined) updates.vehicleId = vehicleId;
+      if (driverId !== undefined) updates.driverId = driverId;
+      if (stops !== undefined) updates.stops = stops;
+      updates.updatedAt = new Date().toISOString();
       if (status === 'completed') {
         updates.completedAt = new Date().toISOString();
 
@@ -286,10 +320,161 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ vehicles });
     }
 
+    // Create vehicle
+    if (url === '/api/vehicles' && method === 'POST') {
+      const { make, model, year, licensePlate, vehicleType, status, vin, fuelType, capacity } = req.body as any;
+
+      if (!make || !model || !licensePlate) {
+        return res.status(400).json({ error: 'Missing required fields: make, model, licensePlate' });
+      }
+
+      const vehicle = {
+        id: generateId(),
+        make,
+        model,
+        year: year || new Date().getFullYear(),
+        licensePlate,
+        vehicleType: vehicleType || 'TRUCK',
+        status: status || 'AVAILABLE',
+        vin: vin || '',
+        fuelType: fuelType || 'DIESEL',
+        capacity: capacity || 1000,
+        createdAt: new Date().toISOString()
+      };
+
+      await db.collection('vehicles').insertOne(vehicle);
+      return res.status(201).json({ vehicle });
+    }
+
+    // Update vehicle
+    if (url.startsWith('/api/vehicles/') && method === 'PATCH') {
+      const id = url.split('/api/vehicles/')[1];
+      const updates = req.body as any;
+
+      const result = await db.collection('vehicles').findOneAndUpdate(
+        { id },
+        { $set: { ...updates, updatedAt: new Date().toISOString() } },
+        { returnDocument: 'after' }
+      );
+
+      if (!result) {
+        return res.status(404).json({ error: 'Vehicle not found' });
+      }
+
+      return res.status(200).json({ vehicle: result });
+    }
+
     // Get all drivers
     if (url === '/api/drivers' && method === 'GET') {
       const drivers = await db.collection('drivers').find({}).toArray();
       return res.status(200).json({ drivers });
+    }
+
+    // Create driver
+    if (url === '/api/drivers' && method === 'POST') {
+      const { firstName, lastName, email, phone, licenseNumber, licenseType, assignedVehicleId, notes, status } = req.body as any;
+
+      if (!firstName || !lastName || !email) {
+        return res.status(400).json({ error: 'Missing required fields: firstName, lastName, email' });
+      }
+
+      const driver = {
+        id: generateId(),
+        firstName,
+        lastName,
+        email,
+        phone: phone || '',
+        licenseNumber: licenseNumber || '',
+        licenseType: licenseType || 'CLASS_C',
+        assignedVehicleId: assignedVehicleId || null,
+        notes: notes || '',
+        status: status || 'ACTIVE',
+        createdAt: new Date().toISOString()
+      };
+
+      await db.collection('drivers').insertOne(driver);
+      return res.status(201).json({ driver });
+    }
+
+    // Update driver
+    if (url.startsWith('/api/drivers/') && method === 'PATCH') {
+      const id = url.split('/api/drivers/')[1];
+      const updates = req.body as any;
+
+      const result = await db.collection('drivers').findOneAndUpdate(
+        { id },
+        { $set: { ...updates, updatedAt: new Date().toISOString() } },
+        { returnDocument: 'after' }
+      );
+
+      if (!result) {
+        return res.status(404).json({ error: 'Driver not found' });
+      }
+
+      return res.status(200).json({ driver: result });
+    }
+
+    // ============================================================================
+    // CUSTOMERS API
+    // ============================================================================
+
+    // Get all customers
+    if (url === '/api/customers' && method === 'GET') {
+      const customers = await db.collection('customers').find({}).toArray();
+      return res.status(200).json({ customers });
+    }
+
+    // Create customer
+    if (url === '/api/customers' && method === 'POST') {
+      const { name, address, businessName, notes, exceptions } = req.body as any;
+
+      if (!name || !address) {
+        return res.status(400).json({ error: 'Missing required fields: name, address' });
+      }
+
+      const customer = {
+        id: generateId(),
+        name,
+        address,
+        businessName: businessName || '',
+        notes: notes || '',
+        exceptions: exceptions || '',
+        createdAt: new Date().toISOString()
+      };
+
+      await db.collection('customers').insertOne(customer);
+      return res.status(201).json({ customer });
+    }
+
+    // Update customer
+    if (url.startsWith('/api/customers/') && method === 'PATCH') {
+      const id = url.split('/api/customers/')[1];
+      const updates = req.body as any;
+
+      const result = await db.collection('customers').findOneAndUpdate(
+        { id },
+        { $set: { ...updates, updatedAt: new Date().toISOString() } },
+        { returnDocument: 'after' }
+      );
+
+      if (!result) {
+        return res.status(404).json({ error: 'Customer not found' });
+      }
+
+      return res.status(200).json({ customer: result });
+    }
+
+    // Delete customer
+    if (url.startsWith('/api/customers/') && method === 'DELETE') {
+      const id = url.split('/api/customers/')[1];
+
+      const result = await db.collection('customers').deleteOne({ id });
+
+      if (result.deletedCount === 0) {
+        return res.status(404).json({ error: 'Customer not found' });
+      }
+
+      return res.status(200).json({ success: true, message: 'Customer deleted' });
     }
 
     // ============================================================================

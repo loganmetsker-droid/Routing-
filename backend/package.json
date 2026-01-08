@@ -13,7 +13,8 @@
     "typeorm": "typeorm-ts-node-commonjs",
     "migration:generate": "npm run typeorm -- migration:generate",
     "migration:run": "npm run typeorm -- migration:run",
-    "migration:revert": "npm run typeorm -- migration:revert"
+    "migration:revert": "npm run typeorm -- migration:revert",
+    "seed-multi": "ts-node seed-multi.ts"
   },
   "dependencies": {
     "@apollo/server": "^4.9.5",

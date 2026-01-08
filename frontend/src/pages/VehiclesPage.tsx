@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -29,14 +29,9 @@ import {
   LocalShipping,
   Edit,
 } from '@mui/icons-material';
-import {
-  useVehicles,
-  useVehiclesByType,
-  useVehiclesNeedingMaintenance,
-  useCreateVehicle,
-  useUpdateVehicle,
-} from '../graphql/hooks';
 import { motion } from 'framer-motion';
+
+const API_BASE_URL = import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const container = {
   hidden: { opacity: 0 },
@@ -70,12 +65,25 @@ export default function VehiclesPage() {
     capacity: 1000,
   });
   const [submitting, setSubmitting] = useState(false);
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const { data: allVehicles, loading: loadingAll } = useVehicles();
-  const { data: byTypeData, loading: loadingByType } = useVehiclesByType(selectedType);
-  const { data: maintenanceData, loading: loadingMaintenance } = useVehiclesNeedingMaintenance();
-  const [createVehicle] = useCreateVehicle();
-  const [updateVehicle] = useUpdateVehicle();
+  const loadVehicles = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE_URL}/api/vehicles`);
+      const data = await response.json();
+      setVehicles(data.vehicles || []);
+    } catch (error) {
+      console.error('Error loading vehicles:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadVehicles();
+  }, []);
 
   const handleOpenDialog = (vehicle?: any) => {
     if (vehicle) {
@@ -85,7 +93,7 @@ export default function VehiclesPage() {
         model: vehicle.model || '',
         year: vehicle.year || new Date().getFullYear(),
         licensePlate: vehicle.licensePlate || '',
-        vehicleType: vehicle.vehicleType || 'TRUCK',
+        vehicleType: vehicle.vehicleType || vehicle.type || 'TRUCK',
         status: vehicle.status || 'AVAILABLE',
         vin: vehicle.vin || '',
         fuelType: vehicle.fuelType || 'DIESEL',
@@ -117,20 +125,20 @@ export default function VehiclesPage() {
     setSubmitting(true);
     try {
       if (editingVehicle) {
-        await updateVehicle({
-          variables: {
-            id: editingVehicle.id,
-            input: formData,
-          },
+        await fetch(`${API_BASE_URL}/api/vehicles/${editingVehicle.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
         });
       } else {
-        await createVehicle({
-          variables: {
-            input: formData,
-          },
+        await fetch(`${API_BASE_URL}/api/vehicles`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
         });
       }
       handleCloseDialog();
+      await loadVehicles();
     } catch (error) {
       console.error('Error saving vehicle:', error);
     } finally {
@@ -139,9 +147,9 @@ export default function VehiclesPage() {
   };
 
   const getVehicles = () => {
-    if (tab === 0) return allVehicles?.vehicles || [];
-    if (tab === 1) return byTypeData?.vehicles || [];
-    return maintenanceData?.vehicles || [];
+    if (tab === 0) return vehicles;
+    if (tab === 1) return vehicles.filter(v => v.vehicleType?.toLowerCase() === selectedType.toLowerCase() || v.type?.toLowerCase() === selectedType.toLowerCase());
+    return vehicles.filter(v => v.status?.toUpperCase() === 'MAINTENANCE');
   };
 
   const getStatusColor = (status: string) => {
@@ -162,16 +170,17 @@ export default function VehiclesPage() {
   const getVehicleIcon = (type: string) => {
     switch (type?.toUpperCase()) {
       case 'TRUCK':
+      case 'BOX_TRUCK':
         return <LocalShipping sx={{ fontSize: 40, color: 'primary.main' }} />;
       case 'VAN':
+      case 'CARGO_VAN':
         return <DirectionsCar sx={{ fontSize: 40, color: 'secondary.main' }} />;
       default:
         return <DirectionsCar sx={{ fontSize: 40, color: 'grey.500' }} />;
     }
   };
 
-  const loading = loadingAll || loadingByType || loadingMaintenance;
-  const vehicles = getVehicles();
+  const displayedVehicles = getVehicles();
 
   return (
     <Box>
@@ -216,10 +225,10 @@ export default function VehiclesPage() {
         <Box display="flex" justifyContent="center" alignItems="center" minHeight="50vh">
           <CircularProgress size={48} />
         </Box>
-      ) : vehicles.length > 0 ? (
+      ) : displayedVehicles.length > 0 ? (
         <motion.div variants={container} initial="hidden" animate="show">
           <Grid container spacing={3}>
-            {vehicles.map((vehicle: any) => (
+            {displayedVehicles.map((vehicle: any) => (
               <Grid item xs={12} sm={6} md={4} lg={3} key={vehicle.id}>
                 <motion.div variants={item}>
                   <Card
@@ -246,7 +255,7 @@ export default function VehiclesPage() {
                             justifyContent: 'center',
                           }}
                         >
-                          {getVehicleIcon(vehicle.vehicleType)}
+                          {getVehicleIcon(vehicle.vehicleType || vehicle.type)}
                         </Box>
                         <Chip
                           label={vehicle.status}
@@ -259,7 +268,7 @@ export default function VehiclesPage() {
                         {vehicle.make} {vehicle.model}
                       </Typography>
                       <Typography variant="body2" color="textSecondary" gutterBottom>
-                        {vehicle.year} • {vehicle.vehicleType}
+                        {vehicle.year} • {vehicle.vehicleType || vehicle.type}
                       </Typography>
                       <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                         <Typography variant="caption" color="textSecondary">
