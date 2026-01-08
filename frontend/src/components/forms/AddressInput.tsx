@@ -8,15 +8,12 @@ import {
 } from '@mui/material';
 import {
   Address,
-  validateAddress,
   validateStreetAddress,
   validateCity,
   validateState,
   validateZipFormat,
   validateZipMatch,
-  normalizeAddress,
   loadZipDatabase,
-  ValidationError,
 } from '../../utils/addressValidation';
 
 export interface AddressInputProps {
@@ -42,7 +39,6 @@ export const AddressInput: React.FC<AddressInputProps> = ({
 }) => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
-  const [isValidating, setIsValidating] = useState(false);
 
   // Load ZIP database on mount
   useEffect(() => {
@@ -108,39 +104,7 @@ export const AddressInput: React.FC<AddressInputProps> = ({
     }
   };
 
-  // Validate all fields
-  const validateAll = async () => {
-    setIsValidating(true);
-    const result = await validateAddress(value);
-    setIsValidating(false);
-
-    const newErrors: Record<string, string> = {};
-    result.errors.forEach(err => {
-      newErrors[err.field] = err.message;
-    });
-
-    setErrors(newErrors);
-    setTouched({
-      line1: true,
-      city: true,
-      state: true,
-      zip: true,
-    });
-
-    if (onValidationChange) {
-      onValidationChange(result.valid);
-    }
-
-    return result.valid;
-  };
-
-  // Expose validation method
-  useEffect(() => {
-    // Store validateAll in a ref accessible from parent if needed
-    // This is handled via onValidationChange callback
-  }, []);
-
-  const handleFieldChange = (field: keyof Address, val: string) => {
+  const handleFieldChange = (field: keyof Address, val: string | null) => {
     const newValue = { ...value, [field]: val };
     onChange(newValue);
 
