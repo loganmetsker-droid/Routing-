@@ -103,14 +103,22 @@ async function seed() {
   const addresses = generateAddresses();
   const jobs: Job[] = [];
 
+  const statuses = ['unscheduled', 'scheduled', 'in_progress', 'completed'];
+  const billingStatuses = ['unpaid', 'paid'];
+
   for (let i = 0; i < 20; i++) {
     const pickup = addresses[i];
     const delivery = addresses[(i + 10) % 20];
+    const status = statuses[i % 4];
+    const hasStartDate = status !== 'unscheduled';
+    const baseDate = new Date();
+    baseDate.setDate(baseDate.getDate() + (i - 10)); // Mix of past and future jobs
 
     jobs.push(
       jobRepo.create({
         customerName: `Customer ${i + 1}`,
         customerPhone: `555-02${String(i).padStart(2, '0')}`,
+        customerEmail: `customer${i + 1}@example.com`,
         // Legacy format address
         pickupAddress: `${pickup.street}${pickup.street2 ? ', ' + pickup.street2 : ''}, ${pickup.city}, ${pickup.state} ${pickup.zip}`,
         deliveryAddress: `${delivery.street}${delivery.street2 ? ', ' + delivery.street2 : ''}, ${delivery.city}, ${delivery.state} ${delivery.zip}`,
@@ -129,11 +137,20 @@ async function seed() {
           state: delivery.state,
           zip: delivery.zip,
         },
-        timeWindowStart: new Date(Date.now() + (i + 1) * 60 * 60 * 1000),
-        timeWindowEnd: new Date(Date.now() + (i + 5) * 60 * 60 * 1000),
+        timeWindowStart: new Date(baseDate.getTime() + 8 * 60 * 60 * 1000), // 8 AM
+        timeWindowEnd: new Date(baseDate.getTime() + 17 * 60 * 60 * 1000), // 5 PM
         weight: 100 + Math.random() * 200,
         priority: ['normal', 'high', 'urgent'][i % 3] as any,
-        status: 'pending' as any,
+        status: status as any,
+        // Multi-day job support
+        startDate: hasStartDate ? new Date(baseDate.getTime() + 9 * 60 * 60 * 1000) : undefined,
+        endDate: hasStartDate ? new Date(baseDate.getTime() + 16 * 60 * 60 * 1000) : undefined,
+        // Billing
+        billingStatus: billingStatuses[i % 2] as any,
+        billingAmount: Math.floor(Math.random() * 500) + 100,
+        billingNotes: i % 2 === 0 ? `Invoice #INV-${1000 + i}` : undefined,
+        invoiceRef: i % 2 === 0 ? `INV-${1000 + i}` : undefined,
+        notes: i % 3 === 0 ? 'Handle with care - fragile items' : undefined,
       }),
     );
   }

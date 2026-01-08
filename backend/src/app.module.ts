@@ -21,6 +21,7 @@ import { DriversModule } from './modules/drivers/drivers.module';
 import { VehiclesModule } from './modules/vehicles/vehicles.module';
 import { ShiftsModule } from './modules/shifts/shifts.module';
 import { JobsModule } from './modules/jobs/jobs.module';
+import { CustomersModule } from './modules/customers/customers.module';
 import { DispatchModule } from './modules/dispatch/dispatch.module';
 import { RoutesModule } from './modules/routes/routes.module';
 import { DispatchesModule } from './modules/dispatches/dispatches.module';
@@ -80,6 +81,7 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
     VehiclesModule,
     ShiftsModule,
     JobsModule,
+    CustomersModule,
     DispatchModule,
     RoutesModule,
     DispatchesModule,

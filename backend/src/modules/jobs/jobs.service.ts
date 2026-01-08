@@ -8,9 +8,12 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
-import { Job, JobStatus, JobPriority } from './entities/job.entity';
+import { Job, JobStatus, JobPriority, BillingStatus } from './entities/job.entity';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
+import { UpdateBillingDto } from './dto/update-billing.dto';
+import { UpdateLifecycleDto } from './dto/update-lifecycle.dto';
+import { Between, IsNull } from 'typeorm';
 
 @Injectable()
 export class JobsService {
@@ -84,8 +87,17 @@ export class JobsService {
     return savedJob;
   }
 
-  async findAll(status?: string, priority?: string): Promise<Job[]> {
+  async findAll(
+    status?: string,
+    priority?: string,
+    billingStatus?: string,
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<Job[]> {
     const queryBuilder = this.jobRepository.createQueryBuilder('job');
+
+    // Exclude archived jobs by default
+    queryBuilder.andWhere('job.archived_at IS NULL');
 
     if (status) {
       queryBuilder.andWhere('job.status = :status', { status });
@@ -93,6 +105,18 @@ export class JobsService {
 
     if (priority) {
       queryBuilder.andWhere('job.priority = :priority', { priority });
+    }
+
+    if (billingStatus) {
+      queryBuilder.andWhere('job.billing_status = :billingStatus', { billingStatus });
+    }
+
+    if (startDate) {
+      queryBuilder.andWhere('job.start_date >= :startDate', { startDate });
+    }
+
+    if (endDate) {
+      queryBuilder.andWhere('job.end_date <= :endDate', { endDate });
     }
 
     queryBuilder.orderBy('job.priority', 'DESC').addOrderBy('job.createdAt', 'ASC');
@@ -336,5 +360,156 @@ export class JobsService {
 
     // Start processing 30 minutes before time window
     return Math.max(0, delayMs - 30 * 60 * 1000);
+  }
+
+  // New workflow methods
+
+  async updateBilling(id: string, updateBillingDto: UpdateBillingDto): Promise<Job> {
+    const job = await this.findOne(id);
+
+    Object.assign(job, {
+      billingStatus: updateBillingDto.billingStatus,
+      billingAmount: updateBillingDto.billingAmount,
+      billingNotes: updateBillingDto.billingNotes,
+      invoiceRef: updateBillingDto.invoiceRef,
+    });
+
+    return this.jobRepository.save(job);
+  }
+
+  async updateLifecycle(id: string, updateLifecycleDto: UpdateLifecycleDto): Promise<Job> {
+    const job = await this.findOne(id);
+
+    Object.assign(job, {
+      status: updateLifecycleDto.status,
+      startDate: updateLifecycleDto.startDate ? new Date(updateLifecycleDto.startDate) : job.startDate,
+      endDate: updateLifecycleDto.endDate ? new Date(updateLifecycleDto.endDate) : job.endDate,
+    });
+
+    // If archiving, set archivedAt timestamp
+    if (updateLifecycleDto.status === JobStatus.ARCHIVED) {
+      job.archivedAt = new Date();
+    }
+
+    return this.jobRepository.save(job);
+  }
+
+  async cloneJob(id: string): Promise<Job> {
+    const sourceJob = await this.findOne(id);
+
+    // Create new job with same properties but reset status and dates
+    const clonedJob = this.jobRepository.create({
+      customerName: sourceJob.customerName,
+      customerPhone: sourceJob.customerPhone,
+      customerEmail: sourceJob.customerEmail,
+      pickupAddress: sourceJob.pickupAddress,
+      deliveryAddress: sourceJob.deliveryAddress,
+      pickupAddressStructured: sourceJob.pickupAddressStructured,
+      deliveryAddressStructured: sourceJob.deliveryAddressStructured,
+      pickupLocation: sourceJob.pickupLocation,
+      deliveryLocation: sourceJob.deliveryLocation,
+      priority: sourceJob.priority,
+      weight: sourceJob.weight,
+      volume: sourceJob.volume,
+      quantity: sourceJob.quantity,
+      notes: sourceJob.notes,
+      specialInstructions: sourceJob.specialInstructions,
+      customerId: sourceJob.customerId,
+      timeWindowStart: sourceJob.timeWindowStart,
+      timeWindowEnd: sourceJob.timeWindowEnd,
+      // Reset workflow fields
+      status: JobStatus.UNSCHEDULED,
+      startDate: undefined,
+      endDate: undefined,
+      billingStatus: BillingStatus.UNPAID,
+      billingAmount: sourceJob.billingAmount,
+      billingNotes: undefined,
+      invoiceRef: undefined,
+    });
+
+    return this.jobRepository.save(clonedJob);
+  }
+
+  async findHistory(start: Date, end: Date): Promise<Job[]> {
+    return this.jobRepository.find({
+      where: [
+        {
+          startDate: Between(start, end),
+        },
+        {
+          endDate: Between(start, end),
+        },
+      ],
+      order: { startDate: 'ASC' },
+    });
+  }
+
+  async findCustomerHistory(customerId: string): Promise<Job[]> {
+    return this.jobRepository.find({
+      where: { customerId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async findArchived(): Promise<Job[]> {
+    return this.jobRepository.find({
+      where: { status: JobStatus.ARCHIVED },
+      order: { archivedAt: 'DESC' },
+    });
+  }
+
+  async getCalendarData(
+    start: Date,
+    end: Date,
+    resourceView?: string,
+  ): Promise<any[]> {
+    const queryBuilder = this.jobRepository
+      .createQueryBuilder('job')
+      .where('job.start_date IS NOT NULL')
+      .andWhere('job.archived_at IS NULL')
+      .andWhere(
+        '(job.start_date BETWEEN :start AND :end OR job.end_date BETWEEN :start AND :end)',
+        { start, end },
+      );
+
+    const jobs = await queryBuilder.getMany();
+
+    // Format for FullCalendar
+    return jobs.map((job) => ({
+      id: job.id,
+      title: job.customerName || 'Untitled Job',
+      start: job.startDate,
+      end: job.endDate,
+      backgroundColor: this.getStatusColor(job.status),
+      borderColor: this.getBillingBorderColor(job.billingStatus),
+      extendedProps: {
+        status: job.status,
+        billingStatus: job.billingStatus,
+        priority: job.priority,
+        pickupAddress: job.pickupAddress,
+        deliveryAddress: job.deliveryAddress,
+        notes: job.notes,
+        assignedRouteId: job.assignedRouteId,
+      },
+    }));
+  }
+
+  private getStatusColor(status: JobStatus): string {
+    const colorMap = {
+      [JobStatus.UNSCHEDULED]: '#9e9e9e',
+      [JobStatus.SCHEDULED]: '#2196f3',
+      [JobStatus.IN_PROGRESS]: '#ff9800',
+      [JobStatus.COMPLETED]: '#4caf50',
+      [JobStatus.ARCHIVED]: '#607d8b',
+      [JobStatus.CANCELLED]: '#f44336',
+      [JobStatus.FAILED]: '#d32f2f',
+      [JobStatus.PENDING]: '#9e9e9e',
+      [JobStatus.ASSIGNED]: '#2196f3',
+    };
+    return colorMap[status] || '#9e9e9e';
+  }
+
+  private getBillingBorderColor(billingStatus: string): string {
+    return billingStatus === 'paid' ? '#4caf50' : '#f44336';
   }
 }

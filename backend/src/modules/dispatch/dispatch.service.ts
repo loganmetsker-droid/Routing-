@@ -82,12 +82,12 @@ export class DispatchService {
     const coordinates = [];
     for (const job of jobs) {
       // Add pickup location
-      if (job.pickupLocation?.coordinates) {
-        coordinates.push(job.pickupLocation.coordinates);
+      if (job.pickupLocation) {
+        coordinates.push([job.pickupLocation.lng, job.pickupLocation.lat]);
       }
       // Add delivery location
-      if (job.deliveryLocation?.coordinates) {
-        coordinates.push(job.deliveryLocation.coordinates);
+      if (job.deliveryLocation) {
+        coordinates.push([job.deliveryLocation.lng, job.deliveryLocation.lat]);
       }
     }
 

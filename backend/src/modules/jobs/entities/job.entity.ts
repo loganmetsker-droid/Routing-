@@ -10,12 +10,20 @@ import {
 import { ObjectType, Field, ID, Float, Int } from '@nestjs/graphql';
 
 export enum JobStatus {
-  PENDING = 'pending',
-  ASSIGNED = 'assigned',
+  UNSCHEDULED = 'unscheduled', // new lifecycle state
+  SCHEDULED = 'scheduled',     // new lifecycle state
+  PENDING = 'pending',          // legacy - maps to unscheduled
+  ASSIGNED = 'assigned',        // legacy - maps to scheduled
   IN_PROGRESS = 'in_progress',
   COMPLETED = 'completed',
+  ARCHIVED = 'archived',        // new lifecycle state
   CANCELLED = 'cancelled',
   FAILED = 'failed',
+}
+
+export enum BillingStatus {
+  UNPAID = 'unpaid',
+  PAID = 'paid',
 }
 
 export enum JobPriority {
@@ -181,9 +189,66 @@ export class Job {
   @Field({ nullable: true })
   assignedRouteId?: string;
 
+  // Multi-day job support
+  @Column({
+    name: 'start_date',
+    type: 'timestamp with time zone',
+    nullable: true,
+    comment: 'Actual start date/time for multi-day jobs',
+  })
+  @Field({ nullable: true })
+  startDate?: Date;
+
+  @Column({
+    name: 'end_date',
+    type: 'timestamp with time zone',
+    nullable: true,
+    comment: 'End date/time for multi-day jobs (null = same-day)',
+  })
+  @Field({ nullable: true })
+  endDate?: Date;
+
+  // Billing tracking (no payment processing)
+  @Column({
+    type: 'enum',
+    enum: BillingStatus,
+    default: BillingStatus.UNPAID,
+    name: 'billing_status',
+  })
+  @Field()
+  billingStatus: BillingStatus;
+
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    name: 'billing_amount',
+    comment: 'Amount to bill (no payment processing)',
+  })
+  @Field(() => Float, { nullable: true })
+  billingAmount?: number;
+
+  @Column({ type: 'text', nullable: true, name: 'billing_notes' })
+  @Field({ nullable: true })
+  billingNotes?: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true, name: 'invoice_ref' })
+  @Field({ nullable: true })
+  invoiceRef?: string;
+
+  // Customer reference for reuse
+  @Column({ type: 'uuid', nullable: true, name: 'customer_id' })
+  @Field({ nullable: true })
+  customerId?: string;
+
   @Column({ name: 'completed_at', type: 'timestamp with time zone', nullable: true })
   @Field({ nullable: true })
   completedAt?: Date;
+
+  @Column({ name: 'archived_at', type: 'timestamp with time zone', nullable: true })
+  @Field({ nullable: true })
+  archivedAt?: Date;
 
   @CreateDateColumn({ name: 'created_at' })
   @Field()
