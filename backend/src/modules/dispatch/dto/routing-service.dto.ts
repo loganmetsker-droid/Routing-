@@ -30,5 +30,6 @@ export class RoutingServiceResponse {
     latitude: number;
     longitude: number;
   };
+  polyline?: any; // Optional polyline from routing service
   error?: string;
 }

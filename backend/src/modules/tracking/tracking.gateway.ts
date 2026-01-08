@@ -263,14 +263,13 @@ export class TrackingGateway
 
       // Update vehicle current location
       await this.vehicleRepository.update(data.vehicleId, {
-        currentLocation: { lat: data.lat, lng: data.lng },
+        currentLocation: { lat: data.lat, lng: data.lng } as any,
       });
 
       // Store in telemetry table for history
       const telemetry = this.telemetryRepository.create({
         vehicleId: data.vehicleId,
-        latitude: data.lat,
-        longitude: data.lng,
+        location: { lat: data.lat, lng: data.lng },
         speed: data.speed || null,
         heading: data.heading || null,
         timestamp: new Date(data.timestamp),
