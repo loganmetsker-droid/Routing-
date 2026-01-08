@@ -6,6 +6,7 @@ import { JobsService } from './jobs.service';
 import { JobsController } from './jobs.controller';
 import { JobsProcessor } from './jobs.processor';
 import { JobsResolver } from './jobs.resolver';
+import './enums-registration'; // Register GraphQL enums
 
 @Module({
   imports: [
