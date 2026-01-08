@@ -81,6 +81,31 @@ export class Route {
   @Field(() => Float, { nullable: true })
   totalDurationMinutes?: number;
 
+  @Column({
+    type: 'jsonb',
+    nullable: true,
+    comment: 'Route polyline geometry (GeoJSON or encoded polyline)',
+  })
+  @Field(() => GraphQLJSON, { nullable: true })
+  polyline?: any;
+
+  @Column({
+    type: 'varchar',
+    length: 7,
+    nullable: true,
+    comment: 'Hex color for route visualization (e.g., #FF5733)',
+  })
+  @Field({ nullable: true })
+  color?: string;
+
+  @Column({
+    type: 'timestamp with time zone',
+    nullable: true,
+    comment: 'Estimated time of arrival at final destination',
+  })
+  @Field({ nullable: true })
+  eta?: Date;
+
   @Column({ type: 'int', default: 0 })
   @Field(() => Int)
   jobCount: number;

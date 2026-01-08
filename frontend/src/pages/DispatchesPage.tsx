@@ -39,6 +39,7 @@ import {
 } from '@mui/icons-material';
 import { useDrivers, useVehicles } from '../graphql/hooks';
 import { getJobs, getRoutes, generateRoute, assignDriverToRoute, updateRouteStatus, connectSSE } from '../services/api';
+import MultiRouteMap from '../components/maps/MultiRouteMap';
 
 export default function DispatchesPage() {
   const [tab, setTab] = useState(0);
@@ -165,6 +166,58 @@ export default function DispatchesPage() {
   const plannedRoutes = routes.filter(r => r.status === 'planned');
   const dispatchedRoutes = routes.filter(r => r.status === 'dispatched');
 
+  // Transform routes for multi-route map
+  const transformRoutesForMap = () => {
+    const activeRoutes = routes.filter(
+      r => r.status === 'planned' || r.status === 'dispatched' || r.status === 'in_progress'
+    );
+
+    return activeRoutes.map((route: any) => {
+      const vehicle = vehicles.find((v: any) => v.id === route.vehicleId);
+      const driver = route.driverId ? drivers.find((d: any) => d.id === route.driverId) : null;
+
+      // Generate stops from jobs
+      const routeJobs = jobs.filter(j => route.jobIds?.includes(j.id));
+      const stops = routeJobs.flatMap((job: any) => [
+        {
+          lat: job.pickupLocation?.coordinates?.[1] || 37.7749,
+          lng: job.pickupLocation?.coordinates?.[0] || -122.4194,
+          address: job.pickupAddress || 'Unknown',
+          type: 'pickup' as const,
+        },
+        {
+          lat: job.deliveryLocation?.coordinates?.[1] || 37.7749,
+          lng: job.deliveryLocation?.coordinates?.[0] || -122.4194,
+          address: job.deliveryAddress || 'Unknown',
+          type: 'delivery' as const,
+        },
+      ]);
+
+      return {
+        id: route.id,
+        color: route.color || '#3B82F6',
+        polyline: route.polyline,
+        vehicle: vehicle ? {
+          id: vehicle.id,
+          make: vehicle.make,
+          model: vehicle.model,
+          licensePlate: vehicle.licensePlate,
+          currentLocation: vehicle.currentLocation,
+        } : undefined,
+        driver: driver ? {
+          firstName: driver.firstName,
+          lastName: driver.lastName,
+        } : undefined,
+        status: route.status,
+        totalDistanceKm: route.totalDistanceKm || route.totalDistance,
+        totalDurationMinutes: route.totalDurationMinutes || route.totalDuration,
+        eta: route.eta,
+        jobCount: route.jobCount || route.jobIds?.length || 0,
+        stops,
+      };
+    });
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -240,6 +293,11 @@ export default function DispatchesPage() {
           </Card>
         </Grid>
       </Grid>
+
+      {/* Multi-Route Map */}
+      <Paper sx={{ mb: 3, overflow: 'hidden' }}>
+        <MultiRouteMap routes={transformRoutesForMap()} height="500px" />
+      </Paper>
 
       <Paper sx={{ mb: 3 }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v)}>

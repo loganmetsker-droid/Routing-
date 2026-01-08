@@ -67,11 +67,35 @@ export class DispatchGateway {
     this.server.to('routes').emit('route:created', {
       routeId: route.id,
       vehicleId: route.vehicleId,
+      driverId: route.driverId,
+      jobIds: route.jobIds,
       jobCount: route.jobCount,
       status: route.status,
       totalDistanceKm: route.totalDistanceKm,
       totalDurationMinutes: route.totalDurationMinutes,
+      polyline: route.polyline,
+      color: route.color,
+      eta: route.eta,
       createdAt: route.createdAt,
+    });
+
+    // Also emit to all clients (not just subscribers)
+    this.server.emit('route:update', {
+      type: 'created',
+      route: {
+        id: route.id,
+        vehicleId: route.vehicleId,
+        driverId: route.driverId,
+        jobIds: route.jobIds,
+        jobCount: route.jobCount,
+        status: route.status,
+        totalDistanceKm: route.totalDistanceKm,
+        totalDurationMinutes: route.totalDurationMinutes,
+        polyline: route.polyline,
+        color: route.color,
+        eta: route.eta,
+      },
+      timestamp: new Date().toISOString(),
     });
   }
 

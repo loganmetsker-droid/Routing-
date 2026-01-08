@@ -209,4 +209,17 @@ export class TrackingGateway
       };
     }
   }
+
+  /**
+   * Broadcast route update to all connected clients
+   * Called when routes are created, updated, or dispatched
+   */
+  broadcastRouteUpdate(route: any, eventType: 'created' | 'updated' | 'dispatched' | 'completed') {
+    this.logger.log(`Broadcasting route ${eventType}: ${route.id}`);
+    this.server.emit('route:update', {
+      type: eventType,
+      route,
+      timestamp: new Date().toISOString(),
+    });
+  }
 }

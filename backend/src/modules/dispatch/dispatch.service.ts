@@ -3,6 +3,8 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -18,11 +20,21 @@ import {
   RoutingServiceRequest,
   RoutingServiceResponse,
 } from './dto/routing-service.dto';
+import { DispatchGateway } from './dispatch.gateway';
 
 @Injectable()
 export class DispatchService {
   private readonly logger = new Logger(DispatchService.name);
   private readonly routingServiceUrl: string;
+
+  // Predefined color palette for route visualization
+  private readonly routeColors = [
+    '#FF5733', '#33FF57', '#3357FF', '#FF33A1', '#FFD700',
+    '#00CED1', '#FF6347', '#32CD32', '#BA55D3', '#FF8C00',
+    '#4169E1', '#DC143C', '#00FA9A', '#FF1493', '#1E90FF',
+  ];
+
+  private routeColorIndex = 0;
 
   constructor(
     @InjectRepository(Route)
@@ -33,11 +45,57 @@ export class DispatchService {
     private readonly jobRepository: Repository<Job>,
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
+    @Inject(forwardRef(() => DispatchGateway))
+    private readonly dispatchGateway: DispatchGateway,
   ) {
     this.routingServiceUrl = this.configService.get<string>(
       'ROUTING_SERVICE_URL',
       'http://localhost:8000',
     );
+  }
+
+  /**
+   * Get next available route color
+   */
+  private getNextRouteColor(): string {
+    const color = this.routeColors[this.routeColorIndex];
+    this.routeColorIndex = (this.routeColorIndex + 1) % this.routeColors.length;
+    return color;
+  }
+
+  /**
+   * Generate polyline from job locations
+   * If routing service provides polyline, use it; otherwise create from job coordinates
+   */
+  private async generatePolyline(
+    jobIds: string[],
+    routingResponse: RoutingServiceResponse,
+  ): Promise<any> {
+    // Check if routing service returned polyline geometry
+    if (routingResponse.polyline) {
+      return routingResponse.polyline;
+    }
+
+    // Otherwise, generate simple polyline from job locations
+    const jobs = await this.jobRepository.findByIds(jobIds);
+
+    const coordinates = [];
+    for (const job of jobs) {
+      // Add pickup location
+      if (job.pickupLocation?.coordinates) {
+        coordinates.push(job.pickupLocation.coordinates);
+      }
+      // Add delivery location
+      if (job.deliveryLocation?.coordinates) {
+        coordinates.push(job.deliveryLocation.coordinates);
+      }
+    }
+
+    // Return as GeoJSON LineString
+    return {
+      type: 'LineString',
+      coordinates,
+    };
   }
 
   /**
@@ -128,6 +186,24 @@ export class DispatchService {
     // Extract optimized job order from routing response
     const optimizedJobIds = routingResponse.route.map((r) => r.job_id);
 
+    // Generate polyline geometry
+    const polyline = await this.generatePolyline(
+      optimizedJobIds,
+      routingResponse,
+    );
+
+    // Assign a color for route visualization
+    const color = this.getNextRouteColor();
+
+    // Calculate ETA (planned start + duration)
+    let eta: Date | null = null;
+    if (createRouteDto.plannedStart && routingResponse.total_duration_minutes) {
+      const startTime = new Date(createRouteDto.plannedStart);
+      eta = new Date(
+        startTime.getTime() + routingResponse.total_duration_minutes * 60000,
+      );
+    }
+
     // Create route entity
     const route = this.routeRepository.create({
       vehicleId: createRouteDto.vehicleId,
@@ -138,6 +214,9 @@ export class DispatchService {
       totalDistanceKm: routingResponse.total_distance_km,
       totalDurationMinutes: routingResponse.total_duration_minutes,
       jobCount: routingResponse.num_jobs,
+      polyline,
+      color,
+      eta,
       plannedStart: createRouteDto.plannedStart
         ? new Date(createRouteDto.plannedStart)
         : null,
@@ -146,7 +225,10 @@ export class DispatchService {
 
     const savedRoute = await this.routeRepository.save(route);
 
-    this.logger.log(`Route ${savedRoute.id} created successfully`);
+    this.logger.log(`Route ${savedRoute.id} created successfully with color ${color}`);
+
+    // Broadcast route creation via WebSocket
+    this.dispatchGateway.emitRouteCreated(savedRoute);
 
     return savedRoute;
   }
@@ -229,6 +311,9 @@ export class DispatchService {
       `Route ${route.id} started. Vehicle ${route.vehicleId} now in_route`,
     );
 
+    // Broadcast route started via WebSocket
+    this.dispatchGateway.emitRouteStarted(updatedRoute);
+
     return updatedRoute;
   }
 
@@ -252,7 +337,12 @@ export class DispatchService {
       status: 'available',
     });
 
-    return this.routeRepository.save(route);
+    const completedRoute = await this.routeRepository.save(route);
+
+    // Broadcast route completion via WebSocket
+    this.dispatchGateway.emitRouteCompleted(completedRoute);
+
+    return completedRoute;
   }
 
   /**
