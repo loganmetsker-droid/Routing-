@@ -29,10 +29,12 @@ export class SubscriptionsController {
     private readonly configService: ConfigService,
   ) {
     const stripeSecretKey = this.configService.get<string>('STRIPE_SECRET_KEY');
-    this.stripe = new Stripe(stripeSecretKey, {
-      apiVersion: '2025-12-15.clover',
-    });
-    this.webhookSecret = this.configService.get<string>('STRIPE_WEBHOOK_SECRET');
+    if (stripeSecretKey) {
+      this.stripe = new Stripe(stripeSecretKey, {
+        apiVersion: '2025-12-15.clover',
+      });
+      this.webhookSecret = this.configService.get<string>('STRIPE_WEBHOOK_SECRET');
+    }
   }
 
   @Post('subscribe')
