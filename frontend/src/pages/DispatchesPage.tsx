@@ -205,8 +205,8 @@ export default function DispatchesPage() {
           currentLocation: vehicle.currentLocation,
         } : undefined,
         driver: driver ? {
-          firstName: driver.firstName,
-          lastName: driver.lastName,
+          firstName: driver.firstName || '',
+          lastName: driver.lastName || '',
         } : undefined,
         status: route.status,
         totalDistanceKm: route.totalDistanceKm || route.totalDistance,
