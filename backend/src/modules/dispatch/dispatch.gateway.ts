@@ -126,6 +126,46 @@ export class DispatchGateway {
   }
 
   /**
+   * Emit route updated event (for stop reordering, etc.)
+   */
+  emitRouteUpdated(route: Route) {
+    this.logger.log(`Emitting route updated: ${route.id}`);
+    this.server.to('routes').emit('route:updated', {
+      routeId: route.id,
+      vehicleId: route.vehicleId,
+      driverId: route.driverId,
+      jobIds: route.jobIds,
+      jobCount: route.jobCount,
+      status: route.status,
+      totalDistanceKm: route.totalDistanceKm,
+      totalDurationMinutes: route.totalDurationMinutes,
+      polyline: route.polyline,
+      color: route.color,
+      eta: route.eta,
+      updatedAt: route.updatedAt,
+    });
+
+    // Also emit to all clients
+    this.server.emit('route:update', {
+      type: 'updated',
+      route: {
+        id: route.id,
+        vehicleId: route.vehicleId,
+        driverId: route.driverId,
+        jobIds: route.jobIds,
+        jobCount: route.jobCount,
+        status: route.status,
+        totalDistanceKm: route.totalDistanceKm,
+        totalDurationMinutes: route.totalDurationMinutes,
+        polyline: route.polyline,
+        color: route.color,
+        eta: route.eta,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /**
    * Emit vehicle status update
    */
   emitVehicleStatusUpdate(update: {

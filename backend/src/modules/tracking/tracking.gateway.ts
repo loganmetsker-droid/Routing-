@@ -11,7 +11,11 @@ import {
 import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { Interval } from '@nestjs/schedule';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { TrackingService, VehicleLocation } from './tracking.service';
+import { Vehicle } from '../vehicles/entities/vehicle.entity';
+import { Telemetry } from './entities/telemetry.entity';
 
 /**
  * WebSocket Gateway for real-time vehicle tracking
@@ -32,7 +36,13 @@ export class TrackingGateway
   private readonly logger = new Logger(TrackingGateway.name);
   private connectedClients = new Set<string>();
 
-  constructor(private readonly trackingService: TrackingService) {}
+  constructor(
+    private readonly trackingService: TrackingService,
+    @InjectRepository(Vehicle)
+    private readonly vehicleRepository: Repository<Vehicle>,
+    @InjectRepository(Telemetry)
+    private readonly telemetryRepository: Repository<Telemetry>,
+  ) {}
 
   /**
    * Gateway initialization
@@ -221,5 +231,82 @@ export class TrackingGateway
       route,
       timestamp: new Date().toISOString(),
     });
+  }
+
+  /**
+   * Handle driver GPS location updates from mobile app
+   */
+  @SubscribeMessage('driver:location')
+  async handleDriverLocation(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: {
+      vehicleId: string;
+      lat: number;
+      lng: number;
+      speed?: number;
+      heading?: number;
+      timestamp: string;
+    },
+  ) {
+    try {
+      this.logger.log(
+        `Received location update for vehicle ${data.vehicleId} from client ${client.id}`,
+      );
+
+      // Validate data
+      if (!data.vehicleId || !data.lat || !data.lng) {
+        return {
+          event: 'error',
+          data: { message: 'Missing required fields: vehicleId, lat, lng' },
+        };
+      }
+
+      // Update vehicle current location
+      await this.vehicleRepository.update(data.vehicleId, {
+        currentLocation: { lat: data.lat, lng: data.lng },
+      });
+
+      // Store in telemetry table for history
+      const telemetry = this.telemetryRepository.create({
+        vehicleId: data.vehicleId,
+        latitude: data.lat,
+        longitude: data.lng,
+        speed: data.speed || null,
+        heading: data.heading || null,
+        timestamp: new Date(data.timestamp),
+      });
+      await this.telemetryRepository.save(telemetry);
+
+      // Broadcast to all connected clients (dispatchers, other drivers)
+      this.server.emit('vehicle:location-update', {
+        vehicleId: data.vehicleId,
+        lat: data.lat,
+        lng: data.lng,
+        speed: data.speed,
+        heading: data.heading,
+        timestamp: data.timestamp,
+      });
+
+      this.logger.log(
+        `✅ Location updated for vehicle ${data.vehicleId} and broadcast to clients`,
+      );
+
+      return {
+        event: 'location:acknowledged',
+        data: {
+          vehicleId: data.vehicleId,
+          timestamp: new Date().toISOString(),
+        },
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error handling driver location: ${error.message}`,
+        error.stack,
+      );
+      return {
+        event: 'error',
+        data: { message: 'Failed to update location' },
+      };
+    }
   }
 }

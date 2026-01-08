@@ -381,6 +381,74 @@ export class DispatchService {
   }
 
   /**
+   * Reorder stops in a route and recalculate polyline
+   */
+  async reorderStops(routeId: string, newJobOrder: string[]): Promise<Route> {
+    this.logger.log(
+      `Reordering stops for route ${routeId} with ${newJobOrder.length} jobs`,
+    );
+
+    const route = await this.findOne(routeId);
+
+    if (route.status === RouteStatus.COMPLETED || route.status === RouteStatus.CANCELLED) {
+      throw new BadRequestException(
+        `Cannot reorder stops for ${route.status} route`,
+      );
+    }
+
+    // Validate that all job IDs belong to this route
+    const invalidJobs = newJobOrder.filter((jobId) => !route.jobIds.includes(jobId));
+    if (invalidJobs.length > 0) {
+      throw new BadRequestException(
+        `Invalid job IDs: ${invalidJobs.join(', ')}`,
+      );
+    }
+
+    if (newJobOrder.length !== route.jobIds.length) {
+      throw new BadRequestException(
+        'Job count mismatch. All jobs must be included in new order.',
+      );
+    }
+
+    // Call routing service with new order to get updated polyline and metrics
+    const routingResponse = await this.callRoutingService(
+      route.vehicleId,
+      newJobOrder,
+    );
+
+    // Generate new polyline
+    const polyline = await this.generatePolyline(newJobOrder, routingResponse);
+
+    // Calculate new ETA
+    let eta: Date | null = null;
+    if (route.plannedStart && routingResponse.total_duration_minutes) {
+      const startTime = new Date(route.plannedStart);
+      eta = new Date(
+        startTime.getTime() + routingResponse.total_duration_minutes * 60000,
+      );
+    }
+
+    // Update route with new order and metrics
+    route.jobIds = newJobOrder;
+    route.polyline = polyline;
+    route.totalDistanceKm = routingResponse.total_distance_km;
+    route.totalDurationMinutes = routingResponse.total_duration_minutes;
+    route.eta = eta;
+    route.routeData = routingResponse;
+
+    const updatedRoute = await this.routeRepository.save(route);
+
+    this.logger.log(
+      `Route ${routeId} stops reordered. New distance: ${updatedRoute.totalDistanceKm} km`,
+    );
+
+    // Broadcast route update via WebSocket
+    this.dispatchGateway.emitRouteUpdated(updatedRoute);
+
+    return updatedRoute;
+  }
+
+  /**
    * Get statistics
    */
   async getStatistics() {

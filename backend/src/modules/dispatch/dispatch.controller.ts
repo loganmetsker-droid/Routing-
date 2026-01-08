@@ -10,6 +10,7 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -18,6 +19,7 @@ import {
   ApiBearerAuth,
   ApiQuery,
   ApiParam,
+  ApiBody,
 } from '@nestjs/swagger';
 import { DispatchService } from './dispatch.service';
 import { DispatchWorker } from './dispatch.worker';
@@ -25,6 +27,8 @@ import { Route, RouteStatus } from './entities/route.entity';
 import { CreateRouteDto } from './dto/create-route.dto';
 import { UpdateRouteDto } from './dto/update-route.dto';
 import { Public } from '../../common/decorators/public.decorator';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { RolesGuard } from '../../common/guards/roles.guard';
 
 @ApiTags('dispatch')
 @Controller('api/dispatch')
@@ -141,6 +145,39 @@ export class DispatchController {
   @ApiResponse({ status: 200, description: 'Route cancelled', type: Route })
   cancelRoute(@Param('id', ParseUUIDPipe) id: string): Promise<Route> {
     return this.dispatchService.cancelRoute(id);
+  }
+
+  @Patch('routes/:id/reorder')
+  @UseGuards(RolesGuard)
+  @Roles('DISPATCHER', 'ADMIN')
+  @ApiOperation({
+    summary: 'Reorder stops in a route (Dispatcher only)',
+    description:
+      'Reorder job stops and recalculate polyline, distance, and ETA',
+  })
+  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        newJobOrder: {
+          type: 'array',
+          items: { type: 'string', format: 'uuid' },
+          description: 'Array of job IDs in new order',
+        },
+      },
+      required: ['newJobOrder'],
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Route stops reordered', type: Route })
+  @ApiResponse({ status: 400, description: 'Invalid job order' })
+  @ApiResponse({ status: 403, description: 'Forbidden - Dispatcher role required' })
+  @ApiResponse({ status: 404, description: 'Route not found' })
+  reorderStops(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body('newJobOrder') newJobOrder: string[],
+  ): Promise<Route> {
+    return this.dispatchService.reorderStops(id, newJobOrder);
   }
 
   @Post('auto-dispatch')

@@ -94,6 +94,16 @@ export const updateRouteStatus = async (routeId: string, status: string): Promis
   return response.json();
 };
 
+export const reorderRouteStops = async (routeId: string, newJobOrder: string[]): Promise<{ route: Route }> => {
+  const response = await fetch(`${API_BASE_URL}/api/dispatch/routes/${routeId}/reorder`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ newJobOrder }),
+  });
+  if (!response.ok) throw new Error('Failed to reorder route stops');
+  return response.json();
+};
+
 // Vehicles & Drivers API
 export const getVehicles = async (): Promise<{ vehicles: any[] }> => {
   const response = await fetch(`${API_BASE_URL}/api/vehicles`);

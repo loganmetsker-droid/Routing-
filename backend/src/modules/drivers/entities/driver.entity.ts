@@ -82,6 +82,11 @@ export class Driver {
   })
   currentLocation?: any; // Location stored as { lat: number, lng: number }
 
+  // Roles for permissions
+  @Column({ type: 'jsonb', default: '["DRIVER"]' })
+  @Field(() => [String])
+  roles: string[];
+
   // Relationship to current vehicle
   @Column({ name: 'current_vehicle_id', type: 'uuid', nullable: true })
   @Field(() => ID, { nullable: true })

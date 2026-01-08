@@ -38,8 +38,9 @@ import {
   TrendingUp,
 } from '@mui/icons-material';
 import { useDrivers, useVehicles } from '../graphql/hooks';
-import { getJobs, getRoutes, generateRoute, assignDriverToRoute, updateRouteStatus, connectSSE } from '../services/api';
+import { getJobs, getRoutes, generateRoute, assignDriverToRoute, updateRouteStatus, connectSSE, reorderRouteStops } from '../services/api';
 import MultiRouteMap from '../components/maps/MultiRouteMap';
+import ReorderableStopsList from '../components/maps/ReorderableStopsList';
 
 export default function DispatchesPage() {
   const [tab, setTab] = useState(0);
@@ -51,6 +52,8 @@ export default function DispatchesPage() {
   const [routes, setRoutes] = useState<any[]>([]);
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [selectedRouteForStops, setSelectedRouteForStops] = useState<any>(null);
+  const [stopsDialogOpen, setStopsDialogOpen] = useState(false);
 
   const { data: driversData, loading: driversLoading } = useDrivers();
   const { data: vehiclesData } = useVehicles();
@@ -149,6 +152,21 @@ export default function DispatchesPage() {
       await loadData();
     } catch (error) {
       console.error('Failed to complete route:', error);
+    }
+  };
+
+  const handleOpenStopsDialog = (route: any) => {
+    setSelectedRouteForStops(route);
+    setStopsDialogOpen(true);
+  };
+
+  const handleReorderStops = async (routeId: string, newJobOrder: string[]) => {
+    try {
+      await reorderRouteStops(routeId, newJobOrder);
+      await loadData();
+    } catch (error) {
+      console.error('Failed to reorder stops:', error);
+      throw error;
     }
   };
 
@@ -335,7 +353,16 @@ export default function DispatchesPage() {
                       <Typography variant="body2" color="text.secondary" gutterBottom>
                         <strong>Distance:</strong> {route.totalDistance?.toFixed(1)} km
                       </Typography>
-                      <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
+                      <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                        <Button
+                          size="small"
+                          startIcon={<RouteIcon />}
+                          variant="text"
+                          onClick={() => handleOpenStopsDialog(route)}
+                          sx={{ textTransform: 'none' }}
+                        >
+                          Edit Stops
+                        </Button>
                         {!driver && (
                           <Button
                             size="small"
@@ -546,6 +573,45 @@ export default function DispatchesPage() {
           <Button variant="contained" onClick={handleAssignDriver} disabled={!selectedDriverId}>
             Assign Driver
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={stopsDialogOpen} onClose={() => setStopsDialogOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Reorder Route Stops</DialogTitle>
+        <DialogContent>
+          {selectedRouteForStops && (
+            <ReorderableStopsList
+              routeId={selectedRouteForStops.id}
+              stops={(() => {
+                const stops: any[] = [];
+                const routeJobs = jobs.filter(j => selectedRouteForStops.jobIds?.includes(j.id));
+
+                selectedRouteForStops.jobIds?.forEach((jobId: string) => {
+                  const job = routeJobs.find(j => j.id === jobId);
+                  if (job) {
+                    stops.push({
+                      jobId: job.id,
+                      address: job.pickupAddress,
+                      type: 'pickup' as const,
+                      customerName: job.customerName,
+                    });
+                    stops.push({
+                      jobId: job.id,
+                      address: job.deliveryAddress,
+                      type: 'delivery' as const,
+                      customerName: job.customerName,
+                    });
+                  }
+                });
+                return stops;
+              })()}
+              routeColor={selectedRouteForStops.color || '#3B82F6'}
+              onReorder={handleReorderStops}
+            />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setStopsDialogOpen(false)}>Close</Button>
         </DialogActions>
       </Dialog>
     </Box>
