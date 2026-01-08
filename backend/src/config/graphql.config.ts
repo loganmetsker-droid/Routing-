@@ -7,7 +7,11 @@ export const graphqlConfig = (
   configService: ConfigService,
 ): ApolloDriverConfig => ({
   // Auto-generate schema file
-  autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
+  // In production: use in-memory (read-only FS)
+  // In development: write to file for inspection
+  autoSchemaFile: configService.get('NODE_ENV') === 'production'
+    ? true
+    : join(process.cwd(), 'src/schema.gql'),
   sortSchema: true,
 
   // GraphQL Playground
