@@ -11,6 +11,7 @@ import DispatchesPage from './pages/DispatchesPage';
 import JobsPageImproved from './pages/JobsPageImproved';
 import JobsPageEnhanced from './pages/JobsPageEnhanced';
 import DispatchWorkflowPage from './pages/DispatchWorkflowPage';
+import DispatchWorkflowCorrected from './pages/DispatchWorkflowCorrected';
 
 import LoginPage from './pages/LoginPage';
 
@@ -28,8 +29,10 @@ function App() {
         <Route path="jobs" element={<JobsPageEnhanced />} />
         {/* ALT: Basic improved version */}
         <Route path="jobs-basic" element={<JobsPageImproved />} />
-        {/* NEW: Streamlined dispatch workflow */}
-        <Route path="dispatch-workflow" element={<DispatchWorkflowPage />} />
+        {/* LATEST: Corrected dispatch workflow (Drivers before Optimization) */}
+        <Route path="dispatch-workflow" element={<DispatchWorkflowCorrected />} />
+        {/* ALT: Original workflow (kept for reference) */}
+        <Route path="dispatch-workflow-old" element={<DispatchWorkflowPage />} />
         {/* Existing pages - keep for alternative workflows */}
         <Route path="routing" element={<RoutingPage />} />
         <Route path="dispatches" element={<DispatchesPage />} />
