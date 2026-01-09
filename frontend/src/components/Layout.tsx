@@ -28,6 +28,7 @@ import {
   Logout as LogoutIcon,
   Brightness4 as DarkModeIcon,
   Brightness7 as LightModeIcon,
+  AutoAwesome as WorkflowIcon,
 } from '@mui/icons-material';
 import { useThemeMode } from '../contexts/ThemeContext';
 
@@ -36,6 +37,8 @@ const drawerWidth = 240;
 const menuItems = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
   { text: 'Jobs', icon: <JobsIcon />, path: '/jobs' },
+  // NEW: Streamlined dispatch workflow
+  { text: 'Dispatch Workflow', icon: <WorkflowIcon />, path: '/dispatch-workflow', badge: 'NEW' },
   { text: 'Routing', icon: <RoutesIcon />, path: '/routing' },
   { text: 'Dispatch', icon: <DispatchIcon />, path: '/dispatches' },
   { text: 'Drivers', icon: <DriversIcon />, path: '/drivers' },

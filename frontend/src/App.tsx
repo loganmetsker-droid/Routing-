@@ -6,7 +6,11 @@ import VehiclesPage from './pages/VehiclesPage';
 import CustomersPage from './pages/CustomersPage';
 import RoutingPage from './pages/RoutingPage';
 import DispatchesPage from './pages/DispatchesPage';
-import JobsPage from './pages/JobsPage';
+
+// Improved dispatch workflow pages
+import JobsPageImproved from './pages/JobsPageImproved';
+import DispatchWorkflowPage from './pages/DispatchWorkflowPage';
+
 import LoginPage from './pages/LoginPage';
 
 // Legacy route pages (kept for backwards compatibility)
@@ -19,7 +23,11 @@ function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<Layout />}>
         <Route index element={<Dashboard />} />
-        <Route path="jobs" element={<JobsPage />} />
+        {/* NEW: Improved Jobs page with archive functionality */}
+        <Route path="jobs" element={<JobsPageImproved />} />
+        {/* NEW: Streamlined dispatch workflow */}
+        <Route path="dispatch-workflow" element={<DispatchWorkflowPage />} />
+        {/* Existing pages - keep for alternative workflows */}
         <Route path="routing" element={<RoutingPage />} />
         <Route path="dispatches" element={<DispatchesPage />} />
         <Route path="drivers" element={<DriversPage />} />
