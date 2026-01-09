@@ -415,8 +415,8 @@ export default function JobsPageImproved() {
                           sx={{ mr: 0.5 }}
                         />
                         <Chip
-                          label={job.priority}
-                          color={getPriorityColor(job.priority) as any}
+                          label={job.priority || 'normal'}
+                          color={getPriorityColor(job.priority || 'normal') as any}
                           size="small"
                         />
                       </Box>
