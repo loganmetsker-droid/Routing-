@@ -12,6 +12,7 @@ import JobsPageImproved from './pages/JobsPageImproved';
 import JobsPageEnhanced from './pages/JobsPageEnhanced';
 import DispatchWorkflowPage from './pages/DispatchWorkflowPage';
 import DispatchWorkflowCorrected from './pages/DispatchWorkflowCorrected';
+import RouteOptimizationPage from './pages/RouteOptimizationPage';
 
 import LoginPage from './pages/LoginPage';
 
@@ -33,6 +34,8 @@ function App() {
         <Route path="dispatch-workflow" element={<DispatchWorkflowCorrected />} />
         {/* ALT: Original workflow (kept for reference) */}
         <Route path="dispatch-workflow-old" element={<DispatchWorkflowPage />} />
+        {/* NEW: Enhanced Route Optimization with drag-and-drop */}
+        <Route path="route-optimization" element={<RouteOptimizationPage />} />
         {/* Existing pages - keep for alternative workflows */}
         <Route path="routing" element={<RoutingPage />} />
         <Route path="dispatches" element={<DispatchesPage />} />

@@ -29,6 +29,7 @@ import {
   Brightness4 as DarkModeIcon,
   Brightness7 as LightModeIcon,
   AutoAwesome as WorkflowIcon,
+  Speed as OptimizeIcon,
 } from '@mui/icons-material';
 import { useThemeMode } from '../contexts/ThemeContext';
 
@@ -39,6 +40,8 @@ const menuItems = [
   { text: 'Jobs', icon: <JobsIcon />, path: '/jobs' },
   // NEW: Streamlined dispatch workflow
   { text: 'Dispatch Workflow', icon: <WorkflowIcon />, path: '/dispatch-workflow', badge: 'NEW' },
+  // NEW: Enhanced route optimization
+  { text: 'Route Optimization', icon: <OptimizeIcon />, path: '/route-optimization', badge: 'NEW' },
   { text: 'Routing', icon: <RoutesIcon />, path: '/routing' },
   { text: 'Dispatch', icon: <DispatchIcon />, path: '/dispatches' },
   { text: 'Drivers', icon: <DriversIcon />, path: '/drivers' },
