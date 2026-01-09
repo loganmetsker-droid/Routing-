@@ -3,8 +3,6 @@ import {
   Box,
   Typography,
   Button,
-  Card,
-  CardContent,
   Chip,
   CircularProgress,
   Dialog,
@@ -18,7 +16,6 @@ import {
   Snackbar,
   Alert,
   IconButton,
-  Divider,
   Checkbox,
   FormControl,
   InputLabel,
@@ -41,11 +38,9 @@ import {
   Info,
   Archive,
   Unarchive,
-  CheckCircle,
   PersonOff,
   PersonAdd,
   SwapHoriz,
-  FilterList,
   Search,
   Clear,
   Done,
@@ -825,14 +820,15 @@ export default function JobsPageEnhanced() {
                     <TextField {...params} label="Customer Name" required />
                   )}
                 />
-                <AddressInput
-                  label="Delivery Address"
-                  value={deliveryAddressData}
-                  onChange={setDeliveryAddressData}
-                  onValidationChange={setDeliveryAddressValid}
-                  required
-                  sx={{ mt: 2 }}
-                />
+                <Box sx={{ mt: 2 }}>
+                  <AddressInput
+                    label="Delivery Address"
+                    value={deliveryAddressData}
+                    onChange={setDeliveryAddressData}
+                    onValidationChange={setDeliveryAddressValid}
+                    required
+                  />
+                </Box>
               </>
             )}
 
@@ -854,14 +850,15 @@ export default function JobsPageEnhanced() {
             </Box>
 
             {pickupMode === 'custom' && (
-              <AddressInput
-                label="Pickup Address"
-                value={pickupAddressData}
-                onChange={setPickupAddressData}
-                onValidationChange={setPickupAddressValid}
-                required
-                sx={{ mt: 2 }}
-              />
+              <Box sx={{ mt: 2 }}>
+                <AddressInput
+                  label="Pickup Address"
+                  value={pickupAddressData}
+                  onChange={setPickupAddressData}
+                  onValidationChange={setPickupAddressValid}
+                  required
+                />
+              </Box>
             )}
 
             <TextField
