@@ -9,6 +9,7 @@ import DispatchesPage from './pages/DispatchesPage';
 
 // Improved dispatch workflow pages
 import JobsPageImproved from './pages/JobsPageImproved';
+import JobsPageEnhanced from './pages/JobsPageEnhanced';
 import DispatchWorkflowPage from './pages/DispatchWorkflowPage';
 
 import LoginPage from './pages/LoginPage';
@@ -23,8 +24,10 @@ function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<Layout />}>
         <Route index element={<Dashboard />} />
-        {/* NEW: Improved Jobs page with archive functionality */}
-        <Route path="jobs" element={<JobsPageImproved />} />
+        {/* LATEST: Enhanced Jobs page with reassignment, batch actions, and filtering */}
+        <Route path="jobs" element={<JobsPageEnhanced />} />
+        {/* ALT: Basic improved version */}
+        <Route path="jobs-basic" element={<JobsPageImproved />} />
         {/* NEW: Streamlined dispatch workflow */}
         <Route path="dispatch-workflow" element={<DispatchWorkflowPage />} />
         {/* Existing pages - keep for alternative workflows */}
