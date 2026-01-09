@@ -21,7 +21,6 @@ import {
   ListItemIcon,
   Snackbar,
   Paper,
-  Divider,
   Select,
   MenuItem,
   FormControl,
@@ -31,12 +30,9 @@ import {
 import {
   CheckCircle,
   LocalShipping,
-  Person,
   Route as RouteIcon,
   AutoAwesome,
   PlayArrow,
-  Map as MapIcon,
-  Inventory,
 } from '@mui/icons-material';
 import {
   getJobs,
@@ -54,10 +50,12 @@ const steps = ['Select Jobs', 'Select Vehicles', 'Optimize Routes', 'Assign Driv
 interface Job {
   id: string;
   customerName: string;
-  pickupAddress: string;
-  deliveryAddress: string;
+  pickupAddress?: string;
+  deliveryAddress?: string;
   status: string;
-  priority: string;
+  priority?: string;
+  pickupLocation?: { coordinates?: number[] };
+  deliveryLocation?: { coordinates?: number[] };
 }
 
 interface Vehicle {
@@ -78,7 +76,7 @@ interface Driver {
 interface GeneratedRoute {
   id: string;
   vehicleId: string;
-  jobIds: string[];
+  jobIds?: string[];
   totalDistance?: number;
   totalDuration?: number;
   status: string;

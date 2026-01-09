@@ -30,11 +30,8 @@ import {
   Archive,
   Unarchive,
   CheckCircle,
-  LocalShipping,
-  Person,
-  Route as RouteIcon,
 } from '@mui/icons-material';
-import { getJobs, createJob, connectSSE, updateJobStatus } from '../services/api';
+import { getJobs, createJob, connectSSE } from '../services/api';
 import AddressInput from '../components/forms/AddressInput';
 import { Address } from '../types/address';
 import { formatAddress } from '../utils/addressValidation';
@@ -52,11 +49,11 @@ interface Customer {
 interface Job {
   id: string;
   customerName: string;
-  pickupAddress: string;
-  deliveryAddress: string;
+  pickupAddress?: string;
+  deliveryAddress?: string;
   status: string;
-  priority: string;
-  createdAt: string;
+  priority?: string;
+  createdAt?: string;
   archived?: boolean;
   archivedAt?: string;
 }
