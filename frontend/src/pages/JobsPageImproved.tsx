@@ -46,7 +46,7 @@ interface Customer {
   address: string;
 }
 
-interface Job {
+interface JobImproved {
   id: string;
   customerName: string;
   pickupAddress?: string;
@@ -59,7 +59,7 @@ interface Job {
 }
 
 export default function JobsPageImproved() {
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobs, setJobs] = useState<JobImproved[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -104,7 +104,7 @@ export default function JobsPageImproved() {
   const loadJobs = async () => {
     try {
       const data = await getJobs();
-      setJobs(data.jobs);
+      setJobs((data.jobs || []) as JobImproved[]);
     } catch (error) {
       console.error('Failed to load jobs:', error);
       showSnackbar('Failed to load jobs', 'error');
@@ -401,7 +401,7 @@ export default function JobsPageImproved() {
               </Card>
             </Grid>
           ) : (
-            activeJobs.map((job: Job) => (
+            activeJobs.map((job: JobImproved) => (
               <Grid item xs={12} md={6} lg={4} key={job.id}>
                 <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                   <CardContent sx={{ flexGrow: 1 }}>
@@ -454,7 +454,7 @@ export default function JobsPageImproved() {
               </Card>
             </Grid>
           ) : (
-            completedJobs.map((job: Job) => (
+            completedJobs.map((job: JobImproved) => (
               <Grid item xs={12} md={6} lg={4} key={job.id}>
                 <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                   <CardContent sx={{ flexGrow: 1 }}>
@@ -501,7 +501,7 @@ export default function JobsPageImproved() {
               </Card>
             </Grid>
           ) : (
-            archivedJobs.map((job: Job) => (
+            archivedJobs.map((job: JobImproved) => (
               <Grid item xs={12} md={6} lg={4} key={job.id}>
                 <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', opacity: 0.8 }}>
                   <CardContent sx={{ flexGrow: 1 }}>

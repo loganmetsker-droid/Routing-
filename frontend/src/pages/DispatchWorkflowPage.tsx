@@ -47,7 +47,7 @@ import {
 // Workflow steps: Select Jobs → Select Vehicles → Auto-Optimize → Assign Drivers → Dispatch
 const steps = ['Select Jobs', 'Select Vehicles', 'Optimize Routes', 'Assign Drivers', 'Dispatch'];
 
-interface Job {
+interface DispatchJob {
   id: string;
   customerName: string;
   pickupAddress?: string;
@@ -87,7 +87,7 @@ export default function DispatchWorkflowPage() {
   const [activeStep, setActiveStep] = useState(0);
 
   // Data state
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobs, setJobs] = useState<DispatchJob[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [generatedRoutes, setGeneratedRoutes] = useState<GeneratedRoute[]>([]);
@@ -126,7 +126,7 @@ export default function DispatchWorkflowPage() {
         getDrivers(),
       ]);
 
-      setJobs(jobsData.jobs || []);
+      setJobs((jobsData.jobs || []) as DispatchJob[]);
       setVehicles(vehiclesData.vehicles || []);
       setDrivers(driversData.drivers || []);
     } catch (error) {
@@ -187,7 +187,7 @@ export default function DispatchWorkflowPage() {
 
         // Generate optimized route for this vehicle
         const result = await generateRoute(vehicleId, vehicleJobs);
-        routes.push(result.route);
+        routes.push(result.route as GeneratedRoute);
       }
 
       setGeneratedRoutes(routes);
@@ -547,7 +547,7 @@ export default function DispatchWorkflowPage() {
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
                               <RouteIcon fontSize="small" sx={{ verticalAlign: 'middle', mr: 0.5 }} />
-                              {route.jobIds.length} stop(s)
+                              {route.jobIds ? route.jobIds.length : 0} stop(s)
                               {route.totalDistance && ` • ${route.totalDistance.toFixed(1)} km`}
                             </Typography>
                           </Box>
@@ -614,7 +614,7 @@ export default function DispatchWorkflowPage() {
                     }}
                   >
                     <ListItemIcon>
-                      <Badge badgeContent={route.jobIds.length} color="primary">
+                      <Badge badgeContent={route.jobIds ? route.jobIds.length : 0} color="primary">
                         <RouteIcon color="primary" />
                       </Badge>
                     </ListItemIcon>
@@ -631,7 +631,7 @@ export default function DispatchWorkflowPage() {
                           </Typography>
                           <br />
                           <Typography variant="body2" component="span">
-                            <strong>Stops:</strong> {route.jobIds.length}
+                            <strong>Stops:</strong> {route.jobIds ? route.jobIds.length : 0}
                             {route.totalDistance && ` • ${route.totalDistance.toFixed(1)} km`}
                           </Typography>
                         </>
