@@ -16,6 +16,10 @@ import DispatchWorkflowCorrected from './pages/DispatchWorkflowCorrected';
 import DispatchWorkflowEnhanced from './pages/DispatchWorkflowEnhanced';
 import RouteOptimizationPage from './pages/RouteOptimizationPage';
 
+// Phase 3: Consolidated Routes and Enhanced Tracking
+import RoutesConsolidated from './pages/RoutesConsolidated';
+import TrackingEnhanced from './pages/TrackingEnhanced';
+
 import LoginPage from './pages/LoginPage';
 
 // Legacy route pages (kept for backwards compatibility)
@@ -42,6 +46,10 @@ function App() {
         <Route path="dispatch-workflow-old" element={<DispatchWorkflowPage />} />
         {/* NEW: Enhanced Route Optimization with drag-and-drop */}
         <Route path="route-optimization" element={<RouteOptimizationPage />} />
+        {/* PHASE 3: Consolidated Routes (replaces route-optimization + routing) */}
+        <Route path="routes-consolidated" element={<RoutesConsolidated />} />
+        {/* PHASE 3: Enhanced Tracking with real-time updates and alerts */}
+        <Route path="tracking-enhanced" element={<TrackingEnhanced />} />
         {/* Existing pages - keep for alternative workflows */}
         <Route path="routing" element={<RoutingPage />} />
         <Route path="dispatches" element={<DispatchesPage />} />
