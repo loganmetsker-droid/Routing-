@@ -10,8 +10,10 @@ import DispatchesPage from './pages/DispatchesPage';
 // Improved dispatch workflow pages
 import JobsPageImproved from './pages/JobsPageImproved';
 import JobsPageEnhanced from './pages/JobsPageEnhanced';
+import JobsPageEnhancedV2 from './pages/JobsPageEnhancedV2';
 import DispatchWorkflowPage from './pages/DispatchWorkflowPage';
 import DispatchWorkflowCorrected from './pages/DispatchWorkflowCorrected';
+import DispatchWorkflowEnhanced from './pages/DispatchWorkflowEnhanced';
 import RouteOptimizationPage from './pages/RouteOptimizationPage';
 
 import LoginPage from './pages/LoginPage';
@@ -26,12 +28,16 @@ function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/" element={<Layout />}>
         <Route index element={<Dashboard />} />
-        {/* LATEST: Enhanced Jobs page with reassignment, batch actions, and filtering */}
-        <Route path="jobs" element={<JobsPageEnhanced />} />
+        {/* LATEST V2: Enhanced Jobs page with batch actions, filters, and completed summary */}
+        <Route path="jobs" element={<JobsPageEnhancedV2 />} />
+        {/* ALT: Enhanced V1 */}
+        <Route path="jobs-v1" element={<JobsPageEnhanced />} />
         {/* ALT: Basic improved version */}
         <Route path="jobs-basic" element={<JobsPageImproved />} />
-        {/* LATEST: Corrected dispatch workflow (Drivers before Optimization) */}
-        <Route path="dispatch-workflow" element={<DispatchWorkflowCorrected />} />
+        {/* LATEST: Enhanced dispatch workflow with session storage & preview metrics */}
+        <Route path="dispatch-workflow" element={<DispatchWorkflowEnhanced />} />
+        {/* ALT: Corrected workflow (kept for reference) */}
+        <Route path="dispatch-workflow-v1" element={<DispatchWorkflowCorrected />} />
         {/* ALT: Original workflow (kept for reference) */}
         <Route path="dispatch-workflow-old" element={<DispatchWorkflowPage />} />
         {/* NEW: Enhanced Route Optimization with drag-and-drop */}
