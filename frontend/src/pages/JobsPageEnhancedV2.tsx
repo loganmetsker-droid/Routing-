@@ -16,7 +16,6 @@ import {
   MenuItem,
   Tabs,
   Tab,
-  Tooltip,
   Autocomplete,
   Checkbox,
   IconButton,
@@ -33,7 +32,6 @@ import {
 } from '@mui/material';
 import {
   Add,
-  Info,
   CheckBox as CheckBoxIcon,
   CheckBoxOutlineBlank as CheckBoxOutlineBlankIcon,
   Edit as EditIcon,
@@ -61,7 +59,6 @@ interface Customer {
 interface Job {
   id?: string;
   customerName: string;
-  pickupAddress: string;
   deliveryAddress: string;
   priority?: string;
   status?: string;
@@ -77,7 +74,6 @@ export default function JobsPageEnhancedV2() {
   const [assignDriverDialogOpen, setAssignDriverDialogOpen] = useState(false);
   const [customerTab, setCustomerTab] = useState(0);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [pickupMode, setPickupMode] = useState('last_stop');
   const [recentCustomerNames, setRecentCustomerNames] = useState<string[]>([]);
   const [selectedJobs, setSelectedJobs] = useState<string[]>([]);
   const [activePreset, setActivePreset] = useState<string | null>(null);
@@ -86,16 +82,8 @@ export default function JobsPageEnhancedV2() {
 
   const [formData, setFormData] = useState({
     customerName: '',
-    pickupAddress: '',
     deliveryAddress: '',
     priority: 'normal',
-  });
-  const [pickupAddressData, setPickupAddressData] = useState<Address>({
-    line1: '',
-    line2: null,
-    city: '',
-    state: '',
-    zip: '',
   });
   const [deliveryAddressData, setDeliveryAddressData] = useState<Address>({
     line1: '',
@@ -104,7 +92,6 @@ export default function JobsPageEnhancedV2() {
     state: '',
     zip: '',
   });
-  const [pickupAddressValid, setPickupAddressValid] = useState(false);
   const [deliveryAddressValid, setDeliveryAddressValid] = useState(false);
 
   // Filter completed jobs for today
@@ -278,51 +265,24 @@ export default function JobsPageEnhancedV2() {
     setCreateDialogOpen(true);
     setCustomerTab(0);
     setSelectedCustomer(null);
-    setPickupMode('last_stop');
-    setFormData({ customerName: '', pickupAddress: '', deliveryAddress: '', priority: 'normal' });
-    setPickupAddressData({ line1: '', line2: null, city: '', state: '', zip: '' });
+    setFormData({ customerName: '', deliveryAddress: '', priority: 'normal' });
     setDeliveryAddressData({ line1: '', line2: null, city: '', state: '', zip: '' });
-    setPickupAddressValid(false);
     setDeliveryAddressValid(false);
   };
 
   const handleCloseDialog = () => {
     setCreateDialogOpen(false);
     setSelectedCustomer(null);
-    setPickupMode('last_stop');
   };
 
   const handleCustomerSelect = (customer: Customer | null) => {
     setSelectedCustomer(customer);
     if (customer) {
-      // Auto-populate pickup address with customer address
-      const customerAddressParts = parseAddress(customer.address);
-      setPickupAddressData(customerAddressParts);
-      setPickupAddressValid(true);
-      setPickupMode('custom');
-
       setFormData({
         ...formData,
         customerName: customer.name,
-        pickupAddress: customer.address,
       });
     }
-  };
-
-  const parseAddress = (address: string): any => {
-    // Simple parser for address string
-    const parts = address.split(',').map(s => s.trim());
-    if (parts.length >= 3) {
-      const stateZip = parts[parts.length - 1].split(' ');
-      return {
-        line1: parts[0] || '',
-        line2: null,
-        city: parts[parts.length - 2] || '',
-        state: stateZip[0] || '',
-        zip: stateZip[1] || '',
-      };
-    }
-    return { line1: address, line2: null, city: '', state: '', zip: '' };
   };
 
   const handleNewCustomerNameChange = (value: string) => {
@@ -340,15 +300,7 @@ export default function JobsPageEnhancedV2() {
       const jobData = {
         customerName: formData.customerName,
         priority: formData.priority,
-        pickupAddress:
-          customerTab === 0
-            ? formatAddress(pickupAddressData)
-            : (pickupMode === 'last_stop' ? '' : formatAddress(pickupAddressData)),
         deliveryAddress: formatAddress(deliveryAddressData),
-        pickupAddressStructured:
-          customerTab === 0
-            ? pickupAddressData
-            : (pickupMode === 'custom' ? pickupAddressData : null),
         deliveryAddressStructured: deliveryAddressData,
       };
       await createJob(jobData);
@@ -565,9 +517,6 @@ export default function JobsPageEnhancedV2() {
                       />
                     </Box>
                     <Typography variant="body2" color="text.secondary">
-                      <strong>Pickup:</strong> {job.pickupAddress || 'Use Last Stop'}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
                       <strong>Delivery:</strong> {job.deliveryAddress}
                     </Typography>
                     {job.createdAt && (
@@ -627,24 +576,13 @@ export default function JobsPageEnhancedV2() {
                     onChange={(_, value) => handleCustomerSelect(value)}
                     renderInput={(params) => <TextField {...params} label="Select Customer" required />}
                   />
-                  {selectedCustomer && (
-                    <>
-                      <AddressInput
-                        label="Pickup Address (Customer Address)"
-                        value={pickupAddressData}
-                        onChange={setPickupAddressData}
-                        onValidationChange={setPickupAddressValid}
-                        required
-                      />
-                      <AddressInput
-                        label="Delivery Address"
-                        value={deliveryAddressData}
-                        onChange={setDeliveryAddressData}
-                        onValidationChange={setDeliveryAddressValid}
-                        required
-                      />
-                    </>
-                  )}
+                  <AddressInput
+                    label="Delivery Address"
+                    value={deliveryAddressData}
+                    onChange={setDeliveryAddressData}
+                    onValidationChange={setDeliveryAddressValid}
+                    required
+                  />
                 </>
               ) : (
                 <>
@@ -655,34 +593,6 @@ export default function JobsPageEnhancedV2() {
                     onInputChange={(_, value) => handleNewCustomerNameChange(value)}
                     renderInput={(params) => <TextField {...params} label="Customer Name" required />}
                   />
-
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <TextField
-                      select
-                      label="Pickup Address"
-                      value={pickupMode}
-                      onChange={(e) => setPickupMode(e.target.value)}
-                      fullWidth
-                      required
-                    >
-                      <MenuItem value="last_stop">Use Last Stop</MenuItem>
-                      <MenuItem value="custom">Custom Address</MenuItem>
-                    </TextField>
-                    <Tooltip title="Routing algorithm will determine optimal pickup sequence. 'Last Stop' uses the previous job's delivery location.">
-                      <Info color="action" sx={{ cursor: 'help' }} />
-                    </Tooltip>
-                  </Box>
-
-                  {pickupMode === 'custom' && (
-                    <AddressInput
-                      label="Pickup Address"
-                      value={pickupAddressData}
-                      onChange={setPickupAddressData}
-                      onValidationChange={setPickupAddressValid}
-                      required
-                    />
-                  )}
-
                   <AddressInput
                     label="Delivery Address"
                     value={deliveryAddressData}
@@ -713,12 +623,7 @@ export default function JobsPageEnhancedV2() {
           <Button
             variant="contained"
             onClick={handleCreateJob}
-            disabled={
-              !formData.customerName ||
-              !deliveryAddressValid ||
-              (customerTab === 0 && !pickupAddressValid) ||
-              (customerTab === 1 && pickupMode === 'custom' && !pickupAddressValid)
-            }
+            disabled={!formData.customerName || !deliveryAddressValid}
           >
             Create
           </Button>

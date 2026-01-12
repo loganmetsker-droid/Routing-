@@ -8,7 +8,6 @@ const API_BASE_URL = import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_A
 interface Job {
   id?: string;
   customerName: string;
-  pickupAddress: string;
   deliveryAddress: string;
   timeWindow?: { start: string; end: string };
   priority?: string;
