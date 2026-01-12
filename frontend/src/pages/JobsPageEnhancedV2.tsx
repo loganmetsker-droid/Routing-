@@ -295,12 +295,34 @@ export default function JobsPageEnhancedV2() {
   const handleCustomerSelect = (customer: Customer | null) => {
     setSelectedCustomer(customer);
     if (customer) {
+      // Auto-populate pickup address with customer address
+      const customerAddressParts = parseAddress(customer.address);
+      setPickupAddressData(customerAddressParts);
+      setPickupAddressValid(true);
+      setPickupMode('custom');
+
       setFormData({
         ...formData,
         customerName: customer.name,
-        deliveryAddress: customer.address,
+        pickupAddress: customer.address,
       });
     }
+  };
+
+  const parseAddress = (address: string): any => {
+    // Simple parser for address string
+    const parts = address.split(',').map(s => s.trim());
+    if (parts.length >= 3) {
+      const stateZip = parts[parts.length - 1].split(' ');
+      return {
+        line1: parts[0] || '',
+        line2: null,
+        city: parts[parts.length - 2] || '',
+        state: stateZip[0] || '',
+        zip: stateZip[1] || '',
+      };
+    }
+    return { line1: address, line2: null, city: '', state: '', zip: '' };
   };
 
   const handleNewCustomerNameChange = (value: string) => {
@@ -318,9 +340,15 @@ export default function JobsPageEnhancedV2() {
       const jobData = {
         customerName: formData.customerName,
         priority: formData.priority,
-        pickupAddress: pickupMode === 'last_stop' ? '' : formatAddress(pickupAddressData),
+        pickupAddress:
+          customerTab === 0
+            ? formatAddress(pickupAddressData)
+            : (pickupMode === 'last_stop' ? '' : formatAddress(pickupAddressData)),
         deliveryAddress: formatAddress(deliveryAddressData),
-        pickupAddressStructured: pickupMode === 'custom' ? pickupAddressData : null,
+        pickupAddressStructured:
+          customerTab === 0
+            ? pickupAddressData
+            : (pickupMode === 'custom' ? pickupAddressData : null),
         deliveryAddressStructured: deliveryAddressData,
       };
       await createJob(jobData);
@@ -591,13 +619,33 @@ export default function JobsPageEnhancedV2() {
 
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {customerTab === 0 ? (
-                <Autocomplete
-                  options={customers}
-                  getOptionLabel={(option) => option.name}
-                  value={selectedCustomer}
-                  onChange={(_, value) => handleCustomerSelect(value)}
-                  renderInput={(params) => <TextField {...params} label="Select Customer" required />}
-                />
+                <>
+                  <Autocomplete
+                    options={customers}
+                    getOptionLabel={(option) => option.name}
+                    value={selectedCustomer}
+                    onChange={(_, value) => handleCustomerSelect(value)}
+                    renderInput={(params) => <TextField {...params} label="Select Customer" required />}
+                  />
+                  {selectedCustomer && (
+                    <>
+                      <AddressInput
+                        label="Pickup Address (Customer Address)"
+                        value={pickupAddressData}
+                        onChange={setPickupAddressData}
+                        onValidationChange={setPickupAddressValid}
+                        required
+                      />
+                      <AddressInput
+                        label="Delivery Address"
+                        value={deliveryAddressData}
+                        onChange={setDeliveryAddressData}
+                        onValidationChange={setDeliveryAddressValid}
+                        required
+                      />
+                    </>
+                  )}
+                </>
               ) : (
                 <>
                   <Autocomplete
@@ -607,6 +655,34 @@ export default function JobsPageEnhancedV2() {
                     onInputChange={(_, value) => handleNewCustomerNameChange(value)}
                     renderInput={(params) => <TextField {...params} label="Customer Name" required />}
                   />
+
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <TextField
+                      select
+                      label="Pickup Address"
+                      value={pickupMode}
+                      onChange={(e) => setPickupMode(e.target.value)}
+                      fullWidth
+                      required
+                    >
+                      <MenuItem value="last_stop">Use Last Stop</MenuItem>
+                      <MenuItem value="custom">Custom Address</MenuItem>
+                    </TextField>
+                    <Tooltip title="Routing algorithm will determine optimal pickup sequence. 'Last Stop' uses the previous job's delivery location.">
+                      <Info color="action" sx={{ cursor: 'help' }} />
+                    </Tooltip>
+                  </Box>
+
+                  {pickupMode === 'custom' && (
+                    <AddressInput
+                      label="Pickup Address"
+                      value={pickupAddressData}
+                      onChange={setPickupAddressData}
+                      onValidationChange={setPickupAddressValid}
+                      required
+                    />
+                  )}
+
                   <AddressInput
                     label="Delivery Address"
                     value={deliveryAddressData}
@@ -615,33 +691,6 @@ export default function JobsPageEnhancedV2() {
                     required
                   />
                 </>
-              )}
-
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <TextField
-                  select
-                  label="Pickup Address"
-                  value={pickupMode}
-                  onChange={(e) => setPickupMode(e.target.value)}
-                  fullWidth
-                  required
-                >
-                  <MenuItem value="last_stop">Use Last Stop</MenuItem>
-                  <MenuItem value="custom">Custom Address</MenuItem>
-                </TextField>
-                <Tooltip title="Routing algorithm will determine optimal pickup sequence. 'Last Stop' uses the previous job's delivery location.">
-                  <Info color="action" sx={{ cursor: 'help' }} />
-                </Tooltip>
-              </Box>
-
-              {pickupMode === 'custom' && (
-                <AddressInput
-                  label="Pickup Address"
-                  value={pickupAddressData}
-                  onChange={setPickupAddressData}
-                  onValidationChange={setPickupAddressValid}
-                  required
-                />
               )}
 
               <TextField
@@ -667,7 +716,8 @@ export default function JobsPageEnhancedV2() {
             disabled={
               !formData.customerName ||
               !deliveryAddressValid ||
-              (pickupMode === 'custom' && !pickupAddressValid)
+              (customerTab === 0 && !pickupAddressValid) ||
+              (customerTab === 1 && pickupMode === 'custom' && !pickupAddressValid)
             }
           >
             Create
