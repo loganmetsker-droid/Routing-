@@ -20,6 +20,9 @@ import RouteOptimizationPage from './pages/RouteOptimizationPage';
 import RoutesConsolidated from './pages/RoutesConsolidated';
 import TrackingEnhanced from './pages/TrackingEnhanced';
 
+// Phase 4: Unified Dispatch
+import DispatchUnified from './pages/DispatchUnified';
+
 import LoginPage from './pages/LoginPage';
 
 // Legacy route pages (kept for backwards compatibility)
@@ -50,6 +53,10 @@ function App() {
         <Route path="routes-consolidated" element={<RoutesConsolidated />} />
         {/* PHASE 3: Enhanced Tracking with real-time updates and alerts */}
         <Route path="tracking-enhanced" element={<TrackingEnhanced />} />
+        {/* Active Tracking page */}
+        <Route path="tracking" element={<TrackingEnhanced />} />
+        {/* PHASE 4: Unified Dispatch (single page for assign → optimize → dispatch) */}
+        <Route path="dispatch" element={<DispatchUnified />} />
         {/* Existing pages - keep for alternative workflows */}
         <Route path="routing" element={<RoutingPage />} />
         <Route path="dispatches" element={<DispatchesPage />} />

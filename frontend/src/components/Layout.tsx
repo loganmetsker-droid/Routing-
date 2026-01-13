@@ -30,6 +30,7 @@ import {
   Brightness7 as LightModeIcon,
   AutoAwesome as WorkflowIcon,
   Speed as OptimizeIcon,
+  GpsFixed as TrackingIcon,
 } from '@mui/icons-material';
 import { useThemeMode } from '../contexts/ThemeContext';
 
@@ -38,12 +39,8 @@ const drawerWidth = 240;
 const menuItems = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
   { text: 'Jobs', icon: <JobsIcon />, path: '/jobs' },
-  // NEW: Streamlined dispatch workflow
-  { text: 'Dispatch Workflow', icon: <WorkflowIcon />, path: '/dispatch-workflow', badge: 'NEW' },
-  // NEW: Enhanced route optimization
-  { text: 'Route Optimization', icon: <OptimizeIcon />, path: '/route-optimization', badge: 'NEW' },
-  { text: 'Routing', icon: <RoutesIcon />, path: '/routing' },
-  { text: 'Dispatch', icon: <DispatchIcon />, path: '/dispatches' },
+  { text: 'Dispatch', icon: <DispatchIcon />, path: '/dispatch' },
+  { text: 'Tracking', icon: <TrackingIcon />, path: '/tracking' },
   { text: 'Drivers', icon: <DriversIcon />, path: '/drivers' },
   { text: 'Vehicles', icon: <VehiclesIcon />, path: '/vehicles' },
   { text: 'Customers', icon: <CustomersIcon />, path: '/customers' },
