@@ -22,14 +22,11 @@ import {
   DriveEta as VehiclesIcon,
   Person as DriversIcon,
   People as CustomersIcon,
-  Route as RoutesIcon,
   LocalShipping as DispatchIcon,
   Work as JobsIcon,
   Logout as LogoutIcon,
   Brightness4 as DarkModeIcon,
   Brightness7 as LightModeIcon,
-  AutoAwesome as WorkflowIcon,
-  Speed as OptimizeIcon,
   GpsFixed as TrackingIcon,
 } from '@mui/icons-material';
 import { useThemeMode } from '../contexts/ThemeContext';

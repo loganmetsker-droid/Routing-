@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run dev:*)",
+      "Bash(curl:*)",
+      "Bash(taskkill:*)",
+      "Bash(where psql:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker --version:*)",
+      "Bash(docker exec:*)",
+      "Bash(npx ts-node:*)",
+      "Bash(docker-compose down:*)",
+      "Bash(docker inspect:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nfeat: Unified Dispatch workflow with conflict detection\n\nImplemented Phase 4 unified dispatch page:\n- 3-column layout (Unassigned Jobs, Assigned Routes, Ready to Dispatch)\n- Real-time conflict detection (driver/vehicle conflicts, hours tracking)\n- Driver workload visualization with progress bars\n- Auto-assign logic with intelligent driver scoring\n- Validation before dispatch\n- Filter persistence with localStorage\n\nAdded Tracking tab to navigation:\n- Fixed missing Tracking tab in Layout menu\n- Added route to App.tsx\n\nEnhanced TrackingEnhanced page:\n- Completed jobs widget with archive functionality\n- Driver reassignment with conflict warnings\n- Bulk archive for completed jobs\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n)\")",
+      "Bash(git push:*)",
+      "Bash(git commit:*)",
+      "Bash(npm install:*)",
+      "Bash(railway login:*)",
+      "Bash(railway --version:*)",
+      "Bash(railway status:*)",
+      "Bash(railway domain:*)",
+      "Bash(npm run build:*)"
+    ]
+  }
+}

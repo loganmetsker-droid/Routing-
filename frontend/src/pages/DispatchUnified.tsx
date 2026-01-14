@@ -11,8 +11,6 @@ import {
   Alert,
   AlertTitle,
   Checkbox,
-  IconButton,
-  TextField,
   MenuItem,
   Select,
   FormControl,
@@ -21,16 +19,12 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Tooltip,
   Paper,
-  Divider,
-  Badge,
   Stack,
+  LinearProgress,
 } from '@mui/material';
 import {
-  Add,
   AutoAwesome,
-  Warning,
   CheckCircle,
   LocalShipping,
   Person,
@@ -97,15 +91,6 @@ interface DriverSuggestion extends Driver {
   reason: string;
 }
 
-interface DispatchState {
-  selectedJobIds: string[];
-  filters: {
-    date: string;
-    status: string;
-    priority: string;
-  };
-}
-
 const STORAGE_KEY = 'dispatchUnifiedState';
 
 // ==================== MAIN COMPONENT ====================
@@ -125,7 +110,6 @@ export default function DispatchUnified() {
   const [assignDriverDialogOpen, setAssignDriverDialogOpen] = useState(false);
   const [selectedRouteForDriver, setSelectedRouteForDriver] = useState<string | null>(null);
   const [selectedDriverId, setSelectedDriverId] = useState('');
-  const [validationErrors, setValidationErrors] = useState<Record<string, string[]>>({});
 
   // Filters (persisted)
   const [filters, setFilters] = useState(() => {
@@ -166,10 +150,10 @@ export default function DispatchUnified() {
         getVehicles(),
         getDrivers(),
       ]);
-      setJobs(jobsData || []);
-      setRoutes(routesData || []);
-      setVehicles(vehiclesData || []);
-      setDrivers(driversData || []);
+      setJobs((jobsData as any)?.jobs || jobsData || []);
+      setRoutes((routesData as any)?.routes || routesData || []);
+      setVehicles((vehiclesData as any)?.vehicles || vehiclesData || []);
+      setDrivers((driversData as any)?.drivers || driversData || []);
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -193,8 +177,9 @@ export default function DispatchUnified() {
 
   // ==================== DRIVER SUGGESTION LOGIC ====================
 
-  const getSuggestedDrivers = (route: Route): DriverSuggestion[] => {
-    const routeJobs = jobs.filter((j) => route.jobIds?.includes(j.id));
+  const getSuggestedDrivers = (_route: Route): DriverSuggestion[] => {
+    // Filter jobs belonging to this route (for future proximity calculations)
+    // const routeJobs = jobs.filter((j) => _route.jobIds?.includes(j.id));
     const routeDriverAssignments = routes
       .filter((r) => r.status === 'active' || r.status === 'dispatched')
       .reduce((acc, r) => {
@@ -335,14 +320,12 @@ export default function DispatchUnified() {
       }
 
       // Generate route with selected jobs
-      const newRoute = await generateRoute({
-        vehicleId: availableVehicle.id,
-        jobIds: selectedJobIds,
-      });
+      const routeResponse = await generateRoute(availableVehicle.id, selectedJobIds);
+      const newRoute = routeResponse.route as Route;
 
       // Auto-suggest best driver
       const suggestions = getSuggestedDrivers(newRoute);
-      if (suggestions.length > 0 && suggestions[0].available) {
+      if (suggestions.length > 0 && suggestions[0].available && newRoute.id) {
         await assignDriverToRoute(newRoute.id, suggestions[0].id);
       }
 
@@ -389,7 +372,7 @@ export default function DispatchUnified() {
 
     const errors = validateRoute(route);
     if (errors.length > 0) {
-      setValidationErrors({ [routeId]: errors });
+      alert(`Cannot dispatch:\n${errors.join('\n')}`);
       return;
     }
 

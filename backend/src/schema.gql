@@ -2,6 +2,22 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
 # ------------------------------------------------------
 
+"""Billing payment status"""
+enum BillingStatus {
+  PAID
+  UNPAID
+}
+
+input CreateCustomerDto {
+  businessName: String
+  defaultAddress: String
+  email: String
+  exceptions: String
+  name: String!
+  notes: String
+  phone: String
+}
+
 input CreateDriverDto {
   certifications: [String!]
   currentVehicleId: String
@@ -54,6 +70,19 @@ input CreateVehicleDto {
   year: Int!
 }
 
+type Customer {
+  businessName: String
+  createdAt: DateTime!
+  defaultAddress: String
+  email: String
+  exceptions: String
+  id: ID!
+  name: String!
+  notes: String
+  phone: String
+  updatedAt: DateTime!
+}
+
 """
 A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
 """
@@ -93,20 +122,28 @@ scalar JSON
 
 type Job {
   actualDuration: Float
+  archivedAt: DateTime
   assignedRouteId: String
+  billingAmount: Float
+  billingNotes: String
+  billingStatus: String!
   completedAt: DateTime
   createdAt: DateTime!
   customerEmail: String
+  customerId: String
   customerName: String!
   customerPhone: String
   deliveryAddress: String!
+  endDate: DateTime
   estimatedDuration: Float
   id: ID!
+  invoiceRef: String
   notes: String
   pickupAddress: String!
   priority: String!
   quantity: Int
   specialInstructions: String
+  startDate: DateTime
   status: String!
   timeWindowEnd: DateTime!
   timeWindowStart: DateTime!
@@ -115,7 +152,25 @@ type Job {
   weight: Float
 }
 
+"""Job lifecycle status"""
+enum JobStatus {
+  ARCHIVED
+  ASSIGNED
+  CANCELLED
+  COMPLETED
+  FAILED
+  IN_PROGRESS
+  PENDING
+  SCHEDULED
+  UNSCHEDULED
+}
+
 type Mutation {
+  """Clone a job"""
+  cloneJob(id: ID!): Job!
+
+  """Create a new customer"""
+  createCustomer(input: CreateCustomerDto!): Customer!
   createDriver(data: CreateDriverDto!): Driver!
 
   """Create a new job"""
@@ -123,6 +178,9 @@ type Mutation {
 
   """Create a new vehicle"""
   createVehicle(input: CreateVehicleDto!): Vehicle!
+
+  """Delete a customer (soft delete)"""
+  deleteCustomer(id: ID!): Boolean!
   deleteDriver(id: String!): Boolean!
 
   """Delete a job (soft delete)"""
@@ -130,26 +188,66 @@ type Mutation {
 
   """Delete a vehicle (soft delete)"""
   deleteVehicle(id: ID!): Boolean!
+
+  """Update a customer"""
+  updateCustomer(id: ID!, input: UpdateCustomerDto!): Customer!
   updateDriver(data: UpdateDriverDto!, id: String!): Driver!
 
   """Update a job"""
   updateJob(id: ID!, input: UpdateJobDto!): Job!
+
+  """Update billing information for a job"""
+  updateJobBilling(id: ID!, input: UpdateBillingDto!): Job!
+
+  """Update lifecycle status for a job"""
+  updateJobLifecycle(id: ID!, input: UpdateLifecycleDto!): Job!
 
   """Update a vehicle"""
   updateVehicle(id: ID!, input: UpdateVehicleDto!): Vehicle!
 }
 
 type Query {
+  """Get all archived jobs"""
+  archivedJobs: [Job!]!
+
+  """Get a single customer by ID"""
+  customer(id: ID!): Customer!
+
+  """Get all jobs for a specific customer"""
+  customerJobHistory(customerId: ID!): [Job!]!
+
+  """Get all customers"""
+  customers: [Customer!]!
   driver(id: String!): Driver!
   drivers: [Driver!]!
 
   """Get a single job by ID"""
   job(id: ID!): Job!
 
-  """Get all jobs, optionally filtered by status or priority"""
+  """Get jobs within a date range"""
+  jobHistory(
+    """End date"""
+    end: DateTime!
+
+    """Start date"""
+    start: DateTime!
+  ): [Job!]!
+
+  """
+  Get all jobs, optionally filtered by status, priority, billing, or date range
+  """
   jobs(
+    """Filter by billing status"""
+    billingStatus: String
+
+    """Filter by end date"""
+    endDate: DateTime
+
     """Filter by priority"""
     priority: String
+
+    """Filter by start date"""
+    startDate: DateTime
 
     """Filter by status"""
     status: String
@@ -157,6 +255,9 @@ type Query {
 
   """Get all pending jobs"""
   pendingJobs: [Job!]!
+
+  """Search customers by name, email, phone, or business name"""
+  searchCustomers(query: String!): [Customer!]!
 
   """Get a single vehicle by ID"""
   vehicle(id: ID!): Vehicle!
@@ -172,6 +273,23 @@ type Query {
 
   """Get vehicles that need maintenance"""
   vehiclesNeedingMaintenance: [Vehicle!]!
+}
+
+input UpdateBillingDto {
+  billingAmount: Float
+  billingNotes: String
+  billingStatus: BillingStatus!
+  invoiceRef: String
+}
+
+input UpdateCustomerDto {
+  businessName: String
+  defaultAddress: String
+  email: String
+  exceptions: String
+  name: String
+  notes: String
+  phone: String
 }
 
 input UpdateDriverDto {
@@ -201,6 +319,12 @@ input UpdateJobDto {
   timeWindowStart: String
   volume: Float
   weight: Float
+}
+
+input UpdateLifecycleDto {
+  endDate: String
+  startDate: String
+  status: JobStatus!
 }
 
 input UpdateVehicleDto {

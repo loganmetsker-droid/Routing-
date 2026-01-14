@@ -44,7 +44,6 @@ import {
   ExpandMore as ExpandMoreIcon,
   Archive as ArchiveIcon,
   SwapHoriz as SwapHorizIcon,
-  DragIndicator as DragIndicatorIcon,
 } from '@mui/icons-material';
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
 import L from 'leaflet';
@@ -170,7 +169,7 @@ export default function TrackingEnhanced() {
       setRoutes((routesData.routes || []) as Route[]);
       setDrivers(driversData.drivers || []);
       setVehicles(vehiclesData.vehicles || []);
-      setJobs(jobsData || []);
+      setJobs((jobsData as any)?.jobs || jobsData || []);
 
       // Generate mock alerts for demo
       generateMockAlerts(routesData.routes || []);
