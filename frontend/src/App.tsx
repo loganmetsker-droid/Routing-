@@ -22,6 +22,7 @@ import TrackingEnhanced from './pages/TrackingEnhanced';
 
 // Phase 4: Unified Dispatch
 import DispatchUnified from './pages/DispatchUnified';
+import DispatchUnifiedV2 from './pages/DispatchUnifiedV2';
 
 import LoginPage from './pages/LoginPage';
 
@@ -55,8 +56,10 @@ function App() {
         <Route path="tracking-enhanced" element={<TrackingEnhanced />} />
         {/* Active Tracking page */}
         <Route path="tracking" element={<TrackingEnhanced />} />
-        {/* PHASE 4: Unified Dispatch (single page for assign → optimize → dispatch) */}
-        <Route path="dispatch" element={<DispatchUnified />} />
+        {/* PHASE 4: Unified Dispatch V2 (vehicle-centric workflow) */}
+        <Route path="dispatch" element={<DispatchUnifiedV2 />} />
+        {/* ALT: Unified Dispatch V1 (kept for reference) */}
+        <Route path="dispatch-v1" element={<DispatchUnified />} />
         {/* Existing pages - keep for alternative workflows */}
         <Route path="routing" element={<RoutingPage />} />
         <Route path="dispatches" element={<DispatchesPage />} />

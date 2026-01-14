@@ -13,6 +13,8 @@ interface Job {
   priority?: string;
   status?: string;
   assignedRouteId?: string;
+  assignedVehicleId?: string;
+  stopSequence?: number;
   createdAt?: string;
 }
 
@@ -24,6 +26,13 @@ interface Route {
   status?: string;
   totalDistance?: number;
   totalDuration?: number;
+  optimizedStops?: Array<{
+    jobId: string;
+    sequence: number;
+    address: string;
+  }>;
+  estimatedCapacity?: number;
+  optimizedAt?: string;
   createdAt?: string;
   dispatchedAt?: string;
   completedAt?: string;
@@ -51,6 +60,16 @@ export const updateJobStatus = async (id: string, status: string, assignedRouteI
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status, assignedRouteId }),
+  });
+  if (!response.ok) throw new Error('Failed to update job');
+  return response.json();
+};
+
+export const updateJob = async (id: string, updates: Partial<Job>): Promise<{ job: Job }> => {
+  const response = await fetch(`${API_BASE_URL}/api/jobs/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
   });
   if (!response.ok) throw new Error('Failed to update job');
   return response.json();
@@ -88,6 +107,16 @@ export const updateRouteStatus = async (routeId: string, status: string): Promis
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status }),
+  });
+  if (!response.ok) throw new Error('Failed to update route');
+  return response.json();
+};
+
+export const updateRoute = async (routeId: string, updates: Partial<Route>): Promise<{ route: Route }> => {
+  const response = await fetch(`${API_BASE_URL}/api/routes/${routeId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
   });
   if (!response.ok) throw new Error('Failed to update route');
   return response.json();

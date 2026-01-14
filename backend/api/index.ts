@@ -118,11 +118,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Update job
     if (url.startsWith('/api/jobs/') && method === 'PATCH') {
       const id = url.split('/api/jobs/')[1];
-      const { status, assignedRouteId } = req.body as any;
+      const { status, assignedRouteId, assignedVehicleId, stopSequence } = req.body as any;
 
       const updates: any = {};
-      if (status) updates.status = status;
-      if (assignedRouteId) updates.assignedRouteId = assignedRouteId;
+      if (status !== undefined) updates.status = status;
+      if (assignedRouteId !== undefined) updates.assignedRouteId = assignedRouteId;
+      if (assignedVehicleId !== undefined) updates.assignedVehicleId = assignedVehicleId;
+      if (stopSequence !== undefined) updates.stopSequence = stopSequence;
 
       const result = await db.collection('jobs').findOneAndUpdate(
         { id },
@@ -263,7 +265,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Update route
     if (url.match(/^\/api\/routes\/[^\/]+$/) && method === 'PATCH') {
       const id = url.split('/api/routes/')[1];
-      const { status, name, vehicleId, driverId, stops } = req.body as any;
+      const { status, name, vehicleId, driverId, stops, optimizedStops, totalDistance, totalDuration, estimatedCapacity } = req.body as any;
 
       const route = await db.collection('routes').findOne({ id });
       if (!route) {
@@ -276,7 +278,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (vehicleId !== undefined) updates.vehicleId = vehicleId;
       if (driverId !== undefined) updates.driverId = driverId;
       if (stops !== undefined) updates.stops = stops;
+      if (optimizedStops !== undefined) updates.optimizedStops = optimizedStops;
+      if (totalDistance !== undefined) updates.totalDistance = totalDistance;
+      if (totalDuration !== undefined) updates.totalDuration = totalDuration;
+      if (estimatedCapacity !== undefined) updates.estimatedCapacity = estimatedCapacity;
       updates.updatedAt = new Date().toISOString();
+      if (status === 'optimized') updates.optimizedAt = new Date().toISOString();
       if (status === 'completed') {
         updates.completedAt = new Date().toISOString();
 

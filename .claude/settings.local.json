@@ -22,7 +22,8 @@
       "Bash(railway domain:*)",
       "Bash(npm run build:*)",
       "Bash(npx vercel:*)",
-      "Bash(powershell -Command:*)"
+      "Bash(powershell -Command:*)",
+      "Bash(node scripts/update-customer-address.js:*)"
     ]
   }
 }
