@@ -426,7 +426,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Create customer
     if (url === '/api/customers' && method === 'POST') {
-      const { name, address, businessName, notes, exceptions } = req.body as any;
+      const { name, address, businessName, notes, exceptions, defaultAddressStructured } = req.body as any;
 
       if (!name || !address) {
         return res.status(400).json({ error: 'Missing required fields: name, address' });
@@ -439,6 +439,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         businessName: businessName || '',
         notes: notes || '',
         exceptions: exceptions || '',
+        defaultAddressStructured: defaultAddressStructured || null,
         createdAt: new Date().toISOString()
       };
 
