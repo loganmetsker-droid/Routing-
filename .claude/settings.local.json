@@ -20,7 +20,9 @@
       "Bash(railway --version:*)",
       "Bash(railway status:*)",
       "Bash(railway domain:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(npx vercel:*)",
+      "Bash(powershell -Command:*)"
     ]
   }
 }

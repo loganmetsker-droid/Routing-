@@ -14,6 +14,13 @@ interface Customer {
   email: string;
   phone: string;
   address: string;
+  defaultAddressStructured?: {
+    line1: string;
+    line2: string | null;
+    city: string;
+    state: string;
+    zip: string;
+  };
 }
 
 export default function JobsPage() {
@@ -113,8 +120,24 @@ export default function JobsPage() {
       setFormData({
         ...formData,
         customerName: customer.name,
-        deliveryAddress: customer.address,
+        deliveryAddress: customer.address || '',
       });
+
+      // Auto-populate delivery address if structured address exists
+      if (customer.defaultAddressStructured) {
+        setDeliveryAddressData({
+          line1: customer.defaultAddressStructured.line1 || '',
+          line2: customer.defaultAddressStructured.line2 || null,
+          city: customer.defaultAddressStructured.city || '',
+          state: customer.defaultAddressStructured.state || '',
+          zip: customer.defaultAddressStructured.zip || '',
+        });
+        setDeliveryAddressValid(true);
+      } else {
+        // Reset to empty if no structured address
+        setDeliveryAddressData({ line1: '', line2: null, city: '', state: '', zip: '' });
+        setDeliveryAddressValid(false);
+      }
     }
   };
 
@@ -223,15 +246,26 @@ export default function JobsPage() {
 
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {customerTab === 0 ? (
-                <Autocomplete
-                  options={customers}
-                  getOptionLabel={(option) => option.name}
-                  value={selectedCustomer}
-                  onChange={(_, value) => handleCustomerSelect(value)}
-                  renderInput={(params) => (
-                    <TextField {...params} label="Select Customer" required />
+                <>
+                  <Autocomplete
+                    options={customers}
+                    getOptionLabel={(option) => option.name}
+                    value={selectedCustomer}
+                    onChange={(_, value) => handleCustomerSelect(value)}
+                    renderInput={(params) => (
+                      <TextField {...params} label="Select Customer" required />
+                    )}
+                  />
+                  {selectedCustomer && (
+                    <AddressInput
+                      label="Delivery Address"
+                      value={deliveryAddressData}
+                      onChange={setDeliveryAddressData}
+                      onValidationChange={setDeliveryAddressValid}
+                      required
+                    />
                   )}
-                />
+                </>
               ) : (
                 <>
                   <Autocomplete

@@ -54,6 +54,13 @@ interface Customer {
   email: string;
   phone: string;
   address: string;
+  defaultAddressStructured?: {
+    line1: string;
+    line2: string | null;
+    city: string;
+    state: string;
+    zip: string;
+  };
 }
 
 interface Job {
@@ -282,6 +289,22 @@ export default function JobsPageEnhancedV2() {
         ...formData,
         customerName: customer.name,
       });
+
+      // Auto-populate delivery address if structured address exists
+      if (customer.defaultAddressStructured) {
+        setDeliveryAddressData({
+          line1: customer.defaultAddressStructured.line1 || '',
+          line2: customer.defaultAddressStructured.line2 || null,
+          city: customer.defaultAddressStructured.city || '',
+          state: customer.defaultAddressStructured.state || '',
+          zip: customer.defaultAddressStructured.zip || '',
+        });
+        setDeliveryAddressValid(true);
+      } else {
+        // Reset to empty if no structured address
+        setDeliveryAddressData({ line1: '', line2: null, city: '', state: '', zip: '' });
+        setDeliveryAddressValid(false);
+      }
     }
   };
 
