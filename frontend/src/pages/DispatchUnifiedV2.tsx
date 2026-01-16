@@ -8,8 +8,6 @@ import {
   Button,
   Chip,
   CircularProgress,
-  Alert,
-  AlertTitle,
   Checkbox,
   Paper,
   Stack,
@@ -28,12 +26,10 @@ import {
   PlayArrow,
   ErrorOutline,
   CheckCircle,
-  Warning as WarningIcon,
   LocalShipping,
   Route as RouteIcon,
   Speed,
   Schedule,
-  Person,
 } from '@mui/icons-material';
 import {
   getJobs,
@@ -149,8 +145,8 @@ export default function DispatchUnifiedV2() {
         getVehicles(),
         getDrivers(),
       ]);
-      setJobs(jobsData);
-      setRoutes(routesData);
+      setJobs(jobsData as any);
+      setRoutes(routesData as any);
       setVehicles(vehiclesData);
       setDrivers(driversData);
     } catch (error) {

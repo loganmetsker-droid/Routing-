@@ -115,7 +115,7 @@ export default function JobsPageEnhancedV2() {
   const loadJobs = async () => {
     try {
       const data = await getJobs();
-      setJobs(data.jobs);
+      setJobs(data);
     } catch (error) {
       console.error('Failed to load jobs:', error);
     } finally {

@@ -169,7 +169,7 @@ export default function TrackingEnhanced() {
       setRoutes(routesData as Route[]);
       setDrivers(driversData);
       setVehicles(vehiclesData);
-      setJobs(jobsData);
+      setJobs(jobsData as any);
 
       // Generate mock alerts for demo
       generateMockAlerts(routesData);

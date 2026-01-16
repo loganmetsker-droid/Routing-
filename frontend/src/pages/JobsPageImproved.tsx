@@ -104,7 +104,7 @@ export default function JobsPageImproved() {
   const loadJobs = async () => {
     try {
       const data = await getJobs();
-      setJobs((data.jobs || []) as JobImproved[]);
+      setJobs(data as JobImproved[]);
     } catch (error) {
       console.error('Failed to load jobs:', error);
       showSnackbar('Failed to load jobs', 'error');

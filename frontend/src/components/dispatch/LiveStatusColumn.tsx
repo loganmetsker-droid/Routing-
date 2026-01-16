@@ -1,4 +1,4 @@
-import { Box, Typography, Paper, Chip, Stack, Divider } from '@mui/material';
+import { Box, Typography, Chip, Stack, Divider } from '@mui/material';
 import { Person, LocalShipping, CheckCircle, Warning } from '@mui/icons-material';
 
 interface Driver {
@@ -52,19 +52,6 @@ export default function LiveStatusColumn({ drivers, vehicles, routes }: LiveStat
     return aCount - bCount;
   });
 
-  const getDriverStatusColor = (driver: Driver) => {
-    const routeCount = driverAssignments[driver.id] || 0;
-    if (routeCount === 0) return 'success';
-    if (routeCount === 1) return 'warning';
-    return 'error';
-  };
-
-  const getVehicleStatusColor = (vehicle: Vehicle) => {
-    if (vehicle.status === 'available' && !vehicleAssignments[vehicle.id]) return 'success';
-    if (vehicle.status === 'in_transit') return 'info';
-    if (vehicleAssignments[vehicle.id]) return 'warning';
-    return 'default';
-  };
 
   return (
     <Box sx={{ p: 3 }}>
