@@ -84,10 +84,11 @@ export default function Dashboard() {
       const jobsData = await jobsRes.json();
       const routesData = await routesRes.json();
 
-      setDrivers(driversData);
-      setVehicles(vehiclesData);
-      setJobs(jobsData);
-      setRoutes(routesData);
+      // Normalize responses - handle both array and wrapped object formats
+      setDrivers(Array.isArray(driversData) ? driversData : driversData.drivers || []);
+      setVehicles(Array.isArray(vehiclesData) ? vehiclesData : vehiclesData.vehicles || []);
+      setJobs(Array.isArray(jobsData) ? jobsData : jobsData.jobs || []);
+      setRoutes(Array.isArray(routesData) ? routesData : routesData.routes || []);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
     } finally {
