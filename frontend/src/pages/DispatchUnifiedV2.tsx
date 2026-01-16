@@ -28,6 +28,12 @@ import {
   PlayArrow,
   ErrorOutline,
   CheckCircle,
+  Warning as WarningIcon,
+  LocalShipping,
+  Route as RouteIcon,
+  Speed,
+  Schedule,
+  Person,
 } from '@mui/icons-material';
 import {
   getJobs,
@@ -143,10 +149,10 @@ export default function DispatchUnifiedV2() {
         getVehicles(),
         getDrivers(),
       ]);
-      setJobs((jobsData as any)?.jobs || jobsData || []);
-      setRoutes((routesData as any)?.routes || routesData || []);
-      setVehicles((vehiclesData as any)?.vehicles || vehiclesData || []);
-      setDrivers((driversData as any)?.drivers || driversData || []);
+      setJobs(jobsData);
+      setRoutes(routesData);
+      setVehicles(vehiclesData);
+      setDrivers(driversData);
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -440,91 +446,253 @@ export default function DispatchUnifiedV2() {
   const suggestedDrivers = selectedRoute ? getSuggestedDrivers(selectedRoute) : [];
 
   return (
-    <Box>
+    <Box sx={{ bgcolor: '#0D1117', minHeight: '100vh', p: 3 }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4">Dispatch Control Center</Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+        <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '24px', color: '#FFFFFF' }}>
+          Dispatch Control Center
+        </Typography>
         <Stack direction="row" spacing={2}>
-          <Button variant="outlined" startIcon={<Refresh />} onClick={loadData}>
+          <Button
+            variant="outlined"
+            startIcon={<Refresh />}
+            onClick={loadData}
+            sx={{
+              borderRadius: '8px',
+              textTransform: 'none',
+              '&:hover': {
+                borderColor: 'primary.main',
+                bgcolor: 'rgba(33, 150, 243, 0.08)',
+              }
+            }}
+          >
             Refresh
           </Button>
         </Stack>
       </Box>
 
-      {/* Conflicts Alert */}
+      {/* Conflicts Alert Banner - Improved */}
       {conflicts.length > 0 && (
-        <Box sx={{ mb: 3 }}>
-          <Alert severity="error">
-            <AlertTitle>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <ErrorOutline />
-                <span>
+        <Paper
+          elevation={0}
+          sx={{
+            mb: 4,
+            p: 3,
+            bgcolor: '#2C1810',
+            border: '2px solid #E74C3C',
+            borderRadius: '12px',
+            position: 'relative',
+            overflow: 'hidden',
+            '&::before': {
+              content: '""',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: '4px',
+              bgcolor: '#E74C3C',
+            }
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+            <Box sx={{ flex: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+                <ErrorOutline sx={{ fontSize: 28, color: '#E74C3C' }} />
+                <Typography variant="h6" sx={{ fontWeight: 700, color: '#E74C3C', fontSize: '18px' }}>
                   {conflicts.length} Conflict{conflicts.length > 1 ? 's' : ''} Detected
-                </span>
-              </Box>
-            </AlertTitle>
-            <Stack spacing={0.5}>
-              {conflicts.map((conflict, idx) => (
-                <Typography key={idx} variant="body2">
-                  • {conflict.message}
                 </Typography>
-              ))}
-            </Stack>
-          </Alert>
-        </Box>
+              </Box>
+              <Box
+                sx={{
+                  borderTop: '1px solid rgba(231, 76, 60, 0.2)',
+                  pt: 2,
+                  mb: 2,
+                }}
+              >
+                <Stack spacing={1}>
+                  {conflicts.map((conflict, idx) => (
+                    <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: '#E74C3C' }} />
+                      <Typography variant="body2" sx={{ color: '#FFFFFF', fontSize: '14px' }}>
+                        {conflict.message}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Stack>
+              </Box>
+            </Box>
+            <Button
+              variant="contained"
+              size="small"
+              sx={{
+                bgcolor: '#E74C3C',
+                color: '#FFFFFF',
+                textTransform: 'none',
+                borderRadius: '6px',
+                px: 3,
+                '&:hover': {
+                  bgcolor: '#C0392B',
+                },
+              }}
+            >
+              Resolve Conflicts
+            </Button>
+          </Box>
+        </Paper>
       )}
 
-      {/* 4-Column Layout */}
-      <Grid container spacing={2}>
+      {/* 3-Column Responsive Layout */}
+      <Grid container spacing={3}>
         {/* Column 1: Unassigned Jobs */}
-        <Grid item xs={12} md={3}>
-          <Paper sx={{ p: 2, height: '70vh', overflow: 'auto' }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">Unassigned Jobs ({unassignedJobs.length})</Typography>
+        <Grid item xs={12} lg={3} md={12}>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              height: '75vh',
+              overflow: 'auto',
+              bgcolor: 'rgba(255, 255, 255, 0.03)',
+              borderRadius: '12px',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              '&::-webkit-scrollbar': {
+                width: '8px',
+              },
+              '&::-webkit-scrollbar-track': {
+                bgcolor: 'transparent',
+              },
+              '&::-webkit-scrollbar-thumb': {
+                bgcolor: 'rgba(255, 255, 255, 0.2)',
+                borderRadius: '4px',
+                '&:hover': {
+                  bgcolor: 'rgba(255, 255, 255, 0.3)',
+                },
+              },
+            }}
+          >
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '18px', color: '#FFFFFF' }}>
+                Unassigned Jobs
+                <Chip
+                  label={unassignedJobs.length}
+                  size="small"
+                  sx={{
+                    ml: 1.5,
+                    bgcolor: 'rgba(33, 150, 243, 0.15)',
+                    color: '#2196F3',
+                    fontWeight: 700,
+                    height: '24px',
+                  }}
+                />
+              </Typography>
               <Checkbox
                 checked={selectedJobIds.length === unassignedJobs.length && unassignedJobs.length > 0}
                 indeterminate={
                   selectedJobIds.length > 0 && selectedJobIds.length < unassignedJobs.length
                 }
                 onChange={handleSelectAllJobs}
+                sx={{
+                  color: 'rgba(255, 255, 255, 0.3)',
+                  '&.Mui-checked': {
+                    color: '#2196F3',
+                  },
+                }}
               />
             </Box>
 
             {unassignedJobs.length === 0 ? (
-              <Alert severity="info">No unassigned jobs</Alert>
+              <Box
+                sx={{
+                  textAlign: 'center',
+                  py: 8,
+                  px: 3,
+                  border: '2px dashed rgba(255, 255, 255, 0.1)',
+                  borderRadius: '12px',
+                  bgcolor: 'rgba(255, 255, 255, 0.02)',
+                }}
+              >
+                <CheckCircle sx={{ fontSize: 48, color: '#2ECC71', mb: 2, opacity: 0.8 }} />
+                <Typography variant="h6" sx={{ color: '#FFFFFF', mb: 1, fontSize: '16px', fontWeight: 600 }}>
+                  No unassigned jobs
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '14px' }}>
+                  All jobs have been assigned to routes
+                </Typography>
+              </Box>
             ) : (
-              <Stack spacing={1}>
+              <Stack spacing={1.5}>
                 {unassignedJobs.map((job) => (
                   <Card
                     key={job.id}
-                    variant="outlined"
+                    elevation={0}
                     sx={{
                       cursor: 'pointer',
-                      border: selectedJobIds.includes(job.id) ? 2 : 1,
-                      borderColor: selectedJobIds.includes(job.id) ? 'primary.main' : 'divider',
+                      bgcolor: selectedJobIds.includes(job.id)
+                        ? 'rgba(33, 150, 243, 0.15)'
+                        : 'rgba(255, 255, 255, 0.05)',
+                      border: '2px solid',
+                      borderColor: selectedJobIds.includes(job.id) ? '#2196F3' : 'transparent',
+                      borderRadius: '8px',
+                      transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                      '&:hover': {
+                        borderColor: selectedJobIds.includes(job.id) ? '#2196F3' : 'rgba(33, 150, 243, 0.5)',
+                        bgcolor: selectedJobIds.includes(job.id)
+                          ? 'rgba(33, 150, 243, 0.2)'
+                          : 'rgba(255, 255, 255, 0.08)',
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                      },
                     }}
                     onClick={() => handleJobToggle(job.id)}
                   >
-                    <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                        <Box>
-                          <Typography variant="body2" fontWeight="bold">
+                    <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}>
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              fontWeight: 600,
+                              fontSize: '14px',
+                              color: '#FFFFFF',
+                              mb: 0.5,
+                            }}
+                          >
                             {job.customerName}
                           </Typography>
-                          <Typography variant="caption" color="text.secondary">
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              color: 'rgba(255, 255, 255, 0.6)',
+                              fontSize: '12px',
+                              display: 'block',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
                             📍 {job.deliveryAddress || 'No address'}
                           </Typography>
                         </Box>
                         <Chip
                           label={job.priority || 'normal'}
                           size="small"
-                          color={
-                            job.priority === 'urgent'
-                              ? 'error'
-                              : job.priority === 'high'
-                              ? 'warning'
-                              : 'default'
-                          }
+                          sx={{
+                            height: '22px',
+                            fontSize: '11px',
+                            fontWeight: 600,
+                            bgcolor:
+                              job.priority === 'urgent'
+                                ? '#E74C3C'
+                                : job.priority === 'high'
+                                ? '#F1C40F'
+                                : 'rgba(255, 255, 255, 0.1)',
+                            color:
+                              job.priority === 'urgent'
+                                ? '#FFFFFF'
+                                : job.priority === 'high'
+                                ? '#000000'
+                                : '#FFFFFF',
+                            border: 'none',
+                          }}
                         />
                       </Box>
                     </CardContent>
@@ -533,13 +701,34 @@ export default function DispatchUnifiedV2() {
               </Stack>
             )}
 
-            <Box sx={{ mt: 2 }}>
+            <Box sx={{ mt: 3 }}>
               <Button
                 fullWidth
                 variant="contained"
                 startIcon={autoAssigning ? <CircularProgress size={20} /> : <AutoAwesome />}
                 onClick={handleAutoAssign}
                 disabled={selectedJobIds.length === 0 || autoAssigning}
+                sx={{
+                  bgcolor: '#2196F3',
+                  color: '#FFFFFF',
+                  borderRadius: '10px',
+                  py: 1.5,
+                  px: 3,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  fontSize: '15px',
+                  boxShadow: '0 4px 12px rgba(33, 150, 243, 0.3)',
+                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                  '&:hover': {
+                    bgcolor: '#1976D2',
+                    transform: 'translateY(-2px)',
+                    boxShadow: '0 6px 20px rgba(33, 150, 243, 0.4)',
+                  },
+                  '&:disabled': {
+                    bgcolor: 'rgba(255, 255, 255, 0.1)',
+                    color: 'rgba(255, 255, 255, 0.3)',
+                  },
+                }}
               >
                 Auto-Assign Selected
               </Button>
@@ -549,10 +738,46 @@ export default function DispatchUnifiedV2() {
 
         {/* Column 2: Vehicles & Routes */}
         <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 2, height: '70vh', overflow: 'auto' }}>
-            <Typography variant="h6" sx={{ mb: 2 }}>
-              Vehicles & Routes ({vehicles.length})
-            </Typography>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              height: '75vh',
+              overflow: 'auto',
+              bgcolor: 'rgba(255, 255, 255, 0.03)',
+              borderRadius: '12px',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              '&::-webkit-scrollbar': {
+                width: '8px',
+              },
+              '&::-webkit-scrollbar-track': {
+                bgcolor: 'transparent',
+              },
+              '&::-webkit-scrollbar-thumb': {
+                bgcolor: 'rgba(255, 255, 255, 0.2)',
+                borderRadius: '4px',
+                '&:hover': {
+                  bgcolor: 'rgba(255, 255, 255, 0.3)',
+                },
+              },
+            }}
+          >
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '18px', color: '#FFFFFF' }}>
+                Vehicles & Routes
+                <Chip
+                  label={vehicles.length}
+                  size="small"
+                  sx={{
+                    ml: 1.5,
+                    bgcolor: 'rgba(46, 204, 113, 0.15)',
+                    color: '#2ECC71',
+                    fontWeight: 700,
+                    height: '24px',
+                  }}
+                />
+              </Typography>
+            </Box>
 
             <Stack spacing={2}>
               {vehicles.map((vehicle) => {
@@ -582,13 +807,66 @@ export default function DispatchUnifiedV2() {
 
         {/* Column 3: Ready to Dispatch */}
         <Grid item xs={12} md={3}>
-          <Paper sx={{ p: 2, height: '70vh', overflow: 'auto' }}>
-            <Typography variant="h6" sx={{ mb: 2 }}>
-              Ready to Dispatch ({readyToDispatchRoutes.length})
-            </Typography>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 3,
+              height: '75vh',
+              overflow: 'auto',
+              bgcolor: 'rgba(255, 255, 255, 0.03)',
+              borderRadius: '12px',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              '&::-webkit-scrollbar': {
+                width: '8px',
+              },
+              '&::-webkit-scrollbar-track': {
+                bgcolor: 'transparent',
+              },
+              '&::-webkit-scrollbar-thumb': {
+                bgcolor: 'rgba(255, 255, 255, 0.2)',
+                borderRadius: '4px',
+                '&:hover': {
+                  bgcolor: 'rgba(255, 255, 255, 0.3)',
+                },
+              },
+            }}
+          >
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '18px', color: '#FFFFFF' }}>
+                Ready to Dispatch
+                <Chip
+                  label={readyToDispatchRoutes.length}
+                  size="small"
+                  sx={{
+                    ml: 1.5,
+                    bgcolor: 'rgba(46, 204, 113, 0.15)',
+                    color: '#2ECC71',
+                    fontWeight: 700,
+                    height: '24px',
+                  }}
+                />
+              </Typography>
+            </Box>
 
             {readyToDispatchRoutes.length === 0 ? (
-              <Alert severity="info">No routes ready for dispatch</Alert>
+              <Box
+                sx={{
+                  textAlign: 'center',
+                  py: 8,
+                  px: 3,
+                  border: '2px dashed rgba(255, 255, 255, 0.1)',
+                  borderRadius: '12px',
+                  bgcolor: 'rgba(255, 255, 255, 0.02)',
+                }}
+              >
+                <PlayArrow sx={{ fontSize: 48, color: 'rgba(255, 255, 255, 0.3)', mb: 2 }} />
+                <Typography variant="h6" sx={{ color: '#FFFFFF', mb: 1, fontSize: '16px', fontWeight: 600 }}>
+                  No routes ready
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '14px' }}>
+                  Assign drivers to optimized routes to dispatch them
+                </Typography>
+              </Box>
             ) : (
               <Stack spacing={2}>
                 {readyToDispatchRoutes.map((route) => {
@@ -596,46 +874,105 @@ export default function DispatchUnifiedV2() {
                   const driver = drivers.find((d) => d.id === route.driverId);
 
                   return (
-                    <Card key={route.id} variant="outlined" sx={{ borderColor: 'success.main', borderWidth: 2 }}>
-                      <CardContent>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <CheckCircle color="success" />
-                          <Typography variant="subtitle2" fontWeight="bold">
+                    <Card
+                      key={route.id}
+                      elevation={0}
+                      sx={{
+                        bgcolor: 'rgba(46, 204, 113, 0.08)',
+                        border: '2px solid #2ECC71',
+                        borderRadius: '10px',
+                        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                        '&:hover': {
+                          bgcolor: 'rgba(46, 204, 113, 0.12)',
+                          transform: 'translateY(-2px)',
+                          boxShadow: '0 4px 12px rgba(46, 204, 113, 0.2)',
+                        },
+                      }}
+                    >
+                      <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                          <CheckCircle sx={{ color: '#2ECC71', fontSize: 24 }} />
+                          <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: '15px', color: '#FFFFFF' }}>
                             Route {route.id.slice(0, 8)}
                           </Typography>
                         </Box>
 
-                        <Typography variant="body2">
-                          <strong>Vehicle:</strong> {vehicle?.make} {vehicle?.model}
-                        </Typography>
-                        <Typography variant="body2">
-                          <strong>Driver:</strong> {driver?.firstName} {driver?.lastName}
-                        </Typography>
-                        <Typography variant="body2">
-                          <strong>Jobs:</strong> {route.jobIds?.length || 0}
-                        </Typography>
-                        <Typography variant="body2">
-                          <strong>Distance:</strong> {route.totalDistance?.toFixed(1) || 0} mi
-                        </Typography>
-                        <Typography variant="body2">
-                          <strong>Duration:</strong>{' '}
-                          {route.totalDuration ? `${Math.floor(route.totalDuration / 60)}h ${Math.round(route.totalDuration % 60)}m` : '0m'}
-                        </Typography>
+                        <Stack spacing={1} sx={{ mb: 2.5 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <LocalShipping sx={{ fontSize: 16, color: 'rgba(255, 255, 255, 0.5)' }} />
+                            <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '13px' }}>
+                              {vehicle?.make} {vehicle?.model}
+                            </Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Box
+                              component="span"
+                              sx={{
+                                width: 16,
+                                height: 16,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                color: 'rgba(255, 255, 255, 0.5)',
+                              }}
+                            >
+                              👤
+                            </Box>
+                            <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '13px' }}>
+                              {driver?.firstName} {driver?.lastName}
+                            </Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <RouteIcon sx={{ fontSize: 16, color: 'rgba(255, 255, 255, 0.5)' }} />
+                            <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '13px' }}>
+                              {route.jobIds?.length || 0} stops
+                            </Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Speed sx={{ fontSize: 16, color: 'rgba(255, 255, 255, 0.5)' }} />
+                            <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '13px' }}>
+                              {route.totalDistance?.toFixed(1) || 0} mi
+                            </Typography>
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Schedule sx={{ fontSize: 16, color: 'rgba(255, 255, 255, 0.5)' }} />
+                            <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '13px' }}>
+                              {route.totalDuration ? `${Math.floor(route.totalDuration / 60)}h ${Math.round(route.totalDuration % 60)}m` : '0m'}
+                            </Typography>
+                          </Box>
+                        </Stack>
 
                         <Button
                           fullWidth
                           variant="contained"
-                          color="success"
                           startIcon={
                             dispatchingRouteId === route.id ? (
-                              <CircularProgress size={20} />
+                              <CircularProgress size={20} sx={{ color: '#FFFFFF' }} />
                             ) : (
                               <PlayArrow />
                             )
                           }
                           onClick={() => handleDispatch(route.id)}
                           disabled={dispatchingRouteId === route.id}
-                          sx={{ mt: 2 }}
+                          sx={{
+                            bgcolor: '#2ECC71',
+                            color: '#FFFFFF',
+                            borderRadius: '8px',
+                            py: 1.25,
+                            textTransform: 'none',
+                            fontWeight: 700,
+                            fontSize: '14px',
+                            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                            '&:hover': {
+                              bgcolor: '#27AE60',
+                              transform: 'translateY(-1px)',
+                              boxShadow: '0 4px 12px rgba(46, 204, 113, 0.3)',
+                            },
+                            '&:disabled': {
+                              bgcolor: 'rgba(255, 255, 255, 0.1)',
+                              color: 'rgba(255, 255, 255, 0.3)',
+                            },
+                          }}
                         >
                           DISPATCH
                         </Button>
@@ -650,9 +987,31 @@ export default function DispatchUnifiedV2() {
 
         {/* Column 4: Live Status */}
         <Grid item xs={12} md={2}>
-          <Box sx={{ height: '70vh', overflow: 'auto' }}>
+          <Paper
+            elevation={0}
+            sx={{
+              height: '75vh',
+              overflow: 'auto',
+              bgcolor: 'rgba(255, 255, 255, 0.03)',
+              borderRadius: '12px',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              '&::-webkit-scrollbar': {
+                width: '8px',
+              },
+              '&::-webkit-scrollbar-track': {
+                bgcolor: 'transparent',
+              },
+              '&::-webkit-scrollbar-thumb': {
+                bgcolor: 'rgba(255, 255, 255, 0.2)',
+                borderRadius: '4px',
+                '&:hover': {
+                  bgcolor: 'rgba(255, 255, 255, 0.3)',
+                },
+              },
+            }}
+          >
             <LiveStatusColumn drivers={drivers} vehicles={vehicles} routes={activeRoutes} />
-          </Box>
+          </Paper>
         </Grid>
       </Grid>
 

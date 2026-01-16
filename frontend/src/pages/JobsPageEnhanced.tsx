@@ -148,8 +148,8 @@ export default function JobsPageEnhanced() {
       ]);
 
       // Enrich jobs with driver information from routes
-      const enrichedJobs = (jobsData.jobs || []).map((job: any) => {
-        const route = routesData.routes?.find((r: any) => r.id === job.assignedRouteId);
+      const enrichedJobs = jobsData.map((job: any) => {
+        const route = routesData.find((r: any) => r.id === job.assignedRouteId);
         const driver = route?.driverId ? drivers.find((d: Driver) => d.id === route.driverId) : null;
 
         return {
@@ -172,7 +172,7 @@ export default function JobsPageEnhanced() {
   const loadDrivers = async () => {
     try {
       const driversData = await getDrivers();
-      setDrivers(driversData.drivers || []);
+      setDrivers(driversData);
     } catch (error) {
       console.error('Failed to load drivers:', error);
     }
@@ -183,7 +183,7 @@ export default function JobsPageEnhanced() {
     try {
       const response = await fetch(`${API_BASE_URL}/api/customers`);
       const data = await response.json();
-      setCustomers(data.customers || []);
+      setCustomers(data);
     } catch (error) {
       console.error('Failed to load customers:', error);
     }

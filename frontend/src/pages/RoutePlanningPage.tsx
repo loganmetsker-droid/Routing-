@@ -160,8 +160,8 @@ export default function RoutingPage() {
         ]);
         const vehiclesData = await vehiclesRes.json();
         const customersData = await customersRes.json();
-        setVehicles(vehiclesData.vehicles || []);
-        setCustomers(customersData.customers || []);
+        setVehicles(vehiclesData);
+        setCustomers(customersData);
       } catch (error) {
         console.error('Error loading data:', error);
       } finally {

@@ -67,14 +67,16 @@ export default function LiveStatusColumn({ drivers, vehicles, routes }: LiveStat
   };
 
   return (
-    <Box>
+    <Box sx={{ p: 3 }}>
       {/* Available Drivers */}
-      <Paper sx={{ p: 2, mb: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-          <Person />
-          <Typography variant="h6">Drivers</Typography>
+      <Box sx={{ mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
+          <Person sx={{ fontSize: 22, color: '#2196F3' }} />
+          <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '16px', color: '#FFFFFF' }}>
+            Drivers
+          </Typography>
         </Box>
-        <Stack spacing={1}>
+        <Stack spacing={1.5}>
           {sortedDrivers.slice(0, 8).map((driver) => {
             const routeCount = driverAssignments[driver.id] || 0;
             const isAvailable = routeCount === 0;
@@ -84,57 +86,72 @@ export default function LiveStatusColumn({ drivers, vehicles, routes }: LiveStat
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 1,
-                  p: 1,
-                  borderRadius: 1,
-                  bgcolor: isAvailable ? 'success.50' : 'action.hover',
+                  gap: 1.5,
+                  p: 1.5,
+                  borderRadius: '8px',
+                  bgcolor: isAvailable ? 'rgba(46, 204, 113, 0.08)' : 'rgba(255, 255, 255, 0.05)',
                   border: '1px solid',
-                  borderColor: isAvailable ? 'success.main' : 'divider',
+                  borderColor: isAvailable ? 'rgba(46, 204, 113, 0.3)' : 'rgba(255, 255, 255, 0.08)',
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    bgcolor: isAvailable ? 'rgba(46, 204, 113, 0.12)' : 'rgba(255, 255, 255, 0.08)',
+                    transform: 'translateX(4px)',
+                  },
                 }}
               >
                 {isAvailable ? (
-                  <CheckCircle fontSize="small" color="success" />
+                  <CheckCircle sx={{ fontSize: 18, color: '#2ECC71' }} />
                 ) : (
-                  <Warning fontSize="small" color="warning" />
+                  <Warning sx={{ fontSize: 18, color: '#F1C40F' }} />
                 )}
-                <Box sx={{ flex: 1 }}>
-                  <Typography variant="body2" fontWeight="bold">
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '13px', color: '#FFFFFF', mb: 0.25 }}>
                     {driver.firstName} {driver.lastName}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '11px' }}>
                     {routeCount} route{routeCount !== 1 ? 's' : ''}
                   </Typography>
                 </Box>
                 <Chip
                   label={isAvailable ? 'Available' : 'Busy'}
                   size="small"
-                  color={getDriverStatusColor(driver)}
+                  sx={{
+                    height: '20px',
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    bgcolor: isAvailable ? '#2ECC71' : '#F1C40F',
+                    color: isAvailable ? '#FFFFFF' : '#000000',
+                  }}
                 />
               </Box>
             );
           })}
           {sortedDrivers.length > 8 && (
-            <Typography variant="caption" color="text.secondary" textAlign="center">
+            <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.4)', fontSize: '11px', textAlign: 'center', mt: 1 }}>
               +{sortedDrivers.length - 8} more
             </Typography>
           )}
           {sortedDrivers.length === 0 && (
-            <Typography variant="body2" color="text.secondary" textAlign="center">
-              No drivers
-            </Typography>
+            <Box sx={{ textAlign: 'center', py: 3 }}>
+              <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.4)', fontSize: '13px' }}>
+                No drivers available
+              </Typography>
+            </Box>
           )}
         </Stack>
-      </Paper>
+      </Box>
 
-      <Divider sx={{ my: 2 }} />
+      <Divider sx={{ my: 3, borderColor: 'rgba(255, 255, 255, 0.08)' }} />
 
       {/* Vehicle Status */}
-      <Paper sx={{ p: 2 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-          <LocalShipping />
-          <Typography variant="h6">Vehicles</Typography>
+      <Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2.5 }}>
+          <LocalShipping sx={{ fontSize: 22, color: '#2ECC71' }} />
+          <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '16px', color: '#FFFFFF' }}>
+            Vehicles
+          </Typography>
         </Box>
-        <Stack spacing={1}>
+        <Stack spacing={1.5}>
           {vehicles.slice(0, 8).map((vehicle) => {
             const isAssigned = vehicleAssignments[vehicle.id];
             const displayStatus =
@@ -150,39 +167,61 @@ export default function LiveStatusColumn({ drivers, vehicles, routes }: LiveStat
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 1,
-                  p: 1,
-                  borderRadius: 1,
-                  bgcolor: 'action.hover',
+                  gap: 1.5,
+                  p: 1.5,
+                  borderRadius: '8px',
+                  bgcolor: isAssigned ? 'rgba(33, 150, 243, 0.08)' : 'rgba(255, 255, 255, 0.05)',
                   border: '1px solid',
-                  borderColor: 'divider',
+                  borderColor: isAssigned ? 'rgba(33, 150, 243, 0.3)' : 'rgba(255, 255, 255, 0.08)',
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    bgcolor: isAssigned ? 'rgba(33, 150, 243, 0.12)' : 'rgba(255, 255, 255, 0.08)',
+                    transform: 'translateX(4px)',
+                  },
                 }}
               >
-                <LocalShipping fontSize="small" color={isAssigned ? 'primary' : 'disabled'} />
-                <Box sx={{ flex: 1 }}>
-                  <Typography variant="body2" fontWeight="bold">
+                <LocalShipping sx={{ fontSize: 18, color: isAssigned ? '#2196F3' : 'rgba(255, 255, 255, 0.3)' }} />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '13px', color: '#FFFFFF', mb: 0.25 }}>
                     {vehicle.make} {vehicle.model}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '11px' }}>
                     {vehicle.licensePlate || 'No plate'}
                   </Typography>
                 </Box>
-                <Chip label={displayStatus} size="small" color={getVehicleStatusColor(vehicle)} />
+                <Chip
+                  label={displayStatus}
+                  size="small"
+                  sx={{
+                    height: '20px',
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    bgcolor:
+                      displayStatus === 'Available'
+                        ? '#2ECC71'
+                        : displayStatus === 'Assigned'
+                        ? '#2196F3'
+                        : 'rgba(255, 255, 255, 0.1)',
+                    color: displayStatus === 'Available' || displayStatus === 'Assigned' ? '#FFFFFF' : 'rgba(255, 255, 255, 0.6)',
+                  }}
+                />
               </Box>
             );
           })}
           {vehicles.length > 8 && (
-            <Typography variant="caption" color="text.secondary" textAlign="center">
+            <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.4)', fontSize: '11px', textAlign: 'center', mt: 1 }}>
               +{vehicles.length - 8} more
             </Typography>
           )}
           {vehicles.length === 0 && (
-            <Typography variant="body2" color="text.secondary" textAlign="center">
-              No vehicles
-            </Typography>
+            <Box sx={{ textAlign: 'center', py: 3 }}>
+              <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.4)', fontSize: '13px' }}>
+                No vehicles available
+              </Typography>
+            </Box>
           )}
         </Stack>
-      </Paper>
+      </Box>
     </Box>
   );
 }

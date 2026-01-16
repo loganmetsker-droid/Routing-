@@ -49,10 +49,11 @@ export const createJob = async (job: Omit<Job, 'id'>): Promise<{ job: Job }> => 
   return response.json();
 };
 
-export const getJobs = async (): Promise<{ jobs: Job[] }> => {
+export const getJobs = async (): Promise<Job[]> => {
   const response = await fetch(`${API_BASE_URL}/api/jobs`);
   if (!response.ok) throw new Error('Failed to fetch jobs');
-  return response.json();
+  const data = await response.json();
+  return Array.isArray(data) ? data : data.jobs || [];
 };
 
 export const updateJobStatus = async (id: string, status: string, assignedRouteId?: string): Promise<{ job: Job }> => {
@@ -86,10 +87,11 @@ export const generateRoute = async (vehicleId: string, jobIds: string[]): Promis
   return response.json();
 };
 
-export const getRoutes = async (): Promise<{ routes: Route[] }> => {
+export const getRoutes = async (): Promise<Route[]> => {
   const response = await fetch(`${API_BASE_URL}/api/routes`);
   if (!response.ok) throw new Error('Failed to fetch routes');
-  return response.json();
+  const data = await response.json();
+  return Array.isArray(data) ? data : data.routes || [];
 };
 
 export const assignDriverToRoute = async (routeId: string, driverId: string): Promise<{ route: Route }> => {
@@ -133,16 +135,18 @@ export const reorderRouteStops = async (routeId: string, newJobOrder: string[]):
 };
 
 // Vehicles & Drivers API
-export const getVehicles = async (): Promise<{ vehicles: any[] }> => {
+export const getVehicles = async (): Promise<any[]> => {
   const response = await fetch(`${API_BASE_URL}/api/vehicles`);
   if (!response.ok) throw new Error('Failed to fetch vehicles');
-  return response.json();
+  const data = await response.json();
+  return Array.isArray(data) ? data : data.vehicles || [];
 };
 
-export const getDrivers = async (): Promise<{ drivers: any[] }> => {
+export const getDrivers = async (): Promise<any[]> => {
   const response = await fetch(`${API_BASE_URL}/api/drivers`);
   if (!response.ok) throw new Error('Failed to fetch drivers');
-  return response.json();
+  const data = await response.json();
+  return Array.isArray(data) ? data : data.drivers || [];
 };
 
 // SSE for real-time updates

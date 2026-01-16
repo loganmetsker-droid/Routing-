@@ -159,10 +159,10 @@ export default function RouteOptimizationPage() {
         getDrivers(),
       ]);
 
-      setRoutes((routesData.routes || []) as Route[]);
-      setJobs((jobsData.jobs || []) as Job[]);
-      setVehicles(vehiclesData.vehicles || []);
-      setDrivers(driversData.drivers || []);
+      setRoutes(routesData as Route[]);
+      setJobs(jobsData as Job[]);
+      setVehicles(vehiclesData);
+      setDrivers(driversData);
     } catch (error) {
       console.error('Failed to load data:', error);
       showSnackbar('Failed to load data', 'error');

@@ -104,9 +104,9 @@ export default function RoutesConsolidated() {
         getDrivers(),
       ]);
 
-      setRoutes((routesData.routes || []) as Route[]);
-      setVehicles(vehiclesData.vehicles || []);
-      setDrivers(driversData.drivers || []);
+      setRoutes(routesData as Route[]);
+      setVehicles(vehiclesData);
+      setDrivers(driversData);
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {

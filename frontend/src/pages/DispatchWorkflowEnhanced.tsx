@@ -156,9 +156,9 @@ export default function DispatchWorkflowEnhanced() {
         getDrivers(),
       ]);
 
-      setJobs((jobsData.jobs || []) as DispatchJob[]);
-      setVehicles(vehiclesData.vehicles || []);
-      setDrivers(driversData.drivers || []);
+      setJobs(jobsData as DispatchJob[]);
+      setVehicles(vehiclesData);
+      setDrivers(driversData);
     } catch (error) {
       console.error('Failed to load data:', error);
       setSnackbarMessage('Failed to load data');

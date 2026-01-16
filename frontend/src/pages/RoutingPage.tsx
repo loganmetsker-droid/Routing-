@@ -128,10 +128,10 @@ export default function RoutingPage() {
         jobsRes.json(),
       ]);
 
-      setRoutes(routesData.routes || []);
-      setVehicles(vehiclesData.vehicles || []);
-      setDrivers(driversData.drivers || []);
-      setJobs(jobsData.jobs || []);
+      setRoutes(routesData);
+      setVehicles(vehiclesData);
+      setDrivers(driversData);
+      setJobs(jobsData);
     } catch (error) {
       console.error('Error loading data:', error);
     } finally {

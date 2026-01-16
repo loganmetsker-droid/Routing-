@@ -166,13 +166,13 @@ export default function TrackingEnhanced() {
         getJobs(),
       ]);
 
-      setRoutes((routesData.routes || []) as Route[]);
-      setDrivers(driversData.drivers || []);
-      setVehicles(vehiclesData.vehicles || []);
-      setJobs((jobsData as any)?.jobs || jobsData || []);
+      setRoutes(routesData as Route[]);
+      setDrivers(driversData);
+      setVehicles(vehiclesData);
+      setJobs(jobsData);
 
       // Generate mock alerts for demo
-      generateMockAlerts(routesData.routes || []);
+      generateMockAlerts(routesData);
     } catch (error) {
       console.error('Failed to load tracking data:', error);
     }

@@ -65,8 +65,8 @@ export default function DispatchesPage() {
   const loadData = async () => {
     try {
       const [jobsData, routesData] = await Promise.all([getJobs(), getRoutes()]);
-      setJobs(jobsData.jobs);
-      setRoutes(routesData.routes);
+      setJobs(jobsData);
+      setRoutes(routesData);
     } catch (error) {
       console.error('Failed to load data:', error);
     }
