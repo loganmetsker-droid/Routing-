@@ -45,6 +45,31 @@ export const AddressInput: React.FC<AddressInputProps> = ({
     loadZipDatabase();
   }, []);
 
+  // Validate when value changes (for programmatic updates)
+  useEffect(() => {
+    if (!onValidationChange) return;
+
+    // Check if all required fields are filled
+    const hasRequiredFields = value.line1 && value.city && value.state && value.zip;
+
+    if (hasRequiredFields) {
+      // Validate each field
+      const line1Error = validateStreetAddress(value.line1);
+      const cityError = validateCity(value.city);
+      const stateError = validateState(value.state);
+      const zipFormatError = validateZipFormat(value.zip);
+
+      // If all fields valid, notify parent
+      if (!line1Error && !cityError && !stateError && !zipFormatError) {
+        onValidationChange(true);
+      } else {
+        onValidationChange(false);
+      }
+    } else {
+      onValidationChange(false);
+    }
+  }, [value, onValidationChange]);
+
   // Validate field on blur
   const handleBlur = async (field: keyof Address) => {
     if (!validateOnBlur) return;

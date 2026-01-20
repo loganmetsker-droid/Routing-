@@ -292,30 +292,27 @@ export default function JobsPageEnhancedV2() {
 
       // Auto-populate delivery address if structured address exists
       if (customer.defaultAddressStructured) {
-        setDeliveryAddressData({
+        const addressData = {
           line1: customer.defaultAddressStructured.line1 || '',
           line2: customer.defaultAddressStructured.line2 || null,
           city: customer.defaultAddressStructured.city || '',
           state: customer.defaultAddressStructured.state || '',
           zip: customer.defaultAddressStructured.zip || '',
-        });
-        setDeliveryAddressValid(true);
+        };
+        setDeliveryAddressData(addressData);
+
+        // Validate the address - if all required fields are present, mark as valid
+        const hasRequiredFields = addressData.line1 && addressData.city && addressData.state && addressData.zip;
+        setDeliveryAddressValid(!!hasRequiredFields);
       } else if (customer.defaultAddress) {
-        // Fallback: try to parse legacy address format
-        const parsed = formatAddress({
+        // Fallback: populate line1 with legacy address, user must complete rest
+        setDeliveryAddressData({
           line1: customer.defaultAddress,
           line2: null,
           city: '',
           state: '',
           zip: ''
         });
-        setFormData({
-          ...formData,
-          customerName: customer.name,
-          deliveryAddress: parsed,
-        });
-        // Keep address input empty so user can enter structured format
-        setDeliveryAddressData({ line1: customer.defaultAddress, line2: null, city: '', state: '', zip: '' });
         setDeliveryAddressValid(false);
       } else {
         // Reset to empty if no address at all
