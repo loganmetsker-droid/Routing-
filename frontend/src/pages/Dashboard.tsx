@@ -79,18 +79,24 @@ export default function Dashboard() {
         fetch(`${API_BASE_URL}/api/dispatch/routes`),
       ]);
 
-      const driversData = await driversRes.json();
-      const vehiclesData = await vehiclesRes.json();
-      const jobsData = await jobsRes.json();
-      const routesData = await routesRes.json();
+      // Parse JSON with error handling for each response
+      const driversData = driversRes.ok ? await driversRes.json() : { drivers: [] };
+      const vehiclesData = vehiclesRes.ok ? await vehiclesRes.json() : { vehicles: [] };
+      const jobsData = jobsRes.ok ? await jobsRes.json() : { jobs: [] };
+      const routesData = routesRes.ok ? await routesRes.json() : { routes: [] };
 
       // Normalize responses - handle both array and wrapped object formats
-      setDrivers(Array.isArray(driversData) ? driversData : driversData.drivers || []);
-      setVehicles(Array.isArray(vehiclesData) ? vehiclesData : vehiclesData.vehicles || []);
-      setJobs(Array.isArray(jobsData) ? jobsData : jobsData.jobs || []);
-      setRoutes(Array.isArray(routesData) ? routesData : routesData.routes || []);
+      setDrivers(Array.isArray(driversData) ? driversData : (driversData?.drivers || []));
+      setVehicles(Array.isArray(vehiclesData) ? vehiclesData : (vehiclesData?.vehicles || []));
+      setJobs(Array.isArray(jobsData) ? jobsData : (jobsData?.jobs || []));
+      setRoutes(Array.isArray(routesData) ? routesData : (routesData?.routes || []));
     } catch (error) {
       console.error('Error loading dashboard data:', error);
+      // Ensure state is always arrays even on error
+      setDrivers([]);
+      setVehicles([]);
+      setJobs([]);
+      setRoutes([]);
     } finally {
       setLoading(false);
     }
@@ -108,22 +114,28 @@ export default function Dashboard() {
 
   // Calculate statistics
   const stats = useMemo(() => {
-    const activeJobs = jobs.filter((j: any) =>
+    // Ensure all inputs are arrays to prevent crashes
+    const safeJobs = Array.isArray(jobs) ? jobs : [];
+    const safeDrivers = Array.isArray(drivers) ? drivers : [];
+    const safeVehicles = Array.isArray(vehicles) ? vehicles : [];
+    const safeRoutes = Array.isArray(routes) ? routes : [];
+
+    const activeJobs = safeJobs.filter((j: any) =>
       j.status === 'pending' || j.status === 'in_progress'
     ).length;
 
-    const activeDrivers = drivers.filter((d: any) =>
+    const activeDrivers = safeDrivers.filter((d: any) =>
       d.status === 'ACTIVE' || d.status === 'active'
     ).length;
 
-    const availableVehicles = vehicles.filter((v: any) =>
+    const availableVehicles = safeVehicles.filter((v: any) =>
       v.status === 'available' || v.status === 'AVAILABLE'
     ).length;
 
-    const totalDrivers = drivers.length;
-    const totalVehicles = vehicles.length;
-    const totalJobs = jobs.length;
-    const totalRoutes = routes.length;
+    const totalDrivers = safeDrivers.length;
+    const totalVehicles = safeVehicles.length;
+    const totalJobs = safeJobs.length;
+    const totalRoutes = safeRoutes.length;
 
     return [
       {
@@ -175,8 +187,12 @@ export default function Dashboard() {
 
   // Prepare map data with vehicle assignments
   const mapRoutes = useMemo(() => {
-    return routes.map((route: any, index: number) => {
-      const assignedVehicle = vehicles.find((v: any) => v.id === route.vehicleId);
+    // Ensure routes and vehicles are arrays to prevent crashes
+    const safeRoutes = Array.isArray(routes) ? routes : [];
+    const safeVehicles = Array.isArray(vehicles) ? vehicles : [];
+
+    return safeRoutes.map((route: any, index: number) => {
+      const assignedVehicle = safeVehicles.find((v: any) => v.id === route.vehicleId);
 
       // Simple mock positions for routes without coordinates
       const positions = route.stops && Array.isArray(route.stops) && route.stops.length > 0
@@ -213,7 +229,8 @@ export default function Dashboard() {
 
   // Recent jobs for table
   const recentJobs = useMemo(() => {
-    return jobs.slice(0, 6);
+    const safeJobs = Array.isArray(jobs) ? jobs : [];
+    return safeJobs.slice(0, 6);
   }, [jobs]);
 
   if (loading) {
