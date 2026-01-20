@@ -161,6 +161,7 @@ export default function JobsPage() {
         deliveryAddress: formatAddress(deliveryAddressData),
         pickupAddressStructured: pickupMode === 'custom' ? pickupAddressData : null,
         deliveryAddressStructured: deliveryAddressData,
+        status: 'pending',
       };
       await createJob(jobData);
       handleCloseDialog();

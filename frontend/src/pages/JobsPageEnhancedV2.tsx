@@ -325,6 +325,7 @@ export default function JobsPageEnhancedV2() {
         priority: formData.priority,
         deliveryAddress: formatAddress(deliveryAddressData),
         deliveryAddressStructured: deliveryAddressData,
+        status: 'pending',
       };
       await createJob(jobData);
       handleCloseDialog();
