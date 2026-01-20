@@ -49,7 +49,7 @@ import LiveStatusColumn from '../components/dispatch/LiveStatusColumn';
 // ==================== INTERFACES ====================
 
 interface Job {
-  id: string;
+  id?: string;
   customerName: string;
   pickupAddress?: string;
   deliveryAddress?: string;
@@ -61,7 +61,7 @@ interface Job {
 }
 
 interface Route {
-  id: string;
+  id?: string;
   vehicleId?: string;
   driverId?: string;
   jobIds?: string[];
@@ -145,10 +145,10 @@ export default function DispatchUnifiedV2() {
         getVehicles(),
         getDrivers(),
       ]);
-      setJobs(Array.isArray(jobsData) ? jobsData : []);
-      setRoutes(Array.isArray(routesData) ? routesData : []);
-      setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
-      setDrivers(Array.isArray(driversData) ? driversData : []);
+      setJobs(Array.isArray(jobsData) ? jobsData as any : []);
+      setRoutes(Array.isArray(routesData) ? routesData as any : []);
+      setVehicles(Array.isArray(vehiclesData) ? vehiclesData as any : []);
+      setDrivers(Array.isArray(driversData) ? driversData as any : []);
     } catch (error) {
       console.error('Failed to load data:', error);
       setJobs([]);
