@@ -210,7 +210,7 @@ export default function RoutingPage() {
 
     try {
       // Create a general route (without jobs) using the new backend endpoint
-      const response = await fetch(`${API_BASE_URL}/api/routes`, {
+      const response = await fetch(`${API_BASE_URL}/api/dispatch/routes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

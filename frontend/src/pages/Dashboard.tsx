@@ -76,7 +76,7 @@ export default function Dashboard() {
         fetch(`${API_BASE_URL}/api/drivers`),
         fetch(`${API_BASE_URL}/api/vehicles`),
         fetch(`${API_BASE_URL}/api/jobs`),
-        fetch(`${API_BASE_URL}/api/routes`),
+        fetch(`${API_BASE_URL}/api/dispatch/routes`),
       ]);
 
       const driversData = await driversRes.json();

@@ -65,7 +65,7 @@ const RoutesPage: React.FC = () => {
 
   const loadRoutes = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/routes`);
+      const response = await fetch(`${API_BASE_URL}/api/dispatch/routes`);
       const data = await response.json();
       setRoutes(data.routes || []);
     } catch (error) {
@@ -155,13 +155,13 @@ const RoutesPage: React.FC = () => {
       };
 
       if (editingRoute) {
-        await fetch(`${API_BASE_URL}/api/routes/${editingRoute.id}`, {
+        await fetch(`${API_BASE_URL}/api/dispatch/routes/${editingRoute.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
       } else {
-        await fetch(`${API_BASE_URL}/api/routes`, {
+        await fetch(`${API_BASE_URL}/api/dispatch/routes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),

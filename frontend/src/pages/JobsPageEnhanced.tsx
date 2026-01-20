@@ -428,7 +428,7 @@ export default function JobsPageEnhanced() {
         const job = jobs.find(j => j.id === jobId);
         if (job?.assignedRouteId) {
           // Update the route's driver assignment
-          await fetch(`${API_BASE_URL}/api/routes/${job.assignedRouteId}/assign`, {
+          await fetch(`${API_BASE_URL}/api/dispatch/routes/${job.assignedRouteId}/assign`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ driverId: selectedDriverForReassign }),

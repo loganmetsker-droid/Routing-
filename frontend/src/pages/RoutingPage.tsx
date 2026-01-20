@@ -115,7 +115,7 @@ export default function RoutingPage() {
     try {
       setLoading(true);
       const [routesRes, vehiclesRes, driversRes, jobsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/routes`),
+        fetch(`${API_BASE_URL}/api/dispatch/routes`),
         fetch(`${API_BASE_URL}/api/vehicles`),
         fetch(`${API_BASE_URL}/api/drivers`),
         fetch(`${API_BASE_URL}/api/jobs`),
@@ -172,7 +172,7 @@ export default function RoutingPage() {
         if (vehicleJobs.length === 0) continue;
 
         // Create route with jobs
-        await fetch(`${API_BASE_URL}/api/routes`, {
+        await fetch(`${API_BASE_URL}/api/dispatch/routes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -251,13 +251,13 @@ export default function RoutingPage() {
       };
 
       if (editingRoute) {
-        await fetch(`${API_BASE_URL}/api/routes/${editingRoute.id}`, {
+        await fetch(`${API_BASE_URL}/api/dispatch/routes/${editingRoute.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
         });
       } else {
-        await fetch(`${API_BASE_URL}/api/routes`, {
+        await fetch(`${API_BASE_URL}/api/dispatch/routes`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
@@ -279,7 +279,7 @@ export default function RoutingPage() {
 
     try {
       // Note: Backend doesn't have DELETE endpoint yet, so we'll update status instead
-      await fetch(`${API_BASE_URL}/api/routes/${routeId}`, {
+      await fetch(`${API_BASE_URL}/api/dispatch/routes/${routeId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'cancelled' }),
@@ -293,7 +293,7 @@ export default function RoutingPage() {
 
   const handleDispatchRoute = async (routeId: string) => {
     try {
-      await fetch(`${API_BASE_URL}/api/routes/${routeId}`, {
+      await fetch(`${API_BASE_URL}/api/dispatch/routes/${routeId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'dispatched' }),

@@ -1,6 +1,6 @@
 /**
  * REST API service for routing backend integration
- * Endpoints: /api/jobs, /api/routes, /api/vehicles, /api/drivers
+ * Endpoints: /api/jobs, /api/dispatch/routes, /api/vehicles, /api/drivers
  */
 
 const API_BASE_URL = import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -78,7 +78,7 @@ export const updateJob = async (id: string, updates: Partial<Job>): Promise<{ jo
 
 // Routes API
 export const generateRoute = async (vehicleId: string, jobIds: string[]): Promise<{ route: Route }> => {
-  const response = await fetch(`${API_BASE_URL}/api/routes`, {
+  const response = await fetch(`${API_BASE_URL}/api/dispatch/routes`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ vehicleId, jobIds }),
@@ -88,14 +88,14 @@ export const generateRoute = async (vehicleId: string, jobIds: string[]): Promis
 };
 
 export const getRoutes = async (): Promise<Route[]> => {
-  const response = await fetch(`${API_BASE_URL}/api/routes`);
+  const response = await fetch(`${API_BASE_URL}/api/dispatch/routes`);
   if (!response.ok) throw new Error('Failed to fetch routes');
   const data = await response.json();
   return Array.isArray(data) ? data : data.routes || [];
 };
 
 export const assignDriverToRoute = async (routeId: string, driverId: string): Promise<{ route: Route }> => {
-  const response = await fetch(`${API_BASE_URL}/api/routes/${routeId}/assign`, {
+  const response = await fetch(`${API_BASE_URL}/api/dispatch/routes/${routeId}/assign`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ driverId }),
@@ -105,7 +105,7 @@ export const assignDriverToRoute = async (routeId: string, driverId: string): Pr
 };
 
 export const updateRouteStatus = async (routeId: string, status: string): Promise<{ route: Route }> => {
-  const response = await fetch(`${API_BASE_URL}/api/routes/${routeId}`, {
+  const response = await fetch(`${API_BASE_URL}/api/dispatch/routes/${routeId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status }),
@@ -115,7 +115,7 @@ export const updateRouteStatus = async (routeId: string, status: string): Promis
 };
 
 export const updateRoute = async (routeId: string, updates: Partial<Route>): Promise<{ route: Route }> => {
-  const response = await fetch(`${API_BASE_URL}/api/routes/${routeId}`, {
+  const response = await fetch(`${API_BASE_URL}/api/dispatch/routes/${routeId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(updates),
