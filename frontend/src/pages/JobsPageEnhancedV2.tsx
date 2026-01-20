@@ -53,7 +53,7 @@ interface Customer {
   name: string;
   email: string;
   phone: string;
-  address: string;
+  defaultAddress?: string;
   defaultAddressStructured?: {
     line1: string;
     line2: string | null;
