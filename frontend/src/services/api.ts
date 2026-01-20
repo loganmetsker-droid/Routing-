@@ -50,10 +50,15 @@ export const createJob = async (job: Omit<Job, 'id'>): Promise<{ job: Job }> => 
 };
 
 export const getJobs = async (): Promise<Job[]> => {
-  const response = await fetch(`${API_BASE_URL}/api/jobs`);
-  if (!response.ok) throw new Error('Failed to fetch jobs');
-  const data = await response.json();
-  return Array.isArray(data) ? data : data.jobs || [];
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/jobs`);
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data) ? data : data.jobs || [];
+  } catch (error) {
+    console.error('Error fetching jobs:', error);
+    return [];
+  }
 };
 
 export const updateJobStatus = async (id: string, status: string, assignedRouteId?: string): Promise<{ job: Job }> => {
@@ -88,10 +93,15 @@ export const generateRoute = async (vehicleId: string, jobIds: string[]): Promis
 };
 
 export const getRoutes = async (): Promise<Route[]> => {
-  const response = await fetch(`${API_BASE_URL}/api/dispatch/routes`);
-  if (!response.ok) throw new Error('Failed to fetch routes');
-  const data = await response.json();
-  return Array.isArray(data) ? data : data.routes || [];
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/dispatch/routes`);
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data) ? data : data.routes || [];
+  } catch (error) {
+    console.error('Error fetching routes:', error);
+    return [];
+  }
 };
 
 export const assignDriverToRoute = async (routeId: string, driverId: string): Promise<{ route: Route }> => {
@@ -136,17 +146,27 @@ export const reorderRouteStops = async (routeId: string, newJobOrder: string[]):
 
 // Vehicles & Drivers API
 export const getVehicles = async (): Promise<any[]> => {
-  const response = await fetch(`${API_BASE_URL}/api/vehicles`);
-  if (!response.ok) throw new Error('Failed to fetch vehicles');
-  const data = await response.json();
-  return Array.isArray(data) ? data : data.vehicles || [];
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/vehicles`);
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data) ? data : data.vehicles || [];
+  } catch (error) {
+    console.error('Error fetching vehicles:', error);
+    return [];
+  }
 };
 
 export const getDrivers = async (): Promise<any[]> => {
-  const response = await fetch(`${API_BASE_URL}/api/drivers`);
-  if (!response.ok) throw new Error('Failed to fetch drivers');
-  const data = await response.json();
-  return Array.isArray(data) ? data : data.drivers || [];
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/drivers`);
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data) ? data : data.drivers || [];
+  } catch (error) {
+    console.error('Error fetching drivers:', error);
+    return [];
+  }
 };
 
 // SSE for real-time updates

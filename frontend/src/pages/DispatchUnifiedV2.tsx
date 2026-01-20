@@ -145,12 +145,16 @@ export default function DispatchUnifiedV2() {
         getVehicles(),
         getDrivers(),
       ]);
-      setJobs(jobsData as any);
-      setRoutes(routesData as any);
-      setVehicles(vehiclesData);
-      setDrivers(driversData);
+      setJobs(Array.isArray(jobsData) ? jobsData : []);
+      setRoutes(Array.isArray(routesData) ? routesData : []);
+      setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
+      setDrivers(Array.isArray(driversData) ? driversData : []);
     } catch (error) {
       console.error('Failed to load data:', error);
+      setJobs([]);
+      setRoutes([]);
+      setVehicles([]);
+      setDrivers([]);
     } finally {
       setLoading(false);
     }
