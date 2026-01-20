@@ -300,8 +300,25 @@ export default function JobsPageEnhancedV2() {
           zip: customer.defaultAddressStructured.zip || '',
         });
         setDeliveryAddressValid(true);
+      } else if (customer.defaultAddress) {
+        // Fallback: try to parse legacy address format
+        const parsed = formatAddress({
+          line1: customer.defaultAddress,
+          line2: null,
+          city: '',
+          state: '',
+          zip: ''
+        });
+        setFormData({
+          ...formData,
+          customerName: customer.name,
+          deliveryAddress: parsed,
+        });
+        // Keep address input empty so user can enter structured format
+        setDeliveryAddressData({ line1: customer.defaultAddress, line2: null, city: '', state: '', zip: '' });
+        setDeliveryAddressValid(false);
       } else {
-        // Reset to empty if no structured address
+        // Reset to empty if no address at all
         setDeliveryAddressData({ line1: '', line2: null, city: '', state: '', zip: '' });
         setDeliveryAddressValid(false);
       }

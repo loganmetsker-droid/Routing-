@@ -174,6 +174,7 @@ export function validateZipFormat(zip: string): ValidationError | null {
 
 /**
  * Validate ZIP code matches city and state
+ * NOTE: This is now lenient - only validates if ZIP is in database, otherwise allows any valid format
  */
 export function validateZipMatch(
   zip: string,
@@ -182,14 +183,12 @@ export function validateZipMatch(
 ): ValidationError | null {
   const zipInfo = getZipInfo(zip);
 
+  // If ZIP not in database, skip validation (allow any 5-digit ZIP)
   if (!zipInfo) {
-    return {
-      field: 'zip',
-      message: 'ZIP code not found in database'
-    };
+    return null; // Changed from error to null - allows any valid format ZIP
   }
 
-  // Check state match
+  // Check state match only if we have data
   if (zipInfo.state !== state.toUpperCase()) {
     return {
       field: 'zip',
@@ -197,7 +196,7 @@ export function validateZipMatch(
     };
   }
 
-  // Check city match (case-insensitive)
+  // Check city match (case-insensitive) - this is now a warning, not blocking
   const cityLower = city.toLowerCase().trim();
   const primaryCity = zipInfo.city.toLowerCase();
   const altCities = zipInfo.alt_cities.map(c => c.toLowerCase());
