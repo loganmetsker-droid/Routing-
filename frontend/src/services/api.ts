@@ -6,12 +6,13 @@
 const API_BASE_URL = import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 interface Job {
-  id?: string;
+  id: string;
   customerName: string;
   deliveryAddress: string;
+  pickupAddress?: string;
   timeWindow?: { start: string; end: string };
   priority?: string;
-  status?: string;
+  status: string;
   assignedRouteId?: string;
   assignedVehicleId?: string;
   stopSequence?: number;
@@ -19,11 +20,11 @@ interface Job {
 }
 
 interface Route {
-  id?: string;
+  id: string;
   vehicleId: string;
   jobIds: string[];
   driverId?: string;
-  status?: string;
+  status: string;
   totalDistance?: number;
   totalDuration?: number;
   optimizedStops?: Array<{
@@ -49,12 +50,28 @@ export const createJob = async (job: Omit<Job, 'id'>): Promise<{ job: Job }> => 
   return response.json();
 };
 
+// Sanitize job data to ensure required fields
+const sanitizeJob = (job: any): Job => ({
+  id: job.id || `job-${Date.now()}-${Math.random()}`,
+  customerName: job.customerName || 'Unknown Customer',
+  deliveryAddress: job.deliveryAddress || 'Unknown Address',
+  pickupAddress: job.pickupAddress,
+  timeWindow: job.timeWindow,
+  priority: job.priority,
+  status: job.status || 'pending',
+  assignedRouteId: job.assignedRouteId,
+  assignedVehicleId: job.assignedVehicleId,
+  stopSequence: job.stopSequence,
+  createdAt: job.createdAt,
+});
+
 export const getJobs = async (): Promise<Job[]> => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/jobs`);
     if (!response.ok) return [];
     const data = await response.json();
-    return Array.isArray(data) ? data : data.jobs || [];
+    const rawJobs = Array.isArray(data) ? data : data.jobs || [];
+    return rawJobs.map(sanitizeJob);
   } catch (error) {
     console.error('Error fetching jobs:', error);
     return [];
@@ -92,12 +109,30 @@ export const generateRoute = async (vehicleId: string, jobIds: string[]): Promis
   return response.json();
 };
 
+// Sanitize route data to ensure required fields
+const sanitizeRoute = (route: any): Route => ({
+  id: route.id || `route-${Date.now()}-${Math.random()}`,
+  vehicleId: route.vehicleId || 'unknown-vehicle',
+  jobIds: Array.isArray(route.jobIds) ? route.jobIds : [],
+  driverId: route.driverId,
+  status: route.status || 'planned',
+  totalDistance: route.totalDistance || route.totalDistanceKm,
+  totalDuration: route.totalDuration || route.totalDurationMinutes,
+  optimizedStops: route.optimizedStops,
+  estimatedCapacity: route.estimatedCapacity,
+  optimizedAt: route.optimizedAt,
+  createdAt: route.createdAt,
+  dispatchedAt: route.dispatchedAt,
+  completedAt: route.completedAt,
+});
+
 export const getRoutes = async (): Promise<Route[]> => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/dispatch/routes`);
     if (!response.ok) return [];
     const data = await response.json();
-    return Array.isArray(data) ? data : data.routes || [];
+    const rawRoutes = Array.isArray(data) ? data : data.routes || [];
+    return rawRoutes.map(sanitizeRoute);
   } catch (error) {
     console.error('Error fetching routes:', error);
     return [];
@@ -145,12 +180,25 @@ export const reorderRouteStops = async (routeId: string, newJobOrder: string[]):
 };
 
 // Vehicles & Drivers API
+const sanitizeVehicle = (vehicle: any) => ({
+  ...vehicle,
+  id: vehicle.id || `vehicle-${Date.now()}-${Math.random()}`,
+  status: vehicle.status || 'UNKNOWN',
+});
+
+const sanitizeDriver = (driver: any) => ({
+  ...driver,
+  id: driver.id || `driver-${Date.now()}-${Math.random()}`,
+  status: driver.status || 'UNKNOWN',
+});
+
 export const getVehicles = async (): Promise<any[]> => {
   try {
     const response = await fetch(`${API_BASE_URL}/api/vehicles`);
     if (!response.ok) return [];
     const data = await response.json();
-    return Array.isArray(data) ? data : data.vehicles || [];
+    const rawVehicles = Array.isArray(data) ? data : data.vehicles || [];
+    return rawVehicles.map(sanitizeVehicle);
   } catch (error) {
     console.error('Error fetching vehicles:', error);
     return [];
@@ -162,7 +210,8 @@ export const getDrivers = async (): Promise<any[]> => {
     const response = await fetch(`${API_BASE_URL}/api/drivers`);
     if (!response.ok) return [];
     const data = await response.json();
-    return Array.isArray(data) ? data : data.drivers || [];
+    const rawDrivers = Array.isArray(data) ? data : data.drivers || [];
+    return rawDrivers.map(sanitizeDriver);
   } catch (error) {
     console.error('Error fetching drivers:', error);
     return [];
