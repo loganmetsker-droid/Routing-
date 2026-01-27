@@ -623,7 +623,6 @@ export default function JobsPageEnhancedV2() {
                     renderInput={(params) => <TextField {...params} label="Select Customer" required />}
                   />
                   <AddressInput
-                    key={selectedCustomer?.id || 'new'}
                     label="Delivery Address"
                     value={deliveryAddressData}
                     onChange={setDeliveryAddressData}
