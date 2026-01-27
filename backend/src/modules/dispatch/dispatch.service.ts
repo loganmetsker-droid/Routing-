@@ -199,7 +199,7 @@ export class DispatchService {
         `VEHICLE_NOT_FOUND: Vehicle with ID ${createRouteDto.vehicleId} does not exist`,
       );
     }
-    this.logger.log(`[ROUTE:CREATE:STEP1] Vehicle found: ${vehicle.name || vehicle.id.substring(0, 8)} (status: ${vehicle.status})`);
+    this.logger.log(`[ROUTE:CREATE:STEP1] Vehicle found: ${vehicle.licensePlate || vehicle.id.substring(0, 8)} (status: ${vehicle.status})`);
 
     // Step 2: Validate jobs exist and are pending
     this.logger.log(`[ROUTE:CREATE:STEP2] Validating ${createRouteDto.jobIds.length} jobs...`);
