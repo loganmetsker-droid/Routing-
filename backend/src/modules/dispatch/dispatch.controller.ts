@@ -185,13 +185,31 @@ export class DispatchController {
   @ApiOperation({
     summary: 'Manually trigger auto-dispatch (for testing)',
     description:
-      'Manually runs the auto-dispatch worker that normally runs every minute',
+      'Manually runs the auto-dispatch worker that normally runs every minute. Returns detailed results.',
   })
-  @ApiResponse({ status: 200, description: 'Auto-dispatch triggered' })
+  @ApiResponse({
+    status: 200,
+    description: 'Auto-dispatch completed',
+    schema: {
+      type: 'object',
+      properties: {
+        success: { type: 'boolean' },
+        message: { type: 'string' },
+        error: { type: 'string' },
+        routesCreated: { type: 'number' },
+        routeIds: { type: 'array', items: { type: 'string' } },
+        failedVehicles: { type: 'array' },
+        durationMs: { type: 'number' },
+        pendingJobCount: { type: 'number' },
+        timestamp: { type: 'string', format: 'date-time' },
+      },
+    },
+  })
+  @ApiResponse({ status: 500, description: 'Auto-dispatch failed' })
   async manualDispatch() {
-    await this.dispatchWorker.manualDispatch();
+    const result = await this.dispatchWorker.manualDispatch();
     return {
-      message: 'Auto-dispatch triggered successfully',
+      ...result,
       timestamp: new Date(),
     };
   }

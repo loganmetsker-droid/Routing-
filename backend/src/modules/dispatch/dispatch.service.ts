@@ -105,8 +105,9 @@ export class DispatchService {
     vehicleId: string,
     jobIds: string[],
   ): Promise<RoutingServiceResponse> {
+    const requestUrl = `${this.routingServiceUrl}/route`;
     this.logger.log(
-      `Calling routing service for vehicle ${vehicleId} with ${jobIds.length} jobs`,
+      `[ROUTING:REQUEST] Calling routing service at ${requestUrl} for vehicle ${vehicleId.substring(0, 8)} with ${jobIds.length} jobs`,
     );
 
     const request: RoutingServiceRequest = {
@@ -115,30 +116,66 @@ export class DispatchService {
     };
 
     try {
+      this.logger.debug(`[ROUTING:REQUEST] Payload: ${JSON.stringify(request)}`);
+      const startTime = Date.now();
+
       const response: any = await firstValueFrom(
         this.httpService.post<RoutingServiceResponse>(
-          `${this.routingServiceUrl}/route`,
+          requestUrl,
           request,
+          { timeout: 30000 }, // 30 second timeout
         ) as any,
       );
 
+      const duration = Date.now() - startTime;
       const data = response?.data as RoutingServiceResponse;
 
-      if (!data.success) {
+      this.logger.log(
+        `[ROUTING:RESPONSE] Received response in ${duration}ms - success: ${data?.success}`,
+      );
+
+      if (!data) {
         throw new BadRequestException(
-          `Routing optimization failed: ${data.error}`,
+          `ROUTING_SERVICE_EMPTY_RESPONSE: Routing service returned empty response`,
         );
       }
 
+      if (!data.success) {
+        throw new BadRequestException(
+          `ROUTING_OPTIMIZATION_FAILED: ${data.error || 'Unknown routing error'}`,
+        );
+      }
+
+      this.logger.log(
+        `[ROUTING:SUCCESS] Route optimized - distance: ${data.total_distance_km}km, duration: ${data.total_duration_minutes}min, stops: ${data.num_jobs}`,
+      );
+
       return data;
     } catch (error) {
+      // Categorize errors for better debugging
+      let errorCode = 'ROUTING_SERVICE_ERROR';
+      let errorMessage = error.message;
+
+      if (error.code === 'ECONNREFUSED') {
+        errorCode = 'ROUTING_SERVICE_UNAVAILABLE';
+        errorMessage = `Routing service is not running at ${this.routingServiceUrl}`;
+      } else if (error.code === 'ETIMEDOUT' || error.message?.includes('timeout')) {
+        errorCode = 'ROUTING_SERVICE_TIMEOUT';
+        errorMessage = `Routing service timed out after 30 seconds`;
+      } else if (error.response?.status === 404) {
+        errorCode = 'ROUTING_ENDPOINT_NOT_FOUND';
+        errorMessage = `Routing endpoint ${requestUrl} not found`;
+      } else if (error.response?.status >= 500) {
+        errorCode = 'ROUTING_SERVICE_INTERNAL_ERROR';
+        errorMessage = `Routing service internal error: ${error.response?.data?.message || error.message}`;
+      }
+
       this.logger.error(
-        `Error calling routing service: ${error.message}`,
+        `[ROUTING:ERROR] ${errorCode}: ${errorMessage}`,
         error.stack,
       );
-      throw new BadRequestException(
-        `Failed to optimize route: ${error.message}`,
-      );
+
+      throw new BadRequestException(`${errorCode}: ${errorMessage}`);
     }
   }
 
@@ -146,26 +183,34 @@ export class DispatchService {
    * Create a new route with optimization
    */
   async create(createRouteDto: CreateRouteDto): Promise<Route> {
+    const startTime = Date.now();
     this.logger.log(
-      `Creating route for vehicle ${createRouteDto.vehicleId} with ${createRouteDto.jobIds.length} jobs`,
+      `[ROUTE:CREATE] Starting route creation for vehicle ${createRouteDto.vehicleId.substring(0, 8)} with ${createRouteDto.jobIds.length} jobs`,
     );
 
-    // Validate vehicle exists and is available
+    // Step 1: Validate vehicle exists
+    this.logger.log(`[ROUTE:CREATE:STEP1] Validating vehicle ${createRouteDto.vehicleId.substring(0, 8)}...`);
     const vehicle = await this.vehicleRepository.findOne({
       where: { id: createRouteDto.vehicleId },
     });
 
     if (!vehicle) {
       throw new NotFoundException(
-        `Vehicle ${createRouteDto.vehicleId} not found`,
+        `VEHICLE_NOT_FOUND: Vehicle with ID ${createRouteDto.vehicleId} does not exist`,
       );
     }
+    this.logger.log(`[ROUTE:CREATE:STEP1] Vehicle found: ${vehicle.name || vehicle.id.substring(0, 8)} (status: ${vehicle.status})`);
 
-    // Validate jobs exist and are pending
+    // Step 2: Validate jobs exist and are pending
+    this.logger.log(`[ROUTE:CREATE:STEP2] Validating ${createRouteDto.jobIds.length} jobs...`);
     const jobs = await this.jobRepository.findByIds(createRouteDto.jobIds);
 
     if (jobs.length !== createRouteDto.jobIds.length) {
-      throw new BadRequestException('One or more jobs not found');
+      const foundIds = jobs.map((j) => j.id);
+      const missingIds = createRouteDto.jobIds.filter((id) => !foundIds.includes(id));
+      throw new BadRequestException(
+        `JOBS_NOT_FOUND: ${missingIds.length} job(s) not found: [${missingIds.map(id => id.substring(0, 8)).join(', ')}]`,
+      );
     }
 
     const nonPendingJobs = jobs.filter(
@@ -173,20 +218,25 @@ export class DispatchService {
     );
     if (nonPendingJobs.length > 0) {
       throw new BadRequestException(
-        `Jobs must be in 'pending' status. Found: ${nonPendingJobs.map((j) => j.status).join(', ')}`,
+        `JOBS_INVALID_STATUS: ${nonPendingJobs.length} job(s) not in 'pending' status: [${nonPendingJobs.map((j) => `${j.id.substring(0, 8)}:${j.status}`).join(', ')}]`,
       );
     }
+    this.logger.log(`[ROUTE:CREATE:STEP2] All ${jobs.length} jobs validated successfully`);
 
-    // Call routing service for optimization
+    // Step 3: Call routing service for optimization
+    this.logger.log(`[ROUTE:CREATE:STEP3] Calling routing service for route optimization...`);
     const routingResponse = await this.callRoutingService(
       createRouteDto.vehicleId,
       createRouteDto.jobIds,
     );
 
-    // Extract optimized job order from routing response
+    // Step 4: Extract optimized job order
+    this.logger.log(`[ROUTE:CREATE:STEP4] Extracting optimized job order...`);
     const optimizedJobIds = routingResponse.route.map((r) => r.job_id);
+    this.logger.log(`[ROUTE:CREATE:STEP4] Optimized order: [${optimizedJobIds.map(id => id.substring(0, 8)).join(' -> ')}]`);
 
-    // Generate polyline geometry
+    // Step 5: Generate polyline geometry
+    this.logger.log(`[ROUTE:CREATE:STEP5] Generating polyline geometry...`);
     const polyline = await this.generatePolyline(
       optimizedJobIds,
       routingResponse,
@@ -204,7 +254,8 @@ export class DispatchService {
       );
     }
 
-    // Create route entity
+    // Step 6: Create and save route entity
+    this.logger.log(`[ROUTE:CREATE:STEP6] Saving route entity to database...`);
     const route = this.routeRepository.create({
       vehicleId: createRouteDto.vehicleId,
       driverId: createRouteDto.driverId,
@@ -225,9 +276,13 @@ export class DispatchService {
 
     const savedRoute = await this.routeRepository.save(route);
 
-    this.logger.log(`Route ${savedRoute.id} created successfully with color ${color}`);
+    const duration = Date.now() - startTime;
+    this.logger.log(
+      `[ROUTE:CREATE:COMPLETE] Route ${savedRoute.id.substring(0, 8)} created in ${duration}ms (color: ${color}, distance: ${routingResponse.total_distance_km}km, stops: ${routingResponse.num_jobs})`,
+    );
 
-    // Broadcast route creation via WebSocket
+    // Step 7: Broadcast via WebSocket
+    this.logger.log(`[ROUTE:CREATE:STEP7] Broadcasting route creation via WebSocket...`);
     this.dispatchGateway.emitRouteCreated(savedRoute);
 
     return savedRoute;
@@ -282,36 +337,47 @@ export class DispatchService {
    * Start a route (assign to vehicle/driver)
    */
   async startRoute(id: string): Promise<Route> {
+    this.logger.log(`[ROUTE:START] Initiating route start for ${id.substring(0, 8)}...`);
+
     const route = await this.findOne(id);
 
     if (route.status !== RouteStatus.PLANNED) {
       throw new BadRequestException(
-        `Route must be in 'planned' status to start. Current: ${route.status}`,
+        `ROUTE_INVALID_STATUS: Cannot start route ${id.substring(0, 8)} - must be in 'planned' status but is '${route.status}'`,
       );
     }
 
-    // Update route status
+    // Step 1: Update route status
+    this.logger.log(`[ROUTE:START:STEP1] Updating route status to IN_PROGRESS...`);
     route.status = RouteStatus.IN_PROGRESS;
     route.actualStart = new Date();
 
-    // Update vehicle status to "in_route"
+    // Step 2: Update vehicle status to "in_route"
+    this.logger.log(`[ROUTE:START:STEP2] Updating vehicle ${route.vehicleId.substring(0, 8)} status to "in_route"...`);
     await this.vehicleRepository.update(route.vehicleId, {
       status: 'in_route',
     });
 
-    // Update job statuses to "assigned"
-    await this.jobRepository.update(
-      { id: route.jobIds as any },
-      { status: JobStatus.ASSIGNED, assignedRouteId: route.id },
-    );
+    // Step 3: Update job statuses to "assigned"
+    this.logger.log(`[ROUTE:START:STEP3] Updating ${route.jobIds.length} jobs to "assigned" status...`);
+    const updateResult = await this.jobRepository
+      .createQueryBuilder()
+      .update()
+      .set({ status: JobStatus.ASSIGNED, assignedRouteId: route.id })
+      .where('id IN (:...ids)', { ids: route.jobIds })
+      .execute();
+    this.logger.log(`[ROUTE:START:STEP3] Updated ${updateResult.affected} jobs`);
 
+    // Step 4: Save route
+    this.logger.log(`[ROUTE:START:STEP4] Saving route changes...`);
     const updatedRoute = await this.routeRepository.save(route);
 
     this.logger.log(
-      `Route ${route.id} started. Vehicle ${route.vehicleId} now in_route`,
+      `[ROUTE:START:COMPLETE] Route ${route.id.substring(0, 8)} started successfully. Vehicle ${route.vehicleId.substring(0, 8)} now in_route with ${route.jobIds.length} assigned jobs`,
     );
 
-    // Broadcast route started via WebSocket
+    // Step 5: Broadcast via WebSocket
+    this.logger.log(`[ROUTE:START:STEP5] Broadcasting route started event...`);
     this.dispatchGateway.emitRouteStarted(updatedRoute);
 
     return updatedRoute;

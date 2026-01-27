@@ -34,10 +34,12 @@ export class DispatchWorker {
     timeZone: 'UTC',
   })
   async handleAutoDispatch() {
-    this.logger.log('🔄 Running auto-dispatch worker');
+    const startTime = Date.now();
+    this.logger.log('🔄 [DISPATCH:START] Auto-dispatch worker initiated');
 
     try {
-      // 1. Get pending jobs (prioritize urgent/high priority)
+      // Step 1: Query pending jobs
+      this.logger.log('[DISPATCH:STEP1] Querying pending jobs from database...');
       const pendingJobs = await this.jobRepository
         .createQueryBuilder('job')
         .where('job.status = :status', { status: JobStatus.PENDING })
@@ -51,100 +53,146 @@ export class DispatchWorker {
           END`,
         )
         .addOrderBy('job.time_window_start', 'ASC')
-        .limit(50) // Process max 50 jobs per cycle
+        .limit(50)
         .getMany();
 
       if (pendingJobs.length === 0) {
-        this.logger.debug('No pending jobs to dispatch');
-        return;
+        this.logger.debug('[DISPATCH:STEP1] No pending jobs found - skipping dispatch cycle');
+        return { success: true, message: 'No pending jobs to dispatch', routesCreated: 0 };
       }
 
-      this.logger.log(`Found ${pendingJobs.length} pending jobs`);
+      this.logger.log(
+        `[DISPATCH:STEP1] Found ${pendingJobs.length} pending jobs: [${pendingJobs.map(j => j.id.substring(0, 8)).join(', ')}]`,
+      );
 
-      // 2. Get available vehicles
+      // Step 2: Query available vehicles
+      this.logger.log('[DISPATCH:STEP2] Querying available vehicles...');
       const availableVehicles = await this.vehicleRepository.find({
         where: { status: 'available' },
-        take: 10, // Max 10 vehicles per cycle
+        take: 10,
       });
 
       if (availableVehicles.length === 0) {
-        this.logger.warn('No available vehicles for dispatch');
-        return;
+        this.logger.warn('[DISPATCH:STEP2] No available vehicles found - cannot dispatch');
+        return {
+          success: false,
+          error: 'NO_AVAILABLE_VEHICLES',
+          message: 'No vehicles with status "available" found for dispatch',
+          pendingJobCount: pendingJobs.length,
+        };
       }
 
-      this.logger.log(`Found ${availableVehicles.length} available vehicles`);
-
-      // 3. Group jobs for each vehicle (simple round-robin for MVP)
-      const jobsPerVehicle = Math.ceil(
-        pendingJobs.length / availableVehicles.length,
+      this.logger.log(
+        `[DISPATCH:STEP2] Found ${availableVehicles.length} available vehicles: [${availableVehicles.map(v => v.id.substring(0, 8)).join(', ')}]`,
       );
+
+      // Step 3: Distribute jobs across vehicles
+      this.logger.log('[DISPATCH:STEP3] Distributing jobs across vehicles...');
+      const jobsPerVehicle = Math.ceil(pendingJobs.length / availableVehicles.length);
+      this.logger.log(`[DISPATCH:STEP3] Jobs per vehicle (target): ${jobsPerVehicle}`);
 
       let jobIndex = 0;
       const dispatchedRoutes = [];
+      const failedVehicles = [];
 
       for (const vehicle of availableVehicles) {
-        // Get next batch of jobs for this vehicle
-        const vehicleJobs = pendingJobs.slice(
-          jobIndex,
-          jobIndex + jobsPerVehicle,
+        const vehicleJobs = pendingJobs.slice(jobIndex, jobIndex + jobsPerVehicle);
+
+        if (vehicleJobs.length === 0) {
+          this.logger.debug(`[DISPATCH:STEP3] No more jobs to assign to vehicle ${vehicle.id.substring(0, 8)}`);
+          break;
+        }
+
+        this.logger.log(
+          `[DISPATCH:STEP4] Creating route for vehicle ${vehicle.id.substring(0, 8)} with ${vehicleJobs.length} jobs`,
         );
 
-        if (vehicleJobs.length === 0) break;
-
         try {
-          // 4. Call routing service to optimize route
+          // Step 4: Create optimized route via routing service
           this.logger.log(
-            `Creating optimized route for vehicle ${vehicle.id} with ${vehicleJobs.length} jobs`,
+            `[DISPATCH:STEP4] Invoking DispatchService.create() for vehicle ${vehicle.id.substring(0, 8)}...`,
           );
-
           const route = await this.dispatchService.create({
             vehicleId: vehicle.id,
             jobIds: vehicleJobs.map((j) => j.id),
           });
+          this.logger.log(
+            `[DISPATCH:STEP4] Route ${route.id.substring(0, 8)} created successfully`,
+          );
 
-          // 5. Start the route (updates vehicle status to "in_route")
+          // Step 5: Start the route
+          this.logger.log(`[DISPATCH:STEP5] Starting route ${route.id.substring(0, 8)}...`);
           const startedRoute = await this.dispatchService.startRoute(route.id);
+          this.logger.log(
+            `[DISPATCH:STEP5] Route ${startedRoute.id.substring(0, 8)} started - vehicle status updated to "in_route"`,
+          );
 
           dispatchedRoutes.push(startedRoute);
 
-          this.logger.log(
-            `✅ Route ${startedRoute.id} created and started for vehicle ${vehicle.id}`,
-          );
-
-          // 6. Emit WebSocket event for real-time updates
+          // Step 6: Emit WebSocket events
+          this.logger.log(`[DISPATCH:STEP6] Emitting WebSocket events for route ${startedRoute.id.substring(0, 8)}...`);
           this.dispatchGateway.emitRouteCreated(startedRoute);
           this.dispatchGateway.emitVehicleStatusUpdate({
             vehicleId: vehicle.id,
             status: 'in_route',
             routeId: startedRoute.id,
           });
+          this.logger.log(`[DISPATCH:STEP6] WebSocket events emitted successfully`);
 
           jobIndex += vehicleJobs.length;
         } catch (error) {
+          const errorDetails = {
+            vehicleId: vehicle.id,
+            jobIds: vehicleJobs.map((j) => j.id),
+            errorType: error.constructor.name,
+            errorMessage: error.message,
+          };
           this.logger.error(
-            `Failed to create route for vehicle ${vehicle.id}: ${error.message}`,
-            error.stack,
+            `[DISPATCH:ERROR] Failed to create route for vehicle ${vehicle.id.substring(0, 8)}: ${error.message}`,
+            JSON.stringify(errorDetails),
           );
-          // Continue with next vehicle even if this one fails
+          failedVehicles.push(errorDetails);
+          // Continue with next vehicle
         }
       }
 
+      const duration = Date.now() - startTime;
       this.logger.log(
-        `✅ Auto-dispatch complete. Created ${dispatchedRoutes.length} routes`,
+        `[DISPATCH:COMPLETE] Auto-dispatch finished in ${duration}ms. Routes created: ${dispatchedRoutes.length}, Failed: ${failedVehicles.length}`,
       );
+
+      return {
+        success: true,
+        routesCreated: dispatchedRoutes.length,
+        routeIds: dispatchedRoutes.map((r) => r.id),
+        failedVehicles: failedVehicles.length > 0 ? failedVehicles : undefined,
+        durationMs: duration,
+      };
     } catch (error) {
+      const duration = Date.now() - startTime;
       this.logger.error(
-        `Auto-dispatch worker failed: ${error.message}`,
+        `[DISPATCH:FATAL] Auto-dispatch worker failed after ${duration}ms: ${error.message}`,
         error.stack,
       );
+      throw new Error(`Auto-dispatch failed: ${error.message}`);
     }
   }
 
   /**
-   * Manual trigger for testing
+   * Manual trigger for testing - returns dispatch result
    */
-  async manualDispatch(): Promise<void> {
-    this.logger.log('🔧 Manual dispatch triggered');
-    await this.handleAutoDispatch();
+  async manualDispatch(): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+    routesCreated?: number;
+    routeIds?: string[];
+    failedVehicles?: any[];
+    durationMs?: number;
+    pendingJobCount?: number;
+  }> {
+    this.logger.log('🔧 [DISPATCH:MANUAL] Manual dispatch triggered via API');
+    const result = await this.handleAutoDispatch();
+    return result || { success: true, message: 'Dispatch completed', routesCreated: 0 };
   }
 }
