@@ -285,10 +285,10 @@ export default function JobsPageEnhancedV2() {
   const handleCustomerSelect = (customer: Customer | null) => {
     setSelectedCustomer(customer);
     if (customer) {
-      setFormData({
-        ...formData,
+      setFormData((prev) => ({
+        ...prev,
         customerName: customer.name,
-      });
+      }));
 
       // Auto-populate delivery address if structured address exists
       if (customer.defaultAddressStructured) {
@@ -319,6 +319,14 @@ export default function JobsPageEnhancedV2() {
         setDeliveryAddressData({ line1: '', line2: null, city: '', state: '', zip: '' });
         setDeliveryAddressValid(false);
       }
+    } else {
+      // Customer deselected - reset form
+      setFormData((prev) => ({
+        ...prev,
+        customerName: '',
+      }));
+      setDeliveryAddressData({ line1: '', line2: null, city: '', state: '', zip: '' });
+      setDeliveryAddressValid(false);
     }
   };
 
@@ -615,6 +623,7 @@ export default function JobsPageEnhancedV2() {
                     renderInput={(params) => <TextField {...params} label="Select Customer" required />}
                   />
                   <AddressInput
+                    key={selectedCustomer?.id || 'new'}
                     label="Delivery Address"
                     value={deliveryAddressData}
                     onChange={setDeliveryAddressData}

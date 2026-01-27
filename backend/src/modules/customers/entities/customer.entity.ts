@@ -8,6 +8,7 @@ import {
   OneToMany,
 } from 'typeorm';
 import { ObjectType, Field, ID } from '@nestjs/graphql';
+import GraphQLJSON from 'graphql-type-json';
 import { Job } from '../../jobs/entities/job.entity';
 
 @Entity('customers')
@@ -41,6 +42,7 @@ export class Customer {
     nullable: true,
     comment: 'Structured default address: { line1, line2, city, state, zip }',
   })
+  @Field(() => GraphQLJSON, { nullable: true })
   defaultAddressStructured?: {
     line1: string;
     line2: string | null;

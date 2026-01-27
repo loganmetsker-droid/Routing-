@@ -74,6 +74,7 @@ type Customer {
   businessName: String
   createdAt: DateTime!
   defaultAddress: String
+  defaultAddressStructured: JSON
   email: String
   exceptions: String
   id: ID!
