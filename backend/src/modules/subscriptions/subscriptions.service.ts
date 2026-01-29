@@ -32,7 +32,7 @@ export class SubscriptionsService {
     // Only initialize Stripe if a valid API key is provided
     if (stripeSecretKey && !stripeSecretKey.includes('your_stripe_secret_key')) {
       this.stripe = new Stripe(stripeSecretKey, {
-        apiVersion: '2025-12-15.clover',
+        apiVersion: '2026-01-28.clover',
       });
       this.logger.log('Stripe initialized successfully');
     } else {
