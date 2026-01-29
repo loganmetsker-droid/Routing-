@@ -5,8 +5,15 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
+
+  // Log environment for debugging
+  logger.log(`Starting application in ${process.env.NODE_ENV || 'development'} mode`);
+  logger.log(`Database URL present: ${!!process.env.DATABASE_URL}`);
+  logger.log(`Port: ${process.env.PORT || 3000}`);
+
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log', 'debug', 'verbose'],
+    abortOnError: false, // Don't crash on startup errors
   });
 
   // Global prefix for all routes
@@ -87,5 +94,20 @@ async function bootstrap() {
   logger.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 }
 
-bootstrap();
+bootstrap().catch((error) => {
+  const logger = new Logger('Bootstrap');
+  logger.error('Failed to start application:', error);
+  logger.error('Error stack:', error.stack);
+
+  // Log specific database connection errors
+  if (error.message?.includes('ECONNREFUSED') || error.message?.includes('ECONNRESET')) {
+    logger.error('❌ Database connection failed. Please check:');
+    logger.error('   1. DATABASE_URL is set correctly');
+    logger.error('   2. Database server is running and accessible');
+    logger.error('   3. Firewall rules allow connections');
+    logger.error('   4. SSL settings are correct for your database provider');
+  }
+
+  process.exit(1);
+});
 

@@ -14,6 +14,12 @@ export const databaseConfig = (
 
   // Log database connection attempt
   if (databaseUrl) {
+    // Validate DATABASE_URL format
+    if (!databaseUrl.startsWith('postgres://') && !databaseUrl.startsWith('postgresql://')) {
+      logger.error(`[DB:CONFIG] Invalid DATABASE_URL format. Must start with postgres:// or postgresql://`);
+      logger.error(`[DB:CONFIG] Current value starts with: ${databaseUrl.substring(0, 15)}...`);
+    }
+
     // Mask password in URL for logging
     const maskedUrl = databaseUrl.replace(/:([^:@]+)@/, ':****@');
     logger.log(`[DB:CONFIG] Using DATABASE_URL: ${maskedUrl}`);
@@ -36,19 +42,25 @@ export const databaseConfig = (
       // SSL required for Render/Railway hosted PostgreSQL
       ssl: isProduction ? { rejectUnauthorized: false } : false,
       extra: {
-        // Limit connections to avoid exhausting pool
-        max: configService.get<number>('DB_POOL_SIZE', 5),
-        min: 1,
-        // Connection timeout
-        connectionTimeoutMillis: 10000,
-        // Idle timeout
-        idleTimeoutMillis: 30000,
+        // Reduce pool size for Render free tier (max 5 connections)
+        max: isProduction ? 3 : configService.get<number>('DB_POOL_SIZE', 5),
+        min: 0, // Allow pool to scale down to 0 when idle
+        // Increase timeouts for Render cold starts
+        connectionTimeoutMillis: 30000, // 30 seconds
+        // Shorter idle timeout to release connections faster
+        idleTimeoutMillis: 20000,
+        // Statement timeout to prevent hanging queries
+        statement_timeout: 60000, // 60 seconds
+        // Query timeout
+        query_timeout: 60000,
         // Keep-alive to prevent connection drops
         keepAlive: true,
         keepAliveInitialDelayMillis: 10000,
+        // Application name for debugging
+        application_name: 'routing-dispatch-backend',
       },
-      retryAttempts: 5,
-      retryDelay: 5000,
+      retryAttempts: 10, // More retries for cold starts
+      retryDelay: 3000, // 3 seconds between retries
     };
 
     logger.log(`[DB:CONFIG] Pool size: ${config.extra?.max}, Retry attempts: ${config.retryAttempts}`);
