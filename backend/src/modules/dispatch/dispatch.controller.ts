@@ -31,7 +31,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 
 @ApiTags('dispatch')
-@Controller('api/dispatch')
+@Controller('dispatch')
 @ApiBearerAuth()
 @Public()
 export class DispatchController {
@@ -119,6 +119,43 @@ export class DispatchController {
     @Body() updateRouteDto: UpdateRouteDto,
   ): Promise<Route> {
     return this.dispatchService.update(id, updateRouteDto);
+  }
+
+  @Patch('routes/:id')
+  @ApiOperation({ summary: 'Partially update a route' })
+  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Route updated', type: Route })
+  @ApiResponse({ status: 404, description: 'Route not found' })
+  partialUpdate(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateRouteDto: UpdateRouteDto,
+  ): Promise<Route> {
+    return this.dispatchService.update(id, updateRouteDto);
+  }
+
+  @Post('routes/:id/assign')
+  @ApiOperation({ summary: 'Assign a driver to a route' })
+  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        driverId: {
+          type: 'string',
+          format: 'uuid',
+          description: 'ID of the driver to assign',
+        },
+      },
+      required: ['driverId'],
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Driver assigned to route', type: Route })
+  @ApiResponse({ status: 404, description: 'Route or driver not found' })
+  async assignDriver(
+    @Param('id', ParseUUIDPipe) routeId: string,
+    @Body('driverId', ParseUUIDPipe) driverId: string,
+  ): Promise<Route> {
+    return this.dispatchService.update(routeId, { driverId });
   }
 
   @Patch('routes/:id/start')
