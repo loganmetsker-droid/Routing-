@@ -14,7 +14,9 @@ import {
   validateZipFormat,
   validateZipMatch,
   loadZipDatabase,
+  US_STATES,
 } from '../../utils/addressValidation';
+import MenuItem from '@mui/material/MenuItem';
 
 export interface AddressInputProps {
   value: Address;
@@ -203,19 +205,24 @@ export const AddressInput: React.FC<AddressInputProps> = ({
         {/* State */}
         <Grid item xs={12} sm={3}>
           <TextField
+            select
             fullWidth
             label="State"
             value={value.state}
-            onChange={(e) => handleFieldChange('state', e.target.value.toUpperCase())}
+            onChange={(e) => handleFieldChange('state', e.target.value)}
             onBlur={() => handleBlur('state')}
             error={!!getFieldError('state')}
             helperText={getFieldError('state')}
             required={required}
             disabled={disabled}
             size="small"
-            inputProps={{ maxLength: 2, style: { textTransform: 'uppercase' } }}
-            placeholder="CO"
-          />
+          >
+            {US_STATES.map((state) => (
+              <MenuItem key={state} value={state}>
+                {state}
+              </MenuItem>
+            ))}
+          </TextField>
         </Grid>
 
         {/* ZIP Code */}

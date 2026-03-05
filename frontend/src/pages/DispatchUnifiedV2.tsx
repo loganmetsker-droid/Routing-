@@ -45,6 +45,22 @@ import {
 } from '../services/api';
 import VehicleRouteCard from '../components/dispatch/VehicleRouteCard';
 import LiveStatusColumn from '../components/dispatch/LiveStatusColumn';
+import { MapContainer, TileLayer, Polyline, Marker, Popup, Tooltip as LeafletTooltip } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+
+// Fix Leaflet default marker icon issue
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
+
+const ROUTE_COLORS = [
+  '#FF6B6B', '#4ECDC4', '#FFE66D', '#A8E6CF', '#FF8B94', '#95E1D3',
+  '#F38181', '#7FDBFF', '#B4A7D6', '#FFD93D', '#6BCF7F', '#FF9F1C',
+];
 
 // ==================== INTERFACES ====================
 
@@ -430,6 +446,38 @@ export default function DispatchUnifiedV2() {
     }
   };
 
+  // ==================== MAP COMPUTATION ====================
+
+  const mapRoutes = activeRoutes.map((route, index) => {
+    const assignedVehicle = vehicles.find((v) => v.id === route.vehicleId);
+
+    // Convert stop addresses to positions (mocking coordinates for demo)
+    const positions = route.optimizedStops && route.optimizedStops.length > 0
+      ? route.optimizedStops.map((stop, i) => ({
+        lat: 39.0997 + (i * 0.01) + (Math.random() - 0.5) * 0.05,
+        lng: -94.5786 + (i * 0.01) + (Math.random() - 0.5) * 0.05,
+        address: stop.address
+      }))
+      : [];
+
+    return {
+      id: route.id,
+      positions: positions,
+      color: ROUTE_COLORS[index % ROUTE_COLORS.length],
+      status: route.status,
+      vehicle: `${assignedVehicle?.make || ''} ${assignedVehicle?.model || ''}`.trim() || 'Unassigned',
+      vehiclePlate: assignedVehicle?.licensePlate || 'N/A',
+      totalDistance: route.totalDistance || 0,
+      stopCount: positions.length,
+    };
+  });
+
+  const mapCenter: [number, number] = mapRoutes.length > 0 && mapRoutes[0].positions.length > 0
+    ? [mapRoutes[0].positions[0].lat, mapRoutes[0].positions[0].lng]
+    : [39.0997, -94.5786];
+
+  const mapZoom = mapRoutes.length > 0 ? 12 : 10;
+
   // ==================== RENDER ====================
 
   if (loading) {
@@ -540,6 +588,59 @@ export default function DispatchUnifiedV2() {
           </Box>
         </Paper>
       )}
+
+      {/* Map Section */}
+      <Paper sx={{ p: 3, mb: 4, height: 400, borderRadius: '12px', bgcolor: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h6" fontWeight={600} color="#FFFFFF">
+            Live Dispatch Map
+          </Typography>
+          <Chip icon={<CheckCircle />} label="Live" color="success" size="small" />
+        </Box>
+        <Box sx={{ height: 320, borderRadius: 2, overflow: 'hidden', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
+          <MapContainer center={mapCenter} zoom={mapZoom} style={{ height: '100%', width: '100%' }} scrollWheelZoom={true}>
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            {mapRoutes.map((route) => {
+              if (!route.positions || route.positions.length === 0) return null;
+              const positions = route.positions.map((pos) => [pos.lat, pos.lng] as [number, number]);
+              return (
+                <div key={route.id}>
+                  <Polyline positions={positions} pathOptions={{ color: route.color, weight: 5, opacity: 0.8 }}>
+                    <LeafletTooltip sticky>
+                      <div style={{ textAlign: 'center' }}>
+                        <strong>{route.vehicle}</strong><br />
+                        {route.vehiclePlate}<br />
+                        {route.stopCount} stops • {route.totalDistance.toFixed(1)}km
+                      </div>
+                    </LeafletTooltip>
+                  </Polyline>
+                  {route.positions.map((pos, idx) => (
+                    <Marker key={`${route.id}-${idx}`} position={[pos.lat, pos.lng]}>
+                      <Popup>
+                        <Box sx={{ minWidth: 200 }}>
+                          <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+                            Stop {idx + 1} of {route.stopCount}
+                          </Typography>
+                          <Typography variant="body2">{pos.address}</Typography>
+                          <Typography variant="body2" mt={1}>
+                            <strong>Vehicle:</strong> {route.vehicle} ({route.vehiclePlate})
+                          </Typography>
+                          <Typography variant="body2">
+                            <strong>Status:</strong> {route.status}
+                          </Typography>
+                        </Box>
+                      </Popup>
+                    </Marker>
+                  ))}
+                </div>
+              );
+            })}
+          </MapContainer>
+        </Box>
+      </Paper>
 
       {/* 3-Column Responsive Layout */}
       <Grid container spacing={3}>
@@ -683,14 +784,14 @@ export default function DispatchUnifiedV2() {
                               job.priority === 'urgent'
                                 ? '#E74C3C'
                                 : job.priority === 'high'
-                                ? '#F1C40F'
-                                : 'rgba(255, 255, 255, 0.1)',
+                                  ? '#F1C40F'
+                                  : 'rgba(255, 255, 255, 0.1)',
                             color:
                               job.priority === 'urgent'
                                 ? '#FFFFFF'
                                 : job.priority === 'high'
-                                ? '#000000'
-                                : '#FFFFFF',
+                                  ? '#000000'
+                                  : '#FFFFFF',
                             border: 'none',
                           }}
                         />

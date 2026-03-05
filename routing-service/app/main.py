@@ -149,6 +149,10 @@ async def optimize_route(
         job_ids = []
         time_windows = []
         priorities = []
+        job_volumes = []
+        
+        # Vehicle capacity: default to 10 if not set
+        vehicle_capacity = float(vehicle.capacity_volume_m3) if vehicle.capacity_volume_m3 else 10.0
 
         priority_map = {
             'urgent': 1,
@@ -176,6 +180,10 @@ async def optimize_route(
             priority_value = priority_map.get(job.priority, 3)
             priorities.append(priority_value)
 
+            # Volume constraints
+            volume = float(job.volume) if job.volume else 1.0
+            job_volumes.append(volume)
+
         # Validate we have at least one job
         if len(job_locations) == 0:
             raise HTTPException(status_code=400, detail="No valid jobs to optimize")
@@ -187,7 +195,9 @@ async def optimize_route(
             job_locations=job_locations,
             job_ids=job_ids,
             time_windows=time_windows,
-            priorities=priorities
+            priorities=priorities,
+            job_volumes=job_volumes,
+            vehicle_capacity=vehicle_capacity
         )
 
         logger.info(f"Optimization complete. Success: {result['success']}")

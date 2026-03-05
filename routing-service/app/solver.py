@@ -66,7 +66,9 @@ def solve_vrp(
     job_locations: List[Tuple[float, float]],
     job_ids: List[str],
     time_windows: List[Tuple[datetime, datetime]],
-    priorities: List[int]
+    priorities: List[int],
+    job_volumes: List[float],
+    vehicle_capacity: float
 ) -> Dict[str, Any]:
     """
     Solve Vehicle Routing Problem using Google OR-Tools.
@@ -80,6 +82,9 @@ def solve_vrp(
         job_ids: List of job UUIDs
         time_windows: List of (start, end) datetime tuples for each job
         priorities: List of priority values (1=urgent, 2=high, 3=normal, 4=low)
+        job_volumes: List of volume limits for jobs
+        vehicle_capacity: The vehicle's total volume capacity
+
 
     Returns:
         Dictionary with optimized route information
@@ -113,14 +118,35 @@ def solve_vrp(
 
     # Add time window constraints
     time_dimension_name = 'Time'
+    # For concrete trucks, the total lifespan of the mix from start is approx 90-120 minutes.
+    # We enforce a hard limit of 90 minutes (5400 seconds) for the vehicle's total trip duration.
     routing.AddDimension(
         transit_callback_index,
         3600,  # Allow waiting time (1 hour in seconds)
-        86400,  # Maximum time per vehicle (24 hours)
+        5400,  # Maximum time per vehicle (90 minutes / 5400 seconds)
         False,  # Don't force start cumul to zero
         time_dimension_name
     )
     time_dimension = routing.GetDimensionOrDie(time_dimension_name)
+
+    # Add Capacity constraints for Concrete Volume
+    def demand_callback(from_index):
+        """Returns the demand of the node."""
+        from_node = manager.IndexToNode(from_index)
+        if from_node == 0:
+            return 0
+        job_idx = from_node - 1
+        # Multiply by 100 to handle floats safely in OR-Tools integers
+        return int(job_volumes[job_idx] * 100)
+
+    demand_callback_index = routing.RegisterUnaryTransitCallback(demand_callback)
+    routing.AddDimensionWithVehicleCapacity(
+        demand_callback_index,
+        0,  # null capacity slack
+        [int(vehicle_capacity * 100)],  # vehicle maximum capacity
+        True,  # start cumul to zero
+        'Capacity'
+    )
 
     # Add time windows for jobs (skip depot at index 0)
     for location_idx in range(1, num_locations):
