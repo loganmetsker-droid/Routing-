@@ -30,6 +30,13 @@ export const databaseConfig = (
 
   // If DATABASE_URL is provided, use it (Render, Railway, etc.)
   if (databaseUrl) {
+    // Determine if we should use SSL
+    // Most cloud providers (Railway, Render, Supabase) require SSL for external connections
+    const useSSL = isProduction ||
+      databaseUrl.includes('railway.app') ||
+      databaseUrl.includes('render.com') ||
+      databaseUrl.includes('supabase.co');
+
     const config: TypeOrmModuleOptions = {
       type: 'postgres',
       url: databaseUrl,
@@ -40,30 +47,31 @@ export const databaseConfig = (
       logging: !isProduction ? ['error', 'warn', 'schema', 'migration'] : ['error'],
       logger: 'advanced-console',
       // SSL required for Render/Railway hosted PostgreSQL
-      ssl: isProduction ? { rejectUnauthorized: false } : false,
+      ssl: useSSL ? { rejectUnauthorized: false } : false,
       extra: {
+        // Force SSL mode in connection string if not present
+        ssl: useSSL ? { rejectUnauthorized: false } : false,
         // Reduce pool size for Render free tier (max 5 connections)
         max: isProduction ? 3 : configService.get<number>('DB_POOL_SIZE', 5),
-        min: 0, // Allow pool to scale down to 0 when idle
-        // Increase timeouts for Render cold starts
-        connectionTimeoutMillis: 30000, // 30 seconds
-        // Shorter idle timeout to release connections faster
+        min: 0,
+        connectionTimeoutMillis: 30000,
         idleTimeoutMillis: 20000,
-        // Statement timeout to prevent hanging queries
-        statement_timeout: 60000, // 60 seconds
-        // Query timeout
+        statement_timeout: 60000,
         query_timeout: 60000,
-        // Keep-alive to prevent connection drops
         keepAlive: true,
         keepAliveInitialDelayMillis: 10000,
-        // Application name for debugging
         application_name: 'routing-dispatch-backend',
       },
-      retryAttempts: 10, // More retries for cold starts
-      retryDelay: 3000, // 3 seconds between retries
+      retryAttempts: 15, // More retries for cold starts
+      retryDelay: 5000, // 5 seconds between retries
     };
 
-    logger.log(`[DB:CONFIG] Pool size: ${config.extra?.max}, Retry attempts: ${config.retryAttempts}`);
+    // Use console.log to ensure output in Render logs even if Nest logger isn't ready
+    if (useSSL) {
+      console.log('  [DB] SSL Connection Enabled (rejectUnauthorized=false)');
+    }
+    console.log(`  [DB] Pool Size: ${config.extra?.max}, Retries: ${config.retryAttempts}`);
+
     return config;
   }
 

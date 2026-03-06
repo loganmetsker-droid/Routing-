@@ -26,6 +26,8 @@ ENV NODE_ENV=production
 COPY package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/run-migration.js ./run-migration.js
+COPY --from=builder /app/src/database/migrations ./src/database/migrations
+COPY --from=builder /app/migrations ./migrations
 EXPOSE 3000
-USER node
-CMD ["node", "dist/main.js"]
+CMD ["npm", "run", "start:prod"]

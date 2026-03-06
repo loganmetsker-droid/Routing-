@@ -6,9 +6,13 @@ const path = require('path');
 require('dotenv').config();
 
 async function runSQLMigrations(databaseUrl) {
+  const isProduction = process.env.NODE_ENV === 'production' ||
+    databaseUrl.includes('railway.app') ||
+    databaseUrl.includes('render.com');
+
   const client = new Client({
     connectionString: databaseUrl,
-    ssl: false,
+    ssl: isProduction ? { rejectUnauthorized: false } : false,
   });
 
   try {
@@ -54,6 +58,12 @@ async function runSQLMigrations(databaseUrl) {
 }
 
 async function runTypeORMMigrations() {
+  const isProduction = process.env.NODE_ENV === 'production' ||
+    (process.env.DATABASE_URL && (
+      process.env.DATABASE_URL.includes('railway.app') ||
+      process.env.DATABASE_URL.includes('render.com')
+    ));
+
   const dataSource = new DataSource({
     type: 'postgres',
     url: process.env.DATABASE_URL,
@@ -61,7 +71,7 @@ async function runTypeORMMigrations() {
     migrations: [path.join(__dirname, 'dist', 'database', 'migrations', '*.js')],
     synchronize: false,
     logging: true,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    ssl: isProduction ? { rejectUnauthorized: false } : false,
   });
 
   try {
