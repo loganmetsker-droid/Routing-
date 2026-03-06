@@ -8,6 +8,7 @@ require('dotenv').config();
 async function runSQLMigrations(databaseUrl) {
   const isProduction = process.env.NODE_ENV === 'production' ||
     databaseUrl.includes('railway.app') ||
+    databaseUrl.includes('rlwy.net') ||
     databaseUrl.includes('render.com');
 
   const client = new Client({
@@ -61,6 +62,7 @@ async function runTypeORMMigrations() {
   const isProduction = process.env.NODE_ENV === 'production' ||
     (process.env.DATABASE_URL && (
       process.env.DATABASE_URL.includes('railway.app') ||
+      process.env.DATABASE_URL.includes('rlwy.net') ||
       process.env.DATABASE_URL.includes('render.com')
     ));
 

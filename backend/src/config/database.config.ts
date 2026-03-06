@@ -34,6 +34,7 @@ export const databaseConfig = (
     // Most cloud providers (Railway, Render, Supabase) require SSL for external connections
     const useSSL = isProduction ||
       databaseUrl.includes('railway.app') ||
+      databaseUrl.includes('rlwy.net') ||
       databaseUrl.includes('render.com') ||
       databaseUrl.includes('supabase.co');
 
