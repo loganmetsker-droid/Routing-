@@ -62,45 +62,48 @@ def create_distance_matrix(locations: List[Tuple[float, float]]) -> List[List[in
 
 
 def solve_vrp(
-    vehicle_location: Tuple[float, float],
+    vehicle_locations: List[Tuple[float, float]],
+    vehicle_ids: List[str],
+    vehicle_capacities: List[float],
     job_locations: List[Tuple[float, float]],
     job_ids: List[str],
     time_windows: List[Tuple[datetime, datetime]],
     priorities: List[int],
     job_volumes: List[float],
-    vehicle_capacity: float
 ) -> Dict[str, Any]:
     """
-    Solve Vehicle Routing Problem using Google OR-Tools.
-
-    This is a simplified TSP (Traveling Salesman Problem) solver for MVP.
-    The vehicle starts at its current location, visits all jobs, and returns.
+    Solve Multi-Vehicle Routing Problem using Google OR-Tools.
 
     Args:
-        vehicle_location: (lat, lon) of vehicle's current position
+        vehicle_locations: List of (lat, lon) for each vehicle's current position
+        vehicle_ids: List of vehicle UUIDs
+        vehicle_capacities: List of vehicle volume capacities
         job_locations: List of (lat, lon) for each job's delivery location
         job_ids: List of job UUIDs
         time_windows: List of (start, end) datetime tuples for each job
-        priorities: List of priority values (1=urgent, 2=high, 3=normal, 4=low)
+        priorities: List of priority values
         job_volumes: List of volume limits for jobs
-        vehicle_capacity: The vehicle's total volume capacity
-
 
     Returns:
-        Dictionary with optimized route information
+        Dictionary with optimized routes for each vehicle
     """
-    # Prepare locations: [depot] + [all jobs]
-    locations = [vehicle_location] + job_locations
+    # Prepare locations: [all depots] + [all jobs]
+    locations = vehicle_locations + job_locations
+    num_vehicles = len(vehicle_locations)
     num_locations = len(locations)
+
+    starts = list(range(num_vehicles))
+    ends = list(range(num_vehicles))
 
     # Create distance matrix
     distance_matrix = create_distance_matrix(locations)
 
     # Create routing index manager
     manager = pywrapcp.RoutingIndexManager(
-        num_locations,  # Number of locations
-        1,              # Number of vehicles
-        0               # Depot index (vehicle starting location)
+        num_locations,
+        num_vehicles,
+        starts,
+        ends
     )
 
     # Create routing model
@@ -118,53 +121,48 @@ def solve_vrp(
 
     # Add time window constraints
     time_dimension_name = 'Time'
-    # For concrete trucks, the total lifespan of the mix from start is approx 90-120 minutes.
     # We enforce a hard limit of 90 minutes (5400 seconds) for the vehicle's total trip duration.
     routing.AddDimension(
         transit_callback_index,
-        3600,  # Allow waiting time (1 hour in seconds)
-        5400,  # Maximum time per vehicle (90 minutes / 5400 seconds)
+        3600,  # Allow waiting time
+        5400,  # Maximum time per vehicle (90 minutes)
         False,  # Don't force start cumul to zero
         time_dimension_name
     )
     time_dimension = routing.GetDimensionOrDie(time_dimension_name)
 
-    # Add Capacity constraints for Concrete Volume
+    # Add Capacity constraints
     def demand_callback(from_index):
-        """Returns the demand of the node."""
         from_node = manager.IndexToNode(from_index)
-        if from_node == 0:
+        if from_node < num_vehicles:
             return 0
-        job_idx = from_node - 1
-        # Multiply by 100 to handle floats safely in OR-Tools integers
+        job_idx = from_node - num_vehicles
         return int(job_volumes[job_idx] * 100)
 
     demand_callback_index = routing.RegisterUnaryTransitCallback(demand_callback)
     routing.AddDimensionWithVehicleCapacity(
         demand_callback_index,
-        0,  # null capacity slack
-        [int(vehicle_capacity * 100)],  # vehicle maximum capacity
-        True,  # start cumul to zero
+        0,
+        [int(cap * 100) for cap in vehicle_capacities],
+        True,
         'Capacity'
     )
 
-    # Add time windows for jobs (skip depot at index 0)
-    for location_idx in range(1, num_locations):
+    # Add time windows for jobs
+    for location_idx in range(num_vehicles, num_locations):
         index = manager.NodeToIndex(location_idx)
-        job_idx = location_idx - 1
+        job_idx = location_idx - num_vehicles
 
-        # Convert datetime to seconds from epoch
         start_time = int(time_windows[job_idx][0].timestamp())
         end_time = int(time_windows[job_idx][1].timestamp())
 
         time_dimension.CumulVar(index).SetRange(start_time, end_time)
 
-    # Add priority as a soft constraint (via penalty)
-    # Lower priority value = higher priority job
-    for location_idx in range(1, num_locations):
+    # Priority
+    for location_idx in range(num_vehicles, num_locations):
         index = manager.NodeToIndex(location_idx)
-        job_idx = location_idx - 1
-        priority_penalty = priorities[job_idx] * 1000  # Penalty for not visiting high priority jobs first
+        job_idx = location_idx - num_vehicles
+        priority_penalty = priorities[job_idx] * 1000
         routing.AddDisjunction([index], priority_penalty)
 
     # Set search parameters
@@ -175,65 +173,72 @@ def solve_vrp(
     search_parameters.local_search_metaheuristic = (
         routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
     )
-    search_parameters.time_limit.seconds = 10  # 10 second time limit
+    search_parameters.time_limit.seconds = 10
 
-    # Solve the problem
     solution = routing.SolveWithParameters(search_parameters)
 
     if not solution:
         return {
             "success": False,
             "error": "No solution found",
-            "route": [],
-            "total_distance_km": 0,
-            "total_duration_minutes": 0
+            "routes": {},
+            "unassigned_jobs": job_ids
         }
 
-    # Extract solution
-    route = []
-    total_distance = 0
-    index = routing.Start(0)
+    routes = {}
+    assigned_jobs = set()
 
-    while not routing.IsEnd(index):
-        node_index = manager.IndexToNode(index)
+    for vehicle_idx in range(num_vehicles):
+        vehicle_id = vehicle_ids[vehicle_idx]
+        route = []
+        total_distance = 0
+        index = routing.Start(vehicle_idx)
 
-        # Skip depot (node 0)
-        if node_index > 0:
-            job_idx = node_index - 1
-            time_var = time_dimension.CumulVar(index)
-            arrival_time = solution.Value(time_var)
+        while not routing.IsEnd(index):
+            node_index = manager.IndexToNode(index)
 
-            route.append({
-                "job_id": job_ids[job_idx],
-                "sequence": len(route) + 1,
-                "location": {
-                    "latitude": job_locations[job_idx][0],
-                    "longitude": job_locations[job_idx][1]
-                },
-                "estimated_arrival": datetime.fromtimestamp(arrival_time).isoformat(),
-                "time_window_start": time_windows[job_idx][0].isoformat(),
-                "time_window_end": time_windows[job_idx][1].isoformat(),
-                "priority": priorities[job_idx]
-            })
+            if node_index >= num_vehicles:
+                job_idx = node_index - num_vehicles
+                time_var = time_dimension.CumulVar(index)
+                arrival_time = solution.Value(time_var)
+                
+                route.append({
+                    "job_id": job_ids[job_idx],
+                    "sequence": len(route) + 1,
+                    "location": {
+                        "latitude": job_locations[job_idx][0],
+                        "longitude": job_locations[job_idx][1]
+                    },
+                    "estimated_arrival": datetime.fromtimestamp(arrival_time).isoformat(),
+                    "time_window_start": time_windows[job_idx][0].isoformat(),
+                    "time_window_end": time_windows[job_idx][1].isoformat(),
+                    "priority": priorities[job_idx],
+                    "volume": job_volumes[job_idx]
+                })
+                assigned_jobs.add(job_ids[job_idx])
 
-        previous_index = index
-        index = solution.Value(routing.NextVar(index))
-        total_distance += routing.GetArcCostForVehicle(previous_index, index, 0)
+            previous_index = index
+            index = solution.Value(routing.NextVar(index))
+            total_distance += routing.GetArcCostForVehicle(previous_index, index, vehicle_idx)
 
-    # Convert total distance from meters to kilometers
-    total_distance_km = total_distance / 1000.0
+        total_distance_km = total_distance / 1000.0
+        total_duration_minutes = (total_distance_km / 40.0) * 60
 
-    # Estimate duration (assuming average speed of 40 km/h)
-    total_duration_minutes = (total_distance_km / 40.0) * 60
+        routes[vehicle_id] = {
+            "route": route,
+            "total_distance_km": round(total_distance_km, 2),
+            "total_duration_minutes": round(total_duration_minutes, 2),
+            "num_jobs": len(route),
+            "vehicle_start_location": {
+                "latitude": vehicle_locations[vehicle_idx][0],
+                "longitude": vehicle_locations[vehicle_idx][1]
+            }
+        }
+    
+    unassigned_jobs = [jid for jid in job_ids if jid not in assigned_jobs]
 
     return {
         "success": True,
-        "route": route,
-        "total_distance_km": round(total_distance_km, 2),
-        "total_duration_minutes": round(total_duration_minutes, 2),
-        "num_jobs": len(route),
-        "vehicle_start_location": {
-            "latitude": vehicle_location[0],
-            "longitude": vehicle_location[1]
-        }
+        "routes": routes,
+        "unassigned_jobs": unassigned_jobs
     }

@@ -25,6 +25,7 @@ import { DispatchService } from './dispatch.service';
 import { DispatchWorker } from './dispatch.worker';
 import { Route, RouteStatus } from './entities/route.entity';
 import { CreateRouteDto } from './dto/create-route.dto';
+import { CreateGlobalRouteDto } from './dto/create-global-route.dto';
 import { UpdateRouteDto } from './dto/update-route.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -38,7 +39,18 @@ export class DispatchController {
   constructor(
     private readonly dispatchService: DispatchService,
     private readonly dispatchWorker: DispatchWorker,
-  ) {}
+  ) { }
+
+  @Post('routes/global')
+  @ApiOperation({ summary: 'Create and optimize global multi-vehicle routes' })
+  @ApiResponse({
+    status: 201,
+    description: 'Routes created successfully',
+    type: [Route],
+  })
+  createGlobal(@Body() createGlobalRouteDto: CreateGlobalRouteDto): Promise<Route[]> {
+    return this.dispatchService.createGlobalRoutes(createGlobalRouteDto);
+  }
 
   @Post('routes')
   @ApiOperation({ summary: 'Create and optimize a new route' })

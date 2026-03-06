@@ -36,7 +36,8 @@ const drawerWidth = 240;
 const menuItems = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
   { text: 'Jobs', icon: <JobsIcon />, path: '/jobs' },
-  { text: 'Dispatch', icon: <DispatchIcon />, path: '/dispatch' },
+  { text: 'Live Dispatch', icon: <DispatchIcon />, path: '/dispatch' },
+  { text: 'Global Routing', icon: <TrackingIcon />, path: '/routing-global' },
   { text: 'Tracking', icon: <TrackingIcon />, path: '/tracking' },
   { text: 'Drivers', icon: <DriversIcon />, path: '/drivers' },
   { text: 'Vehicles', icon: <VehiclesIcon />, path: '/vehicles' },

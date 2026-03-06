@@ -109,6 +109,16 @@ export const generateRoute = async (vehicleId: string, jobIds: string[]): Promis
   return response.json();
 };
 
+export const generateGlobalRoute = async (vehicleIds: string[], jobIds: string[]): Promise<Route[]> => {
+  const response = await fetch(`${API_BASE_URL}/api/dispatch/routes/global`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ vehicleIds, jobIds }),
+  });
+  if (!response.ok) throw new Error('Failed to generate global routes');
+  return response.json();
+};
+
 // Sanitize route data to ensure required fields
 const sanitizeRoute = (route: any): Route => ({
   id: route.id || `route-${Date.now()}-${Math.random()}`,

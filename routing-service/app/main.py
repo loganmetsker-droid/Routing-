@@ -3,7 +3,7 @@
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict
 from sqlalchemy.orm import Session
 from geoalchemy2.shape import to_shape
 from datetime import datetime
@@ -72,6 +72,28 @@ class RouteResponse(BaseModel):
     total_duration_minutes: float
     num_jobs: int
     vehicle_start_location: dict
+    error: Optional[str] = None
+
+
+class GlobalRouteRequest(BaseModel):
+    """Request model for global multi-vehicle route optimization."""
+    vehicle_ids: List[str] = Field(..., description="List of UUIDs of available vehicles")
+    job_ids: List[str] = Field(..., description="List of unassigned job UUIDs to route")
+
+
+class RouteInfo(BaseModel):
+    route: List[JobInRoute]
+    total_distance_km: float
+    total_duration_minutes: float
+    num_jobs: int
+    vehicle_start_location: dict
+
+
+class GlobalRouteResponse(BaseModel):
+    """Response model for global multi-vehicle route optimization."""
+    success: bool
+    routes: Dict[str, RouteInfo]
+    unassigned_jobs: List[str]
     error: Optional[str] = None
 
 
@@ -191,23 +213,141 @@ async def optimize_route(
         # Run OR-Tools solver
         logger.info(f"Running VRP solver with {len(job_locations)} locations")
         result = solve_vrp(
-            vehicle_location=vehicle_location,
+            vehicle_locations=[vehicle_location],
+            vehicle_ids=[request.vehicle_id],
+            vehicle_capacities=[vehicle_capacity],
             job_locations=job_locations,
             job_ids=job_ids,
             time_windows=time_windows,
             priorities=priorities,
             job_volumes=job_volumes,
-            vehicle_capacity=vehicle_capacity
         )
 
         logger.info(f"Optimization complete. Success: {result['success']}")
 
-        return RouteResponse(**result)
+        if not result['success']:
+            return RouteResponse(
+                success=False,
+                route=[],
+                total_distance_km=0,
+                total_duration_minutes=0,
+                num_jobs=0,
+                vehicle_start_location={"latitude": vehicle_location[0], "longitude": vehicle_location[1]},
+                error=result.get('error', 'Unknown error')
+            )
+            
+        v_route = result['routes'].get(request.vehicle_id)
+        if not v_route:
+            return RouteResponse(
+                success=False,
+                route=[],
+                total_distance_km=0,
+                total_duration_minutes=0,
+                num_jobs=0,
+                vehicle_start_location={"latitude": vehicle_location[0], "longitude": vehicle_location[1]},
+                error="Vehicle discarded by solver"
+            )
+
+        return RouteResponse(
+            success=True,
+            route=v_route['route'],
+            total_distance_km=v_route['total_distance_km'],
+            total_duration_minutes=v_route['total_duration_minutes'],
+            num_jobs=v_route['num_jobs'],
+            vehicle_start_location=v_route['vehicle_start_location']
+        )
+
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error optimizing route: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+@app.post("/route/global", response_model=GlobalRouteResponse)
+async def optimize_global_route(
+    request: GlobalRouteRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Optimize routes for multiple vehicles and a pool of unassigned jobs.
+    """
+    try:
+        logger.info(f"Optimizing global route for {len(request.vehicle_ids)} vehicles and {len(request.job_ids)} jobs")
+
+        vehicles = db.query(Vehicle).filter(Vehicle.id.in_(request.vehicle_ids)).all()
+        if not vehicles:
+            raise HTTPException(status_code=400, detail="No active vehicles found")
+
+        vehicle_locations = []
+        vehicle_ids = []
+        vehicle_capacities = []
+        
+        for v in vehicles:
+            if not v.current_location:
+                continue
+            geom = to_shape(v.current_location)
+            vehicle_locations.append((geom.y, geom.x))
+            vehicle_ids.append(str(v.id))
+            cap = float(v.capacity_volume_m3) if v.capacity_volume_m3 else 10.0
+            vehicle_capacities.append(cap)
+            
+        if not vehicle_locations:
+            raise HTTPException(status_code=400, detail="No vehicles have current locations")
+
+        jobs = db.query(Job).filter(Job.id.in_(request.job_ids)).all()
+        
+        job_locations = []
+        job_ids = []
+        time_windows = []
+        priorities = []
+        job_volumes = []
+        
+        priority_map = {'urgent': 1, 'high': 2, 'normal': 3, 'low': 4}
+        
+        for job in jobs:
+            if not job.delivery_location:
+                continue
+            geom = to_shape(job.delivery_location)
+            job_locations.append((geom.y, geom.x))
+            job_ids.append(str(job.id))
+            time_windows.append((job.time_window_start, job.time_window_end))
+            priorities.append(priority_map.get(job.priority, 3))
+            job_volumes.append(float(job.volume) if job.volume else 1.0)
+            
+        if not job_locations:
+            raise HTTPException(status_code=400, detail="No valid jobs to optimize")
+            
+        result = solve_vrp(
+            vehicle_locations=vehicle_locations,
+            vehicle_ids=vehicle_ids,
+            vehicle_capacities=vehicle_capacities,
+            job_locations=job_locations,
+            job_ids=job_ids,
+            time_windows=time_windows,
+            priorities=priorities,
+            job_volumes=job_volumes,
+        )
+        
+        if not result['success']:
+            return GlobalRouteResponse(
+                success=False,
+                routes={},
+                unassigned_jobs=job_ids,
+                error=result.get('error', 'Unknown error')
+            )
+            
+        return GlobalRouteResponse(
+            success=True,
+            routes=result['routes'],
+            unassigned_jobs=result['unassigned_jobs']
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error optimizing global route: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 

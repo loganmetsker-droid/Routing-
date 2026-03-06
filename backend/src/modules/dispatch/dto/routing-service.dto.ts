@@ -33,3 +33,27 @@ export class RoutingServiceResponse {
   polyline?: any; // Optional polyline from routing service
   error?: string;
 }
+
+export class GlobalRoutingServiceRequest {
+  vehicle_ids: string[];
+  job_ids: string[];
+}
+
+export class RouteInfo {
+  route: JobInRoute[];
+  total_distance_km: number;
+  total_duration_minutes: number;
+  num_jobs: number;
+  vehicle_start_location: {
+    latitude: number;
+    longitude: number;
+  };
+}
+
+export class GlobalRoutingServiceResponse {
+  success: boolean;
+  routes: Record<string, RouteInfo>;
+  unassigned_jobs: string[];
+  error?: string;
+}
+

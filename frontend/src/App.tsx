@@ -23,6 +23,7 @@ import TrackingEnhanced from './pages/TrackingEnhanced';
 // Phase 4: Unified Dispatch
 import DispatchUnified from './pages/DispatchUnified';
 import DispatchUnifiedV2 from './pages/DispatchUnifiedV2';
+import RoutingGlobalPage from './pages/RoutingGlobalPage';
 
 import LoginPage from './pages/LoginPage';
 
@@ -58,6 +59,8 @@ function App() {
         <Route path="tracking" element={<TrackingEnhanced />} />
         {/* PHASE 4: Unified Dispatch V2 (vehicle-centric workflow) */}
         <Route path="dispatch" element={<DispatchUnifiedV2 />} />
+        {/* NEW: Global Routing Kanban UI */}
+        <Route path="routing-global" element={<RoutingGlobalPage />} />
         {/* ALT: Unified Dispatch V1 (kept for reference) */}
         <Route path="dispatch-v1" element={<DispatchUnified />} />
         {/* Existing pages - keep for alternative workflows */}

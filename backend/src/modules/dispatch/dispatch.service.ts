@@ -19,6 +19,8 @@ import { UpdateRouteDto } from './dto/update-route.dto';
 import {
   RoutingServiceRequest,
   RoutingServiceResponse,
+  GlobalRoutingServiceRequest,
+  GlobalRoutingServiceResponse,
 } from './dto/routing-service.dto';
 import { DispatchGateway } from './dispatch.gateway';
 
@@ -177,6 +179,143 @@ export class DispatchService {
 
       throw new BadRequestException(`${errorCode}: ${errorMessage}`);
     }
+  }
+
+  /**
+   * Call the Python routing-service to optimize global multi-vehicle routes
+   */
+  async callGlobalRoutingService(
+    vehicleIds: string[],
+    jobIds: string[],
+  ): Promise<GlobalRoutingServiceResponse> {
+    const requestUrl = `${this.routingServiceUrl}/route/global`;
+    this.logger.log(`[ROUTING:REQUEST] Calling global routing service at ${requestUrl} for ${vehicleIds.length} vehicles and ${jobIds.length} jobs`);
+
+    const request: GlobalRoutingServiceRequest = {
+      vehicle_ids: vehicleIds,
+      job_ids: jobIds,
+    };
+
+    try {
+      this.logger.debug(`[ROUTING:REQUEST] Payload: ${JSON.stringify(request)}`);
+      const startTime = Date.now();
+
+      const response: any = await firstValueFrom(
+        this.httpService.post<GlobalRoutingServiceResponse>(
+          requestUrl,
+          request,
+          { timeout: 60000 },
+        ) as any,
+      );
+
+      const duration = Date.now() - startTime;
+      const data = response?.data as GlobalRoutingServiceResponse;
+
+      this.logger.log(`[ROUTING:RESPONSE] Received response in ${duration}ms - success: ${data?.success}`);
+
+      if (!data) {
+        throw new BadRequestException(`ROUTING_SERVICE_EMPTY_RESPONSE: Routing service returned empty response`);
+      }
+
+      if (!data.success) {
+        throw new BadRequestException(`ROUTING_OPTIMIZATION_FAILED: ${data.error || 'Unknown routing error'}`);
+      }
+
+      const numRoutes = Object.keys(data.routes).length;
+      this.logger.log(`[ROUTING:SUCCESS] Global route optimized - ${numRoutes} routes created`);
+
+      return data;
+    } catch (error) {
+      let errorCode = 'ROUTING_SERVICE_ERROR';
+      let errorMessage = error.message;
+
+      if (error.code === 'ECONNREFUSED') {
+        errorCode = 'ROUTING_SERVICE_UNAVAILABLE';
+        errorMessage = `Routing service is not running at ${this.routingServiceUrl}`;
+      } else if (error.code === 'ETIMEDOUT' || error.message?.includes('timeout')) {
+        errorCode = 'ROUTING_SERVICE_TIMEOUT';
+        errorMessage = `Routing service timed out after 60 seconds`;
+      } else if (error.response?.status === 404) {
+        errorCode = 'ROUTING_ENDPOINT_NOT_FOUND';
+        errorMessage = `Routing endpoint ${requestUrl} not found`;
+      } else if (error.response?.status >= 500) {
+        errorCode = 'ROUTING_SERVICE_INTERNAL_ERROR';
+        errorMessage = `Routing service internal error: ${error.response?.data?.message || error.message}`;
+      }
+
+      this.logger.error(`[ROUTING:ERROR] ${errorCode}: ${errorMessage}`, error.stack);
+      throw new BadRequestException(`${errorCode}: ${errorMessage}`);
+    }
+  }
+
+  /**
+   * Create global routes with optimization for multiple vehicles
+   */
+  async createGlobalRoutes(dto: { vehicleIds: string[]; jobIds: string[] }): Promise<Route[]> {
+    const startTime = Date.now();
+    this.logger.log(`[ROUTE:CREATE_GLOBAL] Starting global route creation for ${dto.vehicleIds.length} vehicles and ${dto.jobIds.length} jobs`);
+
+    // Step 1: Validate vehicles exist
+    const vehicles = await this.vehicleRepository.findByIds(dto.vehicleIds);
+    if (vehicles.length !== dto.vehicleIds.length) {
+      throw new BadRequestException(`VEHICLES_NOT_FOUND: Some vehicles were not found.`);
+    }
+
+    // Step 2: Validate jobs exist and are pending
+    const jobs = await this.jobRepository.findByIds(dto.jobIds);
+    if (jobs.length !== dto.jobIds.length) {
+      throw new BadRequestException(`JOBS_NOT_FOUND: Some jobs were not found.`);
+    }
+
+    const nonPendingJobs = jobs.filter((job) => job.status !== JobStatus.PENDING);
+    if (nonPendingJobs.length > 0) {
+      throw new BadRequestException(`JOBS_INVALID_STATUS: Some jobs are not in 'pending' status.`);
+    }
+
+    // Step 3: Call global routing service
+    const routingResponse = await this.callGlobalRoutingService(dto.vehicleIds, dto.jobIds);
+
+    const savedRoutes: Route[] = [];
+
+    // Step 4: Create individual route entities
+    for (const [vehicleId, routeInfo] of Object.entries(routingResponse.routes)) {
+      if (routeInfo.route.length === 0) continue; // Skip vehicles that weren't assigned any jobs
+
+      const optimizedJobIds = routeInfo.route.map((r) => r.job_id);
+      const polyline = await this.generatePolyline(optimizedJobIds, { polyline: null } as any);
+      const color = this.getNextRouteColor();
+
+      const routeEntity = this.routeRepository.create({
+        vehicleId,
+        driverId: null, // assigned later
+        jobIds: optimizedJobIds,
+        routeData: {
+          success: true,
+          route: routeInfo.route,
+          total_distance_km: routeInfo.total_distance_km,
+          total_duration_minutes: routeInfo.total_duration_minutes,
+          num_jobs: routeInfo.num_jobs,
+          vehicle_start_location: routeInfo.vehicle_start_location,
+        },
+        status: RouteStatus.PLANNED,
+        totalDistanceKm: routeInfo.total_distance_km,
+        totalDurationMinutes: routeInfo.total_duration_minutes,
+        jobCount: routeInfo.num_jobs,
+        polyline,
+        color,
+        eta: null,
+      });
+
+      const savedRoute = await this.routeRepository.save(routeEntity);
+      savedRoutes.push(savedRoute);
+
+      this.dispatchGateway.emitRouteCreated(savedRoute);
+    }
+
+    const duration = Date.now() - startTime;
+    this.logger.log(`[ROUTE:CREATE_GLOBAL] Created ${savedRoutes.length} routes in ${duration}ms`);
+
+    return savedRoutes;
   }
 
   /**
