@@ -11,10 +11,10 @@ import {
     Stack,
 } from '@mui/material';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
-import { AutoAwesome, Save, Refresh } from '@mui/icons-material';
-import { MapContainer, TileLayer, Polyline, Marker, Popup } from 'react-leaflet';
+import { AutoAwesome, Refresh } from '@mui/icons-material';
+import { MapContainer, TileLayer } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { getJobs, getVehicles, generateGlobalRoute, updateJob, connectSSE } from '../services/api';
+import { getJobs, getVehicles, generateGlobalRoute, updateJob } from '../services/api';
 
 const ROUTE_COLORS = [
     '#FF6B6B', '#4ECDC4', '#FFE66D', '#A8E6CF', '#FF8B94', '#95E1D3',
@@ -22,9 +22,7 @@ const ROUTE_COLORS = [
 ];
 
 export default function RoutingGlobalPage() {
-    const [jobs, setJobs] = useState<any[]>([]);
     const [vehicles, setVehicles] = useState<any[]>([]);
-    const [routes, setRoutes] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [optimizing, setOptimizing] = useState(false);
 
@@ -43,7 +41,6 @@ export default function RoutingGlobalPage() {
                 getVehicles(),
             ]);
 
-            setJobs(jobsData || []);
             const activeVehicles = (vehiclesData || []).filter(v => v.status === 'ACTIVE' || v.status === 'active' || v.status === 'AVAILABLE');
             setVehicles(activeVehicles);
 
@@ -83,8 +80,7 @@ export default function RoutingGlobalPage() {
 
         setOptimizing(true);
         try {
-            const resultRoutes = await generateGlobalRoute(vehicleIds, unassignedJobIds);
-            setRoutes(resultRoutes);
+            await generateGlobalRoute(vehicleIds, unassignedJobIds);
             await loadData(); // reload jobs to get new assignments
         } catch (e) {
             console.error(e);
@@ -114,7 +110,7 @@ export default function RoutingGlobalPage() {
 
         // Update backend asynchronously
         try {
-            const vehicleId = destination.droppableId === 'unassigned' ? null : destination.droppableId;
+            const vehicleId = destination.droppableId === 'unassigned' ? undefined : destination.droppableId;
             await updateJob(draggableId, {
                 assignedVehicleId: vehicleId,
                 stopSequence: destination.index,
