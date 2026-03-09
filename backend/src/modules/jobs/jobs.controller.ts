@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Delete,
   Body,
   Param,
@@ -26,7 +27,7 @@ import { UpdateJobDto } from './dto/update-job.dto';
 import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('jobs')
-@Controller('api/jobs')
+@Controller('jobs')
 @ApiBearerAuth()
 @Public()
 export class JobsController {
@@ -36,8 +37,9 @@ export class JobsController {
   @ApiOperation({ summary: 'Create a new job' })
   @ApiResponse({ status: 201, description: 'Job created successfully', type: Job })
   @ApiResponse({ status: 400, description: 'Invalid input data or validation failed' })
-  create(@Body() createJobDto: CreateJobDto): Promise<Job> {
-    return this.jobsService.create(createJobDto);
+  async create(@Body() createJobDto: CreateJobDto): Promise<{ job: Job }> {
+    const job = await this.jobsService.create(createJobDto);
+    return { job };
   }
 
   @Get()
@@ -58,8 +60,8 @@ export class JobsController {
   findAll(
     @Query('status') status?: string,
     @Query('priority') priority?: string,
-  ): Promise<Job[]> {
-    return this.jobsService.findAll(status, priority);
+  ): Promise<{ jobs: Job[] }> {
+    return this.jobsService.findAll(status, priority).then((jobs) => ({ jobs }));
   }
 
   @Get('statistics')
@@ -89,8 +91,8 @@ export class JobsController {
   @Get('pending')
   @ApiOperation({ summary: 'Get all pending jobs' })
   @ApiResponse({ status: 200, description: 'List of pending jobs', type: [Job] })
-  findPending(): Promise<Job[]> {
-    return this.jobsService.findPending();
+  findPending(): Promise<{ jobs: Job[] }> {
+    return this.jobsService.findPending().then((jobs) => ({ jobs }));
   }
 
   @Get('queue')
@@ -154,8 +156,9 @@ export class JobsController {
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Job found', type: Job })
   @ApiResponse({ status: 404, description: 'Job not found' })
-  findOne(@Param('id', ParseUUIDPipe) id: string): Promise<Job> {
-    return this.jobsService.findOne(id);
+  async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<{ job: Job }> {
+    const job = await this.jobsService.findOne(id);
+    return { job };
   }
 
   @Put(':id')
@@ -167,8 +170,21 @@ export class JobsController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateJobDto: UpdateJobDto,
-  ): Promise<Job> {
-    return this.jobsService.update(id, updateJobDto);
+  ): Promise<{ job: Job }> {
+    return this.jobsService.update(id, updateJobDto).then((job) => ({ job }));
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Partially update a job' })
+  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Job updated successfully', type: Job })
+  @ApiResponse({ status: 404, description: 'Job not found' })
+  @ApiResponse({ status: 400, description: 'Invalid input data or validation failed' })
+  patch(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateJobDto: UpdateJobDto,
+  ): Promise<{ job: Job }> {
+    return this.jobsService.update(id, updateJobDto).then((job) => ({ job }));
   }
 
   @Delete(':id')

@@ -26,7 +26,7 @@ import AddressInput from '../components/forms/AddressInput';
 import { Address } from '../types/address';
 import { formatAddress, parseLegacyAddress } from '../utils/addressValidation';
 
-const API_BASE_URL = import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE_URL = (import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/+$/, '').replace(/\/api$/, '');
 
 const container = {
   hidden: { opacity: 0 },

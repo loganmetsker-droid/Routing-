@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Delete,
   Body,
   Param,
@@ -27,7 +28,7 @@ import { UpdateDriverDto } from './dto/update-driver.dto';
 import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('drivers')
-@Controller('api/drivers')
+@Controller('drivers')
 @ApiBearerAuth()
 @Public()
 export class DriversController {
@@ -38,8 +39,9 @@ export class DriversController {
   @ApiResponse({ status: 201, description: 'Driver created successfully', type: Driver })
   @ApiResponse({ status: 400, description: 'Invalid input data' })
   @ApiResponse({ status: 409, description: 'Email, license number, or employee ID already exists' })
-  create(@Body() createDriverDto: CreateDriverDto): Promise<Driver> {
-    return this.driversService.create(createDriverDto);
+  async create(@Body() createDriverDto: CreateDriverDto): Promise<{ driver: Driver }> {
+    const driver = await this.driversService.create(createDriverDto);
+    return { driver };
   }
 
   @Get()
@@ -50,14 +52,16 @@ export class DriversController {
   async findAll(
     @Query('status') status?: string,
     @Query('employmentStatus') employmentStatus?: string,
-  ): Promise<Driver[]> {
+  ): Promise<{ drivers: Driver[] }> {
     if (status) {
-      return this.driversService.findByStatus(status);
+      return this.driversService.findByStatus(status).then((drivers) => ({ drivers }));
     }
     if (employmentStatus) {
-      return this.driversService.findByEmploymentStatus(employmentStatus);
+      return this.driversService
+        .findByEmploymentStatus(employmentStatus)
+        .then((drivers) => ({ drivers }));
     }
-    return this.driversService.findAll();
+    return this.driversService.findAll().then((drivers) => ({ drivers }));
   }
 
   @Get('statistics')
@@ -97,8 +101,9 @@ export class DriversController {
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Driver found', type: Driver })
   @ApiResponse({ status: 404, description: 'Driver not found' })
-  findOne(@Param('id', ParseUUIDPipe) id: string): Promise<Driver> {
-    return this.driversService.findOne(id);
+  async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<{ driver: Driver }> {
+    const driver = await this.driversService.findOne(id);
+    return { driver };
   }
 
   @Get(':id/shifts')
@@ -135,8 +140,21 @@ export class DriversController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateDriverDto: UpdateDriverDto,
-  ): Promise<Driver> {
-    return this.driversService.update(id, updateDriverDto);
+  ): Promise<{ driver: Driver }> {
+    return this.driversService.update(id, updateDriverDto).then((driver) => ({ driver }));
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Partially update a driver' })
+  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
+  @ApiResponse({ status: 200, description: 'Driver updated successfully', type: Driver })
+  @ApiResponse({ status: 404, description: 'Driver not found' })
+  @ApiResponse({ status: 409, description: 'Email, license number, or employee ID already exists' })
+  patch(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateDriverDto: UpdateDriverDto,
+  ): Promise<{ driver: Driver }> {
+    return this.driversService.update(id, updateDriverDto).then((driver) => ({ driver }));
   }
 
   @Delete(':id')

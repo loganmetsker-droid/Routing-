@@ -4,7 +4,6 @@ import GraphQLJSON from 'graphql-type-json';
 import {
   IsString,
   IsInt,
-  IsEnum,
   IsOptional,
   IsNumber,
   Min,
@@ -74,7 +73,7 @@ export class CreateVehicleDto {
     description: 'Type of vehicle',
   })
   @Field()
-  @IsEnum(VehicleType)
+  @IsString()
   vehicleType: VehicleType;
 
   @ApiProperty({
@@ -105,7 +104,7 @@ export class CreateVehicleDto {
     description: 'Fuel type',
   })
   @Field()
-  @IsEnum(FuelType)
+  @IsString()
   fuelType: FuelType;
 
   @ApiProperty({
@@ -148,4 +147,25 @@ export class CreateVehicleDto {
   @Field(() => GraphQLJSON, { nullable: true })
   @IsOptional()
   metadata?: Record<string, any>;
+
+  @ApiProperty({
+    example: 1000,
+    description: 'Legacy capacity alias (maps to capacityWeightKg)',
+    required: false,
+  })
+  @Field(() => Float, { nullable: true })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  capacity?: number;
+
+  @ApiProperty({
+    example: 'AVAILABLE',
+    description: 'Legacy status payload',
+    required: false,
+  })
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  status?: string;
 }

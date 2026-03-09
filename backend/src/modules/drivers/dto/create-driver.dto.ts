@@ -8,9 +8,7 @@ import {
   IsOptional,
   IsDateString,
   IsArray,
-  IsUUID,
   Length,
-  Matches,
   IsObject,
 } from 'class-validator';
 
@@ -86,10 +84,12 @@ export class CreateDriverDto {
   @ApiProperty({
     example: '2027-06-30',
     description: 'License expiry date',
+    required: false,
   })
-  @Field()
+  @Field({ nullable: true })
+  @IsOptional()
   @IsDateString()
-  licenseExpiryDate: string;
+  licenseExpiryDate?: string;
 
   @ApiProperty({
     example: ['CDL', 'Hazmat', 'Forklift'],
@@ -142,8 +142,48 @@ export class CreateDriverDto {
   })
   @Field({ nullable: true })
   @IsOptional()
-  @IsUUID()
+  @IsString()
   currentVehicleId?: string;
+
+  @ApiProperty({
+    example: 'CLASS_C',
+    description: 'Legacy alias for licenseClass',
+    required: false,
+  })
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  licenseType?: string;
+
+  @ApiProperty({
+    example: '11111111-1111-1111-1111-111111111111',
+    description: 'Legacy alias for currentVehicleId',
+    required: false,
+  })
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  assignedVehicleId?: string;
+
+  @ApiProperty({
+    example: 'ACTIVE',
+    description: 'Legacy status field from older UI',
+    required: false,
+  })
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @ApiProperty({
+    example: 'Experienced urban route driver',
+    description: 'Optional notes',
+    required: false,
+  })
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  notes?: string;
 
   @ApiProperty({
     example: { preferred_routes: ['north_bay'], languages: ['en', 'es'] },

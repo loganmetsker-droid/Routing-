@@ -18,14 +18,15 @@ async function bootstrap() {
 
   // Global prefix for all routes
   app.setGlobalPrefix('api', {
-    exclude: ['health', 'graphql'],
+    exclude: ['health', 'graphql', 'stream-route'],
   });
 
   // Global validation pipe with detailed error messages
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
-      forbidNonWhitelisted: true,
+      // Keep strict typing but drop unknown legacy fields instead of 400'ing requests.
+      forbidNonWhitelisted: false,
       transform: true,
       transformOptions: {
         enableImplicitConversion: true,
@@ -110,4 +111,3 @@ bootstrap().catch((error) => {
 
   process.exit(1);
 });
-

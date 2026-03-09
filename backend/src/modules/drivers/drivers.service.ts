@@ -60,19 +60,35 @@ export class DriversService {
       }
     }
 
-    const expiryDate = new Date(createDriverDto.licenseExpiryDate);
-    if (expiryDate <= new Date()) {
+    const fallbackExpiry = new Date();
+    fallbackExpiry.setFullYear(fallbackExpiry.getFullYear() + 1);
+    const normalizedLicenseExpiryDate =
+      createDriverDto.licenseExpiryDate || fallbackExpiry.toISOString().slice(0, 10);
+
+    const expiryDate = new Date(normalizedLicenseExpiryDate);
+    if (!Number.isNaN(expiryDate.getTime()) && expiryDate <= new Date()) {
       throw new BadRequestException('License expiry date must be in the future');
     }
 
+    const normalizedStatus = this.normalizeStatus(createDriverDto.status || 'off_duty');
+    const currentVehicleId =
+      createDriverDto.currentVehicleId || createDriverDto.assignedVehicleId || undefined;
+
     const driver = this.driverRepository.create({
       ...createDriverDto,
-      status: 'off_duty',
+      licenseClass: createDriverDto.licenseClass || createDriverDto.licenseType || undefined,
+      licenseExpiryDate: normalizedLicenseExpiryDate as any,
+      currentVehicleId,
+      status: normalizedStatus,
       employmentStatus: createDriverDto.employmentStatus || 'active',
       totalHoursDriven: 0,
       totalDistanceKm: 0,
       totalDeliveries: 0,
       certifications: createDriverDto.certifications || [],
+      metadata: {
+        ...(createDriverDto.metadata || {}),
+        ...(createDriverDto.notes ? { notes: createDriverDto.notes } : {}),
+      },
     });
 
     const saved = await this.driverRepository.save(driver);
@@ -106,7 +122,7 @@ export class DriversService {
   async findByStatus(status: string): Promise<Driver[]> {
     this.logger.log(`Fetching drivers with status: ${status}`);
     return this.driverRepository.find({
-      where: { status },
+      where: { status: this.normalizeStatus(status) },
       relations: ['currentVehicle'],
       order: { lastName: 'ASC', firstName: 'ASC' },
     });
@@ -221,12 +237,29 @@ export class DriversService {
 
     if (updateDriverDto.licenseExpiryDate) {
       const expiryDate = new Date(updateDriverDto.licenseExpiryDate);
-      if (expiryDate <= new Date()) {
+      if (!Number.isNaN(expiryDate.getTime()) && expiryDate <= new Date()) {
         throw new BadRequestException('License expiry date must be in the future');
       }
     }
 
-    Object.assign(driver, updateDriverDto);
+    const normalizedUpdate = {
+      ...updateDriverDto,
+      ...(updateDriverDto.status ? { status: this.normalizeStatus(updateDriverDto.status) } : {}),
+      ...(updateDriverDto.licenseType ? { licenseClass: updateDriverDto.licenseType } : {}),
+      ...(updateDriverDto.assignedVehicleId
+        ? { currentVehicleId: updateDriverDto.assignedVehicleId }
+        : {}),
+      ...(updateDriverDto.notes
+        ? {
+            metadata: {
+              ...(driver.metadata || {}),
+              notes: updateDriverDto.notes,
+            },
+          }
+        : {}),
+    };
+
+    Object.assign(driver, normalizedUpdate);
     const updated = await this.driverRepository.save(driver);
     this.logger.log(`Driver updated successfully: ${id}`);
     return updated;
@@ -282,5 +315,15 @@ export class DriversService {
       offDuty,
       byEmploymentStatus,
     };
+  }
+
+  private normalizeStatus(status: string): string {
+    const normalized = status.toLowerCase();
+    const map: Record<string, string> = {
+      active: 'available',
+      inactive: 'off_duty',
+      unavailable: 'off_duty',
+    };
+    return map[normalized] || normalized;
   }
 }

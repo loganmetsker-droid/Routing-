@@ -3,7 +3,7 @@
  * Endpoints: /api/jobs, /api/dispatch/routes, /api/vehicles, /api/drivers
  */
 
-const API_BASE_URL = import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE_URL = (import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/+$/, '').replace(/\/api$/, '');
 
 interface Job {
   id: string;
@@ -116,7 +116,8 @@ export const generateGlobalRoute = async (vehicleIds: string[], jobIds: string[]
     body: JSON.stringify({ vehicleIds, jobIds }),
   });
   if (!response.ok) throw new Error('Failed to generate global routes');
-  return response.json();
+  const data = await response.json();
+  return Array.isArray(data) ? data : data.routes || [];
 };
 
 // Sanitize route data to ensure required fields

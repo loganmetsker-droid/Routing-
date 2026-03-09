@@ -2,7 +2,7 @@ import { PartialType } from '@nestjs/graphql';
 import { CreateVehicleDto } from './create-vehicle.dto';
 import { ApiProperty } from '@nestjs/swagger';
 import { InputType, Field } from '@nestjs/graphql';
-import { IsEnum, IsOptional } from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 
 export enum VehicleStatus {
   AVAILABLE = 'available',
@@ -15,13 +15,12 @@ export enum VehicleStatus {
 @InputType()
 export class UpdateVehicleDto extends PartialType(CreateVehicleDto) {
   @ApiProperty({
-    enum: VehicleStatus,
     example: VehicleStatus.AVAILABLE,
     description: 'Vehicle status',
     required: false,
   })
   @Field({ nullable: true })
   @IsOptional()
-  @IsEnum(VehicleStatus)
-  status?: VehicleStatus;
+  @IsString()
+  status?: string;
 }

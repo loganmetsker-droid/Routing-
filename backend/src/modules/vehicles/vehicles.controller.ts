@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Delete,
   Body,
   Param,
@@ -42,8 +43,9 @@ export class VehiclesController {
     status: 409,
     description: 'Vehicle with this license plate already exists',
   })
-  async create(@Body() createVehicleDto: CreateVehicleDto): Promise<Vehicle> {
-    return this.vehiclesService.create(createVehicleDto);
+  async create(@Body() createVehicleDto: CreateVehicleDto): Promise<{ vehicle: Vehicle }> {
+    const vehicle = await this.vehiclesService.create(createVehicleDto);
+    return { vehicle };
   }
 
   @Get()
@@ -58,11 +60,11 @@ export class VehiclesController {
     description: 'Return all vehicles',
     type: [Vehicle],
   })
-  async findAll(@Query('status') status?: string): Promise<Vehicle[]> {
+  async findAll(@Query('status') status?: string): Promise<{ vehicles: Vehicle[] }> {
     if (status) {
-      return this.vehiclesService.findByStatus(status);
+      return this.vehiclesService.findByStatus(status).then((vehicles) => ({ vehicles }));
     }
-    return this.vehiclesService.findAll();
+    return this.vehiclesService.findAll().then((vehicles) => ({ vehicles }));
   }
 
   @Get('statistics')
@@ -93,8 +95,9 @@ export class VehiclesController {
     type: Vehicle,
   })
   @ApiResponse({ status: 404, description: 'Vehicle not found' })
-  async findOne(@Param('id') id: string): Promise<Vehicle> {
-    return this.vehiclesService.findOne(id);
+  async findOne(@Param('id') id: string): Promise<{ vehicle: Vehicle }> {
+    const vehicle = await this.vehiclesService.findOne(id);
+    return { vehicle };
   }
 
   @Put(':id')
@@ -113,8 +116,30 @@ export class VehiclesController {
   async update(
     @Param('id') id: string,
     @Body() updateVehicleDto: UpdateVehicleDto,
-  ): Promise<Vehicle> {
-    return this.vehiclesService.update(id, updateVehicleDto);
+  ): Promise<{ vehicle: Vehicle }> {
+    const vehicle = await this.vehiclesService.update(id, updateVehicleDto);
+    return { vehicle };
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Partially update a vehicle' })
+  @ApiParam({ name: 'id', description: 'Vehicle UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'The vehicle has been successfully updated',
+    type: Vehicle,
+  })
+  @ApiResponse({ status: 404, description: 'Vehicle not found' })
+  @ApiResponse({
+    status: 409,
+    description: 'Vehicle with this license plate already exists',
+  })
+  async patch(
+    @Param('id') id: string,
+    @Body() updateVehicleDto: UpdateVehicleDto,
+  ): Promise<{ vehicle: Vehicle }> {
+    const vehicle = await this.vehiclesService.update(id, updateVehicleDto);
+    return { vehicle };
   }
 
   @Delete(':id')

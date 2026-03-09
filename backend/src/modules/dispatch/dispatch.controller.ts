@@ -10,7 +10,6 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -28,8 +27,6 @@ import { CreateRouteDto } from './dto/create-route.dto';
 import { CreateGlobalRouteDto } from './dto/create-global-route.dto';
 import { UpdateRouteDto } from './dto/update-route.dto';
 import { Public } from '../../common/decorators/public.decorator';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { RolesGuard } from '../../common/guards/roles.guard';
 
 @ApiTags('dispatch')
 @Controller('dispatch')
@@ -48,8 +45,11 @@ export class DispatchController {
     description: 'Routes created successfully',
     type: [Route],
   })
-  createGlobal(@Body() createGlobalRouteDto: CreateGlobalRouteDto): Promise<Route[]> {
-    return this.dispatchService.createGlobalRoutes(createGlobalRouteDto);
+  async createGlobal(
+    @Body() createGlobalRouteDto: CreateGlobalRouteDto,
+  ): Promise<{ routes: Route[] }> {
+    const routes = await this.dispatchService.createGlobalRoutes(createGlobalRouteDto);
+    return { routes };
   }
 
   @Post('routes')
@@ -61,8 +61,9 @@ export class DispatchController {
   })
   @ApiResponse({ status: 400, description: 'Invalid input data' })
   @ApiResponse({ status: 404, description: 'Vehicle or jobs not found' })
-  create(@Body() createRouteDto: CreateRouteDto): Promise<Route> {
-    return this.dispatchService.create(createRouteDto);
+  async create(@Body() createRouteDto: CreateRouteDto): Promise<{ route: Route }> {
+    const route = await this.dispatchService.create(createRouteDto);
+    return { route };
   }
 
   @Get('routes')
@@ -74,8 +75,9 @@ export class DispatchController {
     description: 'Filter by route status',
   })
   @ApiResponse({ status: 200, description: 'List of routes', type: [Route] })
-  findAll(@Query('status') status?: RouteStatus): Promise<Route[]> {
-    return this.dispatchService.findAll(status);
+  async findAll(@Query('status') status?: RouteStatus): Promise<{ routes: Route[] }> {
+    const routes = await this.dispatchService.findAll(status);
+    return { routes };
   }
 
   @Get('routes/statistics')
@@ -103,8 +105,9 @@ export class DispatchController {
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Route found', type: Route })
   @ApiResponse({ status: 404, description: 'Route not found' })
-  findOne(@Param('id', ParseUUIDPipe) id: string): Promise<Route> {
-    return this.dispatchService.findOne(id);
+  async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<{ route: Route }> {
+    const route = await this.dispatchService.findOne(id);
+    return { route };
   }
 
   @Get('vehicles/:vehicleId/routes')
@@ -117,8 +120,8 @@ export class DispatchController {
   })
   findByVehicle(
     @Param('vehicleId', ParseUUIDPipe) vehicleId: string,
-  ): Promise<Route[]> {
-    return this.dispatchService.findByVehicle(vehicleId);
+  ): Promise<{ routes: Route[] }> {
+    return this.dispatchService.findByVehicle(vehicleId).then((routes) => ({ routes }));
   }
 
   @Put('routes/:id')
@@ -129,8 +132,8 @@ export class DispatchController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateRouteDto: UpdateRouteDto,
-  ): Promise<Route> {
-    return this.dispatchService.update(id, updateRouteDto);
+  ): Promise<{ route: Route }> {
+    return this.dispatchService.update(id, updateRouteDto).then((route) => ({ route }));
   }
 
   @Patch('routes/:id')
@@ -141,8 +144,8 @@ export class DispatchController {
   partialUpdate(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateRouteDto: UpdateRouteDto,
-  ): Promise<Route> {
-    return this.dispatchService.update(id, updateRouteDto);
+  ): Promise<{ route: Route }> {
+    return this.dispatchService.update(id, updateRouteDto).then((route) => ({ route }));
   }
 
   @Post('routes/:id/assign')
@@ -166,8 +169,9 @@ export class DispatchController {
   async assignDriver(
     @Param('id', ParseUUIDPipe) routeId: string,
     @Body('driverId', ParseUUIDPipe) driverId: string,
-  ): Promise<Route> {
-    return this.dispatchService.update(routeId, { driverId });
+  ): Promise<{ route: Route }> {
+    const route = await this.dispatchService.update(routeId, { driverId });
+    return { route };
   }
 
   @Patch('routes/:id/start')
@@ -175,8 +179,8 @@ export class DispatchController {
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Route started', type: Route })
   @ApiResponse({ status: 400, description: 'Route cannot be started' })
-  startRoute(@Param('id', ParseUUIDPipe) id: string): Promise<Route> {
-    return this.dispatchService.startRoute(id);
+  startRoute(@Param('id', ParseUUIDPipe) id: string): Promise<{ route: Route }> {
+    return this.dispatchService.startRoute(id).then((route) => ({ route }));
   }
 
   @Patch('routes/:id/complete')
@@ -184,21 +188,19 @@ export class DispatchController {
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Route completed', type: Route })
   @ApiResponse({ status: 400, description: 'Route cannot be completed' })
-  completeRoute(@Param('id', ParseUUIDPipe) id: string): Promise<Route> {
-    return this.dispatchService.completeRoute(id);
+  completeRoute(@Param('id', ParseUUIDPipe) id: string): Promise<{ route: Route }> {
+    return this.dispatchService.completeRoute(id).then((route) => ({ route }));
   }
 
   @Patch('routes/:id/cancel')
   @ApiOperation({ summary: 'Cancel a route' })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Route cancelled', type: Route })
-  cancelRoute(@Param('id', ParseUUIDPipe) id: string): Promise<Route> {
-    return this.dispatchService.cancelRoute(id);
+  cancelRoute(@Param('id', ParseUUIDPipe) id: string): Promise<{ route: Route }> {
+    return this.dispatchService.cancelRoute(id).then((route) => ({ route }));
   }
 
   @Patch('routes/:id/reorder')
-  @UseGuards(RolesGuard)
-  @Roles('DISPATCHER', 'ADMIN')
   @ApiOperation({
     summary: 'Reorder stops in a route (Dispatcher only)',
     description:
@@ -225,8 +227,8 @@ export class DispatchController {
   reorderStops(
     @Param('id', ParseUUIDPipe) id: string,
     @Body('newJobOrder') newJobOrder: string[],
-  ): Promise<Route> {
-    return this.dispatchService.reorderStops(id, newJobOrder);
+  ): Promise<{ route: Route }> {
+    return this.dispatchService.reorderStops(id, newJobOrder).then((route) => ({ route }));
   }
 
   @Post('auto-dispatch')

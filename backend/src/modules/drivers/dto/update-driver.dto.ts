@@ -2,28 +2,19 @@ import { PartialType } from '@nestjs/swagger';
 import { InputType, Field } from '@nestjs/graphql';
 import { CreateDriverDto } from './create-driver.dto';
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsNumber, Min, Max } from 'class-validator';
-
-export enum DriverStatus {
-  AVAILABLE = 'available',
-  ON_ROUTE = 'on_route',
-  ON_BREAK = 'on_break',
-  OFF_DUTY = 'off_duty',
-  UNAVAILABLE = 'unavailable',
-}
+import { IsOptional, IsNumber, Min, Max, IsString } from 'class-validator';
 
 @InputType()
 export class UpdateDriverDto extends PartialType(CreateDriverDto) {
   @ApiProperty({
-    enum: DriverStatus,
-    example: DriverStatus.AVAILABLE,
+    example: 'available',
     description: 'Driver status',
     required: false,
   })
   @Field({ nullable: true })
   @IsOptional()
-  @IsEnum(DriverStatus)
-  status?: DriverStatus;
+  @IsString()
+  status?: string;
 
   @ApiProperty({
     example: 2450.5,

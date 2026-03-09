@@ -40,7 +40,11 @@ export class VehiclesService {
 
     const vehicle = this.vehicleRepository.create({
       ...createVehicleDto,
-      status: 'available',
+      vehicleType: this.normalizeType(createVehicleDto.vehicleType),
+      fuelType: this.normalizeType(createVehicleDto.fuelType),
+      capacityWeightKg:
+        createVehicleDto.capacityWeightKg ?? createVehicleDto.capacity ?? undefined,
+      status: this.normalizeStatus(createVehicleDto.status || 'available'),
     });
 
     return this.vehicleRepository.save(vehicle);
@@ -79,7 +83,7 @@ export class VehiclesService {
   async findByStatus(status: string): Promise<Vehicle[]> {
     this.logger.log(`Fetching vehicles with status: ${status}`);
     return this.vehicleRepository.find({
-      where: { status },
+      where: { status: this.normalizeStatus(status) },
       order: { createdAt: 'DESC' },
     });
   }
@@ -111,7 +115,23 @@ export class VehiclesService {
       }
     }
 
-    Object.assign(vehicle, updateVehicleDto);
+    const normalizedUpdate = {
+      ...updateVehicleDto,
+      ...(updateVehicleDto.vehicleType
+        ? { vehicleType: this.normalizeType(updateVehicleDto.vehicleType) }
+        : {}),
+      ...(updateVehicleDto.fuelType
+        ? { fuelType: this.normalizeType(updateVehicleDto.fuelType) }
+        : {}),
+      ...(updateVehicleDto.capacity !== undefined
+        ? { capacityWeightKg: updateVehicleDto.capacity }
+        : {}),
+      ...(updateVehicleDto.status
+        ? { status: this.normalizeStatus(updateVehicleDto.status) }
+        : {}),
+    };
+
+    Object.assign(vehicle, normalizedUpdate);
     return this.vehicleRepository.save(vehicle);
   }
 
@@ -161,5 +181,19 @@ export class VehiclesService {
       .andWhere('vehicle.current_odometer_km >= vehicle.next_maintenance_km')
       .getMany();
   }
-}
 
+  private normalizeType(value: string): string {
+    return value.toLowerCase();
+  }
+
+  private normalizeStatus(status: string): string {
+    const normalized = status.toLowerCase();
+    const map: Record<string, string> = {
+      active: 'available',
+      in_route: 'in_use',
+      off_duty: 'out_of_service',
+      inactive: 'out_of_service',
+    };
+    return map[normalized] || normalized;
+  }
+}

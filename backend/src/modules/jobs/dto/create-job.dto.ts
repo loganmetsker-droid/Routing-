@@ -14,7 +14,7 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { JobPriority } from '../entities/job.entity';
+import { JobPriority, JobStatus } from '../entities/job.entity';
 
 @InputType()
 export class CreateJobDto {
@@ -38,11 +38,12 @@ export class CreateJobDto {
   @Field({ nullable: true })
   customerEmail?: string;
 
-  @ApiProperty({ description: 'Pickup address', maxLength: 500 })
+  @ApiPropertyOptional({ description: 'Pickup address', maxLength: 500 })
+  @IsOptional()
   @IsString()
   @Length(1, 500)
-  @Field()
-  pickupAddress: string;
+  @Field({ nullable: true })
+  pickupAddress?: string;
 
   @ApiPropertyOptional({
     description: 'Pickup location as GeoJSON point',
@@ -59,6 +60,22 @@ export class CreateJobDto {
   deliveryAddress: string;
 
   @ApiPropertyOptional({
+    description: 'Structured pickup address payload',
+    example: { line1: '123 Main St', line2: null, city: 'Austin', state: 'TX', zip: '78701' },
+  })
+  @IsOptional()
+  @Field(() => GraphQLJSON, { nullable: true })
+  pickupAddressStructured?: any;
+
+  @ApiPropertyOptional({
+    description: 'Structured delivery address payload',
+    example: { line1: '500 Elm St', line2: null, city: 'Dallas', state: 'TX', zip: '75201' },
+  })
+  @IsOptional()
+  @Field(() => GraphQLJSON, { nullable: true })
+  deliveryAddressStructured?: any;
+
+  @ApiPropertyOptional({
     description: 'Delivery location as GeoJSON point',
     example: { type: 'Point', coordinates: [-122.4194, 37.7749] },
   })
@@ -66,21 +83,31 @@ export class CreateJobDto {
   @Field(() => GraphQLJSON, { nullable: true })
   deliveryLocation?: any;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Time window start (ISO 8601 format)',
     example: '2024-01-15T09:00:00Z',
   })
+  @IsOptional()
   @IsDateString()
-  @Field()
-  timeWindowStart: string;
+  @Field({ nullable: true })
+  timeWindowStart?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description: 'Time window end (ISO 8601 format)',
     example: '2024-01-15T17:00:00Z',
   })
+  @IsOptional()
   @IsDateString()
-  @Field()
-  timeWindowEnd: string;
+  @Field({ nullable: true })
+  timeWindowEnd?: string;
+
+  @ApiPropertyOptional({
+    description: 'Legacy nested time window payload',
+    example: { start: '2024-01-15T09:00:00Z', end: '2024-01-15T17:00:00Z' },
+  })
+  @IsOptional()
+  @Field(() => GraphQLJSON, { nullable: true })
+  timeWindow?: { start?: string; end?: string };
 
   @ApiPropertyOptional({ description: 'Weight in kg', minimum: 0 })
   @IsOptional()
@@ -134,4 +161,13 @@ export class CreateJobDto {
   @IsString()
   @Field({ nullable: true })
   specialInstructions?: string;
+
+  @ApiPropertyOptional({
+    description: 'Legacy status field accepted from UI',
+    enum: JobStatus,
+  })
+  @IsOptional()
+  @IsEnum(JobStatus)
+  @Field({ nullable: true })
+  status?: JobStatus;
 }

@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -27,15 +28,29 @@ export class JobsService {
   constructor(
     @InjectRepository(Job)
     private readonly jobRepository: Repository<Job>,
+    @Optional()
     @InjectQueue('jobs')
-    private readonly jobQueue: Queue,
+    private readonly jobQueue?: Queue,
   ) {}
 
   async create(createJobDto: CreateJobDto): Promise<Job> {
-    // Validate time window: start must be before end
-    const timeWindowStart = new Date(createJobDto.timeWindowStart);
-    const timeWindowEnd = new Date(createJobDto.timeWindowEnd);
+    const now = new Date();
+    const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
 
+    // Support both new and legacy frontend payload shapes.
+    const rawStart =
+      createJobDto.timeWindowStart || createJobDto.timeWindow?.start || now.toISOString();
+    const rawEnd =
+      createJobDto.timeWindowEnd || createJobDto.timeWindow?.end || oneHourLater.toISOString();
+
+    const timeWindowStart = new Date(rawStart);
+    const timeWindowEnd = new Date(rawEnd);
+
+    if (Number.isNaN(timeWindowStart.getTime()) || Number.isNaN(timeWindowEnd.getTime())) {
+      throw new BadRequestException('Invalid time window format');
+    }
+
+    // Validate time window: start must be before end
     if (timeWindowEnd <= timeWindowStart) {
       throw new BadRequestException(
         'Time window end must be after time window start',
@@ -73,7 +88,10 @@ export class JobsService {
     // Create job with automatic "pending" status
     const job = this.jobRepository.create({
       ...createJobDto,
-      status: JobStatus.PENDING,
+      pickupAddress: createJobDto.pickupAddress || '',
+      timeWindowStart,
+      timeWindowEnd,
+      status: createJobDto.status || JobStatus.PENDING,
       priority: createJobDto.priority || JobPriority.NORMAL,
     });
 
@@ -164,13 +182,43 @@ export class JobsService {
   async update(id: string, updateJobDto: UpdateJobDto): Promise<Job> {
     const job = await this.findOne(id);
 
+    // Support legacy archive payloads from older UI screens.
+    const { archived, driverId, assignedVehicleId, stopSequence, ...safeUpdateDto } =
+      updateJobDto as UpdateJobDto & {
+        archived?: boolean;
+        driverId?: string;
+        assignedVehicleId?: string;
+        stopSequence?: number;
+      };
+
+    // Mark fields as intentionally unused legacy fields (ignored but accepted).
+    void driverId;
+    void assignedVehicleId;
+    void stopSequence;
+
+    if (archived === true) {
+      safeUpdateDto.status = JobStatus.ARCHIVED;
+      safeUpdateDto.archivedAt = safeUpdateDto.archivedAt || new Date().toISOString();
+    }
+
+    if (archived === false) {
+      safeUpdateDto.archivedAt = null as any;
+      if (!safeUpdateDto.status) {
+        safeUpdateDto.status = JobStatus.PENDING;
+      }
+    }
+
+    if (safeUpdateDto.status === JobStatus.ARCHIVED && !safeUpdateDto.archivedAt) {
+      safeUpdateDto.archivedAt = new Date().toISOString();
+    }
+
     // Validate time window if being updated
-    if (updateJobDto.timeWindowStart || updateJobDto.timeWindowEnd) {
-      const timeWindowStart = updateJobDto.timeWindowStart
-        ? new Date(updateJobDto.timeWindowStart)
+    if (safeUpdateDto.timeWindowStart || safeUpdateDto.timeWindowEnd) {
+      const timeWindowStart = safeUpdateDto.timeWindowStart
+        ? new Date(safeUpdateDto.timeWindowStart)
         : job.timeWindowStart;
-      const timeWindowEnd = updateJobDto.timeWindowEnd
-        ? new Date(updateJobDto.timeWindowEnd)
+      const timeWindowEnd = safeUpdateDto.timeWindowEnd
+        ? new Date(safeUpdateDto.timeWindowEnd)
         : job.timeWindowEnd;
 
       if (timeWindowEnd <= timeWindowStart) {
@@ -189,21 +237,21 @@ export class JobsService {
     }
 
     // Validate capacity constraints if being updated
-    const newWeight = updateJobDto.weight ?? job.weight;
+    const newWeight = safeUpdateDto.weight ?? job.weight;
     if (newWeight && newWeight > this.MAX_WEIGHT_KG) {
       throw new BadRequestException(
         `Weight exceeds maximum capacity of ${this.MAX_WEIGHT_KG} kg`,
       );
     }
 
-    const newVolume = updateJobDto.volume ?? job.volume;
+    const newVolume = safeUpdateDto.volume ?? job.volume;
     if (newVolume && newVolume > this.MAX_VOLUME_M3) {
       throw new BadRequestException(
         `Volume exceeds maximum capacity of ${this.MAX_VOLUME_M3} m³`,
       );
     }
 
-    const newQuantity = updateJobDto.quantity ?? job.quantity;
+    const newQuantity = safeUpdateDto.quantity ?? job.quantity;
     if (newQuantity && newQuantity > this.MAX_QUANTITY) {
       throw new BadRequestException(
         `Quantity exceeds maximum capacity of ${this.MAX_QUANTITY} items`,
@@ -212,8 +260,8 @@ export class JobsService {
 
     // If status changes from pending to something else, remove from queue
     if (
-      updateJobDto.status &&
-      updateJobDto.status !== JobStatus.PENDING &&
+      safeUpdateDto.status &&
+      safeUpdateDto.status !== JobStatus.PENDING &&
       job.status === JobStatus.PENDING
     ) {
       await this.removeFromQueue(job.id);
@@ -221,13 +269,13 @@ export class JobsService {
 
     // If status changes to pending, add to queue
     if (
-      updateJobDto.status === JobStatus.PENDING &&
+      safeUpdateDto.status === JobStatus.PENDING &&
       job.status !== JobStatus.PENDING
     ) {
       await this.addToQueue(job);
     }
 
-    Object.assign(job, updateJobDto);
+    Object.assign(job, safeUpdateDto);
 
     return this.jobRepository.save(job);
   }
@@ -275,6 +323,11 @@ export class JobsService {
 
   // BullMQ Queue Management
   async addToQueue(job: Job): Promise<void> {
+    if (!this.jobQueue) {
+      this.logger.debug(`Skipping queue add for job ${job.id} (Redis queue disabled)`);
+      return;
+    }
+
     await this.jobQueue.add(
       'process-job',
       {
@@ -294,6 +347,10 @@ export class JobsService {
   }
 
   async removeFromQueue(jobId: string): Promise<void> {
+    if (!this.jobQueue) {
+      return;
+    }
+
     const bullJob = await this.jobQueue.getJob(jobId);
     if (bullJob) {
       await bullJob.remove();
@@ -302,6 +359,24 @@ export class JobsService {
   }
 
   async getQueueStatus() {
+    if (!this.jobQueue) {
+      return {
+        waiting: [],
+        active: [],
+        completed: [],
+        failed: [],
+        delayed: [],
+        counts: {
+          waiting: 0,
+          active: 0,
+          completed: 0,
+          failed: 0,
+          delayed: 0,
+        },
+        queueEnabled: false,
+      };
+    }
+
     const [waiting, active, completed, failed, delayed] = await Promise.all([
       this.jobQueue.getWaiting(),
       this.jobQueue.getActive(),
@@ -323,6 +398,7 @@ export class JobsService {
         failed: failed.length,
         delayed: delayed.length,
       },
+      queueEnabled: true,
     };
   }
 

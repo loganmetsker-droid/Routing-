@@ -1,8 +1,12 @@
 import { ApolloClient, InMemoryCache, createHttpLink, ApolloLink } from '@apollo/client';
 import { setContext } from '@apollo/client/link/context';
 
+const API_BASE_URL = (import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:3000')
+  .replace(/\/+$/, '')
+  .replace(/\/api$/, '');
+
 const httpLink = createHttpLink({
-  uri: import.meta.env.VITE_GRAPHQL_URL || 'http://localhost:3000/graphql',
+  uri: import.meta.env.VITE_GRAPHQL_URL || `${API_BASE_URL}/graphql`,
 });
 
 // Auth link to add JWT token to headers
