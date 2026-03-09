@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "npm install --workspace=frontend --include-workspace-root=false --legacy-peer-deps",
+  "buildCommand": "npm run build --workspace=frontend",
+  "outputDirectory": "frontend/dist",
+  "rewrites": [
+    {
+      "source": "/((?!assets/|.*\\..*).*)",
+      "destination": "/index.html"
+    }
+  ]
+}
