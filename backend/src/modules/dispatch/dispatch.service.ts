@@ -101,6 +101,109 @@ export class DispatchService {
   }
 
   /**
+   * Build a deterministic fallback route when the routing service is unavailable.
+   */
+  private buildFallbackRouteResponse(
+    jobIds: string[],
+    reason: string,
+  ): RoutingServiceResponse {
+    const now = Date.now();
+    const fallbackRoute = jobIds.map((jobId, index) => ({
+      job_id: jobId,
+      sequence: index,
+      location: {
+        latitude: 0,
+        longitude: 0,
+      },
+      estimated_arrival: new Date(now + (index + 1) * 20 * 60 * 1000).toISOString(),
+      time_window_start: new Date(now).toISOString(),
+      time_window_end: new Date(now + 8 * 60 * 60 * 1000).toISOString(),
+      priority: 0,
+    }));
+
+    return {
+      success: true,
+      route: fallbackRoute,
+      total_distance_km: Number((jobIds.length * 8).toFixed(2)),
+      total_duration_minutes: jobIds.length * 20,
+      num_jobs: jobIds.length,
+      vehicle_start_location: {
+        latitude: 0,
+        longitude: 0,
+      },
+      polyline: null,
+      error: reason,
+    };
+  }
+
+  /**
+   * Build fallback global routing (round-robin) when optimization service fails.
+   */
+  private buildFallbackGlobalRoutingResponse(
+    vehicleIds: string[],
+    jobIds: string[],
+    reason: string,
+  ): GlobalRoutingServiceResponse {
+    if (vehicleIds.length === 0) {
+      return {
+        success: true,
+        routes: {},
+        unassigned_jobs: jobIds,
+        error: reason,
+      };
+    }
+
+    const now = Date.now();
+    const routes: GlobalRoutingServiceResponse['routes'] = {};
+
+    vehicleIds.forEach((vehicleId) => {
+      routes[vehicleId] = {
+        route: [],
+        total_distance_km: 0,
+        total_duration_minutes: 0,
+        num_jobs: 0,
+        vehicle_start_location: {
+          latitude: 0,
+          longitude: 0,
+        },
+      };
+    });
+
+    jobIds.forEach((jobId, index) => {
+      const vehicleId = vehicleIds[index % vehicleIds.length];
+      const currentRoute = routes[vehicleId];
+
+      currentRoute.route.push({
+        job_id: jobId,
+        sequence: currentRoute.route.length,
+        location: {
+          latitude: 0,
+          longitude: 0,
+        },
+        estimated_arrival: new Date(
+          now + (currentRoute.route.length + 1) * 20 * 60 * 1000,
+        ).toISOString(),
+        time_window_start: new Date(now).toISOString(),
+        time_window_end: new Date(now + 8 * 60 * 60 * 1000).toISOString(),
+        priority: 0,
+      });
+    });
+
+    Object.values(routes).forEach((route) => {
+      route.num_jobs = route.route.length;
+      route.total_distance_km = Number((route.num_jobs * 8).toFixed(2));
+      route.total_duration_minutes = route.num_jobs * 20;
+    });
+
+    return {
+      success: true,
+      routes,
+      unassigned_jobs: [],
+      error: reason,
+    };
+  }
+
+  /**
    * Call the Python routing-service to optimize route
    */
   async callRoutingService(
@@ -176,8 +279,10 @@ export class DispatchService {
         `[ROUTING:ERROR] ${errorCode}: ${errorMessage}`,
         error.stack,
       );
-
-      throw new BadRequestException(`${errorCode}: ${errorMessage}`);
+      this.logger.warn(
+        `[ROUTING:FALLBACK] Using fallback sequential routing for ${jobIds.length} jobs due to ${errorCode}`,
+      );
+      return this.buildFallbackRouteResponse(jobIds, `${errorCode}: ${errorMessage}`);
     }
   }
 
@@ -244,7 +349,14 @@ export class DispatchService {
       }
 
       this.logger.error(`[ROUTING:ERROR] ${errorCode}: ${errorMessage}`, error.stack);
-      throw new BadRequestException(`${errorCode}: ${errorMessage}`);
+      this.logger.warn(
+        `[ROUTING:FALLBACK] Using fallback round-robin global routing for ${jobIds.length} jobs due to ${errorCode}`,
+      );
+      return this.buildFallbackGlobalRoutingResponse(
+        vehicleIds,
+        jobIds,
+        `${errorCode}: ${errorMessage}`,
+      );
     }
   }
 
@@ -308,6 +420,13 @@ export class DispatchService {
 
       const savedRoute = await this.routeRepository.save(routeEntity);
       savedRoutes.push(savedRoute);
+
+      await this.jobRepository
+        .createQueryBuilder()
+        .update()
+        .set({ status: JobStatus.ASSIGNED, assignedRouteId: savedRoute.id })
+        .where('id IN (:...ids)', { ids: optimizedJobIds })
+        .execute();
 
       this.dispatchGateway.emitRouteCreated(savedRoute);
     }
@@ -420,8 +539,19 @@ export class DispatchService {
       `[ROUTE:CREATE:COMPLETE] Route ${savedRoute.id.substring(0, 8)} created in ${duration}ms (color: ${color}, distance: ${routingResponse.total_distance_km}km, stops: ${routingResponse.num_jobs})`,
     );
 
-    // Step 7: Broadcast via WebSocket
-    this.logger.log(`[ROUTE:CREATE:STEP7] Broadcasting route creation via WebSocket...`);
+    // Step 7: Link jobs to route
+    this.logger.log(
+      `[ROUTE:CREATE:STEP7] Linking ${savedRoute.jobIds.length} jobs to route ${savedRoute.id.substring(0, 8)}...`,
+    );
+    await this.jobRepository
+      .createQueryBuilder()
+      .update()
+      .set({ status: JobStatus.ASSIGNED, assignedRouteId: savedRoute.id })
+      .where('id IN (:...ids)', { ids: savedRoute.jobIds })
+      .execute();
+
+    // Step 8: Broadcast via WebSocket
+    this.logger.log(`[ROUTE:CREATE:STEP8] Broadcasting route creation via WebSocket...`);
     this.dispatchGateway.emitRouteCreated(savedRoute);
 
     return savedRoute;
@@ -480,9 +610,9 @@ export class DispatchService {
 
     const route = await this.findOne(id);
 
-    if (route.status !== RouteStatus.PLANNED) {
+    if (![RouteStatus.PLANNED, RouteStatus.ASSIGNED].includes(route.status)) {
       throw new BadRequestException(
-        `ROUTE_INVALID_STATUS: Cannot start route ${id.substring(0, 8)} - must be in 'planned' status but is '${route.status}'`,
+        `ROUTE_INVALID_STATUS: Cannot start route ${id.substring(0, 8)} - must be in 'planned' or 'assigned' status but is '${route.status}'`,
       );
     }
 
@@ -497,12 +627,12 @@ export class DispatchService {
       status: 'in_route',
     });
 
-    // Step 3: Update job statuses to "assigned"
-    this.logger.log(`[ROUTE:START:STEP3] Updating ${route.jobIds.length} jobs to "assigned" status...`);
+    // Step 3: Update job statuses to "in_progress"
+    this.logger.log(`[ROUTE:START:STEP3] Updating ${route.jobIds.length} jobs to "in_progress" status...`);
     const updateResult = await this.jobRepository
       .createQueryBuilder()
       .update()
-      .set({ status: JobStatus.ASSIGNED, assignedRouteId: route.id })
+      .set({ status: JobStatus.IN_PROGRESS, assignedRouteId: route.id })
       .where('id IN (:...ids)', { ids: route.jobIds })
       .execute();
     this.logger.log(`[ROUTE:START:STEP3] Updated ${updateResult.affected} jobs`);
@@ -542,6 +672,17 @@ export class DispatchService {
       status: 'available',
     });
 
+    // Mark route jobs completed
+    await this.jobRepository
+      .createQueryBuilder()
+      .update()
+      .set({
+        status: JobStatus.COMPLETED,
+        completedAt: new Date(),
+      })
+      .where('id IN (:...ids)', { ids: route.jobIds })
+      .execute();
+
     const completedRoute = await this.routeRepository.save(route);
 
     // Broadcast route completion via WebSocket
@@ -567,10 +708,12 @@ export class DispatchService {
     }
 
     // Reset job statuses back to pending
-    await this.jobRepository.update(
-      { id: route.jobIds as any },
-      { status: JobStatus.PENDING, assignedRouteId: null },
-    );
+    await this.jobRepository
+      .createQueryBuilder()
+      .update()
+      .set({ status: JobStatus.PENDING, assignedRouteId: null })
+      .where('id IN (:...ids)', { ids: route.jobIds })
+      .execute();
 
     return this.routeRepository.save(route);
   }

@@ -12,12 +12,22 @@ import {
   Min,
   Max,
   ValidateIf,
+  IsUUID,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { JobPriority, JobStatus } from '../entities/job.entity';
 
 @InputType()
 export class CreateJobDto {
+  @ApiPropertyOptional({
+    description: 'Linked customer UUID',
+    example: '6f5f5b36-6f71-4ca9-b9e2-0fcfbf1dc4a5',
+  })
+  @IsOptional()
+  @IsUUID()
+  @Field({ nullable: true })
+  customerId?: string;
+
   @ApiProperty({ description: 'Customer name', maxLength: 200 })
   @IsString()
   @Length(1, 200)

@@ -108,7 +108,9 @@ export default function VehicleRouteCard({
   };
 
   const hasRoute = !!route;
-  const isOptimized = route?.status === 'optimized' || route?.status === 'ready';
+  const hasOptimizationData =
+    Boolean(route?.optimizedStops && route.optimizedStops.length > 0) ||
+    Boolean(route?.totalDistance);
   const hasDriver = !!driver;
 
   return (
@@ -252,7 +254,7 @@ export default function VehicleRouteCard({
             </Box>
 
             {/* Warning if not optimized */}
-            {!isOptimized && (
+            {!hasOptimizationData && (
               <Alert
                 severity="warning"
                 icon={false}
@@ -270,7 +272,7 @@ export default function VehicleRouteCard({
                   },
                 }}
               >
-                ⚠️ Route needs optimization
+                ⚠️ Route needs optimization pass
               </Alert>
             )}
 

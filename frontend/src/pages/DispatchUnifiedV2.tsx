@@ -37,10 +37,10 @@ import {
   getVehicles,
   getDrivers,
   assignDriverToRoute,
-  updateRouteStatus,
+  startRoute,
   generateRoute,
-  updateJob,
   updateRoute,
+  reorderRouteStops,
   connectSSE,
 } from '../services/api';
 import VehicleRouteCard from '../components/dispatch/VehicleRouteCard';
@@ -79,7 +79,7 @@ interface Job {
 interface Route {
   id: string;
   vehicleId: string;
-  driverId?: string;
+  driverId?: string | null;
   jobIds: string[];
   status: string;
   totalDistance?: number;
@@ -181,12 +181,12 @@ export default function DispatchUnifiedV2() {
   const unassignedJobs = jobs.filter((job) => job.status === 'pending' && !job.assignedRouteId);
 
   const activeRoutes = routes.filter(
-    (route) => route.status !== 'dispatched' && route.status !== 'completed'
+    (route) => route.status !== 'completed' && route.status !== 'cancelled'
   );
 
   const readyToDispatchRoutes = activeRoutes.filter(
     (route) =>
-      (route.status === 'optimized' || route.status === 'ready') &&
+      (route.status === 'planned' || route.status === 'assigned') &&
       route.vehicleId &&
       route.driverId &&
       route.jobIds &&
@@ -265,7 +265,9 @@ export default function DispatchUnifiedV2() {
     try {
       // Find available vehicle
       const availableVehicle = vehicles.find((v) => {
-        const assignedRoute = routes.find((r) => r.vehicleId === v.id && r.status !== 'completed');
+        const assignedRoute = routes.find(
+          (r) => r.vehicleId === v.id && r.status !== 'completed' && r.status !== 'cancelled',
+        );
         return !assignedRoute;
       });
 
@@ -278,17 +280,13 @@ export default function DispatchUnifiedV2() {
       const response = await generateRoute(availableVehicle.id, selectedJobIds);
       const newRoute = (response as any).route || response;
 
-      // Update jobs
-      for (const jobId of selectedJobIds) {
-        await updateJob(jobId, {
-          status: 'assigned',
-          assignedRouteId: newRoute.id,
-          assignedVehicleId: availableVehicle.id,
-        });
-      }
-
-      // Immediately optimize
-      await handleOptimizeRoute(newRoute.id);
+      // Immediately run optimization/reordering on the newly created route.
+      await reorderRouteStops(
+        newRoute.id,
+        Array.isArray(newRoute.jobIds) && newRoute.jobIds.length > 0
+          ? newRoute.jobIds
+          : selectedJobIds,
+      );
 
       setSelectedJobIds([]);
       await loadData();
@@ -310,29 +308,7 @@ export default function DispatchUnifiedV2() {
         throw new Error('Invalid route');
       }
 
-      // Simulate optimization (replace with real API call)
-      const optimizedDistance = Math.random() * 50 + 10;
-      const optimizedDuration = Math.random() * 120 + 30;
-      const optimizedStops: OptimizedStop[] = route.jobIds.map((jobId, idx) => ({
-        jobId,
-        sequence: idx,
-        address: jobs.find((j) => j.id === jobId)?.deliveryAddress || '',
-      }));
-
-      await updateRoute(routeId, {
-        status: 'optimized',
-        totalDistance: optimizedDistance,
-        totalDuration: optimizedDuration,
-        optimizedStops,
-        estimatedCapacity: route.jobIds.length * 100, // Simulated
-      });
-
-      // Update job stop sequences
-      for (let i = 0; i < route.jobIds.length; i++) {
-        await updateJob(route.jobIds[i], {
-          stopSequence: i,
-        });
-      }
+      await reorderRouteStops(routeId, route.jobIds);
 
       await loadData();
     } catch (error) {
@@ -347,7 +323,7 @@ export default function DispatchUnifiedV2() {
 
   const getSuggestedDrivers = (_route: Route): DriverSuggestion[] => {
     const routeDriverAssignments = routes
-      .filter((r) => r.status === 'active' || r.status === 'dispatched')
+      .filter((r) => r.status !== 'completed' && r.status !== 'cancelled')
       .reduce((acc, r) => {
         if (r.driverId) acc[r.driverId] = (acc[r.driverId] || 0) + 1;
         return acc;
@@ -395,7 +371,7 @@ export default function DispatchUnifiedV2() {
 
     try {
       await assignDriverToRoute(selectedRouteForDriver, selectedDriverId);
-      await updateRoute(selectedRouteForDriver, { status: 'ready' });
+      await updateRoute(selectedRouteForDriver, { status: 'assigned' });
       setAssignDriverDialogOpen(false);
       setSelectedDriverId('');
       setSelectedRouteForDriver(null);
@@ -408,7 +384,7 @@ export default function DispatchUnifiedV2() {
 
   const handleRemoveDriver = async (routeId: string) => {
     try {
-      await updateRoute(routeId, { driverId: undefined, status: 'optimized' });
+      await updateRoute(routeId, { driverId: null, status: 'planned' });
       await loadData();
     } catch (error) {
       console.error('Remove driver failed:', error);
@@ -420,7 +396,7 @@ export default function DispatchUnifiedV2() {
   const handleDispatch = async (routeId: string) => {
     setDispatchingRouteId(routeId);
     try {
-      await updateRouteStatus(routeId, 'dispatched');
+      await startRoute(routeId);
       await loadData();
     } catch (error) {
       console.error('Dispatch failed:', error);
@@ -882,7 +858,9 @@ export default function DispatchUnifiedV2() {
 
             <Stack spacing={2}>
               {vehicles.map((vehicle) => {
-                const route = routes.find((r) => r.vehicleId === vehicle.id && r.status !== 'completed');
+                const route = routes.find(
+                  (r) => r.vehicleId === vehicle.id && r.status !== 'completed' && r.status !== 'cancelled',
+                );
                 const driver = route?.driverId ? drivers.find((d) => d.id === route.driverId) : null;
                 const routeJobs = route?.jobIds
                   ? jobs.filter((j) => route.jobIds?.includes(j.id))
@@ -965,7 +943,7 @@ export default function DispatchUnifiedV2() {
                   No routes ready
                 </Typography>
                 <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '14px' }}>
-                  Assign drivers to optimized routes to dispatch them
+                  Assign drivers to planned routes to dispatch them
                 </Typography>
               </Box>
             ) : (
@@ -1032,7 +1010,7 @@ export default function DispatchUnifiedV2() {
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Speed sx={{ fontSize: 16, color: 'rgba(255, 255, 255, 0.5)' }} />
                             <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '13px' }}>
-                              {route.totalDistance?.toFixed(1) || 0} mi
+                              {route.totalDistance?.toFixed(1) || 0} km
                             </Typography>
                           </Box>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

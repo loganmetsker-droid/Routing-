@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -51,8 +52,9 @@ const API_BASE_URL = (import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_
 interface Customer {
   id: string;
   name: string;
-  email: string;
-  phone: string;
+  email?: string;
+  phone?: string;
+  address?: string;
   defaultAddress?: string;
   defaultAddressStructured?: {
     line1: string;
@@ -74,18 +76,16 @@ interface Job {
 }
 
 export default function JobsPageEnhancedV2() {
+  const navigate = useNavigate();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [assignDriverDialogOpen, setAssignDriverDialogOpen] = useState(false);
   const [customerTab, setCustomerTab] = useState(0);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [recentCustomerNames, setRecentCustomerNames] = useState<string[]>([]);
   const [selectedJobs, setSelectedJobs] = useState<string[]>([]);
   const [activePreset, setActivePreset] = useState<string | null>(null);
-  const [drivers, setDrivers] = useState<any[]>([]);
-  const [selectedDriver, setSelectedDriver] = useState('');
 
   const [formData, setFormData] = useState({
     customerName: '',
@@ -109,8 +109,26 @@ export default function JobsPageEnhancedV2() {
       format(new Date(job.completedAt), 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
   );
 
-  // Active jobs (not completed)
-  const activeJobs = jobs.filter((job) => job.id && job.status !== 'completed' && job.status !== 'archived');
+  const nonArchivedJobs = jobs.filter((job) => job.id && job.status !== 'archived');
+  const activeJobs = nonArchivedJobs.filter((job) => job.status !== 'completed');
+  const visibleJobs = (() => {
+    if (activePreset === 'today') {
+      const today = format(new Date(), 'yyyy-MM-dd');
+      return activeJobs.filter(
+        (job) => job.createdAt && format(new Date(job.createdAt), 'yyyy-MM-dd') === today,
+      );
+    }
+    if (activePreset === 'unassigned') {
+      return activeJobs.filter((job) => (job.status || 'pending') === 'pending');
+    }
+    if (activePreset === 'highPriority') {
+      return activeJobs.filter((job) => ['high', 'urgent'].includes((job.priority || '').toLowerCase()));
+    }
+    if (activePreset === 'completed') {
+      return nonArchivedJobs.filter((job) => job.status === 'completed');
+    }
+    return activeJobs;
+  })();
 
   const loadJobs = async () => {
     try {
@@ -133,20 +151,9 @@ export default function JobsPageEnhancedV2() {
     }
   };
 
-  const loadDrivers = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/drivers`);
-      const data = await response.json();
-      setDrivers(data.drivers || []);
-    } catch (error) {
-      console.error('Failed to load drivers:', error);
-    }
-  };
-
   useEffect(() => {
     loadJobs();
     loadCustomers();
-    loadDrivers();
 
     const cached = localStorage.getItem('recentCustomerNames');
     if (cached) {
@@ -165,8 +172,6 @@ export default function JobsPageEnhancedV2() {
   // Quick filter presets
   const applyPresetFilter = (preset: string) => {
     setActivePreset(preset);
-    // In a real implementation, you would apply filters to the jobs list
-    // For now, this is a placeholder
   };
 
   const resetFilters = () => {
@@ -181,39 +186,41 @@ export default function JobsPageEnhancedV2() {
   };
 
   const handleSelectAll = () => {
-    if (selectedJobs.length === activeJobs.length) {
+    if (selectedJobs.length === visibleJobs.length) {
       setSelectedJobs([]);
     } else {
-      setSelectedJobs(activeJobs.map((job) => job.id!).filter(Boolean));
+      setSelectedJobs(visibleJobs.map((job) => job.id!).filter(Boolean));
     }
   };
 
   const handleBulkAssign = () => {
-    setAssignDriverDialogOpen(true);
+    navigate('/dispatch');
   };
 
-  const handleBulkUnassign = async () => {
+  const handleBulkUnassign = async (jobIds: string[] = selectedJobs) => {
     try {
       await Promise.all(
-        selectedJobs.map((jobId) =>
+        jobIds.map((jobId) =>
           fetch(`${API_BASE_URL}/api/jobs/${jobId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'pending', driverId: null }),
+            body: JSON.stringify({ status: 'pending', assignedRouteId: null }),
           })
         )
       );
-      setSelectedJobs([]);
+      if (jobIds === selectedJobs) {
+        setSelectedJobs([]);
+      }
       loadJobs();
     } catch (error) {
       console.error('Failed to unassign jobs:', error);
     }
   };
 
-  const handleBulkArchive = async () => {
+  const handleBulkArchive = async (jobIds: string[] = selectedJobs) => {
     try {
       await Promise.all(
-        selectedJobs.map((jobId) =>
+        jobIds.map((jobId) =>
           fetch(`${API_BASE_URL}/api/jobs/${jobId}`, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -221,7 +228,9 @@ export default function JobsPageEnhancedV2() {
           })
         )
       );
-      setSelectedJobs([]);
+      if (jobIds === selectedJobs) {
+        setSelectedJobs([]);
+      }
       loadJobs();
     } catch (error) {
       console.error('Failed to archive jobs:', error);
@@ -242,28 +251,6 @@ export default function JobsPageEnhancedV2() {
       loadJobs();
     } catch (error) {
       console.error('Failed to archive completed jobs:', error);
-    }
-  };
-
-  const handleAssignDriver = async () => {
-    if (!selectedDriver) return;
-
-    try {
-      await Promise.all(
-        selectedJobs.map((jobId) =>
-          fetch(`${API_BASE_URL}/api/jobs/${jobId}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ driverId: selectedDriver, status: 'assigned' }),
-          })
-        )
-      );
-      setAssignDriverDialogOpen(false);
-      setSelectedJobs([]);
-      setSelectedDriver('');
-      loadJobs();
-    } catch (error) {
-      console.error('Failed to assign driver:', error);
     }
   };
 
@@ -314,6 +301,16 @@ export default function JobsPageEnhancedV2() {
           zip: ''
         });
         setDeliveryAddressValid(false);
+      } else if (customer.address) {
+        // Backward compatibility with older customer payload shape
+        setDeliveryAddressData({
+          line1: customer.address,
+          line2: null,
+          city: '',
+          state: '',
+          zip: ''
+        });
+        setDeliveryAddressValid(false);
       } else {
         // Reset to empty if no address at all
         setDeliveryAddressData({ line1: '', line2: null, city: '', state: '', zip: '' });
@@ -343,7 +340,10 @@ export default function JobsPageEnhancedV2() {
   const handleCreateJob = async () => {
     try {
       const jobData = {
+        customerId: selectedCustomer?.id,
         customerName: formData.customerName,
+        customerPhone: selectedCustomer?.phone,
+        customerEmail: selectedCustomer?.email,
         priority: formData.priority,
         deliveryAddress: formatAddress(deliveryAddressData),
         deliveryAddressStructured: deliveryAddressData,
@@ -462,7 +462,7 @@ export default function JobsPageEnhancedV2() {
             {selectedJobs.length} selected
           </Typography>
           <Button variant="outlined" size="small" onClick={handleBulkAssign}>
-            Assign to Driver
+            Open Dispatch Board
           </Button>
           <Button variant="outlined" size="small" onClick={handleBulkUnassign}>
             Unassign
@@ -527,16 +527,16 @@ export default function JobsPageEnhancedV2() {
       {/* Select All Checkbox */}
       <Box sx={{ mb: 2, display: 'flex', alignItems: 'center' }}>
         <Checkbox
-          checked={selectedJobs.length === activeJobs.length && activeJobs.length > 0}
-          indeterminate={selectedJobs.length > 0 && selectedJobs.length < activeJobs.length}
+          checked={selectedJobs.length === visibleJobs.length && visibleJobs.length > 0}
+          indeterminate={selectedJobs.length > 0 && selectedJobs.length < visibleJobs.length}
           onChange={handleSelectAll}
         />
-        <Typography variant="body2">Select All ({activeJobs.length} jobs)</Typography>
+        <Typography variant="body2">Select All ({visibleJobs.length} jobs)</Typography>
       </Box>
 
       {/* Jobs Grid */}
       <Grid container spacing={3}>
-        {activeJobs.map((job) => (
+        {visibleJobs.map((job) => (
           <Grid item xs={12} md={6} key={job.id!}>
             <Card>
               <CardContent>
@@ -580,15 +580,21 @@ export default function JobsPageEnhancedV2() {
                     <IconButton size="small">
                       <EditIcon fontSize="small" />
                     </IconButton>
-                    <IconButton size="small" onClick={() => handleBulkUnassign()}>
+                    <IconButton
+                      size="small"
+                      onClick={() => {
+                        if (job.id) {
+                          handleBulkUnassign([job.id]);
+                        }
+                      }}
+                    >
                       <ClearIcon fontSize="small" />
                     </IconButton>
                     <IconButton
                       size="small"
                       onClick={() => {
                         if (job.id) {
-                          setSelectedJobs([job.id]);
-                          handleBulkArchive();
+                          handleBulkArchive([job.id]);
                         }
                       }}
                     >
@@ -601,6 +607,14 @@ export default function JobsPageEnhancedV2() {
           </Grid>
         ))}
       </Grid>
+
+      {visibleJobs.length === 0 && (
+        <Paper sx={{ mt: 2, p: 3, textAlign: 'center' }}>
+          <Typography variant="body1" color="text.secondary">
+            No jobs match the current filter.
+          </Typography>
+        </Paper>
+      )}
 
       {/* Create Job Dialog (existing) */}
       <Dialog open={createDialogOpen} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
@@ -676,44 +690,6 @@ export default function JobsPageEnhancedV2() {
         </DialogActions>
       </Dialog>
 
-      {/* Assign Driver Dialog */}
-      <Dialog
-        open={assignDriverDialogOpen}
-        onClose={() => setAssignDriverDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Assign Driver to Selected Jobs</DialogTitle>
-        <DialogContent>
-          <Box sx={{ pt: 2 }}>
-            <TextField
-              select
-              label="Select Driver"
-              value={selectedDriver}
-              onChange={(e) => setSelectedDriver(e.target.value)}
-              fullWidth
-              required
-            >
-              {drivers
-                .filter((d) => d.status === 'available')
-                .map((driver) => (
-                  <MenuItem key={driver.id} value={driver.id}>
-                    {driver.name}
-                  </MenuItem>
-                ))}
-            </TextField>
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
-              {selectedJobs.length} job(s) will be assigned to the selected driver
-            </Typography>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setAssignDriverDialogOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleAssignDriver} disabled={!selectedDriver}>
-            Assign
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 }

@@ -53,7 +53,8 @@ export default function CustomersPage() {
   const [deletingCustomer, setDeletingCustomer] = useState<any>(null);
   const [formData, setFormData] = useState({
     name: '',
-    address: '',
+    phone: '',
+    email: '',
     businessName: '',
     notes: '',
     exceptions: '',
@@ -90,32 +91,62 @@ export default function CustomersPage() {
       setEditingCustomer(customer);
       setFormData({
         name: customer.name || '',
-        address: customer.address || '',
+        phone: customer.phone || '',
+        email: customer.email || '',
         businessName: customer.businessName || '',
         notes: customer.notes || '',
         exceptions: customer.exceptions || '',
       });
-      // Parse legacy address if exists
-      const parsed = parseLegacyAddress(customer.address || '');
-      setAddressData({
-        line1: parsed.line1 || '',
-        line2: parsed.line2 || null,
-        city: parsed.city || '',
-        state: parsed.state || '',
-        zip: parsed.zip || '',
-      });
+      if (customer.defaultAddressStructured) {
+        const structuredAddress = {
+          line1: customer.defaultAddressStructured.line1 || '',
+          line2: customer.defaultAddressStructured.line2 || null,
+          city: customer.defaultAddressStructured.city || '',
+          state: customer.defaultAddressStructured.state || '',
+          zip: customer.defaultAddressStructured.zip || '',
+        };
+        setAddressData(structuredAddress);
+        setAddressValid(
+          !!(
+            structuredAddress.line1 &&
+            structuredAddress.city &&
+            structuredAddress.state &&
+            structuredAddress.zip
+          ),
+        );
+      } else {
+        // Fallback for older customer records
+        const parsed = parseLegacyAddress(customer.defaultAddress || customer.address || '');
+        const parsedAddress = {
+          line1: parsed.line1 || '',
+          line2: parsed.line2 || null,
+          city: parsed.city || '',
+          state: parsed.state || '',
+          zip: parsed.zip || '',
+        };
+        setAddressData(parsedAddress);
+        setAddressValid(
+          !!(
+            parsedAddress.line1 &&
+            parsedAddress.city &&
+            parsedAddress.state &&
+            parsedAddress.zip
+          ),
+        );
+      }
     } else {
       setEditingCustomer(null);
       setFormData({
         name: '',
-        address: '',
+        phone: '',
+        email: '',
         businessName: '',
         notes: '',
         exceptions: '',
       });
       setAddressData({ line1: '', line2: null, city: '', state: '', zip: '' });
+      setAddressValid(false);
     }
-    setAddressValid(false);
     setOpenDialog(true);
   };
 
@@ -144,8 +175,8 @@ export default function CustomersPage() {
     try {
       const customerData = {
         ...formData,
-        address: formatAddress(addressData),
-        addressStructured: addressData,
+        defaultAddress: formatAddress(addressData),
+        defaultAddressStructured: addressData,
       };
 
       if (editingCustomer) {
@@ -277,7 +308,9 @@ export default function CustomersPage() {
                       </Box>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2">{customer.address}</Typography>
+                      <Typography variant="body2">
+                        {customer.defaultAddress || customer.address || 'No address saved'}
+                      </Typography>
                     </TableCell>
                     <TableCell>
                       {customer.businessName ? (
@@ -379,6 +412,22 @@ export default function CustomersPage() {
               fullWidth
               required
               placeholder="John Doe"
+            />
+            <TextField
+              label="Phone"
+              name="phone"
+              value={formData.phone}
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              fullWidth
+              placeholder="(555) 123-4567"
+            />
+            <TextField
+              label="Email"
+              name="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              fullWidth
+              placeholder="customer@example.com"
             />
             <AddressInput
               label="Address"

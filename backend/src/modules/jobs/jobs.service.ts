@@ -10,6 +10,7 @@ import { Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { Job, JobStatus, JobPriority, BillingStatus } from './entities/job.entity';
+import { Customer } from '../customers/entities/customer.entity';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
 import { UpdateBillingDto } from './dto/update-billing.dto';
@@ -28,6 +29,8 @@ export class JobsService {
   constructor(
     @InjectRepository(Job)
     private readonly jobRepository: Repository<Job>,
+    @InjectRepository(Customer)
+    private readonly customerRepository: Repository<Customer>,
     @Optional()
     @InjectQueue('jobs')
     private readonly jobQueue?: Queue,
@@ -85,9 +88,37 @@ export class JobsService {
       );
     }
 
+    const linkedCustomer = createJobDto.customerId
+      ? await this.customerRepository.findOne({
+          where: { id: createJobDto.customerId },
+        })
+      : null;
+
+    if (createJobDto.customerId && !linkedCustomer) {
+      throw new BadRequestException(
+        `Customer with ID ${createJobDto.customerId} not found`,
+      );
+    }
+
+    const resolvedCustomerName = createJobDto.customerName || linkedCustomer?.name;
+    const resolvedCustomerPhone = createJobDto.customerPhone || linkedCustomer?.phone;
+    const resolvedCustomerEmail = createJobDto.customerEmail || linkedCustomer?.email;
+    const resolvedDeliveryAddress =
+      createJobDto.deliveryAddress || linkedCustomer?.defaultAddress;
+
+    if (!resolvedCustomerName || !resolvedDeliveryAddress) {
+      throw new BadRequestException(
+        'customerName and deliveryAddress are required',
+      );
+    }
+
     // Create job with automatic "pending" status
     const job = this.jobRepository.create({
       ...createJobDto,
+      customerName: resolvedCustomerName,
+      customerPhone: resolvedCustomerPhone,
+      customerEmail: resolvedCustomerEmail,
+      deliveryAddress: resolvedDeliveryAddress,
       pickupAddress: createJobDto.pickupAddress || '',
       timeWindowStart,
       timeWindowEnd,

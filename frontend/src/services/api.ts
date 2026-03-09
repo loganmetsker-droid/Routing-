@@ -7,9 +7,19 @@ const API_BASE_URL = (import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_
 
 interface Job {
   id: string;
+  customerId?: string;
   customerName: string;
+  customerPhone?: string;
+  customerEmail?: string;
   deliveryAddress: string;
   pickupAddress?: string;
+  deliveryAddressStructured?: {
+    line1: string;
+    line2?: string | null;
+    city: string;
+    state: string;
+    zip: string;
+  };
   timeWindow?: { start: string; end: string };
   priority?: string;
   status: string;
@@ -23,15 +33,18 @@ interface Route {
   id: string;
   vehicleId: string;
   jobIds: string[];
-  driverId?: string;
+  driverId?: string | null;
   status: string;
   totalDistance?: number;
   totalDuration?: number;
+  totalDistanceKm?: number;
+  totalDurationMinutes?: number;
   optimizedStops?: Array<{
     jobId: string;
     sequence: number;
     address: string;
   }>;
+  routeData?: any;
   estimatedCapacity?: number;
   optimizedAt?: string;
   createdAt?: string;
@@ -53,9 +66,13 @@ export const createJob = async (job: Omit<Job, 'id'>): Promise<{ job: Job }> => 
 // Sanitize job data to ensure required fields
 const sanitizeJob = (job: any): Job => ({
   id: job.id || `job-${Date.now()}-${Math.random()}`,
+  customerId: job.customerId,
   customerName: job.customerName || 'Unknown Customer',
+  customerPhone: job.customerPhone,
+  customerEmail: job.customerEmail,
   deliveryAddress: job.deliveryAddress || 'Unknown Address',
   pickupAddress: job.pickupAddress,
+  deliveryAddressStructured: job.deliveryAddressStructured,
   timeWindow: job.timeWindow,
   priority: job.priority,
   status: job.status || 'pending',
@@ -121,21 +138,36 @@ export const generateGlobalRoute = async (vehicleIds: string[], jobIds: string[]
 };
 
 // Sanitize route data to ensure required fields
-const sanitizeRoute = (route: any): Route => ({
-  id: route.id || `route-${Date.now()}-${Math.random()}`,
-  vehicleId: route.vehicleId || 'unknown-vehicle',
-  jobIds: Array.isArray(route.jobIds) ? route.jobIds : [],
-  driverId: route.driverId,
-  status: route.status || 'planned',
-  totalDistance: route.totalDistance || route.totalDistanceKm,
-  totalDuration: route.totalDuration || route.totalDurationMinutes,
-  optimizedStops: route.optimizedStops,
-  estimatedCapacity: route.estimatedCapacity,
-  optimizedAt: route.optimizedAt,
-  createdAt: route.createdAt,
-  dispatchedAt: route.dispatchedAt,
-  completedAt: route.completedAt,
-});
+const sanitizeRoute = (route: any): Route => {
+  const derivedStops = Array.isArray(route.optimizedStops)
+    ? route.optimizedStops
+    : Array.isArray(route.routeData?.route)
+      ? route.routeData.route.map((stop: any, idx: number) => ({
+          jobId: stop.job_id || stop.jobId,
+          sequence: stop.sequence ?? idx,
+          address: stop.address || '',
+        }))
+      : undefined;
+
+  return {
+    id: route.id || `route-${Date.now()}-${Math.random()}`,
+    vehicleId: route.vehicleId || 'unknown-vehicle',
+    jobIds: Array.isArray(route.jobIds) ? route.jobIds : [],
+    driverId: route.driverId,
+    status: route.status || 'planned',
+    totalDistance: route.totalDistance ?? route.totalDistanceKm,
+    totalDuration: route.totalDuration ?? route.totalDurationMinutes,
+    totalDistanceKm: route.totalDistanceKm,
+    totalDurationMinutes: route.totalDurationMinutes,
+    optimizedStops: derivedStops,
+    routeData: route.routeData,
+    estimatedCapacity: route.estimatedCapacity,
+    optimizedAt: route.optimizedAt,
+    createdAt: route.createdAt,
+    dispatchedAt: route.dispatchedAt,
+    completedAt: route.completedAt,
+  };
+};
 
 export const getRoutes = async (): Promise<Route[]> => {
   try {
@@ -161,12 +193,51 @@ export const assignDriverToRoute = async (routeId: string, driverId: string): Pr
 };
 
 export const updateRouteStatus = async (routeId: string, status: string): Promise<{ route: Route }> => {
+  const normalizedStatus = status === 'dispatched' ? 'in_progress' : status;
+
+  if (normalizedStatus === 'in_progress') {
+    return startRoute(routeId);
+  }
+  if (normalizedStatus === 'completed') {
+    return completeRoute(routeId);
+  }
+  if (normalizedStatus === 'cancelled') {
+    return cancelRoute(routeId);
+  }
+
   const response = await fetch(`${API_BASE_URL}/api/dispatch/routes/${routeId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status: normalizedStatus }),
   });
   if (!response.ok) throw new Error('Failed to update route');
+  return response.json();
+};
+
+export const startRoute = async (routeId: string): Promise<{ route: Route }> => {
+  const response = await fetch(`${API_BASE_URL}/api/dispatch/routes/${routeId}/start`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!response.ok) throw new Error('Failed to start route');
+  return response.json();
+};
+
+export const completeRoute = async (routeId: string): Promise<{ route: Route }> => {
+  const response = await fetch(`${API_BASE_URL}/api/dispatch/routes/${routeId}/complete`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!response.ok) throw new Error('Failed to complete route');
+  return response.json();
+};
+
+export const cancelRoute = async (routeId: string): Promise<{ route: Route }> => {
+  const response = await fetch(`${API_BASE_URL}/api/dispatch/routes/${routeId}/cancel`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!response.ok) throw new Error('Failed to cancel route');
   return response.json();
 };
 

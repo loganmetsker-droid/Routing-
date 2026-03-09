@@ -12,8 +12,26 @@ export class CustomersService {
     private readonly customerRepository: Repository<Customer>,
   ) {}
 
+  private normalizeCustomerPayload(
+    payload: CreateCustomerDto | UpdateCustomerDto,
+  ): CreateCustomerDto | UpdateCustomerDto {
+    const normalized = {
+      ...payload,
+      defaultAddress: payload.defaultAddress ?? payload.address,
+      defaultAddressStructured:
+        payload.defaultAddressStructured ?? payload.addressStructured,
+    } as any;
+
+    delete normalized.address;
+    delete normalized.addressStructured;
+
+    return normalized;
+  }
+
   async create(createCustomerDto: CreateCustomerDto): Promise<Customer> {
-    const customer = this.customerRepository.create(createCustomerDto);
+    const customer = this.customerRepository.create(
+      this.normalizeCustomerPayload(createCustomerDto),
+    );
     return this.customerRepository.save(customer);
   }
 
@@ -50,7 +68,7 @@ export class CustomersService {
 
   async update(id: string, updateCustomerDto: UpdateCustomerDto): Promise<Customer> {
     const customer = await this.findOne(id);
-    Object.assign(customer, updateCustomerDto);
+    Object.assign(customer, this.normalizeCustomerPayload(updateCustomerDto));
     return this.customerRepository.save(customer);
   }
 

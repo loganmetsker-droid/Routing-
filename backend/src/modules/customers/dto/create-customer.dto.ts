@@ -1,5 +1,6 @@
 import { InputType, Field } from '@nestjs/graphql';
-import { IsString, IsEmail, IsOptional, Length } from 'class-validator';
+import GraphQLJSON from 'graphql-type-json';
+import { IsString, IsEmail, IsOptional, Length, IsObject } from 'class-validator';
 
 @InputType()
 export class CreateCustomerDto {
@@ -23,6 +24,34 @@ export class CreateCustomerDto {
   @IsString()
   @IsOptional()
   defaultAddress?: string;
+
+  @Field(() => GraphQLJSON, { nullable: true })
+  @IsOptional()
+  @IsObject()
+  defaultAddressStructured?: {
+    line1: string;
+    line2?: string | null;
+    city: string;
+    state: string;
+    zip: string;
+  };
+
+  // Legacy aliases accepted from existing frontend screens.
+  @Field({ nullable: true })
+  @IsString()
+  @IsOptional()
+  address?: string;
+
+  @Field(() => GraphQLJSON, { nullable: true })
+  @IsOptional()
+  @IsObject()
+  addressStructured?: {
+    line1: string;
+    line2?: string | null;
+    city: string;
+    state: string;
+    zip: string;
+  };
 
   @Field({ nullable: true })
   @IsString()
