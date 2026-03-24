@@ -23,12 +23,10 @@ import { VehiclesService } from './vehicles.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 import { Vehicle } from './entities/vehicle.entity';
-import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('vehicles')
 @ApiBearerAuth('JWT-auth')
 @Controller('vehicles')
-@Public()
 export class VehiclesController {
   constructor(private readonly vehiclesService: VehiclesService) {}
 

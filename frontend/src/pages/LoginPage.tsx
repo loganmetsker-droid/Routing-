@@ -9,24 +9,27 @@ import {
   Typography,
   Alert,
 } from '@mui/material';
-import { useLogin } from '../graphql/hooks';
+import { login } from '../services/api';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
-  const [login, { loading }] = useLogin();
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
     try {
-      await login({ email, password });
+      setLoading(true);
+      await login(email, password);
       navigate('/');
     } catch (err: any) {
       setError(err.message || 'Login failed');
+    } finally {
+      setLoading(false);
     }
   };
 

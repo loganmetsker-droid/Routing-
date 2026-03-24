@@ -31,6 +31,7 @@ import {
   TableHead,
   TableRow,
 } from '@mui/material';
+import { alpha, useTheme } from '@mui/material/styles';
 import {
   Add,
   CheckBox as CheckBoxIcon,
@@ -41,13 +42,16 @@ import {
   CheckCircle as CheckCircleIcon,
   ExpandMore as ExpandMoreIcon,
 } from '@mui/icons-material';
-import { getJobs, createJob, connectSSE } from '../services/api';
+import { getJobs, createJob, getCustomers, updateJob } from '../services/api';
 import AddressInput from '../components/forms/AddressInput';
 import { Address } from '../types/address';
+import { DISPATCH_PLANNER_SELECTION_KEY } from '../types/dispatch';
 import { formatAddress } from '../utils/addressValidation';
 import { format } from 'date-fns';
-
-const API_BASE_URL = (import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/+$/, '').replace(/\/api$/, '');
+import { connectDispatchRealtime } from '../services/socket';
+import ModuleHeader from '../components/ui/ModuleHeader';
+import StatusPill from '../components/ui/StatusPill';
+import InfoCard from '../components/ui/InfoCard';
 
 interface Customer {
   id: string;
@@ -77,6 +81,7 @@ interface Job {
 
 export default function JobsPageEnhancedV2() {
   const navigate = useNavigate();
+  const theme = useTheme();
   const [jobs, setJobs] = useState<Job[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -143,9 +148,8 @@ export default function JobsPageEnhancedV2() {
 
   const loadCustomers = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/customers`);
-      const data = await response.json();
-      setCustomers(data.customers || []);
+      const data = await getCustomers();
+      setCustomers(data || []);
     } catch (error) {
       console.error('Failed to load customers:', error);
     }
@@ -160,7 +164,7 @@ export default function JobsPageEnhancedV2() {
       setRecentCustomerNames(JSON.parse(cached));
     }
 
-    const eventSource = connectSSE((data) => {
+    const eventSource = connectDispatchRealtime((data) => {
       if (data.type === 'job-created' || data.type === 'job-updated') {
         loadJobs();
       }
@@ -194,6 +198,18 @@ export default function JobsPageEnhancedV2() {
   };
 
   const handleBulkAssign = () => {
+    if (selectedJobs.length === 0) {
+      return;
+    }
+
+    sessionStorage.setItem(
+      DISPATCH_PLANNER_SELECTION_KEY,
+      JSON.stringify({
+        selectedJobIds: selectedJobs,
+        source: 'jobs',
+        createdAt: Date.now(),
+      }),
+    );
     navigate('/dispatch');
   };
 
@@ -201,11 +217,7 @@ export default function JobsPageEnhancedV2() {
     try {
       await Promise.all(
         jobIds.map((jobId) =>
-          fetch(`${API_BASE_URL}/api/jobs/${jobId}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'pending', assignedRouteId: null }),
-          })
+          updateJob(jobId, { status: 'pending', assignedRouteId: null })
         )
       );
       if (jobIds === selectedJobs) {
@@ -221,11 +233,7 @@ export default function JobsPageEnhancedV2() {
     try {
       await Promise.all(
         jobIds.map((jobId) =>
-          fetch(`${API_BASE_URL}/api/jobs/${jobId}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'archived' }),
-          })
+          updateJob(jobId, { status: 'archived' })
         )
       );
       if (jobIds === selectedJobs) {
@@ -241,11 +249,7 @@ export default function JobsPageEnhancedV2() {
     try {
       await Promise.all(
         completedJobsToday.filter(job => job.id).map((job) =>
-          fetch(`${API_BASE_URL}/api/jobs/${job.id!}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: 'archived' }),
-          })
+          updateJob(job.id!, { status: 'archived' })
         )
       );
       loadJobs();
@@ -357,36 +361,6 @@ export default function JobsPageEnhancedV2() {
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending':
-        return 'warning';
-      case 'assigned':
-        return 'info';
-      case 'in_progress':
-        return 'primary';
-      case 'completed':
-        return 'success';
-      default:
-        return 'default';
-    }
-  };
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'urgent':
-        return 'error';
-      case 'high':
-        return 'warning';
-      case 'normal':
-        return 'info';
-      case 'low':
-        return 'default';
-      default:
-        return 'default';
-    }
-  };
-
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" p={4}>
@@ -396,26 +370,69 @@ export default function JobsPageEnhancedV2() {
   }
 
   return (
-    <Box>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Box>
-          <Typography variant="h4">Jobs Management</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Filter, assign, and manage jobs efficiently
-          </Typography>
-        </Box>
-        <Box>
-          <Button variant="outlined" onClick={loadJobs} sx={{ mr: 1 }}>
-            Refresh
-          </Button>
-          <Button variant="contained" startIcon={<Add />} onClick={handleOpenDialog}>
-            Create Job
-          </Button>
-        </Box>
-      </Box>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.25 }}>
+      <Grid container spacing={2.25}>
+        <Grid item xs={12} lg={8}>
+          <ModuleHeader
+            title="Jobs Queue"
+            subtitle="Select active work and send it directly into route planning."
+            onRefresh={loadJobs}
+          />
+        </Grid>
+        <Grid item xs={12} lg={4}>
+          <Paper
+            sx={{
+              p: 2.25,
+              borderRadius: 4,
+              border: '1px solid',
+              borderColor: 'divider',
+              bgcolor: 'background.paper',
+            }}
+          >
+            <Typography variant="subtitle2" sx={{ mb: 1.25, fontWeight: 700 }}>
+              Quick Actions
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button fullWidth variant="outlined" onClick={loadJobs}>
+                Refresh
+              </Button>
+              <Button fullWidth variant="contained" startIcon={<Add />} onClick={handleOpenDialog}>
+                Create Job
+              </Button>
+            </Box>
+          </Paper>
+        </Grid>
+      </Grid>
+
+      <Grid container spacing={2.25}>
+        <Grid item xs={12} sm={4}>
+          <InfoCard title="Active Jobs" value={activeJobs.length} subtitle="Open planning queue" statusLabel="Active" statusColor="#2563eb" />
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <InfoCard title="Selected" value={selectedJobs.length} subtitle="Ready for batch actions" statusLabel="Planner" statusColor="#4f46e5" />
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <InfoCard title="Completed Today" value={completedJobsToday.length} subtitle="Archive-ready jobs" statusLabel="Completed" statusColor="#059669" />
+        </Grid>
+      </Grid>
 
       {/* Quick Filter Chips */}
-      <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+      <Paper
+        sx={{
+          p: 1.5,
+          display: 'flex',
+          gap: 1,
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          borderRadius: 4,
+          border: '1px solid',
+          borderColor: 'divider',
+          bgcolor: 'background.paper',
+        }}
+      >
+        <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
+          Filters:
+        </Typography>
         <Chip
           label="Today's Jobs"
           onClick={() => applyPresetFilter('today')}
@@ -440,34 +457,32 @@ export default function JobsPageEnhancedV2() {
           color={activePreset === 'completed' ? 'success' : 'default'}
           variant={activePreset === 'completed' ? 'filled' : 'outlined'}
         />
-        {activePreset && (
-          <Chip label="Clear Filters" onDelete={resetFilters} size="small" />
-        )}
-      </Box>
+        {activePreset && <Chip label="Clear Filters" onDelete={resetFilters} size="small" />}
+      </Paper>
 
       {/* Batch Action Toolbar */}
       {selectedJobs.length > 0 && (
         <Paper
           sx={{
-            mb: 2,
             p: 2,
             display: 'flex',
             gap: 1,
             alignItems: 'center',
-            bgcolor: 'action.selected',
-            borderRadius: 1,
+            flexWrap: 'wrap',
+            bgcolor: alpha(theme.palette.primary.main, 0.08),
+            border: '1px solid',
+            borderColor: alpha(theme.palette.primary.main, 0.25),
+            borderRadius: 4,
           }}
         >
-          <Typography variant="body2" fontWeight="bold">
-            {selectedJobs.length} selected
-          </Typography>
+          <StatusPill label={`${selectedJobs.length} selected`} color="#2563eb" />
           <Button variant="outlined" size="small" onClick={handleBulkAssign}>
-            Open Dispatch Board
+            Plan Route ({selectedJobs.length})
           </Button>
-          <Button variant="outlined" size="small" onClick={handleBulkUnassign}>
+          <Button variant="outlined" size="small" onClick={() => void handleBulkUnassign()}>
             Unassign
           </Button>
-          <Button variant="outlined" size="small" onClick={handleBulkArchive}>
+          <Button variant="outlined" size="small" onClick={() => void handleBulkArchive()}>
             Archive
           </Button>
           <Button variant="text" size="small" onClick={() => setSelectedJobs([])}>
@@ -478,7 +493,7 @@ export default function JobsPageEnhancedV2() {
 
       {/* Completed Jobs Summary */}
       {completedJobsToday.length > 0 && (
-        <Accordion sx={{ mb: 2 }} defaultExpanded={false}>
+        <Accordion sx={{ borderRadius: 4, border: '1px solid', borderColor: 'divider' }} defaultExpanded={false}>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%', pr: 2 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -538,8 +553,16 @@ export default function JobsPageEnhancedV2() {
       <Grid container spacing={3}>
         {visibleJobs.map((job) => (
           <Grid item xs={12} md={6} key={job.id!}>
-            <Card>
-              <CardContent>
+            <Card
+              sx={{
+                borderRadius: 4,
+                border: '1px solid',
+                borderColor: job.id && selectedJobs.includes(job.id) ? alpha(theme.palette.primary.main, 0.4) : 'divider',
+                boxShadow: 'none',
+                bgcolor: job.id && selectedJobs.includes(job.id) ? alpha(theme.palette.primary.main, 0.05) : 'background.paper',
+              }}
+            >
+              <CardContent sx={{ p: 2.25 }}>
                 <Box sx={{ display: 'flex', alignItems: 'flex-start', mb: 1 }}>
                   <Checkbox
                     checked={job.id ? selectedJobs.includes(job.id) : false}
@@ -548,18 +571,31 @@ export default function JobsPageEnhancedV2() {
                     checkedIcon={<CheckBoxIcon />}
                   />
                   <Box sx={{ flexGrow: 1 }}>
-                    <Typography variant="h6">{job.customerName}</Typography>
-                    <Box sx={{ mt: 1, mb: 2 }}>
-                      <Chip
+                    <Typography variant="h6" sx={{ fontSize: '1.05rem' }}>{job.customerName}</Typography>
+                    <Box sx={{ mt: 1, mb: 1.5, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                      <StatusPill
                         label={job.status || 'pending'}
-                        color={getStatusColor(job.status || 'pending') as any}
-                        size="small"
-                        sx={{ mr: 1 }}
+                        color={
+                          (job.status || 'pending') === 'completed'
+                            ? '#059669'
+                            : (job.status || 'pending') === 'in_progress'
+                              ? '#2563eb'
+                              : (job.status || 'pending') === 'assigned'
+                                ? '#0284c7'
+                                : '#d97706'
+                        }
                       />
-                      <Chip
+                      <StatusPill
                         label={job.priority || 'normal'}
-                        color={getPriorityColor(job.priority || 'normal') as any}
-                        size="small"
+                        color={
+                          (job.priority || 'normal') === 'urgent'
+                            ? '#dc2626'
+                            : (job.priority || 'normal') === 'high'
+                              ? '#d97706'
+                              : (job.priority || 'normal') === 'normal'
+                                ? '#2563eb'
+                                : '#64748b'
+                        }
                       />
                     </Box>
                     <Typography variant="body2" color="text.secondary">

@@ -87,3 +87,78 @@ export const disconnectDispatchSocket = () => {
     dispatchSocket = null;
   }
 };
+
+/**
+ * Dispatch realtime adapter that normalizes Socket.IO events
+ * into the SSE-style payloads used throughout the UI.
+ */
+export const connectDispatchRealtime = (onMessage: (data: any) => void) => {
+  const socket = getDispatchSocket();
+  const recent = new Map<string, number>();
+  const DEDUPE_MS = 500;
+
+  const shouldEmit = (type: string, payload: any) => {
+    const routeId = payload?.routeId || payload?.route?.id || payload?.id || 'unknown';
+    const key = `${type}:${routeId}`;
+    const now = Date.now();
+    const last = recent.get(key) || 0;
+    if (now - last < DEDUPE_MS) return false;
+    recent.set(key, now);
+    return true;
+  };
+
+  const emitNormalized = (type: string, payload: any) => {
+    if (!shouldEmit(type, payload)) return;
+    const route = payload?.route || payload;
+    onMessage({ type, route, raw: payload });
+  };
+
+  const emitSyntheticJobUpdate = (payload: any) => {
+    if (!shouldEmit('job-updated', payload)) return;
+    const route = payload?.route || payload;
+    onMessage({ type: 'job-updated', route, raw: payload });
+  };
+
+  const handleRouteUpdate = (payload: any) => {
+    const normalizedType =
+      payload?.type === 'created' ? 'route-created' : 'route-updated';
+    emitNormalized(normalizedType, payload);
+    emitSyntheticJobUpdate(payload);
+  };
+
+  const handleRouteCreated = (payload: any) => emitNormalized('route-created', payload);
+  const handleRouteUpdated = (payload: any) => {
+    emitNormalized('route-updated', payload);
+    emitSyntheticJobUpdate(payload);
+  };
+  const handleRouteStarted = (payload: any) => {
+    emitNormalized('route-updated', payload);
+    emitSyntheticJobUpdate(payload);
+  };
+  const handleRouteCompleted = (payload: any) => {
+    emitNormalized('route-updated', payload);
+    emitSyntheticJobUpdate(payload);
+  };
+  const handleRouteCancelled = (payload: any) => {
+    emitNormalized('route-updated', payload);
+    emitSyntheticJobUpdate(payload);
+  };
+
+  socket.on('route:update', handleRouteUpdate);
+  socket.on('route:created', handleRouteCreated);
+  socket.on('route:updated', handleRouteUpdated);
+  socket.on('route:started', handleRouteStarted);
+  socket.on('route:completed', handleRouteCompleted);
+  socket.on('route:cancelled', handleRouteCancelled);
+
+  return {
+    close: () => {
+      socket.off('route:update', handleRouteUpdate);
+      socket.off('route:created', handleRouteCreated);
+      socket.off('route:updated', handleRouteUpdated);
+      socket.off('route:started', handleRouteStarted);
+      socket.off('route:completed', handleRouteCompleted);
+      socket.off('route:cancelled', handleRouteCancelled);
+    },
+  };
+};

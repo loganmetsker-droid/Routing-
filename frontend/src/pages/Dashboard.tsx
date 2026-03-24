@@ -1,22 +1,18 @@
 import { useEffect, useState, useMemo } from 'react';
 import {
   Grid,
-  Card,
-  CardContent,
   Typography,
   Box,
-  Paper,
-  IconButton,
-  Chip,
+  Button,
+  Stack,
+  Card,
+  CardContent,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Divider,
-  Avatar,
-  LinearProgress,
   CircularProgress,
 } from '@mui/material';
 import {
@@ -24,29 +20,23 @@ import {
   Person,
   LocalShipping,
   Route as RouteIcon,
-  Refresh,
-  TrendingUp,
-  CheckCircle,
+  AddTask,
+  Route,
+  Insights,
 } from '@mui/icons-material';
-import { MapContainer, TileLayer, Polyline, Marker, Popup, Tooltip as LeafletTooltip } from 'react-leaflet';
 import { motion } from 'framer-motion';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
+import ModuleHeader from '../components/ui/ModuleHeader';
+import AICommandBox from '../components/ui/AICommandBox';
+import InfoCard from '../components/ui/InfoCard';
+import MapPanel from '../components/map/MapPanel';
+import DetailTray from '../components/ui/DetailTray';
+import StatusPill from '../components/ui/StatusPill';
+import { moduleAccents } from '../theme/tokens';
+import { getDrivers, getVehicles, getJobs, getRoutes, getDispatchOptimizerHealth, OptimizerHealth } from '../services/api';
 
-const API_BASE_URL = (import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/+$/, '').replace(/\/api$/, '');
-
-// Fix Leaflet default marker icon issue
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-});
-
-// Distinct colors for routes
 const ROUTE_COLORS = [
-  '#FF6B6B', '#4ECDC4', '#FFE66D', '#A8E6CF', '#FF8B94', '#95E1D3',
-  '#F38181', '#7FDBFF', '#B4A7D6', '#FFD93D', '#6BCF7F', '#FF9F1C',
+  '#3b82f6', '#14b8a6', '#f59e0b', '#84cc16', '#8b5cf6', '#4f46e5',
+  '#0ea5e9', '#22c55e', '#f97316', '#06b6d4', '#6366f1', '#0284c7',
 ];
 
 const container = {
@@ -69,27 +59,23 @@ export default function Dashboard() {
   const [routes, setRoutes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [optimizerHealth, setOptimizerHealth] = useState<OptimizerHealth | null>(null);
 
   const loadData = async () => {
     try {
-      const [driversRes, vehiclesRes, jobsRes, routesRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/drivers`),
-        fetch(`${API_BASE_URL}/api/vehicles`),
-        fetch(`${API_BASE_URL}/api/jobs`),
-        fetch(`${API_BASE_URL}/api/dispatch/routes`),
+      const [driversData, vehiclesData, jobsData, routesData] = await Promise.all([
+        getDrivers(),
+        getVehicles(),
+        getJobs(),
+        getRoutes(),
       ]);
+      const healthData = await getDispatchOptimizerHealth();
 
-      // Parse JSON with error handling for each response
-      const driversData = driversRes.ok ? await driversRes.json() : { drivers: [] };
-      const vehiclesData = vehiclesRes.ok ? await vehiclesRes.json() : { vehicles: [] };
-      const jobsData = jobsRes.ok ? await jobsRes.json() : { jobs: [] };
-      const routesData = routesRes.ok ? await routesRes.json() : { routes: [] };
-
-      // Normalize responses - handle both array and wrapped object formats
-      setDrivers(Array.isArray(driversData) ? driversData : (driversData?.drivers || []));
-      setVehicles(Array.isArray(vehiclesData) ? vehiclesData : (vehiclesData?.vehicles || []));
-      setJobs(Array.isArray(jobsData) ? jobsData : (jobsData?.jobs || []));
-      setRoutes(Array.isArray(routesData) ? routesData : (routesData?.routes || []));
+      setDrivers(Array.isArray(driversData) ? driversData : []);
+      setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
+      setJobs(Array.isArray(jobsData) ? jobsData : []);
+      setRoutes(Array.isArray(routesData) ? routesData : []);
+      setOptimizerHealth(healthData);
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       // Ensure state is always arrays even on error
@@ -136,51 +122,45 @@ export default function Dashboard() {
     const totalVehicles = safeVehicles.length;
     const totalJobs = safeJobs.length;
     const totalRoutes = safeRoutes.length;
+    const activeDriverPct = totalDrivers > 0 ? Math.round((activeDrivers / totalDrivers) * 100) : 0;
+    const availableVehiclePct = totalVehicles > 0 ? Math.round((availableVehicles / totalVehicles) * 100) : 0;
+    const activeJobsPct = totalJobs > 0 ? Math.round((activeJobs / totalJobs) * 100) : 0;
 
     return [
       {
         title: 'Active Drivers',
         value: activeDrivers,
         total: totalDrivers,
-        percentage: totalDrivers > 0 ? Math.round((activeDrivers / totalDrivers) * 100) : 0,
-        gradient: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%)',
-        glowColor: 'rgba(99, 102, 241, 0.4)',
+        subtitle: 'Drivers on live assignments',
+        statusLabel: `${activeDriverPct}%`,
+        statusColor: moduleAccents.drivers,
         icon: Person,
-        trend: '+12%',
-        trendUp: true,
       },
       {
         title: 'Available Vehicles',
         value: availableVehicles,
         total: totalVehicles,
-        percentage: totalVehicles > 0 ? Math.round((availableVehicles / totalVehicles) * 100) : 0,
-        gradient: 'linear-gradient(135deg, #ec4899 0%, #f43f5e 50%, #ef4444 100%)',
-        glowColor: 'rgba(236, 72, 153, 0.4)',
+        subtitle: 'Ready for dispatch',
+        statusLabel: `${availableVehiclePct}%`,
+        statusColor: moduleAccents.vehicles,
         icon: DirectionsCar,
-        trend: '+5%',
-        trendUp: true,
       },
       {
         title: 'Active Jobs',
         value: activeJobs,
         total: totalJobs,
-        percentage: totalJobs > 0 ? Math.round((activeJobs / totalJobs) * 100) : 0,
-        gradient: 'linear-gradient(135deg, #3b82f6 0%, #06b6d4 50%, #10b981 100%)',
-        glowColor: 'rgba(59, 130, 246, 0.4)',
+        subtitle: 'Pending + in progress',
+        statusLabel: `${activeJobsPct}%`,
+        statusColor: moduleAccents.jobs,
         icon: LocalShipping,
-        trend: '+18%',
-        trendUp: true,
       },
       {
         title: 'Routes Today',
         value: totalRoutes,
-        total: totalRoutes,
-        percentage: 100,
-        gradient: 'linear-gradient(135deg, #f59e0b 0%, #fb923c 50%, #f97316 100%)',
-        glowColor: 'rgba(245, 158, 11, 0.4)',
+        subtitle: 'Active route plans',
+        statusLabel: 'Live',
+        statusColor: moduleAccents.dispatch,
         icon: RouteIcon,
-        trend: '+8%',
-        trendUp: true,
       },
     ];
   }, [drivers, vehicles, jobs, routes]);
@@ -194,11 +174,11 @@ export default function Dashboard() {
     return safeRoutes.map((route: any, index: number) => {
       const assignedVehicle = safeVehicles.find((v: any) => v.id === route.vehicleId);
 
-      // Simple mock positions for routes without coordinates
-      const positions = route.stops && Array.isArray(route.stops) && route.stops.length > 0
-        ? route.stops.map(() => ({
-            lat: 39.0997 + (Math.random() - 0.5) * 0.1,
-            lng: -94.5786 + (Math.random() - 0.5) * 0.1,
+      const stops = route.optimizedStops || route.routeData?.route || [];
+      const positions = Array.isArray(stops) && stops.length > 0
+        ? stops.map((stop: any, i: number) => ({
+            lat: 39.0997 + (i * 0.012) + (((index * 7 + i * 3) % 9) - 4) * 0.004,
+            lng: -94.5786 + (i * 0.01) + (((index * 5 + i * 2) % 7) - 3) * 0.004,
           }))
         : [];
 
@@ -211,9 +191,20 @@ export default function Dashboard() {
         vehiclePlate: assignedVehicle?.licensePlate || 'N/A',
         totalDistance: route.totalDistance || 0,
         stopCount: positions.length,
+        dataQuality: route.dataQuality || 'live',
+        rerouteState: route.rerouteState || null,
+        plannerDiagnostics: route.plannerDiagnostics || route.routeData?.planner_diagnostics || {},
       };
     });
   }, [routes, vehicles]);
+  const usingSimulatedRoutes = mapRoutes.some((route: any) => route.dataQuality === 'simulated');
+  const usingDegradedRoutes = mapRoutes.some((route: any) => route.dataQuality === 'degraded');
+  const pendingReroutes = mapRoutes.filter((route: any) => route.rerouteState === 'requested' || route.rerouteState === 'approved').length;
+  const routesWithDiagnostics = mapRoutes.filter(
+    (route: any) =>
+      Array.isArray(route?.plannerDiagnostics?.advancedConstraints?.reasonCodes) &&
+      route.plannerDiagnostics.advancedConstraints.reasonCodes.length > 0,
+  ).length;
 
   const mapCenter: [number, number] = useMemo(() => {
     if (mapRoutes.length > 0 && mapRoutes[0].positions.length > 0) {
@@ -233,6 +224,24 @@ export default function Dashboard() {
     return safeJobs.slice(0, 6);
   }, [jobs]);
 
+  const quickActions = [
+    { label: 'Create Job', icon: <AddTask fontSize="small" /> },
+    { label: 'Plan Routes', icon: <Route fontSize="small" /> },
+    { label: 'View Insights', icon: <Insights fontSize="small" /> },
+  ];
+
+  const getPriorityColor = (priority: string) => {
+    if (priority === 'urgent') return '#dc2626';
+    if (priority === 'high') return '#d97706';
+    return '#64748b';
+  };
+
+  const getStatusColor = (status: string) => {
+    if (status === 'completed') return '#059669';
+    if (status === 'in_progress') return '#2563eb';
+    return '#b45309';
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
@@ -243,128 +252,75 @@ export default function Dashboard() {
 
   return (
     <Box sx={{ flexGrow: 1 }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-        <Box>
-          <Typography variant="h4" fontWeight={700} sx={{ mb: 0.5 }}>
-            Dashboard
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Welcome back! Here's what's happening today.
-          </Typography>
-        </Box>
-        <IconButton
-          onClick={handleRefreshAll}
-          disabled={isRefreshing}
-          sx={{
-            bgcolor: 'primary.main',
-            color: 'white',
-            '&:hover': { bgcolor: 'primary.dark' },
-            transform: isRefreshing ? 'rotate(360deg)' : 'rotate(0deg)',
-            transition: 'transform 0.5s',
-          }}
-        >
-          <Refresh />
-        </IconButton>
-      </Box>
-
-      {/* Stats Cards */}
       <motion.div variants={container} initial="hidden" animate="show">
-        <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid container spacing={2.25} sx={{ mb: 2.25 }}>
+          <Grid item xs={12} lg={7}>
+            <motion.div variants={item}>
+              <ModuleHeader
+                title="Command Center"
+                subtitle={`Map-first view of fleet movement, route health, and active delivery demand. Optimizer: ${optimizerHealth?.status || 'unknown'}.`}
+                onRefresh={handleRefreshAll}
+                isRefreshing={isRefreshing}
+              />
+            </motion.div>
+          </Grid>
+          <Grid item xs={12} lg={5}>
+            <motion.div variants={item}>
+              <AICommandBox />
+            </motion.div>
+          </Grid>
+        </Grid>
+
+        <Grid container spacing={2.25} sx={{ mb: 2.25 }}>
+          <Grid item xs={12}>
+            <motion.div variants={item}>
+              <Box
+                sx={{
+                  p: 2,
+                  borderRadius: 4,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  bgcolor: 'background.paper',
+                }}
+              >
+                <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1.25 }}>
+                  Quick Actions
+                </Typography>
+                <Stack direction="row" spacing={1.25} flexWrap="wrap" useFlexGap>
+                  {quickActions.map((action) => (
+                    <Button key={action.label} variant="outlined" startIcon={action.icon} size="small" sx={{ borderRadius: 2 }}>
+                      {action.label}
+                    </Button>
+                  ))}
+                  <StatusPill
+                    label={`Optimizer ${optimizerHealth?.status || 'unknown'}`}
+                    color={optimizerHealth?.status === 'healthy' ? '#059669' : optimizerHealth?.status === 'degraded' ? '#d97706' : '#dc2626'}
+                  />
+                  {usingSimulatedRoutes ? <StatusPill label="Simulated routes" color="#64748b" /> : null}
+                  {!usingSimulatedRoutes && usingDegradedRoutes ? <StatusPill label="Degraded routes" color="#d97706" /> : null}
+                  {pendingReroutes > 0 ? <StatusPill label={`${pendingReroutes} reroute pending`} color="#f97316" /> : null}
+                  {routesWithDiagnostics > 0 ? <StatusPill label={`${routesWithDiagnostics} routes with diagnostics`} color="#0ea5e9" /> : null}
+                </Stack>
+              </Box>
+            </motion.div>
+          </Grid>
+        </Grid>
+
+        <Grid container spacing={2.25} sx={{ mb: 2.25 }}>
           {stats.map((stat) => {
             const IconComponent = stat.icon;
             return (
               <Grid item xs={12} sm={6} lg={3} key={stat.title}>
                 <motion.div variants={item}>
-                  <Card
-                    sx={{
-                      background: stat.gradient,
-                      color: 'white',
-                      height: '100%',
-                      position: 'relative',
-                      overflow: 'hidden',
-                      transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
-                      cursor: 'pointer',
-                      '&:hover': {
-                        transform: 'translateY(-12px) scale(1.02)',
-                        boxShadow: `0 20px 40px -10px ${stat.glowColor}, 0 0 20px ${stat.glowColor}`,
-                      },
-                      '&:active': {
-                        transform: 'translateY(-8px) scale(1.01)',
-                      },
-                      '&::before': {
-                        content: '""',
-                        position: 'absolute',
-                        top: 0,
-                        right: 0,
-                        width: '140px',
-                        height: '140px',
-                        borderRadius: '50%',
-                        background: 'radial-gradient(circle, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 70%)',
-                        transform: 'translate(30%, -30%)',
-                      },
-                      '&::after': {
-                        content: '""',
-                        position: 'absolute',
-                        bottom: -60,
-                        left: -60,
-                        width: '120px',
-                        height: '120px',
-                        borderRadius: '50%',
-                        background: 'radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 70%)',
-                      },
-                    }}
-                  >
-                    <CardContent sx={{ position: 'relative', zIndex: 1 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                        <Box
-                          sx={{
-                            bgcolor: 'rgba(255,255,255,0.2)',
-                            borderRadius: 2,
-                            p: 1.5,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          <IconComponent sx={{ fontSize: 32 }} />
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <TrendingUp sx={{ fontSize: 20 }} />
-                          <Typography variant="body2" fontWeight={600}>
-                            {stat.trend}
-                          </Typography>
-                        </Box>
-                      </Box>
-
-                      <Typography variant="body2" sx={{ opacity: 0.9, mb: 1 }}>
-                        {stat.title}
-                      </Typography>
-
-                      <Typography variant="h3" fontWeight={700} sx={{ mb: 1 }}>
-                        {stat.value}
-                        {stat.total !== stat.value && (
-                          <Typography component="span" variant="h6" sx={{ opacity: 0.7, ml: 1 }}>
-                            / {stat.total}
-                          </Typography>
-                        )}
-                      </Typography>
-
-                      <LinearProgress
-                        variant="determinate"
-                        value={stat.percentage}
-                        sx={{
-                          height: 6,
-                          borderRadius: 3,
-                          bgcolor: 'rgba(255,255,255,0.2)',
-                          '& .MuiLinearProgress-bar': {
-                            bgcolor: 'white',
-                            borderRadius: 3,
-                          },
-                        }}
-                      />
-                    </CardContent>
-                  </Card>
+                  <InfoCard
+                    title={stat.title}
+                    value={stat.value}
+                    total={stat.total}
+                    subtitle={stat.subtitle}
+                    statusLabel={stat.statusLabel}
+                    statusColor={stat.statusColor}
+                    icon={<IconComponent fontSize="small" />}
+                  />
                 </motion.div>
               </Grid>
             );
@@ -372,162 +328,33 @@ export default function Dashboard() {
         </Grid>
       </motion.div>
 
-      {/* Main Content Grid */}
-      <Grid container spacing={3}>
-        {/* Map View */}
+      <Grid container spacing={2.25}>
         <Grid item xs={12} lg={8}>
           <motion.div variants={item} initial="hidden" animate="show">
-            <Paper sx={{ p: 3, height: 600, borderRadius: 3, boxShadow: 3 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Box>
-                  <Typography variant="h6" fontWeight={700} gutterBottom>
-                    Active Routes Map
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {mapRoutes.length} route{mapRoutes.length !== 1 ? 's' : ''} currently active
-                  </Typography>
-                </Box>
-                <Chip icon={<CheckCircle />} label="Live" color="success" size="small" />
-              </Box>
-
-              <Divider sx={{ mb: 2 }} />
-
-              {/* Route Legend */}
-              <Box sx={{ mb: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                {mapRoutes.slice(0, 6).map((route: any) => (
-                  <Chip
-                    key={route.id}
-                    label={`${route.vehicle} (${route.vehiclePlate})`}
-                    size="small"
-                    sx={{
-                      bgcolor: route.color,
-                      color: 'white',
-                      fontWeight: 600,
-                      '& .MuiChip-label': { px: 1.5 },
-                    }}
-                  />
-                ))}
-                {mapRoutes.length > 6 && (
-                  <Chip label={`+${mapRoutes.length - 6} more`} size="small" variant="outlined" />
-                )}
-              </Box>
-
-              {/* Map */}
-              <Box
-                sx={{
-                  height: 440,
-                  borderRadius: 2,
-                  overflow: 'hidden',
-                  boxShadow: 2,
-                  border: '1px solid',
-                  borderColor: 'divider',
-                }}
-              >
-                <MapContainer
-                  center={mapCenter}
-                  zoom={mapZoom}
-                  style={{ height: '100%', width: '100%' }}
-                  scrollWheelZoom={true}
-                >
-                  <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                  />
-
-                  {mapRoutes.map((route: any) => {
-                    if (!route.positions || route.positions.length === 0) return null;
-
-                    const positions = route.positions.map((pos: any) => [pos.lat, pos.lng]);
-
-                    return (
-                      <div key={route.id}>
-                        <Polyline
-                          positions={positions}
-                          pathOptions={{ color: route.color, weight: 5, opacity: 0.8 }}
-                        >
-                          <LeafletTooltip sticky>
-                            <div style={{ textAlign: 'center' }}>
-                              <strong>{route.vehicle}</strong><br />
-                              {route.vehiclePlate}<br />
-                              {route.stopCount} stops • {route.totalDistance}km
-                            </div>
-                          </LeafletTooltip>
-                        </Polyline>
-
-                        {positions.map((pos: any, idx: number) => (
-                          <Marker key={`${route.id}-${idx}`} position={pos}>
-                            <Popup>
-                              <Box sx={{ minWidth: 200 }}>
-                                <Typography variant="subtitle2" fontWeight={700} gutterBottom>
-                                  Stop {idx + 1} of {route.stopCount}
-                                </Typography>
-                                <Divider sx={{ my: 1 }} />
-                                <Typography variant="body2">
-                                  <strong>Vehicle:</strong> {route.vehicle}
-                                </Typography>
-                                <Typography variant="body2">
-                                  <strong>Plate:</strong> {route.vehiclePlate}
-                                </Typography>
-                                <Typography variant="body2">
-                                  <strong>Status:</strong>{' '}
-                                  <Chip
-                                    label={route.status}
-                                    size="small"
-                                    color={route.status === 'completed' ? 'success' : 'primary'}
-                                  />
-                                </Typography>
-                              </Box>
-                            </Popup>
-                          </Marker>
-                        ))}
-                      </div>
-                    );
-                  })}
-                </MapContainer>
-              </Box>
-            </Paper>
+            <MapPanel mapCenter={mapCenter} mapZoom={mapZoom} mapRoutes={mapRoutes} />
           </motion.div>
         </Grid>
 
-        {/* Route Summary */}
         <Grid item xs={12} lg={4}>
           <motion.div variants={item} initial="hidden" animate="show">
-            <Paper sx={{ p: 3, height: 600, borderRadius: 3, boxShadow: 3, overflow: 'auto' }}>
-              <Typography variant="h6" fontWeight={700} gutterBottom>
-                Route Summary
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Vehicle assignments and details
-              </Typography>
-
+            <DetailTray title="Route Summary" subtitle="Vehicle assignments and route health" height={620}>
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {mapRoutes.length > 0 ? (
                   mapRoutes.map((route: any, index: number) => (
                     <Card
                       key={route.id}
                       sx={{
-                        border: '2px solid',
-                        borderColor: route.color,
-                        borderRadius: 2,
-                        transition: 'transform 0.2s, box-shadow 0.2s',
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        borderRadius: 3,
                         '&:hover': {
-                          transform: 'translateX(4px)',
-                          boxShadow: 3,
+                          bgcolor: 'action.hover',
                         },
                       }}
                     >
                       <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-                          <Avatar
-                            sx={{
-                              bgcolor: route.color,
-                              width: 40,
-                              height: 40,
-                              fontWeight: 700,
-                            }}
-                          >
-                            {index + 1}
-                          </Avatar>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: 1.25 }}>
+                          <StatusPill label={`R${index + 1}`} color={route.color} />
                           <Box sx={{ flex: 1 }}>
                             <Typography variant="subtitle2" fontWeight={700}>
                               {route.vehicle}
@@ -536,34 +363,22 @@ export default function Dashboard() {
                               {route.vehiclePlate}
                             </Typography>
                           </Box>
-                          <Chip
-                            label={route.status}
-                            size="small"
-                            color={route.status === 'completed' ? 'success' : 'primary'}
-                            sx={{ fontWeight: 600 }}
-                          />
+                          <StatusPill label={route.status} color={getStatusColor(route.status)} />
                         </Box>
-
-                        <Divider sx={{ my: 1.5 }} />
-
-                        <Grid container spacing={1}>
-                          <Grid item xs={6}>
-                            <Typography variant="caption" color="text.secondary">
-                              Stops
-                            </Typography>
-                            <Typography variant="body2" fontWeight={600}>
-                              {route.stopCount}
-                            </Typography>
-                          </Grid>
-                          <Grid item xs={6}>
-                            <Typography variant="caption" color="text.secondary">
-                              Distance
-                            </Typography>
-                            <Typography variant="body2" fontWeight={600}>
-                              {route.totalDistance} km
-                            </Typography>
-                          </Grid>
-                        </Grid>
+                        <Typography variant="body2" color="text.secondary">
+                          {route.stopCount} stops • {route.totalDistance} km
+                        </Typography>
+                        {route.rerouteState ? (
+                          <Box sx={{ mt: 1 }}>
+                            <StatusPill label={`reroute ${route.rerouteState}`} color="#f97316" />
+                          </Box>
+                        ) : null}
+                        {Array.isArray(route?.plannerDiagnostics?.advancedConstraints?.reasonCodes) &&
+                        route.plannerDiagnostics.advancedConstraints.reasonCodes.length > 0 ? (
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.75 }}>
+                            diagnostics: {route.plannerDiagnostics.advancedConstraints.reasonCodes.slice(0, 2).join(', ')}
+                          </Typography>
+                        ) : null}
                       </CardContent>
                     </Card>
                   ))
@@ -579,21 +394,13 @@ export default function Dashboard() {
                   </Box>
                 )}
               </Box>
-            </Paper>
+            </DetailTray>
           </motion.div>
         </Grid>
 
-        {/* Recent Jobs Table */}
         <Grid item xs={12}>
           <motion.div variants={item} initial="hidden" animate="show">
-            <Paper sx={{ p: 3, borderRadius: 3, boxShadow: 3 }}>
-              <Typography variant="h6" fontWeight={700} gutterBottom>
-                Recent Jobs
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                Latest delivery and pickup jobs
-              </Typography>
-
+            <DetailTray title="Recent Jobs" subtitle="Latest delivery and pickup activity">
               <TableContainer>
                 <Table>
                   <TableHead>
@@ -626,31 +433,10 @@ export default function Dashboard() {
                           <TableCell>{job.pickupAddress || 'Use Last Stop'}</TableCell>
                           <TableCell>{job.deliveryAddress}</TableCell>
                           <TableCell>
-                            <Chip
-                              label={job.priority}
-                              size="small"
-                              color={
-                                job.priority === 'urgent'
-                                  ? 'error'
-                                  : job.priority === 'high'
-                                  ? 'warning'
-                                  : 'default'
-                              }
-                            />
+                            <StatusPill label={job.priority || 'normal'} color={getPriorityColor(job.priority)} />
                           </TableCell>
                           <TableCell>
-                            <Chip
-                              label={job.status}
-                              size="small"
-                              color={
-                                job.status === 'completed'
-                                  ? 'success'
-                                  : job.status === 'in_progress'
-                                  ? 'primary'
-                                  : 'warning'
-                              }
-                              sx={{ fontWeight: 600 }}
-                            />
+                            <StatusPill label={job.status || 'pending'} color={getStatusColor(job.status)} />
                           </TableCell>
                         </TableRow>
                       ))
@@ -665,7 +451,7 @@ export default function Dashboard() {
                   </TableBody>
                 </Table>
               </TableContainer>
-            </Paper>
+            </DetailTray>
           </motion.div>
         </Grid>
       </Grid>

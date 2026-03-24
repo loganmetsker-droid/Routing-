@@ -1,4 +1,5 @@
 // GraphQL hooks disabled - using REST API via src/services/api.ts
+import { login as apiLogin } from '../services/api';
 
 type Vehicle = { id: string; make: string; model: string; licensePlate: string; status: string; [key: string]: any };
 type Driver = { id: string; name?: string; firstName?: string; lastName?: string; status: string; [key: string]: any };
@@ -31,4 +32,11 @@ export const useRoutes = () => ({ data: { routes: [] as Route[] }, loading: fals
 export const useRoute = (_id?: string) => ({ data: { route: null as Route | null }, loading: false, error: null, refetch: async () => {} });
 export const useCreateRoute = () => [async (_input: any) => ({ data: {} }), { loading: false }] as const;
 
-export const useLogin = () => [async (_input: any) => ({ data: {} }), { loading: false }] as const;
+export const useLogin = () =>
+  [
+    async (input: { email: string; password: string }) => {
+      const data = await apiLogin(input.email, input.password);
+      return { data };
+    },
+    { loading: false },
+  ] as const;

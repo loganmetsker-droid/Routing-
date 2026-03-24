@@ -175,11 +175,13 @@ export default function MultiRouteMap({
     switch (status) {
       case 'planned':
         return 'success';
-      case 'dispatched':
+      case 'assigned':
       case 'in_progress':
         return 'primary';
       case 'completed':
         return 'default';
+      case 'cancelled':
+        return 'warning';
       default:
         return 'default';
     }

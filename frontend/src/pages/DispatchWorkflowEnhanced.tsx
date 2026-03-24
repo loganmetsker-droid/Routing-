@@ -36,8 +36,8 @@ import {
   generateRoute,
   assignDriverToRoute,
   updateRouteStatus,
-  connectSSE,
 } from '../services/api';
+import { connectDispatchRealtime } from '../services/socket';
 
 // Workflow: Select Jobs → Select Vehicles → Assign Drivers → Optimize Routes → Dispatch
 const steps = ['Select Jobs', 'Select Vehicles', 'Assign Drivers', 'Optimize Routes', 'Dispatch'];
@@ -138,7 +138,7 @@ export default function DispatchWorkflowEnhanced() {
   useEffect(() => {
     loadAllData();
 
-    const eventSource = connectSSE((data) => {
+    const eventSource = connectDispatchRealtime((data) => {
       if (data.type === 'job-created' || data.type === 'job-updated' || data.type === 'route-created') {
         loadAllData();
       }
@@ -328,11 +328,11 @@ export default function DispatchWorkflowEnhanced() {
     try {
       await Promise.all(
         workflowState.generatedRoutes.map((route) =>
-          updateRouteStatus(route.id, 'dispatched')
+          updateRouteStatus(route.id, 'in_progress')
         )
       );
 
-      setSnackbarMessage(`Dispatched ${workflowState.generatedRoutes.length} routes successfully!`);
+      setSnackbarMessage(`Started ${workflowState.generatedRoutes.length} routes successfully!`);
 
       // Clear workflow after successful dispatch
       sessionStorage.removeItem(WORKFLOW_STORAGE_KEY);

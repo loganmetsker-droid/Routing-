@@ -1,10 +1,10 @@
 import { useState } from 'react';
+import { alpha, useTheme } from '@mui/material/styles';
 import {
   Card,
   CardContent,
   Typography,
   Box,
-  Chip,
   Button,
   LinearProgress,
   Stack,
@@ -21,44 +21,13 @@ import {
   PersonAdd,
   PersonRemove,
 } from '@mui/icons-material';
-
-interface Job {
-  id: string;
-  customerName: string;
-  deliveryAddress?: string;
-  stopSequence?: number;
-}
-
-interface Route {
-  id: string;
-  vehicleId?: string;
-  driverId?: string;
-  jobIds?: string[];
-  status: string;
-  totalDistance?: number;
-  totalDuration?: number;
-  estimatedCapacity?: number;
-  optimizedStops?: Array<{
-    jobId: string;
-    sequence: number;
-    address: string;
-  }>;
-}
-
-interface Vehicle {
-  id: string;
-  make?: string;
-  model?: string;
-  licensePlate?: string;
-  status: string;
-  capacity?: number;
-}
-
-interface Driver {
-  id: string;
-  firstName?: string;
-  lastName?: string;
-}
+import {
+  DispatchDriver as Driver,
+  DispatchJob as Job,
+  DispatchRoute as Route,
+  DispatchVehicle as Vehicle,
+} from '../../types/dispatch';
+import StatusPill from '../ui/StatusPill';
 
 interface VehicleRouteCardProps {
   vehicle: Vehicle;
@@ -69,6 +38,8 @@ interface VehicleRouteCardProps {
   onAssignDriver: (routeId: string) => void;
   onRemoveDriver: (routeId: string) => void;
   optimizing: boolean;
+  selected?: boolean;
+  onSelect?: (routeId: string | null) => void;
 }
 
 export default function VehicleRouteCard({
@@ -80,26 +51,27 @@ export default function VehicleRouteCard({
   onAssignDriver,
   onRemoveDriver,
   optimizing,
+  selected = false,
+  onSelect,
 }: VehicleRouteCardProps) {
+  const theme = useTheme();
   const [expanded, setExpanded] = useState(false);
 
-  // Calculate capacity percentage
   const capacityPercent = route?.estimatedCapacity
     ? Math.min((route.estimatedCapacity / (vehicle.capacity || 1000)) * 100, 100)
     : 0;
 
-  // Filter jobs for this route
   const routeJobs = route?.jobIds
-    ? jobs.filter((j) => route.jobIds?.includes(j.id)).sort((a, b) => (a.stopSequence || 0) - (b.stopSequence || 0))
+    ? jobs
+        .filter((job) => route.jobIds?.includes(job.id))
+        .sort((a, b) => (a.stopSequence || 0) - (b.stopSequence || 0))
     : [];
 
-  // Format distance
-  const formatDistance = (miles?: number) => {
-    if (!miles) return '0 mi';
-    return `${miles.toFixed(1)} mi`;
+  const formatDistance = (distanceKm?: number) => {
+    if (!distanceKm) return '0 km';
+    return `${distanceKm.toFixed(1)} km`;
   };
 
-  // Format duration
   const formatDuration = (minutes?: number) => {
     if (!minutes) return '0m';
     const hours = Math.floor(minutes / 60);
@@ -112,56 +84,75 @@ export default function VehicleRouteCard({
     Boolean(route?.optimizedStops && route.optimizedStops.length > 0) ||
     Boolean(route?.totalDistance);
   const hasDriver = !!driver;
+  const brandText = theme.palette.text.primary;
+  const mutedText = alpha(theme.palette.text.primary, 0.68);
+  const tertiaryText = alpha(theme.palette.text.primary, 0.5);
 
   return (
     <Card
       elevation={0}
+      onClick={() => onSelect?.(route?.id || null)}
       sx={{
-        bgcolor: hasRoute ? 'rgba(33, 150, 243, 0.08)' : 'rgba(255, 255, 255, 0.05)',
-        border: '2px solid',
-        borderColor: hasRoute ? '#2196F3' : 'rgba(255, 255, 255, 0.08)',
-        borderRadius: '10px',
+        bgcolor: alpha(theme.palette.background.paper, theme.palette.mode === 'dark' ? 0.84 : 0.9),
+        border: '1.5px solid',
+        borderColor: hasRoute
+          ? selected
+            ? alpha(theme.palette.primary.main, 0.45)
+            : alpha(theme.palette.primary.main, 0.18)
+          : selected
+            ? alpha(theme.palette.primary.main, 0.32)
+            : alpha(theme.palette.text.primary, 0.08),
+        borderRadius: '18px',
         transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+        cursor: 'pointer',
         '&:hover': {
-          borderColor: hasRoute ? '#2196F3' : 'rgba(255, 255, 255, 0.15)',
-          transform: 'translateY(-2px)',
-          boxShadow: hasRoute ? '0 4px 12px rgba(33, 150, 243, 0.2)' : '0 4px 12px rgba(0, 0, 0, 0.1)',
+          borderColor: hasRoute
+            ? alpha(theme.palette.primary.main, 0.5)
+            : alpha(theme.palette.text.primary, 0.16),
+          transform: 'translateY(-1px)',
+          boxShadow: hasRoute
+            ? `0 14px 24px -20px ${alpha(theme.palette.primary.main, 0.35)}`
+            : `0 16px 28px -22px ${alpha(theme.palette.common.black, 0.22)}`,
         },
       }}
     >
       <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
-        {/* Vehicle Header */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-          <LocalShipping sx={{ color: hasRoute ? '#2196F3' : 'rgba(255, 255, 255, 0.3)', fontSize: 24 }} />
+          <LocalShipping
+            sx={{
+              color: hasRoute ? 'primary.main' : tertiaryText,
+              fontSize: 24,
+            }}
+          />
           <Box sx={{ flex: 1 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: '15px', color: '#FFFFFF' }}>
-              {vehicle.make} {vehicle.model}
+            <Typography
+              variant="subtitle2"
+              sx={{ fontWeight: 700, fontSize: '15px', color: brandText }}
+            >
+              {[vehicle.make, vehicle.model].filter(Boolean).join(' ') || 'Unassigned vehicle'}
             </Typography>
-            <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '12px' }}>
+            <Typography variant="caption" sx={{ color: tertiaryText, fontSize: '12px' }}>
               {vehicle.licensePlate || 'No plate'}
             </Typography>
           </Box>
-          <Chip
-            label={vehicle.status}
-            size="small"
-            sx={{
-              height: '22px',
-              fontSize: '11px',
-              fontWeight: 600,
-              bgcolor: vehicle.status === 'available' ? 'rgba(46, 204, 113, 0.15)' : 'rgba(241, 196, 15, 0.15)',
-              color: vehicle.status === 'available' ? '#2ECC71' : '#F1C40F',
-              border: 'none',
-            }}
+          <StatusPill
+            label={vehicle.status || 'unknown'}
+            color={vehicle.status === 'available' ? theme.palette.success.main : theme.palette.warning.main}
           />
         </Box>
 
-        {/* Capacity Bar */}
         <Box sx={{ mb: 2.5 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-            <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.6)', fontSize: '12px', fontWeight: 500 }}>
+            <Typography
+              variant="caption"
+              sx={{ color: mutedText, fontSize: '12px', fontWeight: 500 }}
+            >
               Capacity
             </Typography>
-            <Typography variant="caption" sx={{ color: '#FFFFFF', fontSize: '12px', fontWeight: 700 }}>
+            <Typography
+              variant="caption"
+              sx={{ color: brandText, fontSize: '12px', fontWeight: 700 }}
+            >
               {capacityPercent.toFixed(0)}%
             </Typography>
           </Box>
@@ -171,10 +162,15 @@ export default function VehicleRouteCard({
             sx={{
               height: 10,
               borderRadius: '6px',
-              bgcolor: 'rgba(255, 255, 255, 0.1)',
+              bgcolor: alpha(theme.palette.text.primary, 0.08),
               '& .MuiLinearProgress-bar': {
                 borderRadius: '6px',
-                bgcolor: capacityPercent > 90 ? '#E74C3C' : capacityPercent > 70 ? '#F1C40F' : '#2ECC71',
+                bgcolor:
+                  capacityPercent > 90
+                    ? theme.palette.error.main
+                    : capacityPercent > 70
+                    ? theme.palette.warning.main
+                    : theme.palette.success.main,
                 transition: 'all 0.3s ease',
               },
             }}
@@ -183,20 +179,19 @@ export default function VehicleRouteCard({
 
         {hasRoute ? (
           <>
-            {/* Route Info */}
             <Box
               sx={{
                 mb: 2.5,
                 p: 2,
-                bgcolor: 'rgba(255, 255, 255, 0.05)',
-                borderRadius: '8px',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
+                bgcolor: alpha(theme.palette.background.paper, theme.palette.mode === 'dark' ? 0.9 : 0.84),
+                borderRadius: '14px',
+                border: `1px solid ${alpha(theme.palette.text.primary, 0.08)}`,
               }}
             >
               <Typography
                 variant="caption"
                 sx={{
-                  color: 'rgba(255, 255, 255, 0.5)',
+                  color: tertiaryText,
                   fontSize: '11px',
                   fontWeight: 600,
                   textTransform: 'uppercase',
@@ -208,19 +203,41 @@ export default function VehicleRouteCard({
                 Route ID: {route.id.slice(0, 8)}
               </Typography>
               <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                <Typography variant="body2" sx={{ color: '#FFFFFF', fontSize: '13px' }}>
-                  <Box component="span" sx={{ fontWeight: 700 }}>{routeJobs.length}</Box> jobs
+                <Typography variant="body2" sx={{ color: brandText, fontSize: '13px' }}>
+                  <Box component="span" sx={{ fontWeight: 700 }}>
+                    {routeJobs.length}
+                  </Box>{' '}
+                  jobs
                 </Typography>
-                <Typography variant="body2" sx={{ color: '#FFFFFF', fontSize: '13px' }}>
-                  <Box component="span" sx={{ fontWeight: 700 }}>{formatDistance(route.totalDistance)}</Box>
+                <Typography variant="body2" sx={{ color: brandText, fontSize: '13px' }}>
+                  <Box component="span" sx={{ fontWeight: 700 }}>
+                    {formatDistance(route.totalDistance)}
+                  </Box>
                 </Typography>
-                <Typography variant="body2" sx={{ color: '#FFFFFF', fontSize: '13px' }}>
-                  <Box component="span" sx={{ fontWeight: 700 }}>{formatDuration(route.totalDuration)}</Box>
+                <Typography variant="body2" sx={{ color: brandText, fontSize: '13px' }}>
+                  <Box component="span" sx={{ fontWeight: 700 }}>
+                    {formatDuration(route.totalDuration)}
+                  </Box>
                 </Typography>
               </Box>
+              <Stack direction="row" spacing={0.75} sx={{ mt: 1.25 }}>
+                <StatusPill
+                  label={route.optimizationStatus || 'optimized'}
+                  color={route.optimizationStatus === 'optimized' ? '#059669' : '#d97706'}
+                />
+                <StatusPill
+                  label={route.dataQuality || 'live'}
+                  color={route.dataQuality === 'live' ? '#0ea5e9' : route.dataQuality === 'degraded' ? '#d97706' : '#64748b'}
+                />
+                {route.rerouteState ? (
+                  <StatusPill
+                    label={`reroute ${route.rerouteState}`}
+                    color={route.rerouteState === 'applied' ? '#059669' : '#d97706'}
+                  />
+                ) : null}
+              </Stack>
             </Box>
 
-            {/* Driver Assignment */}
             <Box
               sx={{
                 mb: 2.5,
@@ -228,32 +245,26 @@ export default function VehicleRouteCard({
                 display: 'flex',
                 alignItems: 'center',
                 gap: 1.5,
-                bgcolor: hasDriver ? 'rgba(46, 204, 113, 0.1)' : 'rgba(231, 76, 60, 0.1)',
-                borderRadius: '8px',
+                bgcolor: hasDriver
+                  ? alpha(theme.palette.success.main, 0.1)
+                  : alpha(theme.palette.warning.main, 0.12),
+                borderRadius: '12px',
                 border: '1px solid',
-                borderColor: hasDriver ? 'rgba(46, 204, 113, 0.3)' : 'rgba(231, 76, 60, 0.3)',
+                borderColor: hasDriver
+                  ? alpha(theme.palette.success.main, 0.24)
+                  : alpha(theme.palette.warning.main, 0.3),
               }}
             >
-              <Person sx={{ fontSize: 20, color: hasDriver ? '#2ECC71' : '#E74C3C' }} />
-              <Typography variant="body2" sx={{ flex: 1, color: '#FFFFFF', fontSize: '13px', fontWeight: 500 }}>
+              <Person sx={{ fontSize: 20, color: hasDriver ? 'success.main' : 'warning.dark' }} />
+              <Typography
+                variant="body2"
+                sx={{ flex: 1, color: brandText, fontSize: '13px', fontWeight: 500 }}
+              >
                 {hasDriver ? `${driver.firstName} ${driver.lastName}` : 'No driver assigned'}
               </Typography>
-              {hasDriver && (
-                <Chip
-                  label="Assigned"
-                  size="small"
-                  sx={{
-                    height: '20px',
-                    fontSize: '11px',
-                    fontWeight: 600,
-                    bgcolor: '#2ECC71',
-                    color: '#FFFFFF',
-                  }}
-                />
-              )}
+              {hasDriver && <StatusPill label="Assigned" color={theme.palette.success.main} />}
             </Box>
 
-            {/* Warning if not optimized */}
             {!hasOptimizationData && (
               <Alert
                 severity="warning"
@@ -262,9 +273,9 @@ export default function VehicleRouteCard({
                   mb: 2.5,
                   py: 1,
                   px: 1.5,
-                  bgcolor: 'rgba(241, 196, 15, 0.1)',
-                  border: '1px solid rgba(241, 196, 15, 0.3)',
-                  color: '#F1C40F',
+                  bgcolor: alpha(theme.palette.warning.main, 0.1),
+                  border: `1px solid ${alpha(theme.palette.warning.main, 0.28)}`,
+                  color: theme.palette.warning.dark,
                   fontSize: '12px',
                   fontWeight: 600,
                   '& .MuiAlert-message': {
@@ -272,11 +283,42 @@ export default function VehicleRouteCard({
                   },
                 }}
               >
-                ⚠️ Route needs optimization pass
+                Route needs an optimization pass before it is ready to dispatch.
               </Alert>
             )}
+            {route.droppedJobIds && route.droppedJobIds.length > 0 ? (
+              <Alert
+                severity="error"
+                icon={false}
+                sx={{
+                  mb: 2.5,
+                  py: 1,
+                  px: 1.5,
+                  bgcolor: alpha(theme.palette.error.main, 0.08),
+                  border: `1px solid ${alpha(theme.palette.error.main, 0.22)}`,
+                  '& .MuiAlert-message': { p: 0 },
+                }}
+              >
+                {route.droppedJobIds.length} dropped/infeasible job(s) flagged by planner.
+              </Alert>
+            ) : null}
+            {route.exceptionCategory ? (
+              <Alert
+                severity="info"
+                icon={false}
+                sx={{
+                  mb: 2.5,
+                  py: 1,
+                  px: 1.5,
+                  bgcolor: alpha(theme.palette.info.main, 0.08),
+                  border: `1px solid ${alpha(theme.palette.info.main, 0.2)}`,
+                  '& .MuiAlert-message': { p: 0 },
+                }}
+              >
+                Exception: {route.exceptionCategory}
+              </Alert>
+            ) : null}
 
-            {/* Jobs List (Expandable) */}
             <Box sx={{ mb: 2 }}>
               <Box
                 sx={{
@@ -285,7 +327,7 @@ export default function VehicleRouteCard({
                   cursor: 'pointer',
                   userSelect: 'none',
                 }}
-                onClick={() => setExpanded(!expanded)}
+                onClick={() => setExpanded((value) => !value)}
               >
                 <Typography variant="body2" sx={{ flex: 1 }}>
                   Jobs ({routeJobs.length})
@@ -296,22 +338,22 @@ export default function VehicleRouteCard({
               </Box>
               <Collapse in={expanded}>
                 <Stack spacing={0.5} sx={{ mt: 1 }}>
-                  {routeJobs.map((job, idx) => (
+                  {routeJobs.map((job, index) => (
                     <Box
                       key={job.id}
                       sx={{
                         p: 1,
-                        bgcolor: 'background.default',
+                        bgcolor: alpha(theme.palette.background.default, 0.9),
                         borderRadius: 1,
                         border: '1px solid',
                         borderColor: 'divider',
                       }}
                     >
                       <Typography variant="caption" display="block" fontWeight="bold">
-                        {idx + 1}. {job.customerName}
+                        {index + 1}. {job.customerName}
                       </Typography>
                       <Typography variant="caption" color="text.secondary" display="block">
-                        📍 {job.deliveryAddress || 'No address'}
+                        {job.deliveryAddress || 'No address'}
                       </Typography>
                     </Box>
                   ))}
@@ -319,7 +361,6 @@ export default function VehicleRouteCard({
               </Collapse>
             </Box>
 
-            {/* Actions */}
             <Stack spacing={1.5}>
               <Button
                 size="small"
@@ -329,28 +370,28 @@ export default function VehicleRouteCard({
                 disabled={optimizing}
                 fullWidth
                 sx={{
-                  borderColor: 'rgba(33, 150, 243, 0.5)',
-                  color: '#2196F3',
-                  borderRadius: '8px',
+                  borderColor: alpha(theme.palette.primary.main, 0.5),
+                  color: 'primary.main',
+                  borderRadius: '10px',
                   py: 1,
                   textTransform: 'none',
                   fontWeight: 600,
                   fontSize: '13px',
                   transition: 'all 0.2s ease',
                   '&:hover': {
-                    borderColor: '#2196F3',
-                    bgcolor: 'rgba(33, 150, 243, 0.1)',
+                    borderColor: 'primary.main',
+                    bgcolor: alpha(theme.palette.primary.main, 0.08),
                     transform: 'translateY(-1px)',
                   },
                   '&:disabled': {
-                    borderColor: 'rgba(255, 255, 255, 0.1)',
-                    color: 'rgba(255, 255, 255, 0.3)',
+                    borderColor: alpha(theme.palette.text.primary, 0.1),
+                    color: alpha(theme.palette.text.primary, 0.3),
                   },
                 }}
               >
                 {optimizing ? 'Optimizing...' : 'Optimize Route'}
               </Button>
-              {!hasDriver && isOptimized && (
+              {!hasDriver && hasOptimizationData && (
                 <Button
                   size="small"
                   variant="contained"
@@ -358,18 +399,18 @@ export default function VehicleRouteCard({
                   onClick={() => onAssignDriver(route.id)}
                   fullWidth
                   sx={{
-                    bgcolor: '#2ECC71',
-                    color: '#FFFFFF',
-                    borderRadius: '8px',
+                    bgcolor: 'success.main',
+                    color: 'common.white',
+                    borderRadius: '10px',
                     py: 1,
                     textTransform: 'none',
                     fontWeight: 600,
                     fontSize: '13px',
                     transition: 'all 0.2s ease',
                     '&:hover': {
-                      bgcolor: '#27AE60',
+                      bgcolor: 'success.dark',
                       transform: 'translateY(-1px)',
-                      boxShadow: '0 4px 12px rgba(46, 204, 113, 0.3)',
+                      boxShadow: `0 8px 18px -12px ${alpha(theme.palette.success.main, 0.55)}`,
                     },
                   }}
                 >
@@ -384,17 +425,17 @@ export default function VehicleRouteCard({
                   onClick={() => onRemoveDriver(route.id)}
                   fullWidth
                   sx={{
-                    borderColor: 'rgba(231, 76, 60, 0.5)',
-                    color: '#E74C3C',
-                    borderRadius: '8px',
+                    borderColor: alpha(theme.palette.error.main, 0.5),
+                    color: 'error.main',
+                    borderRadius: '10px',
                     py: 1,
                     textTransform: 'none',
                     fontWeight: 600,
                     fontSize: '13px',
                     transition: 'all 0.2s ease',
                     '&:hover': {
-                      borderColor: '#E74C3C',
-                      bgcolor: 'rgba(231, 76, 60, 0.1)',
+                      borderColor: 'error.main',
+                      bgcolor: alpha(theme.palette.error.main, 0.08),
                       transform: 'translateY(-1px)',
                     },
                   }}
@@ -405,25 +446,25 @@ export default function VehicleRouteCard({
             </Stack>
           </>
         ) : (
-          <>
-            {/* No Route Assigned */}
-            <Box
-              sx={{
-                p: 4,
-                textAlign: 'center',
-                border: '2px dashed rgba(255, 255, 255, 0.1)',
-                borderRadius: '10px',
-                bgcolor: 'rgba(255, 255, 255, 0.02)',
-              }}
+          <Box
+            sx={{
+              p: 4,
+              textAlign: 'center',
+              border: `2px dashed ${alpha(theme.palette.text.primary, 0.1)}`,
+              borderRadius: '14px',
+              bgcolor: alpha(theme.palette.background.paper, 0.65),
+            }}
+          >
+            <Typography
+              variant="body2"
+              sx={{ color: mutedText, fontSize: '14px', fontWeight: 500, mb: 1 }}
             >
-              <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '14px', fontWeight: 500, mb: 1 }}>
-                No jobs assigned
-              </Typography>
-              <Typography variant="caption" sx={{ color: 'rgba(255, 255, 255, 0.3)', fontSize: '12px' }}>
-                Select jobs and use Auto-Assign
-              </Typography>
-            </Box>
-          </>
+              No route assigned
+            </Typography>
+            <Typography variant="caption" sx={{ color: tertiaryText, fontSize: '12px' }}>
+              Select jobs from the planning queue and create a planned route.
+            </Typography>
+          </Box>
         )}
       </CardContent>
     </Card>

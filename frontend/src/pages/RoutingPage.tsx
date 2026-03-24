@@ -247,7 +247,7 @@ export default function RoutingPage() {
         vehicleId: formData.vehicleId || null,
         driverId: formData.driverId || null,
         stops: formData.stops.filter(s => s.trim() !== ''),
-        status: editingRoute ? editingRoute.status : 'pending',
+        status: editingRoute ? editingRoute.status : 'planned',
       };
 
       if (editingRoute) {
@@ -296,7 +296,7 @@ export default function RoutingPage() {
       await fetch(`${API_BASE_URL}/api/dispatch/routes/${routeId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'dispatched' }),
+        body: JSON.stringify({ status: 'in_progress' }),
       });
       await loadData();
     } catch (error) {
@@ -315,9 +315,9 @@ export default function RoutingPage() {
 
   const getStatusColor = (status: string): 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' => {
     switch (status?.toLowerCase()) {
-      case 'pending': return 'default';
+      case 'pending':
       case 'planned': return 'info';
-      case 'dispatched': return 'primary';
+      case 'assigned': return 'primary';
       case 'in_progress': return 'warning';
       case 'completed': return 'success';
       case 'cancelled': return 'error';
@@ -559,7 +559,7 @@ export default function RoutingPage() {
                         </IconButton>
                       </Tooltip>
 
-                      {route.status !== 'dispatched' && route.status !== 'in_progress' && (
+                      {route.status !== 'in_progress' && route.status !== 'completed' && route.status !== 'cancelled' && (
                         <Tooltip title="Dispatch Route">
                           <IconButton
                             size="small"

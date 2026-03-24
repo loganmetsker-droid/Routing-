@@ -24,12 +24,10 @@ import { JobsService } from './jobs.service';
 import { Job, JobStatus, JobPriority } from './entities/job.entity';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
-import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('jobs')
 @Controller('jobs')
 @ApiBearerAuth()
-@Public()
 export class JobsController {
   constructor(private readonly jobsService: JobsService) {}
 

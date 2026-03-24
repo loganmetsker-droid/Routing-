@@ -21,6 +21,16 @@ export enum RouteStatus {
   CANCELLED = 'cancelled',
 }
 
+export enum RouteWorkflowStatus {
+  PLANNED = 'planned',
+  READY_FOR_DISPATCH = 'ready_for_dispatch',
+  IN_PROGRESS = 'in_progress',
+  REROUTING = 'rerouting',
+  DEGRADED = 'degraded',
+  COMPLETED = 'completed',
+  CANCELLED = 'cancelled',
+}
+
 @Entity('routes')
 @ObjectType()
 @Index(['status', 'createdAt'])
@@ -60,6 +70,15 @@ export class Route {
   })
   @Field()
   status: RouteStatus;
+
+  @Column({
+    name: 'workflow_status',
+    type: 'enum',
+    enum: RouteWorkflowStatus,
+    default: RouteWorkflowStatus.PLANNED,
+  })
+  @Field()
+  workflowStatus: RouteWorkflowStatus;
 
   @Column({
     type: 'decimal',

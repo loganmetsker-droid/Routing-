@@ -2,6 +2,11 @@
 
 A modern fleet management system built with NestJS, GraphQL, React, and PostgreSQL.
 
+## ✅ Canonical Backend
+
+This repo contains multiple backend implementations. The **canonical backend** is the NestJS app in `backend/`.
+Legacy Express (`backend/server.js`) and Vercel serverless (`backend/api/index.ts`) are **deprecated** and should not be used for new development.
+
 ## 🎯 Current Status
 
 ✅ **Backend**: Fully implemented with GraphQL API  
@@ -91,6 +96,7 @@ my-awesome-project/
 - **JWT** - Authentication
 - **Bull** - Job queues
 - **Redis** - Caching
+- **Routing Service** - FastAPI + OR-Tools optimization (see `routing-service/`)
 
 ### Frontend
 - **React 18** - UI framework

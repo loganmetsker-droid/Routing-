@@ -45,10 +45,11 @@ import {
   Clear,
   Done,
 } from '@mui/icons-material';
-import { getJobs, createJob, connectSSE, updateJobStatus, getDrivers, getRoutes } from '../services/api';
+import { getJobs, createJob, updateJobStatus, getDrivers, getRoutes } from '../services/api';
 import AddressInput from '../components/forms/AddressInput';
 import { Address } from '../types/address';
 import { formatAddress } from '../utils/addressValidation';
+import { connectDispatchRealtime } from '../services/socket';
 
 const API_BASE_URL = (import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/+$/, '').replace(/\/api$/, '');
 
@@ -208,7 +209,7 @@ export default function JobsPageEnhanced() {
 
   useEffect(() => {
     // Real-time updates via SSE
-    const eventSource = connectSSE((data) => {
+    const eventSource = connectDispatchRealtime((data) => {
       if (data.type === 'job-created' || data.type === 'job-updated' || data.type === 'route-updated') {
         loadJobs();
       }

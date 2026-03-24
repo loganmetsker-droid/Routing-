@@ -28,7 +28,8 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
 } from '@mui/icons-material';
-import { getRoutes, getVehicles, getDrivers, connectSSE } from '../services/api';
+import { getRoutes, getVehicles, getDrivers } from '../services/api';
+import { connectDispatchRealtime } from '../services/socket';
 
 interface Route {
   id: string;
@@ -79,14 +80,14 @@ export default function RoutesConsolidated() {
 
   // Filter routes by status and conflicts
   const activeRoutes = routes.filter(
-    (r) => r.status === 'planned' || r.status === 'dispatched' || r.status === 'in_progress'
+    (r) => r.status === 'planned' || r.status === 'assigned' || r.status === 'in_progress'
   );
   const conflictingRoutes = routes.filter((r) => r.conflicts && r.conflicts.length > 0);
 
   useEffect(() => {
     loadAllData();
 
-    const eventSource = connectSSE((data) => {
+    const eventSource = connectDispatchRealtime((data) => {
       if (data.type === 'route-created' || data.type === 'route-updated') {
         loadAllData();
       }
@@ -130,12 +131,14 @@ export default function RoutesConsolidated() {
     switch (status) {
       case 'planned':
         return 'info';
-      case 'dispatched':
+      case 'assigned':
         return 'primary';
       case 'in_progress':
         return 'warning';
       case 'completed':
         return 'success';
+      case 'cancelled':
+        return 'error';
       default:
         return 'default';
     }

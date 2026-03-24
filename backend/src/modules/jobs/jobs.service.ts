@@ -16,6 +16,10 @@ import { UpdateJobDto } from './dto/update-job.dto';
 import { UpdateBillingDto } from './dto/update-billing.dto';
 import { UpdateLifecycleDto } from './dto/update-lifecycle.dto';
 import { Between, IsNull } from 'typeorm';
+import {
+  JOB_ALLOWED_TRANSITIONS,
+  normalizeLifecycleJobStatus,
+} from './jobs-workflow';
 
 @Injectable()
 export class JobsService {
@@ -25,7 +29,6 @@ export class JobsService {
   private readonly MAX_WEIGHT_KG = 10000; // 10 tons
   private readonly MAX_VOLUME_M3 = 50; // 50 cubic meters
   private readonly MAX_QUANTITY = 1000; // 1000 items
-
   constructor(
     @InjectRepository(Job)
     private readonly jobRepository: Repository<Job>,
@@ -35,6 +38,70 @@ export class JobsService {
     @InjectQueue('jobs')
     private readonly jobQueue?: Queue,
   ) {}
+
+  private normalizeAddressString(
+    structured?: {
+      line1?: string;
+      line2?: string | null;
+      city?: string;
+      state?: string;
+      zip?: string;
+    } | null,
+  ): string | undefined {
+    if (!structured || !structured.line1) {
+      return undefined;
+    }
+    const parts = [
+      structured.line1,
+      structured.line2 || undefined,
+      [structured.city, structured.state, structured.zip]
+        .filter(Boolean)
+        .join(' ')
+        .trim() || undefined,
+    ].filter(Boolean);
+    return parts.join(', ');
+  }
+
+  private normalizeStructuredAddress<T extends {
+    line1?: string;
+    line2?: string | null;
+    city?: string;
+    state?: string;
+    zip?: string;
+  } | null | undefined>(structured: T): T {
+    if (!structured) return structured;
+    const normalized = {
+      ...structured,
+      line1: structured.line1?.trim() || '',
+      line2: structured.line2?.trim() || null,
+      city: structured.city?.trim() || '',
+      state: structured.state?.trim().toUpperCase() || '',
+      zip: structured.zip?.trim() || '',
+    };
+    return normalized as T;
+  }
+
+  private normalizeLifecycleStatus(status: JobStatus): JobStatus {
+    return normalizeLifecycleJobStatus(status);
+  }
+
+  private ensureValidStatusTransition(current: JobStatus, next: JobStatus) {
+    const normalizedCurrent = this.normalizeLifecycleStatus(current);
+    const normalizedNext = this.normalizeLifecycleStatus(next);
+
+    if (normalizedCurrent === normalizedNext) {
+      return normalizedNext;
+    }
+
+    const allowed = JOB_ALLOWED_TRANSITIONS[normalizedCurrent] || [];
+    if (!allowed.includes(normalizedNext)) {
+      throw new BadRequestException(
+        `Invalid job transition: ${normalizedCurrent} -> ${normalizedNext}`,
+      );
+    }
+
+    return normalizedNext;
+  }
 
   async create(createJobDto: CreateJobDto): Promise<Job> {
     const now = new Date();
@@ -104,7 +171,9 @@ export class JobsService {
     const resolvedCustomerPhone = createJobDto.customerPhone || linkedCustomer?.phone;
     const resolvedCustomerEmail = createJobDto.customerEmail || linkedCustomer?.email;
     const resolvedDeliveryAddress =
-      createJobDto.deliveryAddress || linkedCustomer?.defaultAddress;
+      createJobDto.deliveryAddress ||
+      this.normalizeAddressString(createJobDto.deliveryAddressStructured as any) ||
+      linkedCustomer?.defaultAddress;
 
     if (!resolvedCustomerName || !resolvedDeliveryAddress) {
       throw new BadRequestException(
@@ -115,14 +184,23 @@ export class JobsService {
     // Create job with automatic "pending" status
     const job = this.jobRepository.create({
       ...createJobDto,
+      pickupAddressStructured: this.normalizeStructuredAddress(
+        createJobDto.pickupAddressStructured as any,
+      ),
+      deliveryAddressStructured: this.normalizeStructuredAddress(
+        createJobDto.deliveryAddressStructured as any,
+      ),
       customerName: resolvedCustomerName,
       customerPhone: resolvedCustomerPhone,
       customerEmail: resolvedCustomerEmail,
       deliveryAddress: resolvedDeliveryAddress,
-      pickupAddress: createJobDto.pickupAddress || '',
+      pickupAddress:
+        createJobDto.pickupAddress ||
+        this.normalizeAddressString(createJobDto.pickupAddressStructured as any) ||
+        '',
       timeWindowStart,
       timeWindowEnd,
-      status: createJobDto.status || JobStatus.PENDING,
+      status: this.normalizeLifecycleStatus(createJobDto.status || JobStatus.PENDING),
       priority: createJobDto.priority || JobPriority.NORMAL,
     });
 
@@ -239,8 +317,53 @@ export class JobsService {
       }
     }
 
+    if (safeUpdateDto.deliveryAddressStructured) {
+      safeUpdateDto.deliveryAddressStructured = this.normalizeStructuredAddress(
+        safeUpdateDto.deliveryAddressStructured as any,
+      );
+    }
+
+    if (safeUpdateDto.pickupAddressStructured) {
+      safeUpdateDto.pickupAddressStructured = this.normalizeStructuredAddress(
+        safeUpdateDto.pickupAddressStructured as any,
+      );
+    }
+
+    if (safeUpdateDto.deliveryAddressStructured && !safeUpdateDto.deliveryAddress) {
+      const normalized = this.normalizeAddressString(
+        safeUpdateDto.deliveryAddressStructured as any,
+      );
+      if (normalized) {
+        safeUpdateDto.deliveryAddress = normalized;
+      }
+    }
+
+    if (safeUpdateDto.pickupAddressStructured && !safeUpdateDto.pickupAddress) {
+      const normalized = this.normalizeAddressString(
+        safeUpdateDto.pickupAddressStructured as any,
+      );
+      if (normalized) {
+        safeUpdateDto.pickupAddress = normalized;
+      }
+    }
+
+    if (safeUpdateDto.status) {
+      const normalizedNextStatus = this.ensureValidStatusTransition(
+        job.status,
+        safeUpdateDto.status,
+      );
+      safeUpdateDto.status = normalizedNextStatus;
+    }
+
     if (safeUpdateDto.status === JobStatus.ARCHIVED && !safeUpdateDto.archivedAt) {
       safeUpdateDto.archivedAt = new Date().toISOString();
+    }
+
+    if (
+      safeUpdateDto.status === JobStatus.COMPLETED &&
+      !safeUpdateDto.completedAt
+    ) {
+      safeUpdateDto.completedAt = new Date().toISOString();
     }
 
     // Validate time window if being updated
@@ -293,7 +416,7 @@ export class JobsService {
     if (
       safeUpdateDto.status &&
       safeUpdateDto.status !== JobStatus.PENDING &&
-      job.status === JobStatus.PENDING
+      this.normalizeLifecycleStatus(job.status) === JobStatus.PENDING
     ) {
       await this.removeFromQueue(job.id);
     }
@@ -301,7 +424,7 @@ export class JobsService {
     // If status changes to pending, add to queue
     if (
       safeUpdateDto.status === JobStatus.PENDING &&
-      job.status !== JobStatus.PENDING
+      this.normalizeLifecycleStatus(job.status) !== JobStatus.PENDING
     ) {
       await this.addToQueue(job);
     }
@@ -486,16 +609,20 @@ export class JobsService {
 
   async updateLifecycle(id: string, updateLifecycleDto: UpdateLifecycleDto): Promise<Job> {
     const job = await this.findOne(id);
+    const nextStatus = this.ensureValidStatusTransition(job.status, updateLifecycleDto.status);
 
     Object.assign(job, {
-      status: updateLifecycleDto.status,
+      status: nextStatus,
       startDate: updateLifecycleDto.startDate ? new Date(updateLifecycleDto.startDate) : job.startDate,
       endDate: updateLifecycleDto.endDate ? new Date(updateLifecycleDto.endDate) : job.endDate,
     });
 
     // If archiving, set archivedAt timestamp
-    if (updateLifecycleDto.status === JobStatus.ARCHIVED) {
+    if (nextStatus === JobStatus.ARCHIVED) {
       job.archivedAt = new Date();
+    }
+    if (nextStatus === JobStatus.COMPLETED && !job.completedAt) {
+      job.completedAt = new Date();
     }
 
     return this.jobRepository.save(job);

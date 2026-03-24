@@ -1,4 +1,6 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Box, CircularProgress } from '@mui/material';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import DriversPage from './pages/DriversPage';
@@ -10,12 +12,73 @@ import TrackingEnhanced from './pages/TrackingEnhanced';
 import DispatchUnifiedV2 from './pages/DispatchUnifiedV2';
 
 import LoginPage from './pages/LoginPage';
+import { clearAuthSession, isAuthenticated, validateSession } from './services/api';
+
+function AuthGate({ children }: { children: React.ReactNode }) {
+  const location = useLocation();
+  const [checking, setChecking] = useState(true);
+  const [valid, setValid] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      if (!isAuthenticated()) {
+        if (!cancelled) {
+          setValid(false);
+          setChecking(false);
+        }
+        return;
+      }
+
+      const ok = await validateSession();
+      if (!cancelled) {
+        setValid(ok);
+        setChecking(false);
+      }
+    };
+    setChecking(true);
+    check();
+    return () => {
+      cancelled = true;
+    };
+  }, [location.pathname]);
+
+  if (checking) {
+    return (
+      <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }}>
+        <CircularProgress size={28} />
+      </Box>
+    );
+  }
+
+  if (!valid) {
+    clearAuthSession();
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function ProtectedLayout() {
+  return (
+    <AuthGate>
+      <Layout />
+    </AuthGate>
+  );
+}
+
+function LoginRoute() {
+  if (isAuthenticated()) {
+    return <Navigate to="/" replace />;
+  }
+  return <LoginPage />;
+}
 
 function App() {
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/" element={<Layout />}>
+      <Route path="/login" element={<LoginRoute />} />
+      <Route path="/" element={<ProtectedLayout />}>
         <Route index element={<Dashboard />} />
         <Route path="jobs" element={<JobsPageEnhancedV2 />} />
         <Route path="dispatch" element={<DispatchUnifiedV2 />} />

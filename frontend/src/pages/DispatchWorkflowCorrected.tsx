@@ -56,8 +56,8 @@ import {
   generateRoute,
   assignDriverToRoute,
   updateRouteStatus,
-  connectSSE,
 } from '../services/api';
+import { connectDispatchRealtime } from '../services/socket';
 
 // CORRECTED Workflow: Select Jobs → Select Vehicles → Assign Drivers → Optimize Routes → Dispatch
 const steps = ['Select Jobs', 'Select Vehicles', 'Assign Drivers', 'Optimize Routes', 'Dispatch'];
@@ -130,7 +130,7 @@ export default function DispatchWorkflowCorrected() {
     loadAllData();
 
     // Real-time updates
-    const eventSource = connectSSE((data) => {
+    const eventSource = connectDispatchRealtime((data) => {
       if (data.type === 'job-created' || data.type === 'job-updated' || data.type === 'route-created') {
         loadAllData();
       }
@@ -310,7 +310,7 @@ export default function DispatchWorkflowCorrected() {
     setDispatching(true);
     try {
       for (const route of generatedRoutes) {
-        await updateRouteStatus(route.id, 'dispatched');
+        await updateRouteStatus(route.id, 'in_progress');
       }
 
       showSnackbar(`Dispatched ${generatedRoutes.length} route(s)`, 'success');

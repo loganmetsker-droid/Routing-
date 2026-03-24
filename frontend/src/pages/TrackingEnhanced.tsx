@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
-  Paper,
   Grid,
   Chip,
   LinearProgress,
@@ -38,7 +37,6 @@ import {
   CheckCircle as CheckCircleIcon,
   RadioButtonChecked as RadioButtonCheckedIcon,
   RadioButtonUnchecked as RadioButtonUncheckedIcon,
-  FiberManualRecord as FiberManualRecordIcon,
   Phone as PhoneIcon,
   Edit as EditIcon,
   ExpandMore as ExpandMoreIcon,
@@ -47,7 +45,26 @@ import {
 } from '@mui/icons-material';
 import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet';
 import L from 'leaflet';
-import { getRoutes, getDrivers, getVehicles, getJobs, updateJobStatus, assignDriverToRoute, connectSSE } from '../services/api';
+import {
+  getRoutes,
+  getDrivers,
+  getVehicles,
+  getJobs,
+  updateJobStatus,
+  assignDriverToRoute,
+  getDispatchOptimizerHealth,
+  OptimizerHealth,
+} from '../services/api';
+import { connectDispatchRealtime } from '../services/socket';
+import ModuleHeader from '../components/ui/ModuleHeader';
+import DetailTray from '../components/ui/DetailTray';
+import StatusPill from '../components/ui/StatusPill';
+import InfoCard from '../components/ui/InfoCard';
+import {
+  DispatchDriver as Driver,
+  DispatchRoute as Route,
+  DispatchVehicle as Vehicle,
+} from '../types/dispatch';
 
 // Fix Leaflet default icon issue
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -56,33 +73,6 @@ L.Icon.Default.mergeOptions({
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
 });
-
-interface Route {
-  id?: string;
-  vehicleId?: string;
-  driverId?: string;
-  jobIds?: string[];
-  status?: string;
-  totalDistance?: number;
-  currentLocation?: [number, number];
-  completedStops?: number;
-  totalStops?: number;
-  estimatedTimeRemaining?: number;
-  path?: [number, number][];
-}
-
-interface Driver {
-  id: string;
-  firstName?: string;
-  lastName?: string;
-}
-
-interface Vehicle {
-  id: string;
-  make?: string;
-  model?: string;
-  licensePlate?: string;
-}
 
 interface AlertItem {
   id: string;
@@ -102,6 +92,87 @@ interface Job {
   priority?: string;
 }
 
+const buildTrackingAlerts = (routes: Route[]): AlertItem[] => {
+  const now = Date.now();
+  const items: AlertItem[] = [];
+
+  routes.forEach((route) => {
+    if (!route?.id) return;
+
+    if (route.dataQuality === 'degraded' || route.dataQuality === 'simulated') {
+      items.push({
+        id: `degraded-${route.id}`,
+        severity: 'info',
+        title: 'Degraded Telemetry',
+        message: `Route ${route.id.slice(0, 8)} is marked ${route.dataQuality}.`,
+        routeId: route.id,
+        timestamp: new Date(),
+      });
+    }
+
+    if (route.rerouteState === 'requested' || route.rerouteState === 'approved') {
+      items.push({
+        id: `reroute-${route.id}`,
+        severity: 'warning',
+        title: 'Reroute Pending',
+        message: `Route ${route.id.slice(0, 8)} has reroute state '${route.rerouteState}'.`,
+        routeId: route.id,
+        timestamp: new Date(),
+      });
+    }
+
+    if (route.exceptionCategory) {
+      items.push({
+        id: `exception-${route.id}`,
+        severity: 'info',
+        title: 'Exception Category',
+        message: `Route ${route.id.slice(0, 8)} exception: ${route.exceptionCategory}.`,
+        routeId: route.id,
+        timestamp: new Date(),
+      });
+    }
+
+    const advancedReasonCodes = route?.plannerDiagnostics?.advancedConstraints?.reasonCodes;
+    if (Array.isArray(advancedReasonCodes) && advancedReasonCodes.length > 0) {
+      items.push({
+        id: `diagnostics-${route.id}`,
+        severity: 'warning',
+        title: 'Constraint Diagnostics',
+        message: `Route ${route.id.slice(0, 8)} reason codes: ${advancedReasonCodes.slice(0, 2).join(', ')}`,
+        routeId: route.id,
+        timestamp: new Date(),
+      });
+    }
+
+    if ((route.status === 'assigned' || route.status === 'in_progress') && !route.driverId) {
+      items.push({
+        id: `driver-missing-${route.id}`,
+        severity: 'warning',
+        title: 'Driver Missing',
+        message: `Route ${route.id.slice(0, 8)} has no assigned driver.`,
+        routeId: route.id,
+        timestamp: new Date(),
+      });
+    }
+
+    if (route.eta) {
+      const etaTs = new Date(route.eta).getTime();
+      if (!Number.isNaN(etaTs) && etaTs < now && route.status !== 'completed') {
+        items.push({
+          id: `late-${route.id}`,
+          severity: 'warning',
+          title: 'ETA Breached',
+          message: `Route ${route.id.slice(0, 8)} is running past its ETA.`,
+          routeId: route.id,
+          timestamp: new Date(),
+        });
+      }
+    }
+  });
+
+  return items;
+};
+
 export default function TrackingEnhanced() {
   const [routes, setRoutes] = useState<Route[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
@@ -116,11 +187,15 @@ export default function TrackingEnhanced() {
   const [newDriverId, setNewDriverId] = useState('');
   const [reassigning, setReassigning] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [optimizerHealth, setOptimizerHealth] = useState<OptimizerHealth | null>(null);
 
   // Filter active routes
   const activeRoutes = routes.filter(
-    (r) => r.status === 'dispatched' || r.status === 'in_progress'
+    (r) => r.status === 'assigned' || r.status === 'in_progress'
   );
+  const reroutePendingCount = activeRoutes.filter(
+    (r) => r.rerouteState === 'requested' || r.rerouteState === 'approved',
+  ).length;
 
   // Filter completed jobs for today
   const completedJobsToday = jobs.filter((job) => {
@@ -145,7 +220,7 @@ export default function TrackingEnhanced() {
     }, 30000);
 
     // SSE for real-time events
-    const eventSource = connectSSE((data) => {
+    const eventSource = connectDispatchRealtime((data) => {
       if (data.type === 'route-updated' || data.type === 'location-updated') {
         loadData();
       }
@@ -165,58 +240,27 @@ export default function TrackingEnhanced() {
         getVehicles(),
         getJobs(),
       ]);
+      const healthData = await getDispatchOptimizerHealth();
 
-      setRoutes(routesData as Route[]);
+      setRoutes(routesData);
       setDrivers(driversData);
       setVehicles(vehiclesData);
       setJobs(jobsData as any);
+      setOptimizerHealth(healthData);
 
-      // Generate mock alerts for demo
-      generateMockAlerts(routesData);
+      setAlerts(buildTrackingAlerts(routesData));
     } catch (error) {
       console.error('Failed to load tracking data:', error);
     }
   };
 
-  const generateMockAlerts = (routes: Route[]) => {
-    const mockAlerts: AlertItem[] = [];
-
-    routes.forEach((route) => {
-      // Simulate delays
-      if (route.id && route.status === 'in_progress' && Math.random() > 0.7) {
-        mockAlerts.push({
-          id: `delay-${route.id}`,
-          severity: 'warning',
-          title: 'Delay Risk',
-          message: `Route ${route.id.slice(0, 8)} is running 15 minutes behind schedule`,
-          routeId: route.id,
-          timestamp: new Date(),
-        });
-      }
-
-      // Simulate missed time windows
-      if (route.id && route.completedStops && route.totalStops && route.completedStops > route.totalStops / 2 && Math.random() > 0.8) {
-        mockAlerts.push({
-          id: `timewindow-${route.id}`,
-          severity: 'error',
-          title: 'Missed Time Window',
-          message: `Stop #${route.completedStops} missed delivery window`,
-          routeId: route.id,
-          timestamp: new Date(),
-        });
-      }
-    });
-
-    setAlerts(mockAlerts);
-  };
-
-  const getDriverName = (driverId?: string) => {
+  const getDriverName = (driverId?: string | null) => {
     if (!driverId) return 'Unassigned';
     const driver = drivers.find((d) => d.id === driverId);
     return driver ? `${driver.firstName} ${driver.lastName}` : 'Unknown';
   };
 
-  const getVehicleName = (vehicleId?: string) => {
+  const getVehicleName = (vehicleId?: string | null) => {
     if (!vehicleId) return 'Unknown';
     const vehicle = vehicles.find((v) => v.id === vehicleId);
     return vehicle ? `${vehicle.make} ${vehicle.model}` : 'Unknown';
@@ -273,7 +317,7 @@ export default function TrackingEnhanced() {
     const targetDriver = drivers.find((d) => d.id === newDriverId);
     const driverCurrentRoute = routes.find((r) =>
       r.driverId === newDriverId &&
-      (r.status === 'dispatched' || r.status === 'in_progress')
+      (r.status === 'assigned' || r.status === 'in_progress')
     );
 
     if (driverCurrentRoute) {
@@ -300,7 +344,7 @@ export default function TrackingEnhanced() {
   const getAvailableDrivers = () => {
     const busyDriverIds = new Set(
       routes
-        .filter((r) => r.status === 'dispatched' || r.status === 'in_progress')
+        .filter((r) => r.status === 'assigned' || r.status === 'in_progress')
         .map((r) => r.driverId)
         .filter(Boolean)
     );
@@ -312,129 +356,120 @@ export default function TrackingEnhanced() {
   };
 
   return (
-    <Box>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Box>
-          <Box display="flex" alignItems="center" gap={1}>
-            <Typography variant="h4">Real-Time Tracking</Typography>
-            <Chip
-              label="Live"
-              color="success"
-              size="small"
-              icon={
-                <FiberManualRecordIcon
-                  sx={{
-                    animation: 'pulse 2s infinite',
-                    '@keyframes pulse': {
-                      '0%, 100%': { opacity: 1 },
-                      '50%': { opacity: 0.5 },
-                    },
-                  }}
-                />
-              }
-            />
-          </Box>
-          <Typography variant="body2" color="text.secondary">
-            Last updated: {lastUpdate.toLocaleTimeString()}
-          </Typography>
-        </Box>
-        <Button variant="outlined" onClick={loadData}>
-          Refresh Now
-        </Button>
-      </Box>
-
-      <Grid container spacing={2}>
-        {/* Left: Map View */}
-        <Grid item xs={12} md={8}>
-          <Paper sx={{ height: 'calc(100vh - 250px)', position: 'relative', overflow: 'hidden' }}>
-            <MapContainer
-              center={[39.8283, -98.5795]}
-              zoom={5}
-              style={{ height: '100%', width: '100%' }}
-            >
-              <TileLayer
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                attribution="&copy; OpenStreetMap contributors"
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.25 }}>
+      <Grid container spacing={2.25}>
+        <Grid item xs={12} lg={8}>
+          <ModuleHeader
+            title="Real-Time Tracking"
+            subtitle={`Live route movement and exceptions. Last updated: ${lastUpdate.toLocaleTimeString()}${activeRoutes.some((route) => route.dataQuality && route.dataQuality !== 'live') ? ' • Degraded telemetry in active routes' : ''} • Optimizer: ${optimizerHealth?.status || 'unknown'}`}
+            onRefresh={loadData}
+          />
+        </Grid>
+        <Grid item xs={12} lg={4}>
+          <DetailTray
+            title="Live Status"
+            subtitle="Monitoring stream"
+            action={<StatusPill label="LIVE" color="#059669" />}
+          >
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+              <StatusPill label={`${alerts.length} alerts`} color={alerts.length > 0 ? '#d97706' : '#64748b'} />
+              <StatusPill label={`${activeRoutes.length} active routes`} color="#84cc16" />
+              <StatusPill
+                label={`${reroutePendingCount} reroute pending`}
+                color={reroutePendingCount > 0 ? '#d97706' : '#64748b'}
               />
+              <StatusPill
+                label={`Optimizer ${optimizerHealth?.status || 'unknown'}`}
+                color={optimizerHealth?.status === 'healthy' ? '#059669' : optimizerHealth?.status === 'degraded' ? '#d97706' : '#dc2626'}
+              />
+            </Stack>
+          </DetailTray>
+        </Grid>
+      </Grid>
 
-              {/* Driver markers */}
-              {activeRoutes.map((route) => {
-                const location = route.currentLocation || [39.8283 + Math.random() * 10, -98.5795 + Math.random() * 10];
-                return (
-                  <Marker
-                    key={route.id}
-                    position={location as [number, number]}
-                    icon={getDriverIcon(route.status)}
-                    eventHandlers={{
-                      click: () => setSelectedRoute(route),
-                    }}
-                  >
-                    <Popup>
-                      <Box>
-                        <Typography variant="subtitle2">{getDriverName(route.driverId)}</Typography>
-                        <Typography variant="caption">{getVehicleName(route.vehicleId)}</Typography>
-                        <Typography variant="caption" display="block">
-                          {route.completedStops || 0}/{route.totalStops || 0} stops
-                        </Typography>
-                      </Box>
-                    </Popup>
-                  </Marker>
-                );
-              })}
+      <Grid container spacing={2.25}>
+        <Grid item xs={12} sm={4}>
+          <InfoCard title="Active Routes" value={activeRoutes.length} subtitle="Assigned + in progress" statusLabel="Live" statusColor="#84cc16" />
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <InfoCard title="Active Alerts" value={alerts.length} subtitle="Exceptions and risks" statusLabel={alerts.length > 0 ? 'Attention' : 'Clear'} statusColor={alerts.length > 0 ? '#d97706' : '#64748b'} />
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <InfoCard title="Completed Today" value={completedJobsToday.length} subtitle="Jobs finished today" statusLabel="Archive Ready" statusColor="#2563eb" />
+        </Grid>
+      </Grid>
 
-              {/* Selected route path */}
-              {selectedRoute && selectedRoute.path && (
-                <Polyline positions={selectedRoute.path} color="blue" weight={4} />
-              )}
-            </MapContainer>
-          </Paper>
+      <Grid container spacing={2.25}>
+        <Grid item xs={12} lg={8}>
+          <DetailTray
+            title="Live Map"
+            subtitle="Select a vehicle marker to inspect route details"
+            height={680}
+          >
+            <Box sx={{ height: 560, borderRadius: 3, overflow: 'hidden', border: '1px solid', borderColor: 'divider' }}>
+              <MapContainer center={[39.8283, -98.5795]} zoom={5} style={{ height: '100%', width: '100%' }}>
+                <TileLayer
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  attribution="&copy; OpenStreetMap contributors"
+                />
+                {activeRoutes.map((route, index) => {
+                  const fallbackLocation: [number, number] = [
+                    39.8283 + (((index * 7) % 9) - 4) * 1.15,
+                    -98.5795 + (((index * 5) % 11) - 5) * 1.45,
+                  ];
+                  const location = route.currentLocation || fallbackLocation;
+                  return (
+                    <Marker
+                      key={route.id}
+                      position={location as [number, number]}
+                      icon={getDriverIcon(route.status)}
+                      eventHandlers={{ click: () => setSelectedRoute(route) }}
+                    >
+                      <Popup>
+                        <Box>
+                          <Typography variant="subtitle2">{getDriverName(route.driverId)}</Typography>
+                          <Typography variant="caption">{getVehicleName(route.vehicleId)}</Typography>
+                          <Typography variant="caption" display="block">
+                            {route.completedStops || 0}/{route.totalStops || 0} stops
+                          </Typography>
+                        </Box>
+                      </Popup>
+                    </Marker>
+                  );
+                })}
+                {selectedRoute && selectedRoute.path && (
+                  <Polyline positions={selectedRoute.path} color="blue" weight={4} />
+                )}
+              </MapContainer>
+            </Box>
+          </DetailTray>
         </Grid>
 
-        {/* Right: Details Panel */}
-        <Grid item xs={12} md={4}>
-          {/* Alerts Section */}
-          <Paper sx={{ p: 2, mb: 2, maxHeight: 200, overflow: 'auto' }}>
-            <Typography variant="h6" gutterBottom>
-              Alerts ({alerts.length})
-            </Typography>
-            {alerts.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                No active alerts
-              </Typography>
-            ) : (
-              <Stack spacing={1}>
-                {alerts.map((alert) => (
-                  <Alert
-                    key={alert.id}
-                    severity={alert.severity}
-                    onClose={() => handleDismissAlert(alert.id)}
-                  >
-                    <AlertTitle>{alert.title}</AlertTitle>
-                    {alert.message}
-                  </Alert>
-                ))}
-              </Stack>
-            )}
-          </Paper>
-
-          {/* Route Details */}
-          {selectedRoute ? (
-            <RouteDetailsPanel
-              route={selectedRoute}
-              driverName={getDriverName(selectedRoute.driverId)}
-              vehicleName={getVehicleName(selectedRoute.vehicleId)}
-            />
-          ) : (
-            <Paper sx={{ p: 2 }}>
-              <Typography variant="body2" color="text.secondary">
-                Select a driver on the map to view details
-              </Typography>
-
-              {/* Active Routes Summary */}
-              <Box sx={{ mt: 2 }}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Active Routes ({activeRoutes.length})
+        <Grid item xs={12} lg={4}>
+          <Stack spacing={2.25}>
+            <DetailTray title="Alerts / Exceptions" subtitle={`${alerts.length} active`}>
+              {alerts.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  No active alerts
                 </Typography>
+              ) : (
+                <Stack spacing={1}>
+                  {alerts.map((alert) => (
+                    <Alert key={alert.id} severity={alert.severity} onClose={() => handleDismissAlert(alert.id)}>
+                      <AlertTitle>{alert.title}</AlertTitle>
+                      {alert.message}
+                    </Alert>
+                  ))}
+                </Stack>
+              )}
+            </DetailTray>
+
+            <DetailTray title="Active Routes" subtitle="Click to focus on map and details">
+              {activeRoutes.length === 0 ? (
+                <Typography variant="body2" color="text.secondary">
+                  No active routes right now.
+                </Typography>
+              ) : (
                 <List dense>
                   {activeRoutes.map((route) => (
                     <ListItem
@@ -453,32 +488,55 @@ export default function TrackingEnhanced() {
                         </IconButton>
                       }
                       onClick={() => setSelectedRoute(route)}
-                      sx={{ cursor: 'pointer' }}
+                      sx={{
+                        cursor: 'pointer',
+                        borderRadius: 2,
+                        border: '1px solid',
+                        borderColor: selectedRoute?.id === route.id ? 'primary.main' : 'divider',
+                        mb: 1,
+                      }}
                     >
                       <ListItemText
                         primary={getDriverName(route.driverId)}
-                        secondary={`${getVehicleName(route.vehicleId)} - ${route.completedStops || 0}/${
-                          route.totalStops || 0
-                        } stops`}
+                        secondary={`${getVehicleName(route.vehicleId)} • ${route.completedStops || 0}/${route.totalStops || 0} stops${
+                          Array.isArray(route?.plannerDiagnostics?.advancedConstraints?.reasonCodes) &&
+                          route.plannerDiagnostics.advancedConstraints.reasonCodes.length > 0
+                            ? ` • ${route.plannerDiagnostics.advancedConstraints.reasonCodes[0]}`
+                            : ''
+                        }`}
                       />
                     </ListItem>
                   ))}
                 </List>
-              </Box>
-            </Paper>
-          )}
+              )}
+            </DetailTray>
+          </Stack>
         </Grid>
       </Grid>
 
-      {/* Completed Jobs Widget */}
+      <DetailTray
+        title="Selected Route Detail"
+        subtitle={selectedRoute ? `Route ${selectedRoute.id?.slice(0, 8)}` : 'Pick an active route to inspect'}
+      >
+        {selectedRoute ? (
+          <RouteDetailsPanel
+            route={selectedRoute}
+            driverName={getDriverName(selectedRoute.driverId)}
+            vehicleName={getVehicleName(selectedRoute.vehicleId)}
+          />
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            Select a driver marker on the map or an item from Active Routes.
+          </Typography>
+        )}
+      </DetailTray>
+
       {completedJobsToday.length > 0 && (
-        <Box sx={{ mt: 3 }}>
-          <Accordion>
+        <DetailTray title="Completed Jobs" subtitle={`Today: ${completedJobsToday.length}`}>
+          <Accordion elevation={0} disableGutters>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', pr: 2 }}>
-                <Typography variant="h6">
-                  Completed Today ({completedJobsToday.length})
-                </Typography>
+                <Typography variant="subtitle1">Completed Today ({completedJobsToday.length})</Typography>
                 <Button
                   size="small"
                   variant="outlined"
@@ -509,19 +567,13 @@ export default function TrackingEnhanced() {
                       <TableCell>{job.customerName}</TableCell>
                       <TableCell>{job.deliveryAddress || 'N/A'}</TableCell>
                       <TableCell>
-                        {job.completedAt
-                          ? new Date(job.completedAt).toLocaleTimeString()
-                          : 'N/A'}
+                        {job.completedAt ? new Date(job.completedAt).toLocaleTimeString() : 'N/A'}
                       </TableCell>
                       <TableCell>
                         <Chip
                           label={job.priority || 'normal'}
                           size="small"
-                          color={
-                            job.priority === 'high' || job.priority === 'urgent'
-                              ? 'error'
-                              : 'default'
-                          }
+                          color={job.priority === 'high' || job.priority === 'urgent' ? 'error' : 'default'}
                         />
                       </TableCell>
                       <TableCell align="right">
@@ -539,7 +591,7 @@ export default function TrackingEnhanced() {
               </Table>
             </AccordionDetails>
           </Accordion>
-        </Box>
+        </DetailTray>
       )}
 
       {/* Reassign Driver Dialog */}
@@ -629,21 +681,25 @@ function RouteDetailsPanel({
     ? ((route.completedStops || 0) / route.totalStops) * 100
     : 0;
 
-  // Mock stops data
-  const mockStops = Array.from({ length: route.totalStops || 5 }, (_, i) => ({
-    id: `stop-${i}`,
-    customer: `Customer ${i + 1}`,
-    address: `${100 + i * 10} Main St`,
-    timeWindow: '9:00 AM - 11:00 AM',
-    status: i < (route.completedStops || 0) ? 'completed' : i === route.completedStops ? 'current' : 'pending',
-    completedAt: i < (route.completedStops || 0) ? '10:30 AM' : undefined,
+  const totalStops = route.totalStops || route.jobIds?.length || 0;
+  const completedStops = route.completedStops || 0;
+  const hasDetailedStopTelemetry = false;
+  const advancedConstraints = route?.plannerDiagnostics?.advancedConstraints || null;
+  const feasibilityScore =
+    typeof advancedConstraints?.feasibilityScore === 'number'
+      ? advancedConstraints.feasibilityScore
+      : null;
+  const fallbackStops = Array.from({ length: totalStops }, (_, i) => ({
+    id: route.jobIds?.[i] || `stop-${i}`,
+    status:
+      i < completedStops ? 'completed' : i === completedStops ? 'current' : 'pending',
   }));
 
   return (
-    <Paper sx={{ p: 2 }}>
+    <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
         <Typography variant="h6">{driverName}</Typography>
-        <Chip label={route.status} color="primary" size="small" />
+        <StatusPill label={route.status} color="#2563eb" />
       </Box>
 
       {/* Progress Bar */}
@@ -690,12 +746,26 @@ function RouteDetailsPanel({
         </Grid>
       </Grid>
 
+      {advancedConstraints ? (
+        <Alert severity={advancedConstraints.feasible ? 'info' : 'warning'} sx={{ mb: 2 }}>
+          {feasibilityScore !== null ? `Feasibility score ${feasibilityScore}/100.` : 'Diagnostics available.'}
+          {Array.isArray(advancedConstraints.reasonCodes) && advancedConstraints.reasonCodes.length > 0
+            ? ` Reason codes: ${advancedConstraints.reasonCodes.slice(0, 3).join(', ')}.`
+            : ''}
+        </Alert>
+      ) : null}
+
       {/* Stops List */}
       <Typography variant="subtitle2" gutterBottom>
         Stops
       </Typography>
+      {!hasDetailedStopTelemetry && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+          Stop-level telemetry unavailable. Showing sequence placeholders.
+        </Typography>
+      )}
       <List dense sx={{ maxHeight: 300, overflow: 'auto' }}>
-        {mockStops.map((stop, idx) => (
+        {fallbackStops.map((stop, idx) => (
           <ListItem
             key={stop.id}
             sx={{
@@ -713,18 +783,15 @@ function RouteDetailsPanel({
               )}
             </ListItemIcon>
             <ListItemText
-              primary={`${idx + 1}. ${stop.customer}`}
+              primary={`${idx + 1}. Stop ${idx + 1}`}
               secondary={
                 <>
-                  {stop.address}
-                  {stop.timeWindow && (
-                    <Typography variant="caption" display="block">
-                      Window: {stop.timeWindow}
-                    </Typography>
-                  )}
-                  {stop.status === 'completed' && stop.completedAt && (
+                  <Typography variant="caption" display="block">
+                    Job ID: {stop.id}
+                  </Typography>
+                  {stop.status === 'completed' && (
                     <Typography variant="caption" color="success.main">
-                      Completed at {stop.completedAt}
+                      Completed
                     </Typography>
                   )}
                 </>
@@ -743,6 +810,6 @@ function RouteDetailsPanel({
           Modify
         </Button>
       </Box>
-    </Paper>
+    </Box>
   );
 }

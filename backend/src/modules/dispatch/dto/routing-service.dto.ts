@@ -2,6 +2,27 @@
  * DTOs for communication with Python routing-service
  */
 
+export type DataQuality = 'live' | 'degraded' | 'simulated';
+export type OptimizationStatus = 'optimized' | 'degraded' | 'failed';
+
+export interface OptimizerHealth {
+  status: 'healthy' | 'degraded' | 'unavailable';
+  circuitOpen: boolean;
+  consecutiveFailures: number;
+  lastCheckedAt: string;
+  lastSuccessAt?: string;
+  lastFailureAt?: string;
+  message?: string;
+}
+
+export interface OptimizerEvent {
+  level: 'info' | 'warning' | 'error';
+  code: string;
+  message: string;
+  fallbackUsed: boolean;
+  timestamp: string;
+}
+
 export class RoutingServiceRequest {
   vehicle_id: string;
   job_ids: string[];
@@ -32,6 +53,13 @@ export class RoutingServiceResponse {
   };
   polyline?: any; // Optional polyline from routing service
   error?: string;
+  optimization_status?: OptimizationStatus;
+  data_quality?: DataQuality;
+  is_fallback?: boolean;
+  fallback_reason?: string;
+  warnings?: string[];
+  dropped_jobs?: string[];
+  planner_diagnostics?: Record<string, any>;
 }
 
 export class GlobalRoutingServiceRequest {
@@ -48,6 +76,11 @@ export class RouteInfo {
     latitude: number;
     longitude: number;
   };
+  data_quality?: DataQuality;
+  optimization_status?: OptimizationStatus;
+  warnings?: string[];
+  dropped_jobs?: string[];
+  planner_diagnostics?: Record<string, any>;
 }
 
 export class GlobalRoutingServiceResponse {
@@ -55,5 +88,10 @@ export class GlobalRoutingServiceResponse {
   routes: Record<string, RouteInfo>;
   unassigned_jobs: string[];
   error?: string;
+  optimization_status?: OptimizationStatus;
+  data_quality?: DataQuality;
+  is_fallback?: boolean;
+  fallback_reason?: string;
+  warnings?: string[];
+  planner_diagnostics?: Record<string, any>;
 }
-

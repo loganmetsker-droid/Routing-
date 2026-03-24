@@ -9,8 +9,11 @@ enum BillingStatus {
 }
 
 input CreateCustomerDto {
+  address: String
+  addressStructured: JSON
   businessName: String
   defaultAddress: String
+  defaultAddressStructured: JSON
   email: String
   exceptions: String
   name: String!
@@ -19,6 +22,7 @@ input CreateCustomerDto {
 }
 
 input CreateDriverDto {
+  assignedVehicleId: String
   certifications: [String!]
   currentVehicleId: String
   dateOfBirth: String
@@ -29,32 +33,41 @@ input CreateDriverDto {
   hireDate: String
   lastName: String!
   licenseClass: String
-  licenseExpiryDate: String!
+  licenseExpiryDate: String
   licenseNumber: String!
+  licenseType: String
   metadata: JSON
+  notes: String
   phone: String!
+  status: String
 }
 
 input CreateJobDto {
   customerEmail: String
+  customerId: String
   customerName: String!
   customerPhone: String
   deliveryAddress: String!
+  deliveryAddressStructured: JSON
   deliveryLocation: JSON
   estimatedDuration: Float
   notes: String
-  pickupAddress: String!
+  pickupAddress: String
+  pickupAddressStructured: JSON
   pickupLocation: JSON
   priority: String
   quantity: Int
   specialInstructions: String
-  timeWindowEnd: String!
-  timeWindowStart: String!
+  status: String
+  timeWindow: JSON
+  timeWindowEnd: String
+  timeWindowStart: String
   volume: Float
   weight: Float
 }
 
 input CreateVehicleDto {
+  capacity: Float
   capacityVolumeM3: Float
   capacityWeightKg: Float
   currentOdometerKm: Float
@@ -65,6 +78,7 @@ input CreateVehicleDto {
   metadata: JSON
   model: String!
   nextMaintenanceKm: Float
+  status: String
   vehicleType: String!
   vin: String
   year: Int!
@@ -284,8 +298,11 @@ input UpdateBillingDto {
 }
 
 input UpdateCustomerDto {
+  address: String
+  addressStructured: JSON
   businessName: String
   defaultAddress: String
+  defaultAddressStructured: JSON
   email: String
   exceptions: String
   name: String
@@ -302,20 +319,30 @@ input UpdateDriverDto {
 }
 
 input UpdateJobDto {
+  archived: Boolean
+  archivedAt: String
+  assignedRouteId: String
+  assignedVehicleId: String
   completedAt: String
   customerEmail: String
+  customerId: String
   customerName: String
   customerPhone: String
   deliveryAddress: String
+  deliveryAddressStructured: JSON
   deliveryLocation: JSON
+  driverId: String
   estimatedDuration: Float
   notes: String
   pickupAddress: String
+  pickupAddressStructured: JSON
   pickupLocation: JSON
   priority: String
   quantity: Int
   specialInstructions: String
   status: String
+  stopSequence: Float
+  timeWindow: JSON
   timeWindowEnd: String
   timeWindowStart: String
   volume: Float
@@ -329,6 +356,7 @@ input UpdateLifecycleDto {
 }
 
 input UpdateVehicleDto {
+  capacity: Float
   capacityVolumeM3: Float
   capacityWeightKg: Float
   currentOdometerKm: Float

@@ -31,10 +31,11 @@ import {
   Unarchive,
   CheckCircle,
 } from '@mui/icons-material';
-import { getJobs, createJob, connectSSE } from '../services/api';
+import { getJobs, createJob } from '../services/api';
 import AddressInput from '../components/forms/AddressInput';
 import { Address } from '../types/address';
 import { formatAddress } from '../utils/addressValidation';
+import { connectDispatchRealtime } from '../services/socket';
 
 const API_BASE_URL = (import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/+$/, '').replace(/\/api$/, '');
 
@@ -135,7 +136,7 @@ export default function JobsPageImproved() {
     }
 
     // Connect SSE for real-time updates - automatically archive completed jobs
-    const eventSource = connectSSE((data) => {
+    const eventSource = connectDispatchRealtime((data) => {
       if (data.type === 'job-created' || data.type === 'job-updated') {
         loadJobs();
 

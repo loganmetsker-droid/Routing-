@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { alpha, useTheme } from '@mui/material/styles';
 import {
   Box,
   Typography,
@@ -11,6 +12,7 @@ import {
   Checkbox,
   Paper,
   Stack,
+  Divider,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -19,6 +21,8 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Snackbar,
+  Alert,
 } from '@mui/material';
 import {
   AutoAwesome,
@@ -28,92 +32,51 @@ import {
   CheckCircle,
   LocalShipping,
   Route as RouteIcon,
-  Speed,
-  Schedule,
+  Person,
 } from '@mui/icons-material';
 import {
   getJobs,
   getRoutes,
   getVehicles,
   getDrivers,
+  getDispatchOptimizerHealth,
+  getRerouteHistory,
+  getDispatchTimeline,
+  requestReroute,
+  approveReroute,
+  rejectReroute,
+  applyReroute,
+  previewReroute,
   assignDriverToRoute,
   startRoute,
   generateRoute,
   updateRoute,
   reorderRouteStops,
-  connectSSE,
+  OptimizerHealth,
+  RerouteRequest,
+  DispatchTimelineEvent,
+  ReroutePreview,
 } from '../services/api';
+import { connectDispatchRealtime } from '../services/socket';
 import VehicleRouteCard from '../components/dispatch/VehicleRouteCard';
 import LiveStatusColumn from '../components/dispatch/LiveStatusColumn';
-import { MapContainer, TileLayer, Polyline, Marker, Popup, Tooltip as LeafletTooltip } from 'react-leaflet';
-import 'leaflet/dist/leaflet.css';
-import L from 'leaflet';
-
-// Fix Leaflet default marker icon issue
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-});
+import ModuleHeader from '../components/ui/ModuleHeader';
+import DetailTray from '../components/ui/DetailTray';
+import MapPanel from '../components/map/MapPanel';
+import StatusPill from '../components/ui/StatusPill';
+import {
+  DISPATCH_PLANNER_SELECTION_KEY,
+  DispatchDriver as Driver,
+  DispatchJob as Job,
+  DispatchPlannerSelection,
+  DispatchRoute as Route,
+  DispatchVehicle as Vehicle,
+} from '../types/dispatch';
 
 const ROUTE_COLORS = [
   '#FF6B6B', '#4ECDC4', '#FFE66D', '#A8E6CF', '#FF8B94', '#95E1D3',
   '#F38181', '#7FDBFF', '#B4A7D6', '#FFD93D', '#6BCF7F', '#FF9F1C',
 ];
-
-// ==================== INTERFACES ====================
-
-interface Job {
-  id: string;
-  customerName: string;
-  pickupAddress?: string;
-  deliveryAddress?: string;
-  status: string;
-  priority?: string;
-  assignedRouteId?: string;
-  assignedVehicleId?: string;
-  stopSequence?: number;
-}
-
-interface Route {
-  id: string;
-  vehicleId: string;
-  driverId?: string | null;
-  jobIds: string[];
-  status: string;
-  totalDistance?: number;
-  totalDuration?: number;
-  estimatedCapacity?: number;
-  optimizedStops?: OptimizedStop[];
-  optimizedAt?: string;
-}
-
-interface OptimizedStop {
-  jobId: string;
-  sequence: number;
-  address: string;
-  estimatedArrival?: string;
-  distanceFromPrevious?: number;
-}
-
-interface Vehicle {
-  id: string;
-  make?: string;
-  model?: string;
-  licensePlate?: string;
-  status: string;
-  capacity?: number;
-}
-
-interface Driver {
-  id: string;
-  firstName?: string;
-  lastName?: string;
-  status: string;
-  currentHours?: number;
-  maxHours?: number;
-}
 
 interface DriverSuggestion extends Driver {
   available: boolean;
@@ -122,9 +85,12 @@ interface DriverSuggestion extends Driver {
   reason: string;
 }
 
+type FeedbackSeverity = 'success' | 'info' | 'warning' | 'error';
+
 // ==================== MAIN COMPONENT ====================
 
 export default function DispatchUnifiedV2() {
+  const theme = useTheme();
   // State
   const [jobs, setJobs] = useState<Job[]>([]);
   const [routes, setRoutes] = useState<Route[]>([]);
@@ -132,9 +98,30 @@ export default function DispatchUnifiedV2() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
+  const [selectedVehicleId, setSelectedVehicleId] = useState('');
   const [autoAssigning, setAutoAssigning] = useState(false);
   const [optimizingRouteId, setOptimizingRouteId] = useState<string | null>(null);
   const [dispatchingRouteId, setDispatchingRouteId] = useState<string | null>(null);
+  const [selectedRouteDetailId, setSelectedRouteDetailId] = useState<string | null>(null);
+  const [plannerSource, setPlannerSource] = useState<'jobs' | 'dispatch' | null>(null);
+  const [plannerSelectionRestored, setPlannerSelectionRestored] = useState(false);
+  const [feedback, setFeedback] = useState<{
+    message: string;
+    severity: FeedbackSeverity;
+  } | null>(null);
+  const [optimizerHealth, setOptimizerHealth] = useState<OptimizerHealth | null>(null);
+  const [reviewedRouteIds, setReviewedRouteIds] = useState<string[]>([]);
+  const [rerouteDialogOpen, setRerouteDialogOpen] = useState(false);
+  const [rerouteSubmitting, setRerouteSubmitting] = useState(false);
+  const [rerouteHistory, setRerouteHistory] = useState<RerouteRequest[]>([]);
+  const [timelineEvents, setTimelineEvents] = useState<DispatchTimelineEvent[]>([]);
+  const [rerouteCategory, setRerouteCategory] = useState('traffic_delay');
+  const [rerouteAction, setRerouteAction] = useState('reorder_stops');
+  const [rerouteReason, setRerouteReason] = useState('');
+  const [constraintPackId, setConstraintPackId] = useState<'generic' | 'construction_concrete'>('generic');
+  const [overrideRequested, setOverrideRequested] = useState(false);
+  const [overrideReason, setOverrideReason] = useState('');
+  const [reroutePreview, setReroutePreview] = useState<ReroutePreview | null>(null);
 
   // Dialogs
   const [assignDriverDialogOpen, setAssignDriverDialogOpen] = useState(false);
@@ -145,13 +132,17 @@ export default function DispatchUnifiedV2() {
 
   useEffect(() => {
     loadData();
-    const eventSource = connectSSE((event) => {
+    const eventSource = connectDispatchRealtime((event) => {
       if (event.type === 'job-updated' || event.type === 'route-updated') {
         loadData();
       }
     });
     return () => eventSource?.close();
   }, []);
+
+  const showFeedback = (message: string, severity: FeedbackSeverity = 'info') => {
+    setFeedback({ message, severity });
+  };
 
   const loadData = async () => {
     try {
@@ -161,10 +152,12 @@ export default function DispatchUnifiedV2() {
         getVehicles(),
         getDrivers(),
       ]);
+      const healthData = await getDispatchOptimizerHealth();
       setJobs(Array.isArray(jobsData) ? jobsData : []);
       setRoutes(Array.isArray(routesData) ? routesData : []);
       setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
       setDrivers(Array.isArray(driversData) ? driversData : []);
+      setOptimizerHealth(healthData);
     } catch (error) {
       console.error('Failed to load data:', error);
       setJobs([]);
@@ -184,6 +177,13 @@ export default function DispatchUnifiedV2() {
     (route) => route.status !== 'completed' && route.status !== 'cancelled'
   );
 
+  const availableVehicles = vehicles.filter((vehicle) => {
+    const assignedRoute = activeRoutes.find((route) => route.vehicleId === vehicle.id);
+    const isAvailableStatus =
+      vehicle.status === 'available' || vehicle.status === 'AVAILABLE';
+    return isAvailableStatus && !assignedRoute;
+  });
+
   const readyToDispatchRoutes = activeRoutes.filter(
     (route) =>
       (route.status === 'planned' || route.status === 'assigned') &&
@@ -192,6 +192,62 @@ export default function DispatchUnifiedV2() {
       route.jobIds &&
       route.jobIds.length > 0
   );
+
+  const optimizerHealthColor =
+    optimizerHealth?.status === 'healthy'
+      ? '#059669'
+      : optimizerHealth?.status === 'degraded'
+      ? '#d97706'
+      : '#dc2626';
+
+  useEffect(() => {
+    if (selectedRouteDetailId && activeRoutes.some((route) => route.id === selectedRouteDetailId)) {
+      return;
+    }
+    setSelectedRouteDetailId(activeRoutes[0]?.id || null);
+  }, [activeRoutes, selectedRouteDetailId]);
+
+  useEffect(() => {
+    if (selectedVehicleId && availableVehicles.some((vehicle) => vehicle.id === selectedVehicleId)) {
+      return;
+    }
+
+    setSelectedVehicleId(availableVehicles[0]?.id || '');
+  }, [availableVehicles, selectedVehicleId]);
+
+  useEffect(() => {
+    if (plannerSelectionRestored || loading) {
+      return;
+    }
+
+    const rawSelection = sessionStorage.getItem(DISPATCH_PLANNER_SELECTION_KEY);
+
+    if (!rawSelection) {
+      setPlannerSelectionRestored(true);
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(rawSelection) as DispatchPlannerSelection;
+      const validJobIds = parsed.selectedJobIds.filter((jobId) =>
+        unassignedJobs.some((job) => job.id === jobId),
+      );
+
+      if (validJobIds.length > 0) {
+        setSelectedJobIds(validJobIds);
+        setPlannerSource(parsed.source || 'dispatch');
+        showFeedback(
+          `Loaded ${validJobIds.length} job${validJobIds.length === 1 ? '' : 's'} from Jobs into the planner.`,
+          'success',
+        );
+      }
+    } catch (error) {
+      console.error('Failed to restore dispatch planner selection:', error);
+    } finally {
+      sessionStorage.removeItem(DISPATCH_PLANNER_SELECTION_KEY);
+      setPlannerSelectionRestored(true);
+    }
+  }, [loading, plannerSelectionRestored, unassignedJobs]);
 
   // ==================== CONFLICT DETECTION ====================
 
@@ -258,41 +314,41 @@ export default function DispatchUnifiedV2() {
 
   // ==================== AUTO-ASSIGN LOGIC ====================
 
-  const handleAutoAssign = async () => {
-    if (selectedJobIds.length === 0) return;
+  const handleCreatePlannedRoute = async () => {
+    if (selectedJobIds.length === 0) {
+      showFeedback('Select at least one job before creating a route.', 'warning');
+      return;
+    }
+
+    if (!selectedVehicleId) {
+      showFeedback('Choose an available vehicle for this route.', 'warning');
+      return;
+    }
 
     setAutoAssigning(true);
     try {
-      // Find available vehicle
-      const availableVehicle = vehicles.find((v) => {
-        const assignedRoute = routes.find(
-          (r) => r.vehicleId === v.id && r.status !== 'completed' && r.status !== 'cancelled',
-        );
-        return !assignedRoute;
-      });
-
-      if (!availableVehicle) {
-        alert('No available vehicles');
-        return;
-      }
-
-      // Create route
-      const response = await generateRoute(availableVehicle.id, selectedJobIds);
+      const response = await generateRoute(selectedVehicleId, selectedJobIds);
       const newRoute = (response as any).route || response;
-
-      // Immediately run optimization/reordering on the newly created route.
-      await reorderRouteStops(
-        newRoute.id,
+      const plannedJobIds =
         Array.isArray(newRoute.jobIds) && newRoute.jobIds.length > 0
           ? newRoute.jobIds
-          : selectedJobIds,
-      );
+          : selectedJobIds;
+
+      await reorderRouteStops(newRoute.id, plannedJobIds);
 
       setSelectedJobIds([]);
+      setPlannerSource('dispatch');
       await loadData();
+      setSelectedRouteForDriver(newRoute.id);
+      setSelectedDriverId('');
+      setAssignDriverDialogOpen(true);
+      showFeedback(
+        'Route created. Assign a driver to move it into the ready lane.',
+        'success',
+      );
     } catch (error) {
-      console.error('Auto-assign failed:', error);
-      alert('Failed to auto-assign jobs');
+      console.error('Route creation failed:', error);
+      showFeedback('Failed to create the planned route.', 'error');
     } finally {
       setAutoAssigning(false);
     }
@@ -313,7 +369,7 @@ export default function DispatchUnifiedV2() {
       await loadData();
     } catch (error) {
       console.error('Optimization failed:', error);
-      alert('Failed to optimize route');
+      showFeedback('Failed to optimize route.', 'error');
     } finally {
       setOptimizingRouteId(null);
     }
@@ -376,9 +432,10 @@ export default function DispatchUnifiedV2() {
       setSelectedDriverId('');
       setSelectedRouteForDriver(null);
       await loadData();
+      showFeedback('Driver assigned. The route is now ready to dispatch.', 'success');
     } catch (error) {
       console.error('Driver assignment failed:', error);
-      alert('Failed to assign driver');
+      showFeedback('Failed to assign driver.', 'error');
     }
   };
 
@@ -386,21 +443,28 @@ export default function DispatchUnifiedV2() {
     try {
       await updateRoute(routeId, { driverId: null, status: 'planned' });
       await loadData();
+      showFeedback('Driver removed. Route moved back to planned.', 'info');
     } catch (error) {
       console.error('Remove driver failed:', error);
+      showFeedback('Failed to remove driver.', 'error');
     }
   };
 
   // ==================== DISPATCH ====================
 
   const handleDispatch = async (routeId: string) => {
+    if (!reviewedRouteIds.includes(routeId)) {
+      showFeedback('Review route warnings/details before dispatching.', 'warning');
+      return;
+    }
     setDispatchingRouteId(routeId);
     try {
       await startRoute(routeId);
       await loadData();
+      showFeedback('Route dispatched successfully.', 'success');
     } catch (error) {
       console.error('Dispatch failed:', error);
-      alert('Failed to dispatch route');
+      showFeedback('Failed to dispatch route.', 'error');
     } finally {
       setDispatchingRouteId(null);
     }
@@ -426,27 +490,32 @@ export default function DispatchUnifiedV2() {
 
   const mapRoutes = activeRoutes.map((route, index) => {
     const assignedVehicle = vehicles.find((v) => v.id === route.vehicleId);
+    const routeId = typeof route.id === 'string' ? route.id : String(route.id ?? `route-${index}`);
 
-    // Convert stop addresses to positions (mocking coordinates for demo)
+    // Use stable fallback positions until backend geometry is available.
     const positions = route.optimizedStops && route.optimizedStops.length > 0
       ? route.optimizedStops.map((stop, i) => ({
-        lat: 39.0997 + (i * 0.01) + (Math.random() - 0.5) * 0.05,
-        lng: -94.5786 + (i * 0.01) + (Math.random() - 0.5) * 0.05,
+        lat: 39.0997 + (i * 0.012) + (((index * 7 + i * 3) % 9) - 4) * 0.004,
+        lng: -94.5786 + (i * 0.01) + (((index * 5 + i * 2) % 7) - 3) * 0.004,
         address: stop.address
       }))
       : [];
 
     return {
-      id: route.id,
+      id: routeId,
       positions: positions,
       color: ROUTE_COLORS[index % ROUTE_COLORS.length],
-      status: route.status,
+      status: String(route.status || 'planned'),
       vehicle: `${assignedVehicle?.make || ''} ${assignedVehicle?.model || ''}`.trim() || 'Unassigned',
       vehiclePlate: assignedVehicle?.licensePlate || 'N/A',
-      totalDistance: route.totalDistance || 0,
+      totalDistance: Number(route.totalDistance || 0),
       stopCount: positions.length,
+      simulatedGeometry: route.dataQuality === 'simulated',
     };
   });
+
+  const usingSimulatedGeometry = mapRoutes.some((route) => route.simulatedGeometry);
+  const usingDegradedQuality = activeRoutes.some((route) => route.dataQuality === 'degraded');
 
   const mapCenter: [number, number] = mapRoutes.length > 0 && mapRoutes[0].positions.length > 0
     ? [mapRoutes[0].positions[0].lat, mapRoutes[0].positions[0].lng]
@@ -456,6 +525,231 @@ export default function DispatchUnifiedV2() {
 
   // ==================== RENDER ====================
 
+  const selectedRoute = selectedRouteForDriver
+    ? routes.find((r) => r.id === selectedRouteForDriver)
+    : null;
+  const suggestedDrivers = selectedRoute ? getSuggestedDrivers(selectedRoute) : [];
+  const selectedRouteDetail = selectedRouteDetailId
+    ? activeRoutes.find((route) => route.id === selectedRouteDetailId) || null
+    : null;
+  const selectedRouteLabel = selectedRouteDetail
+    ? String(selectedRouteDetail.id ?? 'unknown').slice(0, 8)
+    : '';
+  const selectedRouteStatus = String(selectedRouteDetail?.status || 'planned');
+  const selectedRouteDistanceKm = Number(selectedRouteDetail?.totalDistance || 0);
+  const selectedRouteJobIds = Array.isArray(selectedRouteDetail?.jobIds) ? selectedRouteDetail.jobIds : [];
+  const selectedRouteVehicle = selectedRouteDetail
+    ? vehicles.find((vehicle) => vehicle.id === selectedRouteDetail.vehicleId) || null
+    : null;
+  const selectedRouteDriver = selectedRouteDetail
+    ? drivers.find((driver) => driver.id === selectedRouteDetail.driverId) || null
+    : null;
+  const selectedRouteJobs = selectedRouteDetail
+    ? jobs.filter((job) => selectedRouteJobIds.includes(job.id))
+    : [];
+  const routeIsReady = Boolean(
+    selectedRouteDetail &&
+      (selectedRouteDetail.status === 'planned' || selectedRouteDetail.status === 'assigned') &&
+      selectedRouteDetail.vehicleId &&
+      selectedRouteDetail.driverId &&
+      selectedRouteDetail.jobIds?.length,
+  );
+  const routeNeedsRerouteResolution = Boolean(
+    selectedRouteDetail &&
+      (selectedRouteDetail.rerouteState === 'requested' ||
+        selectedRouteDetail.rerouteState === 'approved'),
+  );
+  const routeIsReviewed = Boolean(
+    selectedRouteDetail && reviewedRouteIds.includes(selectedRouteDetail.id),
+  );
+  const panelSx = {
+    borderRadius: 4,
+    border: `1px solid ${alpha(theme.palette.text.primary, 0.08)}`,
+    bgcolor: alpha(theme.palette.background.paper, theme.palette.mode === 'dark' ? 0.88 : 0.95),
+    boxShadow: `0 12px 22px -22px ${alpha(theme.palette.common.black, 0.28)}`,
+  };
+  const panelBodySx = {
+    flex: 1,
+    overflow: 'auto',
+    pr: 0.5,
+    mr: -0.5,
+    minHeight: 0,
+    '&::-webkit-scrollbar': { width: '8px' },
+    '&::-webkit-scrollbar-thumb': {
+      bgcolor: alpha(theme.palette.text.primary, 0.14),
+      borderRadius: '999px',
+    },
+  };
+  const scrollAreaSx = {
+    ...panelBodySx,
+  };
+  const emptyStateSx = {
+    textAlign: 'center',
+    py: 6,
+    px: 3,
+    border: `1.5px dashed ${alpha(theme.palette.text.primary, 0.14)}`,
+    borderRadius: '18px',
+    bgcolor: alpha(theme.palette.background.paper, theme.palette.mode === 'dark' ? 0.76 : 0.72),
+  };
+  const selectedVehicle = availableVehicles.find((vehicle) => vehicle.id === selectedVehicleId);
+  const latestRerouteRequest = rerouteHistory[0] || null;
+
+  useEffect(() => {
+    const loadRerouteHistory = async () => {
+      if (!selectedRouteDetailId) {
+        setRerouteHistory([]);
+        setTimelineEvents([]);
+        return;
+      }
+      const history = await getRerouteHistory(selectedRouteDetailId);
+      const events = await getDispatchTimeline({
+        routeId: selectedRouteDetailId,
+        limit: 20,
+        source: 'reroute',
+      });
+      setRerouteHistory(history);
+      setTimelineEvents(events);
+    };
+    loadRerouteHistory();
+  }, [selectedRouteDetailId, routes]);
+
+  const handleRequestReroute = async () => {
+    if (!selectedRouteDetail) return;
+    if (!rerouteReason.trim()) {
+      showFeedback('Provide a reason before requesting reroute.', 'warning');
+      return;
+    }
+    setRerouteSubmitting(true);
+    try {
+      await requestReroute(selectedRouteDetail.id, {
+        exceptionCategory: rerouteCategory,
+        action: rerouteAction,
+        reason: rerouteReason.trim(),
+        requesterId: 'dispatcher-ui',
+        requestPayload: buildPreviewPayload(),
+      });
+      setRerouteDialogOpen(false);
+      setRerouteReason('');
+      setConstraintPackId('generic');
+      setReroutePreview(null);
+      await loadData();
+      showFeedback('Reroute request submitted for approval.', 'success');
+    } catch (error) {
+      console.error('Failed to request reroute:', error);
+      showFeedback('Failed to request reroute.', 'error');
+    } finally {
+      setRerouteSubmitting(false);
+    }
+  };
+
+  const handleApproveReroute = async () => {
+    if (!selectedRouteDetail || !latestRerouteRequest) return;
+    try {
+      await approveReroute(selectedRouteDetail.id, latestRerouteRequest.id, {
+        reviewerId: 'dispatcher-ui',
+      });
+      await loadData();
+      showFeedback('Reroute request approved.', 'success');
+    } catch (error) {
+      console.error('Failed to approve reroute:', error);
+      showFeedback('Failed to approve reroute.', 'error');
+    }
+  };
+
+  const handleRejectReroute = async () => {
+    if (!selectedRouteDetail || !latestRerouteRequest) return;
+    try {
+      await rejectReroute(selectedRouteDetail.id, latestRerouteRequest.id, {
+        reviewerId: 'dispatcher-ui',
+      });
+      await loadData();
+      showFeedback('Reroute request rejected.', 'info');
+    } catch (error) {
+      console.error('Failed to reject reroute:', error);
+      showFeedback('Failed to reject reroute.', 'error');
+    }
+  };
+
+  const handleApplyReroute = async () => {
+    if (!selectedRouteDetail || !latestRerouteRequest) return;
+    try {
+      await applyReroute(selectedRouteDetail.id, latestRerouteRequest.id, {
+        appliedBy: 'dispatcher-ui',
+        appliedPayload: buildPreviewPayload(),
+        overrideRequested,
+        overrideReason: overrideRequested ? overrideReason.trim() : undefined,
+        overrideActor: overrideRequested ? 'dispatcher-ui' : undefined,
+        overrideActorRole: overrideRequested ? 'dispatcher' : undefined,
+      });
+      setOverrideRequested(false);
+      setOverrideReason('');
+      await loadData();
+      showFeedback(
+        overrideRequested ? 'Reroute override applied and audited.' : 'Reroute applied and logged.',
+        'success',
+      );
+    } catch (error) {
+      console.error('Failed to apply reroute:', error);
+      const message = error instanceof Error ? error.message : 'Failed to apply reroute.';
+      if (message.toLowerCase().includes('override denied by policy')) {
+        showFeedback(message, 'warning');
+      } else {
+        showFeedback(message, 'error');
+      }
+    }
+  };
+
+  const buildPreviewPayload = () => {
+    if (!selectedRouteDetail) return {};
+    const firstJobId = selectedRouteDetail.jobIds?.[0];
+    const withPack = (payload: Record<string, any>) =>
+      constraintPackId === 'construction_concrete'
+        ? { ...payload, constraintPackId: 'construction_concrete' }
+        : payload;
+    if (rerouteAction === 'reorder_stops') {
+      return withPack({ newJobOrder: [...(selectedRouteDetail.jobIds || [])].reverse() });
+    }
+    if (rerouteAction === 'split_route') {
+      return withPack({
+        splitAtIndex: Math.max(1, Math.floor((selectedRouteDetail.jobIds?.length || 2) / 2)),
+      });
+    }
+    if (
+      (rerouteAction === 'remove_stop' ||
+        rerouteAction === 'hold_stop' ||
+        rerouteAction === 'reassign_stop_to_route') &&
+      firstJobId
+    ) {
+      if (rerouteAction === 'reassign_stop_to_route') {
+        const targetRoute = activeRoutes.find((route) => route.id !== selectedRouteDetail.id);
+        return targetRoute
+          ? withPack({ jobId: firstJobId, targetRouteId: targetRoute.id })
+          : withPack({ jobId: firstJobId });
+      }
+      return withPack({ jobId: firstJobId });
+    }
+    if (rerouteAction === 'reassign_driver') {
+      const fallbackDriverId = drivers[0]?.id;
+      return fallbackDriverId ? withPack({ driverId: fallbackDriverId }) : withPack({});
+    }
+    return withPack({});
+  };
+
+  useEffect(() => {
+    const loadPreview = async () => {
+      if (!rerouteDialogOpen || !selectedRouteDetail) {
+        setReroutePreview(null);
+        return;
+      }
+      const preview = await previewReroute(selectedRouteDetail.id, {
+        action: rerouteAction,
+        payload: buildPreviewPayload(),
+      });
+      setReroutePreview(preview);
+    };
+    loadPreview();
+  }, [rerouteDialogOpen, selectedRouteDetail, rerouteAction, drivers, constraintPackId]);
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
@@ -464,635 +758,538 @@ export default function DispatchUnifiedV2() {
     );
   }
 
-  const selectedRoute = selectedRouteForDriver
-    ? routes.find((r) => r.id === selectedRouteForDriver)
-    : null;
-  const suggestedDrivers = selectedRoute ? getSuggestedDrivers(selectedRoute) : [];
-
   return (
-    <Box sx={{ bgcolor: '#0D1117', minHeight: '100vh', p: 3 }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-        <Typography variant="h4" sx={{ fontWeight: 700, fontSize: '24px', color: '#FFFFFF' }}>
-          Dispatch Control Center
-        </Typography>
-        <Stack direction="row" spacing={2}>
-          <Button
-            variant="outlined"
-            startIcon={<Refresh />}
-            onClick={loadData}
-            sx={{
-              borderRadius: '8px',
-              textTransform: 'none',
-              '&:hover': {
-                borderColor: 'primary.main',
-                bgcolor: 'rgba(33, 150, 243, 0.08)',
-              }
-            }}
-          >
-            Refresh
-          </Button>
-        </Stack>
-      </Box>
-
-      {/* Conflicts Alert Banner - Improved */}
-      {conflicts.length > 0 && (
-        <Paper
-          elevation={0}
-          sx={{
-            mb: 4,
-            p: 3,
-            bgcolor: '#2C1810',
-            border: '2px solid #E74C3C',
-            borderRadius: '12px',
-            position: 'relative',
-            overflow: 'hidden',
-            '&::before': {
-              content: '""',
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              height: '4px',
-              bgcolor: '#E74C3C',
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.25 }}>
+      <Grid container spacing={2.25}>
+        <Grid item xs={12} lg={8}>
+          <ModuleHeader
+            title="Dispatch Board"
+            subtitle={`Unassigned jobs, route planning, ready lane, and live map in one command-center view. Optimizer: ${optimizerHealth?.status || 'unknown'}.`}
+            onRefresh={loadData}
+          />
+        </Grid>
+        <Grid item xs={12} lg={4}>
+          <DetailTray
+            title="Planner Controls"
+            subtitle="Select a vehicle and create a planned route."
+            sx={panelSx}
+            action={
+              <StatusPill
+                label={`${readyToDispatchRoutes.length} ready`}
+                color={readyToDispatchRoutes.length > 0 ? '#059669' : '#64748b'}
+              />
             }
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-            <Box sx={{ flex: 1 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-                <ErrorOutline sx={{ fontSize: 28, color: '#E74C3C' }} />
-                <Typography variant="h6" sx={{ fontWeight: 700, color: '#E74C3C', fontSize: '18px' }}>
-                  {conflicts.length} Conflict{conflicts.length > 1 ? 's' : ''} Detected
-                </Typography>
-              </Box>
-              <Box
-                sx={{
-                  borderTop: '1px solid rgba(231, 76, 60, 0.2)',
-                  pt: 2,
-                  mb: 2,
-                }}
-              >
-                <Stack spacing={1}>
-                  {conflicts.map((conflict, idx) => (
-                    <Box key={idx} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: '#E74C3C' }} />
-                      <Typography variant="body2" sx={{ color: '#FFFFFF', fontSize: '14px' }}>
-                        {conflict.message}
-                      </Typography>
-                    </Box>
+          >
+            <Stack spacing={1.25}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Select Vehicle</InputLabel>
+                <Select
+                  value={selectedVehicleId}
+                  label="Select Vehicle"
+                  onChange={(event) => setSelectedVehicleId(event.target.value)}
+                >
+                  {availableVehicles.map((vehicle) => (
+                    <MenuItem key={vehicle.id} value={vehicle.id}>
+                      {[vehicle.make, vehicle.model].filter(Boolean).join(' ') || 'Vehicle'} · {vehicle.licensePlate || 'No plate'}
+                    </MenuItem>
                   ))}
-                </Stack>
-              </Box>
+                </Select>
+              </FormControl>
+              <Stack direction="row" spacing={1}>
+                <Button
+                  fullWidth
+                  variant="contained"
+                  startIcon={autoAssigning ? <CircularProgress size={16} color="inherit" /> : <AutoAwesome />}
+                  onClick={handleCreatePlannedRoute}
+                  disabled={selectedJobIds.length === 0 || !selectedVehicleId || autoAssigning}
+                >
+                  Create Planned Route
+                </Button>
+                <Button fullWidth variant="outlined" startIcon={<Refresh />} onClick={loadData}>
+                  Refresh
+                </Button>
+              </Stack>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                <StatusPill label={`${selectedJobIds.length} selected`} color="#2563eb" />
+                <StatusPill label={`${availableVehicles.length} open`} color="#4f46e5" />
+                <StatusPill
+                  label={`Optimizer ${optimizerHealth?.status || 'unknown'}`}
+                  color={optimizerHealthColor}
+                />
+                {plannerSource === 'jobs' && selectedJobIds.length > 0 ? (
+                  <StatusPill label="Loaded from Jobs" color="#8b5cf6" />
+                ) : null}
+              </Stack>
+            </Stack>
+          </DetailTray>
+        </Grid>
+      </Grid>
+
+      {conflicts.length > 0 && (
+        <Paper elevation={0} sx={{ ...panelSx, p: 2, borderColor: alpha(theme.palette.error.main, 0.36) }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
+              <ErrorOutline sx={{ color: 'error.main', fontSize: 20 }} />
+              <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                {conflicts.length} conflict{conflicts.length !== 1 ? 's' : ''} detected
+              </Typography>
+              {conflicts.slice(0, 2).map((conflict, idx) => (
+                <StatusPill key={`${conflict.routeId}-${idx}`} label={conflict.message} color="#dc2626" />
+              ))}
             </Box>
             <Button
-              variant="contained"
+              variant="outlined"
+              color="error"
               size="small"
-              sx={{
-                bgcolor: '#E74C3C',
-                color: '#FFFFFF',
-                textTransform: 'none',
-                borderRadius: '6px',
-                px: 3,
-                '&:hover': {
-                  bgcolor: '#C0392B',
-                },
-              }}
+              onClick={() =>
+                showFeedback(
+                  'Resolve duplicate driver or vehicle assignments before dispatching these routes.',
+                  'warning',
+                )
+              }
             >
-              Resolve Conflicts
+              Review
             </Button>
           </Box>
         </Paper>
       )}
 
-      {/* Map Section */}
-      <Paper sx={{ p: 3, mb: 4, height: 400, borderRadius: '12px', bgcolor: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)' }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Typography variant="h6" fontWeight={600} color="#FFFFFF">
-            Live Dispatch Map
-          </Typography>
-          <Chip icon={<CheckCircle />} label="Live" color="success" size="small" />
-        </Box>
-        <Box sx={{ height: 320, borderRadius: 2, overflow: 'hidden', border: '1px solid rgba(255, 255, 255, 0.1)' }}>
-          <MapContainer center={mapCenter} zoom={mapZoom} style={{ height: '100%', width: '100%' }} scrollWheelZoom={true}>
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            {mapRoutes.map((route) => {
-              if (!route.positions || route.positions.length === 0) return null;
-              const positions = route.positions.map((pos) => [pos.lat, pos.lng] as [number, number]);
-              return (
-                <div key={route.id}>
-                  <Polyline positions={positions} pathOptions={{ color: route.color, weight: 5, opacity: 0.8 }}>
-                    <LeafletTooltip sticky>
-                      <div style={{ textAlign: 'center' }}>
-                        <strong>{route.vehicle}</strong><br />
-                        {route.vehiclePlate}<br />
-                        {route.stopCount} stops • {route.totalDistance.toFixed(1)}km
-                      </div>
-                    </LeafletTooltip>
-                  </Polyline>
-                  {route.positions.map((pos, idx) => (
-                    <Marker key={`${route.id}-${idx}`} position={[pos.lat, pos.lng]}>
-                      <Popup>
-                        <Box sx={{ minWidth: 200 }}>
-                          <Typography variant="subtitle2" fontWeight={700} gutterBottom>
-                            Stop {idx + 1} of {route.stopCount}
-                          </Typography>
-                          <Typography variant="body2">{pos.address}</Typography>
-                          <Typography variant="body2" mt={1}>
-                            <strong>Vehicle:</strong> {route.vehicle} ({route.vehiclePlate})
-                          </Typography>
-                          <Typography variant="body2">
-                            <strong>Status:</strong> {route.status}
-                          </Typography>
-                        </Box>
-                      </Popup>
-                    </Marker>
-                  ))}
-                </div>
-              );
-            })}
-          </MapContainer>
-        </Box>
-      </Paper>
-
-      {/* 3-Column Responsive Layout */}
-      <Grid container spacing={3}>
-        {/* Column 1: Unassigned Jobs */}
-        <Grid item xs={12} lg={3} md={12}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              height: '75vh',
-              overflow: 'auto',
-              bgcolor: 'rgba(255, 255, 255, 0.03)',
-              borderRadius: '12px',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              '&::-webkit-scrollbar': {
-                width: '8px',
-              },
-              '&::-webkit-scrollbar-track': {
-                bgcolor: 'transparent',
-              },
-              '&::-webkit-scrollbar-thumb': {
-                bgcolor: 'rgba(255, 255, 255, 0.2)',
-                borderRadius: '4px',
-                '&:hover': {
-                  bgcolor: 'rgba(255, 255, 255, 0.3)',
-                },
-              },
-            }}
-          >
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-              <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '18px', color: '#FFFFFF' }}>
-                Unassigned Jobs
-                <Chip
-                  label={unassignedJobs.length}
-                  size="small"
-                  sx={{
-                    ml: 1.5,
-                    bgcolor: 'rgba(33, 150, 243, 0.15)',
-                    color: '#2196F3',
-                    fontWeight: 700,
-                    height: '24px',
-                  }}
-                />
-              </Typography>
+      <Grid container spacing={2.25} alignItems="stretch">
+        <Grid item xs={12} lg={3}>
+          <DetailTray
+            title="Unassigned Jobs"
+            subtitle="Open jobs waiting to be planned"
+            sx={{ ...panelSx, display: 'flex', flexDirection: 'column', height: { xs: 'auto', lg: 740 } }}
+            action={
               <Checkbox
+                size="small"
                 checked={selectedJobIds.length === unassignedJobs.length && unassignedJobs.length > 0}
-                indeterminate={
-                  selectedJobIds.length > 0 && selectedJobIds.length < unassignedJobs.length
-                }
+                indeterminate={selectedJobIds.length > 0 && selectedJobIds.length < unassignedJobs.length}
                 onChange={handleSelectAllJobs}
-                sx={{
-                  color: 'rgba(255, 255, 255, 0.3)',
-                  '&.Mui-checked': {
-                    color: '#2196F3',
-                  },
-                }}
               />
+            }
+          >
+            <Stack direction="row" spacing={1} sx={{ mb: 1.5 }}>
+              <StatusPill label={`${unassignedJobs.length} open`} color="#2563eb" />
+              <StatusPill
+                label={selectedVehicle ? `${selectedVehicle.licensePlate || 'Vehicle'} ready` : 'Vehicle needed'}
+                color={selectedVehicle ? '#059669' : '#d97706'}
+              />
+            </Stack>
+            <Box sx={scrollAreaSx}>
+              {unassignedJobs.length === 0 ? (
+                <Box sx={emptyStateSx}>
+                  <CheckCircle sx={{ fontSize: 40, color: 'success.main', mb: 1 }} />
+                  <Typography variant="subtitle1" sx={{ mb: 0.5 }}>
+                    Queue is clear
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    All dispatchable jobs are already routed or in progress.
+                  </Typography>
+                </Box>
+              ) : (
+                <Stack spacing={1.25}>
+                  {unassignedJobs.map((job) => {
+                    const selected = selectedJobIds.includes(job.id);
+                    const priority = job.priority || 'normal';
+                    return (
+                      <Card
+                        key={job.id}
+                        elevation={0}
+                        onClick={() => handleJobToggle(job.id)}
+                        sx={{
+                          cursor: 'pointer',
+                          bgcolor: alpha(theme.palette.background.paper, 0.85),
+                          border: '1px solid',
+                          borderColor: selected ? alpha(theme.palette.primary.main, 0.45) : alpha(theme.palette.text.primary, 0.1),
+                          borderRadius: 3,
+                        }}
+                      >
+                        <CardContent sx={{ p: 1.75, '&:last-child': { pb: 1.75 } }}>
+                          <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
+                            <Box sx={{ minWidth: 0 }}>
+                              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                                {job.customerName}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {job.deliveryAddress || 'No delivery address'}
+                              </Typography>
+                            </Box>
+                            <StatusPill
+                              label={priority}
+                              color={priority === 'urgent' ? '#dc2626' : priority === 'high' ? '#d97706' : '#64748b'}
+                            />
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </Stack>
+              )}
             </Box>
-
-            {unassignedJobs.length === 0 ? (
-              <Box
-                sx={{
-                  textAlign: 'center',
-                  py: 8,
-                  px: 3,
-                  border: '2px dashed rgba(255, 255, 255, 0.1)',
-                  borderRadius: '12px',
-                  bgcolor: 'rgba(255, 255, 255, 0.02)',
-                }}
-              >
-                <CheckCircle sx={{ fontSize: 48, color: '#2ECC71', mb: 2, opacity: 0.8 }} />
-                <Typography variant="h6" sx={{ color: '#FFFFFF', mb: 1, fontSize: '16px', fontWeight: 600 }}>
-                  No unassigned jobs
-                </Typography>
-                <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '14px' }}>
-                  All jobs have been assigned to routes
-                </Typography>
-              </Box>
-            ) : (
-              <Stack spacing={1.5}>
-                {unassignedJobs.map((job) => (
-                  <Card
-                    key={job.id}
-                    elevation={0}
-                    sx={{
-                      cursor: 'pointer',
-                      bgcolor: selectedJobIds.includes(job.id)
-                        ? 'rgba(33, 150, 243, 0.15)'
-                        : 'rgba(255, 255, 255, 0.05)',
-                      border: '2px solid',
-                      borderColor: selectedJobIds.includes(job.id) ? '#2196F3' : 'transparent',
-                      borderRadius: '8px',
-                      transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                      '&:hover': {
-                        borderColor: selectedJobIds.includes(job.id) ? '#2196F3' : 'rgba(33, 150, 243, 0.5)',
-                        bgcolor: selectedJobIds.includes(job.id)
-                          ? 'rgba(33, 150, 243, 0.2)'
-                          : 'rgba(255, 255, 255, 0.08)',
-                        transform: 'translateY(-2px)',
-                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                      },
-                    }}
-                    onClick={() => handleJobToggle(job.id)}
-                  >
-                    <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 1 }}>
-                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              fontWeight: 600,
-                              fontSize: '14px',
-                              color: '#FFFFFF',
-                              mb: 0.5,
-                            }}
-                          >
-                            {job.customerName}
-                          </Typography>
-                          <Typography
-                            variant="caption"
-                            sx={{
-                              color: 'rgba(255, 255, 255, 0.6)',
-                              fontSize: '12px',
-                              display: 'block',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            📍 {job.deliveryAddress || 'No address'}
-                          </Typography>
-                        </Box>
-                        <Chip
-                          label={job.priority || 'normal'}
-                          size="small"
-                          sx={{
-                            height: '22px',
-                            fontSize: '11px',
-                            fontWeight: 600,
-                            bgcolor:
-                              job.priority === 'urgent'
-                                ? '#E74C3C'
-                                : job.priority === 'high'
-                                  ? '#F1C40F'
-                                  : 'rgba(255, 255, 255, 0.1)',
-                            color:
-                              job.priority === 'urgent'
-                                ? '#FFFFFF'
-                                : job.priority === 'high'
-                                  ? '#000000'
-                                  : '#FFFFFF',
-                            border: 'none',
-                          }}
-                        />
-                      </Box>
-                    </CardContent>
-                  </Card>
-                ))}
-              </Stack>
-            )}
-
-            <Box sx={{ mt: 3 }}>
+            <Divider sx={{ my: 1.5 }} />
+            <Stack spacing={1}>
               <Button
                 fullWidth
                 variant="contained"
-                startIcon={autoAssigning ? <CircularProgress size={20} /> : <AutoAwesome />}
-                onClick={handleAutoAssign}
-                disabled={selectedJobIds.length === 0 || autoAssigning}
-                sx={{
-                  bgcolor: '#2196F3',
-                  color: '#FFFFFF',
-                  borderRadius: '10px',
-                  py: 1.5,
-                  px: 3,
-                  textTransform: 'none',
-                  fontWeight: 600,
-                  fontSize: '15px',
-                  boxShadow: '0 4px 12px rgba(33, 150, 243, 0.3)',
-                  transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                  '&:hover': {
-                    bgcolor: '#1976D2',
-                    transform: 'translateY(-2px)',
-                    boxShadow: '0 6px 20px rgba(33, 150, 243, 0.4)',
-                  },
-                  '&:disabled': {
-                    bgcolor: 'rgba(255, 255, 255, 0.1)',
-                    color: 'rgba(255, 255, 255, 0.3)',
-                  },
-                }}
+                startIcon={autoAssigning ? <CircularProgress size={16} color="inherit" /> : <AutoAwesome />}
+                onClick={handleCreatePlannedRoute}
+                disabled={selectedJobIds.length === 0 || !selectedVehicleId || autoAssigning}
               >
-                Auto-Assign Selected
+                Create Planned Route
               </Button>
-            </Box>
-          </Paper>
-        </Grid>
-
-        {/* Column 2: Vehicles & Routes */}
-        <Grid item xs={12} md={4}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              height: '75vh',
-              overflow: 'auto',
-              bgcolor: 'rgba(255, 255, 255, 0.03)',
-              borderRadius: '12px',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              '&::-webkit-scrollbar': {
-                width: '8px',
-              },
-              '&::-webkit-scrollbar-track': {
-                bgcolor: 'transparent',
-              },
-              '&::-webkit-scrollbar-thumb': {
-                bgcolor: 'rgba(255, 255, 255, 0.2)',
-                borderRadius: '4px',
-                '&:hover': {
-                  bgcolor: 'rgba(255, 255, 255, 0.3)',
-                },
-              },
-            }}
-          >
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-              <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '18px', color: '#FFFFFF' }}>
-                Vehicles & Routes
-                <Chip
-                  label={vehicles.length}
-                  size="small"
-                  sx={{
-                    ml: 1.5,
-                    bgcolor: 'rgba(46, 204, 113, 0.15)',
-                    color: '#2ECC71',
-                    fontWeight: 700,
-                    height: '24px',
-                  }}
-                />
-              </Typography>
-            </Box>
-
-            <Stack spacing={2}>
-              {vehicles.map((vehicle) => {
-                const route = routes.find(
-                  (r) => r.vehicleId === vehicle.id && r.status !== 'completed' && r.status !== 'cancelled',
-                );
-                const driver = route?.driverId ? drivers.find((d) => d.id === route.driverId) : null;
-                const routeJobs = route?.jobIds
-                  ? jobs.filter((j) => route.jobIds?.includes(j.id))
-                  : [];
-
-                return (
-                  <VehicleRouteCard
-                    key={vehicle.id}
-                    vehicle={vehicle}
-                    route={route || null}
-                    jobs={routeJobs}
-                    driver={driver || null}
-                    onOptimize={handleOptimizeRoute}
-                    onAssignDriver={handleAssignDriverClick}
-                    onRemoveDriver={handleRemoveDriver}
-                    optimizing={optimizingRouteId === route?.id}
-                  />
-                );
-              })}
+              <Button fullWidth variant="text" onClick={() => setSelectedJobIds([])} disabled={selectedJobIds.length === 0}>
+                Clear Selection
+              </Button>
             </Stack>
-          </Paper>
+          </DetailTray>
         </Grid>
 
-        {/* Column 3: Ready to Dispatch */}
-        <Grid item xs={12} md={3}>
-          <Paper
-            elevation={0}
-            sx={{
-              p: 3,
-              height: '75vh',
-              overflow: 'auto',
-              bgcolor: 'rgba(255, 255, 255, 0.03)',
-              borderRadius: '12px',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              '&::-webkit-scrollbar': {
-                width: '8px',
-              },
-              '&::-webkit-scrollbar-track': {
-                bgcolor: 'transparent',
-              },
-              '&::-webkit-scrollbar-thumb': {
-                bgcolor: 'rgba(255, 255, 255, 0.2)',
-                borderRadius: '4px',
-                '&:hover': {
-                  bgcolor: 'rgba(255, 255, 255, 0.3)',
-                },
-              },
-            }}
+        <Grid item xs={12} lg={4}>
+          <DetailTray
+            title="Vehicles / Routes"
+            subtitle="Optimize routes and assign drivers"
+            sx={{ ...panelSx, display: 'flex', flexDirection: 'column', height: { xs: 'auto', lg: 740 } }}
+            action={<StatusPill label={`${activeRoutes.length} active`} color="#f97316" />}
           >
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-              <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '18px', color: '#FFFFFF' }}>
-                Ready to Dispatch
-                <Chip
-                  label={readyToDispatchRoutes.length}
-                  size="small"
-                  sx={{
-                    ml: 1.5,
-                    bgcolor: 'rgba(46, 204, 113, 0.15)',
-                    color: '#2ECC71',
-                    fontWeight: 700,
-                    height: '24px',
-                  }}
-                />
-              </Typography>
+            <Box sx={scrollAreaSx}>
+              {vehicles.length === 0 ? (
+                <Box sx={emptyStateSx}>
+                  <LocalShipping sx={{ fontSize: 40, color: 'text.secondary', mb: 1 }} />
+                  <Typography variant="subtitle1" sx={{ mb: 0.5 }}>
+                    No vehicles available
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Add vehicles before building routes.
+                  </Typography>
+                </Box>
+              ) : (
+                <Stack spacing={1.25}>
+                  {vehicles.map((vehicle) => {
+                    const route = routes.find(
+                      (r) => r.vehicleId === vehicle.id && r.status !== 'completed' && r.status !== 'cancelled',
+                    );
+                    const driver = route?.driverId ? drivers.find((d) => d.id === route.driverId) : null;
+                    const routeJobs = route?.jobIds ? jobs.filter((j) => route.jobIds?.includes(j.id)) : [];
+                    return (
+                      <VehicleRouteCard
+                        key={vehicle.id}
+                        vehicle={vehicle}
+                        route={route || null}
+                        jobs={routeJobs}
+                        driver={driver || null}
+                        onOptimize={handleOptimizeRoute}
+                        onAssignDriver={handleAssignDriverClick}
+                        onRemoveDriver={handleRemoveDriver}
+                        optimizing={optimizingRouteId === route?.id}
+                        selected={Boolean(route?.id && route.id === selectedRouteDetailId)}
+                        onSelect={setSelectedRouteDetailId}
+                      />
+                    );
+                  })}
+                </Stack>
+              )}
             </Box>
+          </DetailTray>
+        </Grid>
 
-            {readyToDispatchRoutes.length === 0 ? (
-              <Box
-                sx={{
-                  textAlign: 'center',
-                  py: 8,
-                  px: 3,
-                  border: '2px dashed rgba(255, 255, 255, 0.1)',
-                  borderRadius: '12px',
-                  bgcolor: 'rgba(255, 255, 255, 0.02)',
-                }}
-              >
-                <PlayArrow sx={{ fontSize: 48, color: 'rgba(255, 255, 255, 0.3)', mb: 2 }} />
-                <Typography variant="h6" sx={{ color: '#FFFFFF', mb: 1, fontSize: '16px', fontWeight: 600 }}>
-                  No routes ready
-                </Typography>
-                <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: '14px' }}>
-                  Assign drivers to planned routes to dispatch them
-                </Typography>
-              </Box>
-            ) : (
-              <Stack spacing={2}>
-                {readyToDispatchRoutes.map((route) => {
-                  const vehicle = vehicles.find((v) => v.id === route.vehicleId);
-                  const driver = drivers.find((d) => d.id === route.driverId);
+        <Grid item xs={12} lg={5}>
+          <MapPanel
+            mapCenter={mapCenter}
+            mapZoom={mapZoom}
+            mapRoutes={mapRoutes}
+            title="Live Map"
+            subtitle={
+              mapRoutes.length > 0
+                ? usingSimulatedGeometry
+                  ? 'Tracking active routes (simulated geometry)'
+                  : usingDegradedQuality
+                  ? 'Tracking active routes (degraded telemetry)'
+                  : 'Tracking active routes'
+                : 'Awaiting route geometry'
+            }
+            height={740}
+          />
+        </Grid>
+      </Grid>
 
-                  return (
+      <DetailTray
+        title="Ready to Dispatch + Route Detail"
+        subtitle="Dispatch-ready routes and actions for the selected route"
+        sx={panelSx}
+      >
+        <Grid container spacing={2}>
+          <Grid item xs={12} lg={4}>
+            <Box sx={{ maxHeight: 300, overflow: 'auto', pr: 0.5 }}>
+              {readyToDispatchRoutes.length === 0 ? (
+                <Box sx={emptyStateSx}>
+                  <PlayArrow sx={{ fontSize: 36, color: 'text.secondary', mb: 1 }} />
+                  <Typography variant="body2" color="text.secondary">
+                    No routes staged for dispatch.
+                  </Typography>
+                </Box>
+              ) : (
+                <Stack spacing={1.2}>
+                  {readyToDispatchRoutes.map((route) => (
                     <Card
                       key={route.id}
                       elevation={0}
+                      onClick={() => setSelectedRouteDetailId(route.id)}
                       sx={{
-                        bgcolor: 'rgba(46, 204, 113, 0.08)',
-                        border: '2px solid #2ECC71',
-                        borderRadius: '10px',
-                        transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                        '&:hover': {
-                          bgcolor: 'rgba(46, 204, 113, 0.12)',
-                          transform: 'translateY(-2px)',
-                          boxShadow: '0 4px 12px rgba(46, 204, 113, 0.2)',
-                        },
+                        border: '1px solid',
+                        borderColor: route.id === selectedRouteDetailId ? alpha(theme.palette.success.main, 0.45) : alpha(theme.palette.text.primary, 0.1),
+                        borderRadius: 3,
+                        cursor: 'pointer',
+                        bgcolor: alpha(theme.palette.success.main, 0.06),
                       }}
                     >
-                      <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                          <CheckCircle sx={{ color: '#2ECC71', fontSize: 24 }} />
-                          <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: '15px', color: '#FFFFFF' }}>
-                            Route {route.id.slice(0, 8)}
-                          </Typography>
-                        </Box>
-
-                        <Stack spacing={1} sx={{ mb: 2.5 }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <LocalShipping sx={{ fontSize: 16, color: 'rgba(255, 255, 255, 0.5)' }} />
-                            <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '13px' }}>
-                              {vehicle?.make} {vehicle?.model}
-                            </Typography>
-                          </Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Box
-                              component="span"
-                              sx={{
-                                width: 16,
-                                height: 16,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                color: 'rgba(255, 255, 255, 0.5)',
-                              }}
-                            >
-                              👤
-                            </Box>
-                            <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '13px' }}>
-                              {driver?.firstName} {driver?.lastName}
-                            </Typography>
-                          </Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <RouteIcon sx={{ fontSize: 16, color: 'rgba(255, 255, 255, 0.5)' }} />
-                            <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '13px' }}>
-                              {route.jobIds?.length || 0} stops
-                            </Typography>
-                          </Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Speed sx={{ fontSize: 16, color: 'rgba(255, 255, 255, 0.5)' }} />
-                            <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '13px' }}>
-                              {route.totalDistance?.toFixed(1) || 0} km
-                            </Typography>
-                          </Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Schedule sx={{ fontSize: 16, color: 'rgba(255, 255, 255, 0.5)' }} />
-                            <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.8)', fontSize: '13px' }}>
-                              {route.totalDuration ? `${Math.floor(route.totalDuration / 60)}h ${Math.round(route.totalDuration % 60)}m` : '0m'}
-                            </Typography>
-                          </Box>
+                      <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                          Route {String(route.id ?? 'unknown').slice(0, 8)}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {route.jobIds?.length || 0} stops
+                        </Typography>
+                        <Stack direction="row" spacing={0.75} sx={{ mt: 1 }}>
+                          <StatusPill
+                            label={route.optimizationStatus || 'optimized'}
+                            color={route.optimizationStatus === 'optimized' ? '#059669' : '#d97706'}
+                          />
+                          <StatusPill
+                            label={route.dataQuality || 'live'}
+                            color={route.dataQuality === 'live' ? '#0ea5e9' : route.dataQuality === 'degraded' ? '#d97706' : '#64748b'}
+                          />
+                          {route.rerouteState ? (
+                            <StatusPill
+                              label={`reroute ${route.rerouteState}`}
+                              color={route.rerouteState === 'applied' ? '#059669' : '#d97706'}
+                            />
+                          ) : null}
                         </Stack>
-
-                        <Button
-                          fullWidth
-                          variant="contained"
-                          startIcon={
-                            dispatchingRouteId === route.id ? (
-                              <CircularProgress size={20} sx={{ color: '#FFFFFF' }} />
-                            ) : (
-                              <PlayArrow />
-                            )
-                          }
-                          onClick={() => handleDispatch(route.id)}
-                          disabled={dispatchingRouteId === route.id}
-                          sx={{
-                            bgcolor: '#2ECC71',
-                            color: '#FFFFFF',
-                            borderRadius: '8px',
-                            py: 1.25,
-                            textTransform: 'none',
-                            fontWeight: 700,
-                            fontSize: '14px',
-                            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                            '&:hover': {
-                              bgcolor: '#27AE60',
-                              transform: 'translateY(-1px)',
-                              boxShadow: '0 4px 12px rgba(46, 204, 113, 0.3)',
-                            },
-                            '&:disabled': {
-                              bgcolor: 'rgba(255, 255, 255, 0.1)',
-                              color: 'rgba(255, 255, 255, 0.3)',
-                            },
-                          }}
-                        >
-                          DISPATCH
-                        </Button>
                       </CardContent>
                     </Card>
-                  );
-                })}
-              </Stack>
-            )}
-          </Paper>
-        </Grid>
+                  ))}
+                </Stack>
+              )}
+            </Box>
+          </Grid>
 
-        {/* Column 4: Live Status */}
-        <Grid item xs={12} md={2}>
-          <Paper
-            elevation={0}
-            sx={{
-              height: '75vh',
-              overflow: 'auto',
-              bgcolor: 'rgba(255, 255, 255, 0.03)',
-              borderRadius: '12px',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              '&::-webkit-scrollbar': {
-                width: '8px',
-              },
-              '&::-webkit-scrollbar-track': {
-                bgcolor: 'transparent',
-              },
-              '&::-webkit-scrollbar-thumb': {
-                bgcolor: 'rgba(255, 255, 255, 0.2)',
-                borderRadius: '4px',
-                '&:hover': {
-                  bgcolor: 'rgba(255, 255, 255, 0.3)',
-                },
-              },
-            }}
-          >
-            <LiveStatusColumn drivers={drivers} vehicles={vehicles} routes={activeRoutes} />
-          </Paper>
+          <Grid item xs={12} lg={5}>
+            {selectedRouteDetail ? (
+              <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 3, p: 2 }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.25 }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                    Route {selectedRouteLabel}
+                  </Typography>
+                  <StatusPill label={selectedRouteStatus} color={routeIsReady ? '#059669' : '#64748b'} />
+                </Stack>
+                <Stack spacing={1}>
+                  <Typography variant="body2">
+                    Vehicle: {[selectedRouteVehicle?.make, selectedRouteVehicle?.model].filter(Boolean).join(' ') || 'Unassigned'} {selectedRouteVehicle?.licensePlate ? `· ${selectedRouteVehicle.licensePlate}` : ''}
+                  </Typography>
+                  <Typography variant="body2">
+                    Driver: {[selectedRouteDriver?.firstName, selectedRouteDriver?.lastName].filter(Boolean).join(' ') || 'Not assigned'}
+                  </Typography>
+                  <Typography variant="body2">
+                    Stops: {selectedRouteJobIds.length} • Distance: {selectedRouteDistanceKm.toFixed(1)} km
+                  </Typography>
+                  <Typography variant="body2">
+                    Duration: {selectedRouteDetail.totalDuration ? `${Math.floor(selectedRouteDetail.totalDuration / 60)}h ${Math.round(selectedRouteDetail.totalDuration % 60)}m` : '0m'}
+                  </Typography>
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                    <StatusPill
+                      label={selectedRouteDetail.optimizationStatus || 'optimized'}
+                      color={selectedRouteDetail.optimizationStatus === 'optimized' ? '#059669' : '#d97706'}
+                    />
+                    <StatusPill
+                      label={selectedRouteDetail.dataQuality || 'live'}
+                      color={selectedRouteDetail.dataQuality === 'live' ? '#0ea5e9' : selectedRouteDetail.dataQuality === 'degraded' ? '#d97706' : '#64748b'}
+                    />
+                    <StatusPill
+                      label={routeIsReviewed ? 'Reviewed' : 'Needs Review'}
+                      color={routeIsReviewed ? '#059669' : '#b45309'}
+                    />
+                    {selectedRouteDetail.rerouteState ? (
+                      <StatusPill
+                        label={`Reroute ${selectedRouteDetail.rerouteState}`}
+                        color={selectedRouteDetail.rerouteState === 'applied' ? '#059669' : '#d97706'}
+                      />
+                    ) : null}
+                    {selectedRouteDetail.exceptionCategory ? (
+                      <StatusPill label={selectedRouteDetail.exceptionCategory} color="#7c3aed" />
+                    ) : null}
+                  </Stack>
+                  {selectedRouteDetail.planningWarnings && selectedRouteDetail.planningWarnings.length > 0 ? (
+                    <Alert severity="warning" sx={{ mt: 0.5 }}>
+                      {selectedRouteDetail.planningWarnings[0]}
+                    </Alert>
+                  ) : null}
+                  {selectedRouteDetail.droppedJobIds && selectedRouteDetail.droppedJobIds.length > 0 ? (
+                    <Alert severity="error" sx={{ mt: 0.5 }}>
+                      {selectedRouteDetail.droppedJobIds.length} dropped/infeasible job(s): {selectedRouteDetail.droppedJobIds.slice(0, 2).join(', ')}
+                    </Alert>
+                  ) : null}
+                  {routeNeedsRerouteResolution ? (
+                    <Alert severity="warning" sx={{ mt: 0.5 }}>
+                      Dispatch is blocked while reroute is {selectedRouteDetail.rerouteState}.
+                    </Alert>
+                  ) : null}
+                </Stack>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 2 }}>
+                  <Button
+                    variant="outlined"
+                    startIcon={<Refresh />}
+                    onClick={() => handleOptimizeRoute(selectedRouteDetail.id)}
+                    disabled={optimizingRouteId === selectedRouteDetail.id}
+                  >
+                    Optimize
+                  </Button>
+                  {!selectedRouteDetail.driverId ? (
+                    <Button variant="outlined" startIcon={<Person />} onClick={() => handleAssignDriverClick(selectedRouteDetail.id)}>
+                      Assign Driver
+                    </Button>
+                  ) : (
+                    <Button variant="outlined" color="error" onClick={() => handleRemoveDriver(selectedRouteDetail.id)}>
+                      Remove Driver
+                    </Button>
+                  )}
+                  <Button
+                    variant="outlined"
+                    onClick={() =>
+                      setReviewedRouteIds((prev) =>
+                        prev.includes(selectedRouteDetail.id)
+                          ? prev.filter((id) => id !== selectedRouteDetail.id)
+                          : [...prev, selectedRouteDetail.id],
+                      )
+                    }
+                  >
+                    {routeIsReviewed ? 'Unmark Review' : 'Mark Reviewed'}
+                  </Button>
+                  <Button variant="outlined" onClick={() => setRerouteDialogOpen(true)}>
+                    Request Reroute
+                  </Button>
+                  {latestRerouteRequest?.status === 'requested' ? (
+                    <Button variant="outlined" color="warning" onClick={handleApproveReroute}>
+                      Approve Reroute
+                    </Button>
+                  ) : null}
+                  {latestRerouteRequest?.status === 'requested' ? (
+                    <Button variant="outlined" color="error" onClick={handleRejectReroute}>
+                      Reject Reroute
+                    </Button>
+                  ) : null}
+                  {latestRerouteRequest?.status === 'approved' ? (
+                    <Button
+                      variant="outlined"
+                      color="warning"
+                      onClick={handleApplyReroute}
+                      disabled={overrideRequested && !overrideReason.trim()}
+                    >
+                      Apply Reroute
+                    </Button>
+                  ) : null}
+                  <Button
+                    variant="contained"
+                    color="success"
+                    startIcon={dispatchingRouteId === selectedRouteDetail.id ? <CircularProgress size={16} color="inherit" /> : <PlayArrow />}
+                    onClick={() => handleDispatch(selectedRouteDetail.id)}
+                    disabled={
+                      !routeIsReady ||
+                      !routeIsReviewed ||
+                      routeNeedsRerouteResolution ||
+                      dispatchingRouteId === selectedRouteDetail.id
+                    }
+                  >
+                    Dispatch
+                  </Button>
+                </Stack>
+                <Divider sx={{ my: 1.5 }} />
+                <Typography variant="caption" color="text.secondary">
+                  {selectedRouteJobs.length} linked job{selectedRouteJobs.length !== 1 ? 's' : ''}
+                </Typography>
+                {latestRerouteRequest ? (
+                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 1 }}>
+                    Latest reroute: {latestRerouteRequest.status} • {latestRerouteRequest.action} • {latestRerouteRequest.exceptionCategory}
+                  </Typography>
+                ) : null}
+                {latestRerouteRequest?.status === 'approved' ? (
+                  <Box sx={{ mt: 1, p: 1.25, border: '1px dashed', borderColor: 'divider', borderRadius: 2 }}>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Checkbox
+                        size="small"
+                        checked={overrideRequested}
+                        onChange={(event) => setOverrideRequested(event.target.checked)}
+                      />
+                      <Typography variant="caption" color="text.secondary">
+                        Operator override (for infeasible apply)
+                      </Typography>
+                    </Stack>
+                    {overrideRequested ? (
+                      <Box
+                        component="textarea"
+                        value={overrideReason}
+                        onChange={(event: any) => setOverrideReason(event.target.value)}
+                        style={{
+                          marginTop: 8,
+                          width: '100%',
+                          minHeight: 64,
+                          resize: 'vertical',
+                          borderRadius: 8,
+                          border: '1px solid #cbd5e1',
+                          padding: 8,
+                          fontFamily: 'inherit',
+                          fontSize: 12,
+                        }}
+                      />
+                    ) : null}
+                  </Box>
+                ) : null}
+                {rerouteHistory.length > 0 ? (
+                  <Box sx={{ mt: 1.25 }}>
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                      Reroute audit trail
+                    </Typography>
+                    {rerouteHistory.slice(0, 3).map((entry) => (
+                      <Typography key={entry.id} variant="caption" color="text.secondary" display="block">
+                        {entry.status} • {entry.action} • {entry.exceptionCategory}
+                        {entry.plannerDiagnostics?.override?.applied ? ' • override applied' : ''}
+                      </Typography>
+                    ))}
+                  </Box>
+                ) : null}
+                {timelineEvents.length > 0 ? (
+                  <Box sx={{ mt: 1.25 }}>
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+                      Timeline events
+                    </Typography>
+                    {timelineEvents.slice(0, 3).map((event) => (
+                      <Typography key={event.id} variant="caption" color="text.secondary" display="block">
+                        {event.source}:{event.code} • {event.message}
+                      </Typography>
+                    ))}
+                  </Box>
+                ) : null}
+              </Box>
+            ) : (
+              <Box sx={emptyStateSx}>
+                <RouteIcon sx={{ fontSize: 36, color: 'text.secondary', mb: 1 }} />
+                <Typography variant="body2" color="text.secondary">
+                  Select a route to inspect details and run actions.
+                </Typography>
+              </Box>
+            )}
+          </Grid>
+
+          <Grid item xs={12} lg={3}>
+            <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 3, p: 2, maxHeight: 300, overflow: 'auto' }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.25 }}>
+                Ops Pulse
+              </Typography>
+              <LiveStatusColumn drivers={drivers} vehicles={vehicles} routes={activeRoutes} />
+            </Box>
+          </Grid>
         </Grid>
-      </Grid>
+      </DetailTray>
 
       {/* Assign Driver Dialog */}
       <Dialog open={assignDriverDialogOpen} onClose={() => setAssignDriverDialogOpen(false)} maxWidth="sm" fullWidth>
@@ -1129,6 +1326,188 @@ export default function DispatchUnifiedV2() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Dialog open={rerouteDialogOpen} onClose={() => setRerouteDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Request Reroute</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <FormControl fullWidth size="small">
+              <InputLabel>Exception Category</InputLabel>
+              <Select
+                value={rerouteCategory}
+                label="Exception Category"
+                onChange={(event) => setRerouteCategory(event.target.value)}
+              >
+                <MenuItem value="urgent_insert">urgent_insert</MenuItem>
+                <MenuItem value="vehicle_unavailable">vehicle_unavailable</MenuItem>
+                <MenuItem value="driver_unavailable">driver_unavailable</MenuItem>
+                <MenuItem value="missed_time_window">missed_time_window</MenuItem>
+                <MenuItem value="traffic_delay">traffic_delay</MenuItem>
+                <MenuItem value="customer_not_ready">customer_not_ready</MenuItem>
+                <MenuItem value="no_show">no_show</MenuItem>
+                <MenuItem value="capacity_issue">capacity_issue</MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl fullWidth size="small">
+              <InputLabel>Constraint Pack</InputLabel>
+              <Select
+                value={constraintPackId}
+                label="Constraint Pack"
+                onChange={(event) =>
+                  setConstraintPackId(event.target.value as 'generic' | 'construction_concrete')
+                }
+              >
+                <MenuItem value="generic">generic</MenuItem>
+                <MenuItem value="construction_concrete">construction_concrete</MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl fullWidth size="small">
+              <InputLabel>Reroute Action</InputLabel>
+              <Select
+                value={rerouteAction}
+                label="Reroute Action"
+                onChange={(event) => setRerouteAction(event.target.value)}
+              >
+                <MenuItem value="reorder_stops">reorder_stops</MenuItem>
+                <MenuItem value="reassign_stop_to_route">reassign_stop_to_route</MenuItem>
+                <MenuItem value="split_route">split_route</MenuItem>
+                <MenuItem value="hold_stop">hold_stop</MenuItem>
+                <MenuItem value="remove_stop">remove_stop</MenuItem>
+                <MenuItem value="reassign_driver">reassign_driver</MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl fullWidth>
+              <InputLabel shrink>Reason</InputLabel>
+              <Box
+                component="textarea"
+                value={rerouteReason}
+                onChange={(event: any) => setRerouteReason(event.target.value)}
+                style={{
+                  marginTop: 20,
+                  minHeight: 90,
+                  resize: 'vertical',
+                  borderRadius: 8,
+                  border: '1px solid #cbd5e1',
+                  padding: 10,
+                  fontFamily: 'inherit',
+                  fontSize: 14,
+                }}
+              />
+            </FormControl>
+            {reroutePreview ? (
+              <Stack spacing={1.2}>
+                <Alert severity={reroutePreview?.constraintDiagnostics?.feasible ? 'info' : 'warning'}>
+                  What-if: distance Δ {reroutePreview?.impactSummary?.distanceDeltaKm ?? 0} km, duration Δ {reroutePreview?.impactSummary?.durationDeltaMinutes ?? 0} min, dropped {reroutePreview?.impactSummary?.droppedJobs?.length || 0}, data quality {reroutePreview?.impliedDataQuality || 'degraded'}, workflow {reroutePreview?.impliedWorkflowStatus || 'rerouting'}, dispatch blocked {reroutePreview?.dispatchBlocked ? 'yes' : 'no'}.
+                {typeof reroutePreview?.constraintDiagnostics?.feasibilityScore === 'number' ? (
+                  <>
+                    {' '}Feasibility score: {reroutePreview.constraintDiagnostics.feasibilityScore}/100.
+                  </>
+                ) : null}
+                {reroutePreview?.constraintDiagnostics?.conflictSummary?.total ? (
+                  <>
+                    {' '}Conflicts: critical {reroutePreview.constraintDiagnostics.conflictSummary.critical}, major {reroutePreview.constraintDiagnostics.conflictSummary.major}, minor {reroutePreview.constraintDiagnostics.conflictSummary.minor}.
+                  </>
+                ) : null}
+                {reroutePreview?.constraintDiagnostics?.reasonCodes?.length ? (
+                  <>
+                    {' '}Constraint reason codes: {reroutePreview.constraintDiagnostics.reasonCodes.join(', ')}.
+                  </>
+                ) : null}
+                {reroutePreview?.constraintDiagnostics?.selectedPackId ? (
+                  <>
+                    {' '}Pack: {reroutePreview.constraintDiagnostics.selectedPackId}.
+                  </>
+                ) : null}
+                {reroutePreview?.constraintDiagnostics?.timeWindowViolations?.length ? (
+                  <>
+                    {' '}Time-window violations: {reroutePreview.constraintDiagnostics.timeWindowViolations.length}.
+                  </>
+                ) : null}
+                {reroutePreview?.constraintDiagnostics?.capacityConflicts?.length ? (
+                  <>
+                    {' '}Capacity conflicts: {reroutePreview.constraintDiagnostics.capacityConflicts.length}.
+                  </>
+                ) : null}
+                {reroutePreview?.constraintDiagnostics?.skillMismatches?.length ? (
+                  <>
+                    {' '}Skill mismatches: {reroutePreview.constraintDiagnostics.skillMismatches.length}.
+                  </>
+                ) : null}
+                {reroutePreview?.alternatives?.length ? (
+                  <>
+                    {' '}Alternatives: {reroutePreview.alternatives
+                      .slice(0, 3)
+                      .map((alt) => `#${alt.rank} ${alt.label} score ${alt.score}${alt.feasible ? '' : ' (blocked)'}`)
+                      .join(', ')}.
+                  </>
+                ) : null}
+                </Alert>
+                {reroutePreview?.constraintDiagnostics?.reasonCodes?.length ? (
+                  <Box sx={{ p: 1.2, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'background.paper' }}>
+                    <Typography variant="caption" color="text.secondary">
+                      Reason Codes
+                    </Typography>
+                    <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap sx={{ mt: 0.75 }}>
+                      {reroutePreview.constraintDiagnostics.reasonCodes.slice(0, 8).map((code) => (
+                        <StatusPill key={code} label={code} color={code.startsWith('CONCRETE_') ? '#9a3412' : '#475569'} />
+                      ))}
+                    </Stack>
+                  </Box>
+                ) : null}
+                {reroutePreview?.alternatives?.length ? (
+                  <Stack spacing={0.9}>
+                    {reroutePreview.alternatives.slice(0, 3).map((alt) => (
+                      <Box
+                        key={alt.label}
+                        sx={{
+                          p: 1.1,
+                          border: '1px solid',
+                          borderColor: 'divider',
+                          borderRadius: 2,
+                          bgcolor: alt.rank === 1 ? 'action.hover' : 'background.paper',
+                        }}
+                      >
+                        <Stack direction="row" justifyContent="space-between" alignItems="center">
+                          <Typography variant="caption" sx={{ fontWeight: 700 }}>
+                            #{alt.rank} {alt.label}
+                          </Typography>
+                          <StatusPill label={`score ${alt.score}`} color={alt.feasible ? '#059669' : '#d97706'} />
+                        </Stack>
+                        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.35 }}>
+                          {alt.rationale}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Stack>
+                ) : null}
+              </Stack>
+            ) : (
+              <Alert severity="warning">
+                Preview unavailable for current action/payload. Configure required payload when applying.
+              </Alert>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRerouteDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleRequestReroute} disabled={rerouteSubmitting}>
+            {rerouteSubmitting ? 'Submitting...' : 'Submit Reroute Request'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={Boolean(feedback)}
+        autoHideDuration={4200}
+        onClose={() => setFeedback(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        {feedback ? (
+          <Alert onClose={() => setFeedback(null)} severity={feedback.severity} variant="filled">
+            {feedback.message}
+          </Alert>
+        ) : undefined}
+      </Snackbar>
     </Box>
   );
 }

@@ -4,6 +4,10 @@
 
 The backend now starts successfully without requiring Stripe API keys. Stripe features are **optional** for development.
 
+## Canonical Stack
+
+Use the **NestJS backend** in `backend/` plus the **routing-service** in `routing-service/`. The Express and Vercel serverless backends are legacy and deprecated.
+
 ## Launch Options
 
 ### Option 1: Docker Compose (Full Stack)
@@ -74,6 +78,10 @@ npm run dev
 - Map data loaded (Monaco region)
 - Route calculations working
 - Available at http://localhost:8080
+
+✅ **Routing Optimization Service (FastAPI)**
+- Route optimization endpoints (`/route`, `/route/global`)
+- Default port: http://localhost:8000 (configure `ROUTING_SERVICE_URL` in backend)
 
 ## Optional: Enable Stripe Features
 

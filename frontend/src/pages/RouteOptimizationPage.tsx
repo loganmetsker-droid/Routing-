@@ -59,8 +59,8 @@ import {
   assignDriverToRoute,
   updateJobStatus,
   reorderRouteStops,
-  connectSSE,
 } from '../services/api';
+import { connectDispatchRealtime } from '../services/socket';
 
 // ==================== INTERFACES ====================
 
@@ -178,7 +178,7 @@ export default function RouteOptimizationPage() {
   useEffect(() => {
     loadData();
 
-    const eventSource = connectSSE((data) => {
+    const eventSource = connectDispatchRealtime((data) => {
       console.log('SSE update received:', data);
       loadData(); // Reload data on any backend update
     });
@@ -320,11 +320,9 @@ export default function RouteOptimizationPage() {
    */
   const getStatusColor = (status: string): 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' => {
     switch (status?.toLowerCase()) {
-      case 'pending':
-        return 'warning';
       case 'planned':
         return 'info';
-      case 'dispatched':
+      case 'assigned':
         return 'primary';
       case 'in_progress':
         return 'primary';
@@ -549,9 +547,11 @@ export default function RouteOptimizationPage() {
                 <MenuItem value="all">All Routes</MenuItem>
                 <MenuItem value="active">Active Routes</MenuItem>
                 <MenuItem value="with_conflicts">With Conflicts</MenuItem>
-                <MenuItem value="pending">Pending</MenuItem>
-                <MenuItem value="dispatched">Dispatched</MenuItem>
+                <MenuItem value="planned">Planned</MenuItem>
+                <MenuItem value="assigned">Assigned</MenuItem>
+                <MenuItem value="in_progress">In Progress</MenuItem>
                 <MenuItem value="completed">Completed</MenuItem>
+                <MenuItem value="cancelled">Cancelled</MenuItem>
               </Select>
             </FormControl>
           </Grid>

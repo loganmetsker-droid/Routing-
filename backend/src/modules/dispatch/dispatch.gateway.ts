@@ -110,6 +110,25 @@ export class DispatchGateway {
       status: route.status,
       actualStart: route.actualStart,
     });
+
+    this.server.emit('route:update', {
+      type: 'started',
+      route: {
+        id: route.id,
+        vehicleId: route.vehicleId,
+        driverId: route.driverId,
+        jobIds: route.jobIds,
+        jobCount: route.jobCount,
+        status: route.status,
+        totalDistanceKm: route.totalDistanceKm,
+        totalDurationMinutes: route.totalDurationMinutes,
+        polyline: route.polyline,
+        color: route.color,
+        eta: route.eta,
+        actualStart: route.actualStart,
+      },
+      timestamp: new Date().toISOString(),
+    });
   }
 
   /**
@@ -122,6 +141,57 @@ export class DispatchGateway {
       vehicleId: route.vehicleId,
       status: route.status,
       completedAt: route.completedAt,
+    });
+
+    this.server.emit('route:update', {
+      type: 'completed',
+      route: {
+        id: route.id,
+        vehicleId: route.vehicleId,
+        driverId: route.driverId,
+        jobIds: route.jobIds,
+        jobCount: route.jobCount,
+        status: route.status,
+        totalDistanceKm: route.totalDistanceKm,
+        totalDurationMinutes: route.totalDurationMinutes,
+        polyline: route.polyline,
+        color: route.color,
+        eta: route.eta,
+        completedAt: route.completedAt,
+      },
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Emit route cancelled event
+   */
+  emitRouteCancelled(route: Route) {
+    this.logger.log(`Emitting route cancelled: ${route.id}`);
+    this.server.to('routes').emit('route:cancelled', {
+      routeId: route.id,
+      vehicleId: route.vehicleId,
+      status: route.status,
+      cancelledAt: route.updatedAt,
+    });
+
+    this.server.emit('route:update', {
+      type: 'cancelled',
+      route: {
+        id: route.id,
+        vehicleId: route.vehicleId,
+        driverId: route.driverId,
+        jobIds: route.jobIds,
+        jobCount: route.jobCount,
+        status: route.status,
+        totalDistanceKm: route.totalDistanceKm,
+        totalDurationMinutes: route.totalDurationMinutes,
+        polyline: route.polyline,
+        color: route.color,
+        eta: route.eta,
+        cancelledAt: route.updatedAt,
+      },
+      timestamp: new Date().toISOString(),
     });
   }
 

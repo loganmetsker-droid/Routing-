@@ -42,8 +42,8 @@ import {
   assignDriverToRoute,
   updateRouteStatus,
   generateRoute,
-  connectSSE,
 } from '../services/api';
+import { connectDispatchRealtime } from '../services/socket';
 
 // ==================== INTERFACES ====================
 
@@ -129,7 +129,7 @@ export default function DispatchUnified() {
 
   useEffect(() => {
     loadData();
-    const eventSource = connectSSE((event) => {
+    const eventSource = connectDispatchRealtime((event) => {
       if (event.type === 'job-updated' || event.type === 'route-updated') {
         loadData();
       }
@@ -168,7 +168,7 @@ export default function DispatchUnified() {
   );
 
   const assignedRoutes = routes.filter((route) =>
-    route.status !== 'dispatched' && route.status !== 'completed'
+    route.status !== 'completed' && route.status !== 'cancelled'
   );
 
   const readyToDispatchRoutes = assignedRoutes.filter((route) =>
@@ -181,7 +181,7 @@ export default function DispatchUnified() {
     // Filter jobs belonging to this route (for future proximity calculations)
     // const routeJobs = jobs.filter((j) => _route.jobIds?.includes(j.id));
     const routeDriverAssignments = routes
-      .filter((r) => r.status === 'active' || r.status === 'dispatched')
+      .filter((r) => r.status === 'assigned' || r.status === 'in_progress')
       .reduce((acc, r) => {
         if (r.driverId) acc[r.driverId] = (acc[r.driverId] || 0) + 1;
         return acc;
@@ -378,7 +378,7 @@ export default function DispatchUnified() {
 
     setDispatchingRouteId(routeId);
     try {
-      await updateRouteStatus(routeId, 'dispatched');
+      await updateRouteStatus(routeId, 'in_progress');
       await loadData();
     } catch (error) {
       console.error('Dispatch failed:', error);

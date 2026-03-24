@@ -38,9 +38,10 @@ import {
   TrendingUp,
 } from '@mui/icons-material';
 import { useDrivers, useVehicles } from '../graphql/hooks';
-import { getJobs, getRoutes, generateRoute, assignDriverToRoute, updateRouteStatus, connectSSE, reorderRouteStops } from '../services/api';
+import { getJobs, getRoutes, generateRoute, assignDriverToRoute, updateRouteStatus, reorderRouteStops } from '../services/api';
 import MultiRouteMap from '../components/maps/MultiRouteMap';
 import ReorderableStopsList from '../components/maps/ReorderableStopsList';
+import { connectDispatchRealtime } from '../services/socket';
 
 export default function DispatchesPage() {
   const [tab, setTab] = useState(0);
@@ -77,8 +78,8 @@ export default function DispatchesPage() {
   useEffect(() => {
     loadData();
 
-    const eventSource = connectSSE((data) => {
-      if (data.type === 'route-created' || data.type === 'route-updated' || data.type === 'route-dispatched') {
+    const eventSource = connectDispatchRealtime((data) => {
+      if (data.type === 'route-created' || data.type === 'route-updated') {
         loadData();
       }
     });
@@ -141,7 +142,7 @@ export default function DispatchesPage() {
 
   const handleStartRoute = async (routeId: string) => {
     try {
-      await updateRouteStatus(routeId, 'dispatched');
+      await updateRouteStatus(routeId, 'in_progress');
       await loadData();
     } catch (error) {
       console.error('Failed to start route:', error);
@@ -175,21 +176,22 @@ export default function DispatchesPage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'planned': return 'success';
-      case 'dispatched': return 'primary';
+      case 'assigned': return 'primary';
       case 'in_progress': return 'info';
       case 'completed': return 'default';
+      case 'cancelled': return 'warning';
       default: return 'default';
     }
   };
 
   const pendingJobsCount = jobs.filter(j => j.status === 'pending').length;
   const plannedRoutes = routes.filter(r => r.status === 'planned');
-  const dispatchedRoutes = routes.filter(r => r.status === 'dispatched');
+  const activeRoutes = routes.filter(r => r.status === 'assigned' || r.status === 'in_progress');
 
   // Transform routes for multi-route map
   const transformRoutesForMap = () => {
     const activeRoutes = routes.filter(
-      r => r.status === 'planned' || r.status === 'dispatched' || r.status === 'in_progress'
+      r => r.status === 'planned' || r.status === 'assigned' || r.status === 'in_progress'
     );
 
     return activeRoutes.map((route: any) => {
@@ -268,7 +270,7 @@ export default function DispatchesPage() {
                 <Typography color="white" variant="h6">Active Routes</Typography>
               </Box>
               <Typography variant="h3" color="white" fontWeight={700}>
-                {routes.filter(r => r.status === 'dispatched' || r.status === 'in_progress').length}
+                {routes.filter(r => r.status === 'assigned' || r.status === 'in_progress').length}
               </Typography>
             </CardContent>
           </Card>
@@ -322,7 +324,7 @@ export default function DispatchesPage() {
       <Paper sx={{ mb: 3 }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v)}>
           <Tab label="Planned Routes" sx={{ textTransform: 'none' }} />
-          <Tab label="Dispatched Routes" sx={{ textTransform: 'none' }} />
+          <Tab label="Active Routes" sx={{ textTransform: 'none' }} />
           <Tab label="Pending Jobs" sx={{ textTransform: 'none' }} />
         </Tabs>
       </Paper>
@@ -399,12 +401,12 @@ export default function DispatchesPage() {
 
       {tab === 1 && (
         <Grid container spacing={2}>
-          {dispatchedRoutes.length === 0 ? (
+          {activeRoutes.length === 0 ? (
             <Grid item xs={12}>
-              <Alert severity="info">No dispatched routes</Alert>
+              <Alert severity="info">No active routes</Alert>
             </Grid>
           ) : (
-            dispatchedRoutes.map((route) => {
+            activeRoutes.map((route) => {
               const vehicle = vehicles.find((v: any) => v.id === route.vehicleId);
               const driver = route.driverId ? drivers.find((d: any) => d.id === route.driverId) : null;
 

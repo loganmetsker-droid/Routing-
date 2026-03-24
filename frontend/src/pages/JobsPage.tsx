@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Box, Typography, Grid, Card, CardContent, Chip, Button, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Tabs, Tab, Tooltip, Autocomplete } from '@mui/material';
 import { Add, Info } from '@mui/icons-material';
-import { getJobs, createJob, connectSSE } from '../services/api';
+import { getJobs, createJob } from '../services/api';
 import AddressInput from '../components/forms/AddressInput';
 import { Address } from '../types/address';
 import { formatAddress } from '../utils/addressValidation';
+import { connectDispatchRealtime } from '../services/socket';
 
 const API_BASE_URL = (import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/+$/, '').replace(/\/api$/, '');
 
@@ -87,7 +88,7 @@ export default function JobsPage() {
     }
 
     // Connect SSE for real-time updates
-    const eventSource = connectSSE((data) => {
+    const eventSource = connectDispatchRealtime((data) => {
       if (data.type === 'job-created' || data.type === 'job-updated') {
         loadJobs();
       }
