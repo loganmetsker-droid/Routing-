@@ -172,6 +172,7 @@ osrm-data/
 # Build outputs
 dist/
 build/
+coverage/
 
 # Temporary/test files
 diagnostic.html

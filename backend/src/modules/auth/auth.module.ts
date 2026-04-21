@@ -23,16 +23,19 @@ import { OrganizationsModule } from '../organizations/organizations.module';
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        secret:
-          configService.get<string>('JWT_SECRET') ||
-          (configService.get<string>('NODE_ENV') === 'development'
-            ? 'development-only-jwt-secret'
-            : undefined),
-        signOptions: {
-          expiresIn: configService.get<number>('JWT_EXPIRES_IN_SECONDS', 60 * 60 * 24 * 7),
-        },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const secret = configService.get<string>('JWT_SECRET');
+        if (!secret) {
+          throw new Error('JWT_SECRET is required');
+        }
+
+        return {
+          secret,
+          signOptions: {
+            expiresIn: configService.get<number>('JWT_EXPIRES_IN_SECONDS', 60 * 60 * 24 * 7),
+          },
+        };
+      },
     }),
   ],
   controllers: [AuthController],

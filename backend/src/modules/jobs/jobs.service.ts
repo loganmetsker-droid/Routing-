@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
   Logger,
   Optional,
 } from '@nestjs/common';
@@ -109,7 +110,10 @@ export class JobsService {
   }
 
   private organizationWhere(actor?: Actor) {
-    return actor?.organizationId ? ({ organizationId: actor.organizationId } as const) : {};
+    if (!actor?.organizationId) {
+      throw new ForbiddenException('Organization scope required');
+    }
+    return { organizationId: actor.organizationId } as const;
   }
 
   private requireCustomerScope(customer: Customer, actor?: Actor) {
