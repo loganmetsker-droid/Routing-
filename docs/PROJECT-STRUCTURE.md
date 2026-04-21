@@ -149,7 +149,7 @@ my-awesome-project/
 |------|---------|
 | `src/main.tsx` | React app entry, setup Apollo, React Query, Router providers |
 | `src/App.tsx` | Root component with route definitions |
-| `src/components/layout/Layout.tsx` | Main layout with navigation bar |
+| `src/components/Layout.tsx` | Main authenticated layout and route shell |
 | `src/pages/*.tsx` | Page components for each route |
 | `vite.config.ts` | Vite build config, path aliases, proxy settings |
 | `tailwind.config.js` | Tailwind CSS theme configuration |

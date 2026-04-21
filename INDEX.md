@@ -21,10 +21,6 @@
 - **BUILD_FIXES.md** - Build troubleshooting
 - **TROUBLESHOOTING.md** - Common issues and solutions
 
-### 🎨 Frontend
-- **FRONTEND_COMPLETE.md** - Frontend implementation guide
-- **FRONTEND_SCAFFOLD.md** - Frontend structure details
-
 ### 🔧 Backend Features
 - **VEHICLE_TRACKING_COMPLETE.md** - Real-time GPS tracking
 - **TRACKING_SETUP.md** - Tracking system setup
@@ -71,7 +67,7 @@ my-awesome-project/
 
 #### ...understand the codebase
 1. Read: **README.md** (overview)
-2. Read: **FRONTEND_COMPLETE.md** (frontend)
+2. Read: `frontend/src/App.tsx` and `frontend/src/components/Layout.tsx` (frontend)
 3. Read: **VEHICLE_TRACKING_COMPLETE.md** (backend features)
 
 #### ...use Claude Code workflows
@@ -138,7 +134,7 @@ Professional-grade AI workflows for:
 
 ## 📊 Documentation Statistics
 
-Total documentation files: 21
+Total documentation files: 19
 - Setup guides: 4
 - Feature guides: 6
 - Workflow guides: 4 ⭐ NEW
@@ -168,7 +164,7 @@ Total documentation files: 21
 4. WORKFLOWS_SUMMARY.txt
 
 ### Intermediate
-1. FRONTEND_COMPLETE.md
+1. `frontend/src/App.tsx`
 2. VEHICLE_TRACKING_COMPLETE.md
 3. WORKFLOWS_SETUP.md
 4. TESTING_GUIDE.md

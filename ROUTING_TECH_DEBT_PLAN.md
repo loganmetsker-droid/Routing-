@@ -14,7 +14,7 @@
 
 ## Phase 2: Runtime Consolidation (Next)
 - Pick one backend runtime (Nest) as the only production path.
-- Decommission or archive legacy `backend/server.js` and `backend/api/index.ts` after parity checks.
+- Legacy backend entrypoints have been removed. Keep Nest as the only supported backend path.
 - Remove duplicated deployment docs that conflict (Vercel backend vs Render backend instructions).
 
 ## Phase 3: API Client Refactor

@@ -4,8 +4,7 @@ A modern fleet management system built with NestJS, GraphQL, React, and PostgreS
 
 ## ✅ Canonical Backend
 
-This repo contains multiple backend implementations. The **canonical backend** is the NestJS app in `backend/`.
-Legacy Express (`backend/server.js`) and Vercel serverless (`backend/api/index.ts`) are **deprecated** and should not be used for new development.
+The backend in this repo is the NestJS app in `backend/`.
 
 ## 🎯 Current Status
 
@@ -63,7 +62,6 @@ my-awesome-project/
 │   │   ├── routes/            # Route planning
 │   │   ├── dispatches/        # Dispatch system
 │   │   └── auth/              # JWT authentication
-│   ├── .env                   # Environment config (created)
 │   └── package.json
 │
 ├── frontend/                   # React frontend
@@ -76,13 +74,11 @@ my-awesome-project/
 │   │   │   ├── RoutesPage.tsx
 │   │   │   └── LoginPage.tsx
 │   │   ├── components/        # Layout components
-│   │   ├── graphql/           # GraphQL queries/hooks
 │   │   └── apollo/            # Apollo Client setup
 │   └── package.json
 │
 ├── SETUP_DATABASE.md          # Database setup guide
 ├── START_APPS.md              # Startup instructions
-├── FRONTEND_COMPLETE.md       # Frontend documentation
 └── README.md                  # This file
 ```
 
@@ -148,8 +144,6 @@ uri: 'http://localhost:3000/graphql'
 
 - **Database Setup**: See `SETUP_DATABASE.md`
 - **Starting Apps**: See `START_APPS.md`
-- **Frontend Guide**: See `FRONTEND_COMPLETE.md`
-
 ## 🐛 Troubleshooting
 
 ### Backend won't start
@@ -211,7 +205,8 @@ ISC
 For issues or questions, check the troubleshooting guides in:
 - `SETUP_DATABASE.md`
 - `START_APPS.md`
-- `FRONTEND_COMPLETE.md`
+- `frontend/src/App.tsx`
+- `frontend/src/components/Layout.tsx`
 
 ---
 
