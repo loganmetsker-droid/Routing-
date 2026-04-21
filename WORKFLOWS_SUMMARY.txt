@@ -167,10 +167,8 @@ Edit workflow files to add project-specific rules:
   → Define threat model
   → Customize severity thresholds
 
-context/design-principles.md
-  → Add brand colors
-  → Define typography scale
-  → Set spacing units
+CLAUDE.md
+  → Update project-specific design and workflow conventions
 
 ═══════════════════════════════════════════════════════════════
   GITHUB ACTIONS INTEGRATION (OPTIONAL):

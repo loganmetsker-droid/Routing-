@@ -387,7 +387,7 @@ DIFF CONTENT:
 OBJECTIVE:
 Comprehensively review design quality and implementation.
 
-DESIGN PRINCIPLES (from context/design-principles.md):
+DESIGN PRINCIPLES:
 - Users First
 - Meticulous Craft
 - Speed & Performance
