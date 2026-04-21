@@ -48,13 +48,15 @@ export default function LiveStatusColumn({
 
   return (
     <Box sx={{ p: 0 }}>
-      <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-        <StatusPill label={`${routes.length} active`} color="#2563eb" />
+      <Stack direction="row" spacing={1} sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
+        <StatusPill compact label={`${routes.length} active`} color="#2563eb" />
         <StatusPill
+          compact
           label={`${degradedRoutes} degraded`}
           color={degradedRoutes > 0 ? '#d97706' : '#64748b'}
         />
         <StatusPill
+          compact
           label={`${reroutePending} reroute`}
           color={reroutePending > 0 ? '#f97316' : '#64748b'}
         />
@@ -75,10 +77,10 @@ export default function LiveStatusColumn({
                 key={driver.id}
                 sx={{
                   display: 'flex',
-                  alignItems: 'center',
+                  alignItems: 'flex-start',
                   gap: 1.5,
                   p: 1.5,
-                  borderRadius: '12px',
+                  borderRadius: '8px',
                   bgcolor: isAvailable
                     ? alpha(theme.palette.success.main, 0.08)
                     : alpha(theme.palette.warning.main, 0.08),
@@ -102,7 +104,9 @@ export default function LiveStatusColumn({
                     {routeCount} route{routeCount !== 1 ? 's' : ''}
                   </Typography>
                 </Box>
-                <StatusPill label={isAvailable ? 'Available' : 'Busy'} color={isAvailable ? '#059669' : '#d97706'} />
+                <Box sx={{ alignSelf: 'center' }}>
+                  <StatusPill compact label={isAvailable ? 'Available' : 'Busy'} color={isAvailable ? '#059669' : '#d97706'} />
+                </Box>
               </Box>
             );
           })}
@@ -148,10 +152,10 @@ export default function LiveStatusColumn({
                 key={vehicle.id}
                 sx={{
                   display: 'flex',
-                  alignItems: 'center',
+                  alignItems: 'flex-start',
                   gap: 1.5,
                   p: 1.5,
-                  borderRadius: '12px',
+                  borderRadius: '8px',
                   bgcolor: isAssigned
                     ? alpha(theme.palette.info.main, 0.08)
                     : alpha(theme.palette.background.paper, 0.72),
@@ -176,16 +180,19 @@ export default function LiveStatusColumn({
                     {vehicle.licensePlate || 'No plate'}
                   </Typography>
                 </Box>
-                <StatusPill
-                  label={displayStatus}
-                  color={
-                    displayStatus === 'Available'
-                      ? '#059669'
-                      : displayStatus === 'Assigned'
-                        ? '#0284c7'
-                        : '#64748b'
-                  }
-                />
+                <Box sx={{ alignSelf: 'center' }}>
+                  <StatusPill
+                    compact
+                    label={displayStatus}
+                    color={
+                      displayStatus === 'Available'
+                        ? '#059669'
+                        : displayStatus === 'Assigned'
+                          ? '#0284c7'
+                          : '#64748b'
+                    }
+                  />
+                </Box>
               </Box>
             );
           })}

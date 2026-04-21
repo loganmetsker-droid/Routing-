@@ -102,7 +102,7 @@ export default function VehicleRouteCard({
           : selected
             ? alpha(theme.palette.primary.main, 0.32)
             : alpha(theme.palette.text.primary, 0.08),
-        borderRadius: '18px',
+        borderRadius: '10px',
         transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
         cursor: 'pointer',
         '&:hover': {
@@ -117,14 +117,14 @@ export default function VehicleRouteCard({
       }}
     >
       <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mb: 2 }}>
           <LocalShipping
             sx={{
               color: hasRoute ? 'primary.main' : tertiaryText,
               fontSize: 24,
             }}
           />
-          <Box sx={{ flex: 1 }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography
               variant="subtitle2"
               sx={{ fontWeight: 700, fontSize: '15px', color: brandText }}
@@ -136,6 +136,7 @@ export default function VehicleRouteCard({
             </Typography>
           </Box>
           <StatusPill
+            compact
             label={vehicle.status || 'unknown'}
             color={vehicle.status === 'available' ? theme.palette.success.main : theme.palette.warning.main}
           />
@@ -184,7 +185,7 @@ export default function VehicleRouteCard({
                 mb: 2.5,
                 p: 2,
                 bgcolor: alpha(theme.palette.background.paper, theme.palette.mode === 'dark' ? 0.9 : 0.84),
-                borderRadius: '14px',
+                borderRadius: '8px',
                 border: `1px solid ${alpha(theme.palette.text.primary, 0.08)}`,
               }}
             >
@@ -220,17 +221,20 @@ export default function VehicleRouteCard({
                   </Box>
                 </Typography>
               </Box>
-              <Stack direction="row" spacing={0.75} sx={{ mt: 1.25 }}>
+              <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap sx={{ mt: 1.25 }}>
                 <StatusPill
+                  compact
                   label={route.optimizationStatus || 'optimized'}
                   color={route.optimizationStatus === 'optimized' ? '#059669' : '#d97706'}
                 />
                 <StatusPill
+                  compact
                   label={route.dataQuality || 'live'}
                   color={route.dataQuality === 'live' ? '#0ea5e9' : route.dataQuality === 'degraded' ? '#d97706' : '#64748b'}
                 />
                 {route.rerouteState ? (
                   <StatusPill
+                    compact
                     label={`reroute ${route.rerouteState}`}
                     color={route.rerouteState === 'applied' ? '#059669' : '#d97706'}
                   />
@@ -243,12 +247,12 @@ export default function VehicleRouteCard({
                 mb: 2.5,
                 p: 1.5,
                 display: 'flex',
-                alignItems: 'center',
+                alignItems: 'flex-start',
                 gap: 1.5,
                 bgcolor: hasDriver
                   ? alpha(theme.palette.success.main, 0.1)
                   : alpha(theme.palette.warning.main, 0.12),
-                borderRadius: '12px',
+                borderRadius: '8px',
                 border: '1px solid',
                 borderColor: hasDriver
                   ? alpha(theme.palette.success.main, 0.24)
@@ -258,11 +262,11 @@ export default function VehicleRouteCard({
               <Person sx={{ fontSize: 20, color: hasDriver ? 'success.main' : 'warning.dark' }} />
               <Typography
                 variant="body2"
-                sx={{ flex: 1, color: brandText, fontSize: '13px', fontWeight: 500 }}
+                sx={{ flex: 1, minWidth: 0, color: brandText, fontSize: '13px', fontWeight: 500 }}
               >
                 {hasDriver ? `${driver.firstName} ${driver.lastName}` : 'No driver assigned'}
               </Typography>
-              {hasDriver && <StatusPill label="Assigned" color={theme.palette.success.main} />}
+              {hasDriver && <StatusPill compact label="Assigned" color={theme.palette.success.main} />}
             </Box>
 
             {!hasOptimizationData && (
@@ -344,7 +348,7 @@ export default function VehicleRouteCard({
                       sx={{
                         p: 1,
                         bgcolor: alpha(theme.palette.background.default, 0.9),
-                        borderRadius: 1,
+                        borderRadius: '6px',
                         border: '1px solid',
                         borderColor: 'divider',
                       }}
@@ -372,7 +376,7 @@ export default function VehicleRouteCard({
                 sx={{
                   borderColor: alpha(theme.palette.primary.main, 0.5),
                   color: 'primary.main',
-                  borderRadius: '10px',
+                  borderRadius: '8px',
                   py: 1,
                   textTransform: 'none',
                   fontWeight: 600,
@@ -401,7 +405,7 @@ export default function VehicleRouteCard({
                   sx={{
                     bgcolor: 'success.main',
                     color: 'common.white',
-                    borderRadius: '10px',
+                    borderRadius: '8px',
                     py: 1,
                     textTransform: 'none',
                     fontWeight: 600,
@@ -427,7 +431,7 @@ export default function VehicleRouteCard({
                   sx={{
                     borderColor: alpha(theme.palette.error.main, 0.5),
                     color: 'error.main',
-                    borderRadius: '10px',
+                    borderRadius: '8px',
                     py: 1,
                     textTransform: 'none',
                     fontWeight: 600,
@@ -451,7 +455,7 @@ export default function VehicleRouteCard({
               p: 4,
               textAlign: 'center',
               border: `2px dashed ${alpha(theme.palette.text.primary, 0.1)}`,
-              borderRadius: '14px',
+              borderRadius: '8px',
               bgcolor: alpha(theme.palette.background.paper, 0.65),
             }}
           >

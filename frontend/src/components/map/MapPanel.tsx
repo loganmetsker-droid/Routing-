@@ -1,8 +1,10 @@
 import { Box, Divider, Typography } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { MapContainer, TileLayer, Polyline, Marker, Popup, Tooltip as LeafletTooltip } from 'react-leaflet';
 import StatusPill from '../ui/StatusPill';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import { shellTokens } from '../../theme/tokens';
 
 delete (L.Icon.Default.prototype as any)._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -17,7 +19,7 @@ type MapPanelProps = {
   mapRoutes: any[];
   title?: string;
   subtitle?: string;
-  height?: number;
+  height?: number | string;
 };
 
 export default function MapPanel({
@@ -31,16 +33,20 @@ export default function MapPanel({
   return (
     <Box
       sx={{
-        p: 2.25,
-        borderRadius: 4,
+        p: 2,
+        borderRadius: `${shellTokens.radius.md}px`,
         border: '1px solid',
         borderColor: 'divider',
-        bgcolor: 'background.paper',
+        bgcolor: (theme) => alpha(theme.palette.background.paper, 0.98),
+        boxShadow: shellTokens.shadow.soft,
         height,
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: 0,
       }}
     >
-      <Box sx={{ mb: 1.5 }}>
-        <Typography variant="h6" fontWeight={700}>
+      <Box sx={{ mb: 1.5, minWidth: 0 }}>
+        <Typography variant="h6" fontWeight={700} sx={{ lineHeight: 1.25 }}>
           {title}
         </Typography>
         <Typography variant="body2" color="text.secondary">
@@ -48,22 +54,24 @@ export default function MapPanel({
         </Typography>
       </Box>
 
-      <Divider sx={{ mb: 1.5 }} />
+      <Divider sx={{ mb: 1.5, opacity: 0.7 }} />
 
       <Box sx={{ mb: 1.5, display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
         {mapRoutes.slice(0, 6).map((route: any) => (
-          <StatusPill key={route.id} label={`${route.vehicle} · ${route.vehiclePlate}`} color={route.color} />
+          <StatusPill key={route.id} compact label={`${route.vehicle} · ${route.vehiclePlate}`} color={route.color} />
         ))}
-        {mapRoutes.length > 6 ? <StatusPill label={`+${mapRoutes.length - 6} more`} color="#64748b" /> : null}
+        {mapRoutes.length > 6 ? <StatusPill compact label={`+${mapRoutes.length - 6} more`} color="#64748b" /> : null}
       </Box>
 
       <Box
         sx={{
-          height: height - 120,
-          borderRadius: 3,
+          flex: 1,
+          minHeight: 320,
+          borderRadius: `${shellTokens.radius.sm}px`,
           overflow: 'hidden',
           border: '1px solid',
           borderColor: 'divider',
+          boxShadow: 'inset 0 0 0 1px rgba(148,163,184,0.08)',
         }}
       >
         <MapContainer center={mapCenter} zoom={mapZoom} style={{ height: '100%', width: '100%' }} scrollWheelZoom>

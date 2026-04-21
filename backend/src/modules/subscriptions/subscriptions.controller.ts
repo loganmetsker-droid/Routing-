@@ -16,6 +16,8 @@ import Stripe from 'stripe';
 import { SubscriptionsService } from './subscriptions.service';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { Request } from 'express';
+import { Roles } from '../../common/decorators/roles.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('subscriptions')
 @Controller('subscriptions')
@@ -38,6 +40,7 @@ export class SubscriptionsController {
   }
 
   @Post('subscribe')
+  @Roles('OWNER', 'ADMIN')
   @ApiOperation({ summary: 'Create a new subscription' })
   @ApiResponse({ status: 201, description: 'Subscription created successfully' })
   async createSubscription(@Body() dto: CreateSubscriptionDto) {
@@ -45,6 +48,7 @@ export class SubscriptionsController {
   }
 
   @Get('customers/:userId/subscriptions')
+  @Roles('OWNER', 'ADMIN')
   @ApiOperation({ summary: 'Get all subscriptions for a customer' })
   @ApiResponse({ status: 200, description: 'List of subscriptions' })
   async getCustomerSubscriptions(@Param('userId') userId: string) {
@@ -52,6 +56,7 @@ export class SubscriptionsController {
   }
 
   @Get(':id')
+  @Roles('OWNER', 'ADMIN')
   @ApiOperation({ summary: 'Get subscription by ID' })
   @ApiResponse({ status: 200, description: 'Subscription details' })
   async getSubscription(@Param('id') id: string) {
@@ -59,6 +64,7 @@ export class SubscriptionsController {
   }
 
   @Post(':id/cancel')
+  @Roles('OWNER', 'ADMIN')
   @ApiOperation({ summary: 'Cancel a subscription' })
   @ApiResponse({ status: 200, description: 'Subscription canceled' })
   async cancelSubscription(@Param('id') id: string) {
@@ -66,11 +72,16 @@ export class SubscriptionsController {
   }
 
   @Post('webhook')
+  @Public()
   @ApiOperation({ summary: 'Handle Stripe webhook events' })
   async handleWebhook(
     @Headers('stripe-signature') signature: string,
     @Req() request: RawBodyRequest<Request>,
   ) {
+    if (!this.stripe || !this.webhookSecret) {
+      throw new BadRequestException('Stripe webhook handling is not configured');
+    }
+
     if (!signature) {
       throw new BadRequestException('Missing stripe-signature header');
     }

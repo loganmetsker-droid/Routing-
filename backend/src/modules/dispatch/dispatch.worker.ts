@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -6,9 +6,10 @@ import { Vehicle } from '../vehicles/entities/vehicle.entity';
 import { Job, JobStatus, JobPriority } from '../jobs/entities/job.entity';
 import { DispatchService } from './dispatch.service';
 import { DispatchGateway } from './dispatch.gateway';
+import { RuntimeStatusService } from '../../common/runtime/runtime-status.service';
 
 @Injectable()
-export class DispatchWorker {
+export class DispatchWorker implements OnModuleInit {
   private readonly logger = new Logger(DispatchWorker.name);
 
   constructor(
@@ -18,7 +19,12 @@ export class DispatchWorker {
     private readonly jobRepository: Repository<Job>,
     private readonly dispatchService: DispatchService,
     private readonly dispatchGateway: DispatchGateway,
+    private readonly runtimeStatusService: RuntimeStatusService,
   ) {}
+
+  onModuleInit() {
+    this.runtimeStatusService.registerWorker();
+  }
 
   /**
    * Auto-dispatch worker that runs every minute
@@ -35,6 +41,7 @@ export class DispatchWorker {
   })
   async handleAutoDispatch() {
     const startTime = Date.now();
+    this.runtimeStatusService.markWorkerRunStarted();
     this.logger.log('🔄 [DISPATCH:START] Auto-dispatch worker initiated');
 
     try {
@@ -160,6 +167,7 @@ export class DispatchWorker {
       this.logger.log(
         `[DISPATCH:COMPLETE] Auto-dispatch finished in ${duration}ms. Routes created: ${dispatchedRoutes.length}, Failed: ${failedVehicles.length}`,
       );
+      this.runtimeStatusService.markWorkerRunCompleted(duration);
 
       return {
         success: true,
@@ -170,6 +178,7 @@ export class DispatchWorker {
       };
     } catch (error) {
       const duration = Date.now() - startTime;
+      this.runtimeStatusService.markWorkerRunFailed(error.message, duration);
       this.logger.error(
         `[DISPATCH:FATAL] Auto-dispatch worker failed after ${duration}ms: ${error.message}`,
         error.stack,
@@ -192,6 +201,7 @@ export class DispatchWorker {
     pendingJobCount?: number;
   }> {
     this.logger.log('🔧 [DISPATCH:MANUAL] Manual dispatch triggered via API');
+    this.runtimeStatusService.touchWorkerHeartbeat();
     const result = await this.handleAutoDispatch();
     return result || { success: true, message: 'Dispatch completed', routesCreated: 0 };
   }

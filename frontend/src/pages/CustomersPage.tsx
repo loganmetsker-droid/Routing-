@@ -1,519 +1,285 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Box,
-  Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
   Button,
-  IconButton,
   Dialog,
-  DialogTitle,
-  DialogContent,
   DialogActions,
+  DialogContent,
+  DialogTitle,
+  Grid,
+  List,
+  ListItemButton,
+  ListItemText,
+  Stack,
+  Tab,
+  Tabs,
   TextField,
-  CircularProgress,
-  Avatar,
-  Chip,
+  Typography,
 } from '@mui/material';
-import { Add, Edit, Delete, Business, Person } from '@mui/icons-material';
-import { motion } from 'framer-motion';
-import AddressInput from '../components/forms/AddressInput';
-import { Address } from '../types/address';
-import { formatAddress, parseLegacyAddress } from '../utils/addressValidation';
+import { PageHeader } from '../components/PageHeader';
+import { SurfacePanel } from '../components/SurfacePanel';
+import LoadingState from '../components/ui/LoadingState';
+import { getCustomers, createCustomer, updateCustomer, deleteCustomer } from '../services/api';
 
-const API_BASE_URL = (import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/+$/, '').replace(/\/api$/, '');
-
-const container = {
-  hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.05,
-    },
-  },
-};
-
-const item = {
-  hidden: { x: -20, opacity: 0 },
-  show: { x: 0, opacity: 1 },
-};
-
+function buildConstraintsSummary(formData: Record<string, string>) {
+  return [
+    formData.serviceTime ? 'Service time: ' + formData.serviceTime : '',
+    formData.timeWindows ? 'Time windows: ' + formData.timeWindows : '',
+    formData.callAheadRequired ? 'Call ahead required' : '',
+    formData.gateCode ? 'Gate code: ' + formData.gateCode : '',
+    formData.dockHours ? 'Dock hours: ' + formData.dockHours : '',
+    formData.vehicleRestrictions ? 'Vehicle restrictions: ' + formData.vehicleRestrictions : '',
+    formData.signatureRequired ? 'Signature required' : '',
+    formData.weekendRestrictions ? 'Weekend restrictions: ' + formData.weekendRestrictions : '',
+    formData.preferredTerritory ? 'Preferred territory: ' + formData.preferredTerritory : '',
+    formData.additionalConstraints ? formData.additionalConstraints : '',
+  ].filter(Boolean).join('\n');
+}
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [openDialog, setOpenDialog] = useState(false);
-  const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
-  const [editingCustomer, setEditingCustomer] = useState<any>(null);
-  const [deletingCustomer, setDeletingCustomer] = useState<any>(null);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [detailTab, setDetailTab] = useState(0);
+  const [editingCustomer, setEditingCustomer] = useState<any | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
     email: '',
     businessName: '',
+    defaultAddress: '',
     notes: '',
-    exceptions: '',
+    serviceTime: '',
+    timeWindows: '',
+    callAheadRequired: '',
+    gateCode: '',
+    dockHours: '',
+    vehicleRestrictions: '',
+    signatureRequired: '',
+    weekendRestrictions: '',
+    preferredTerritory: '',
+    additionalConstraints: '',
   });
-  const [addressData, setAddressData] = useState<Address>({
-    line1: '',
-    line2: null,
-    city: '',
-    state: '',
-    zip: '',
-  });
-  const [addressValid, setAddressValid] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-
-  const loadCustomers = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/customers`);
-      const data = await response.json();
-      setCustomers(data.customers || []);
-    } catch (error) {
-      console.error('Error loading customers:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   useEffect(() => {
-    loadCustomers();
+    let mounted = true;
+    const load = async () => {
+      try {
+        const data = await getCustomers();
+        if (!mounted) return;
+        const safeCustomers = Array.isArray(data) ? data : [];
+        setCustomers(safeCustomers);
+        setSelectedCustomerId(safeCustomers[0]?.id || '');
+      } catch (error) {
+        console.error('Failed to load customers', error);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  const handleOpenDialog = (customer?: any) => {
-    if (customer) {
-      setEditingCustomer(customer);
-      setFormData({
-        name: customer.name || '',
-        phone: customer.phone || '',
-        email: customer.email || '',
-        businessName: customer.businessName || '',
-        notes: customer.notes || '',
-        exceptions: customer.exceptions || '',
-      });
-      if (customer.defaultAddressStructured) {
-        const structuredAddress = {
-          line1: customer.defaultAddressStructured.line1 || '',
-          line2: customer.defaultAddressStructured.line2 || null,
-          city: customer.defaultAddressStructured.city || '',
-          state: customer.defaultAddressStructured.state || '',
-          zip: customer.defaultAddressStructured.zip || '',
-        };
-        setAddressData(structuredAddress);
-        setAddressValid(
-          !!(
-            structuredAddress.line1 &&
-            structuredAddress.city &&
-            structuredAddress.state &&
-            structuredAddress.zip
-          ),
-        );
-      } else {
-        // Fallback for older customer records
-        const parsed = parseLegacyAddress(customer.defaultAddress || customer.address || '');
-        const parsedAddress = {
-          line1: parsed.line1 || '',
-          line2: parsed.line2 || null,
-          city: parsed.city || '',
-          state: parsed.state || '',
-          zip: parsed.zip || '',
-        };
-        setAddressData(parsedAddress);
-        setAddressValid(
-          !!(
-            parsedAddress.line1 &&
-            parsedAddress.city &&
-            parsedAddress.state &&
-            parsedAddress.zip
-          ),
-        );
-      }
-    } else {
-      setEditingCustomer(null);
-      setFormData({
-        name: '',
-        phone: '',
-        email: '',
-        businessName: '',
-        notes: '',
-        exceptions: '',
-      });
-      setAddressData({ line1: '', line2: null, city: '', state: '', zip: '' });
-      setAddressValid(false);
-    }
-    setOpenDialog(true);
-  };
+  const selectedCustomer = useMemo(() => customers.find((customer) => customer.id === selectedCustomerId) || customers[0] || null, [customers, selectedCustomerId]);
 
-  const handleCloseDialog = () => {
-    setOpenDialog(false);
+  const openCreate = () => {
     setEditingCustomer(null);
-    setAddressValid(false);
+    setFormData({
+      name: '',
+      phone: '',
+      email: '',
+      businessName: '',
+      defaultAddress: '',
+      notes: '',
+      serviceTime: '',
+      timeWindows: '',
+      callAheadRequired: '',
+      gateCode: '',
+      dockHours: '',
+      vehicleRestrictions: '',
+      signatureRequired: '',
+      weekendRestrictions: '',
+      preferredTerritory: '',
+      additionalConstraints: '',
+    });
+    setDialogOpen(true);
   };
 
-  const handleOpenDeleteDialog = (customer: any) => {
-    setDeletingCustomer(customer);
-    setOpenDeleteDialog(true);
-  };
-
-  const handleCloseDeleteDialog = () => {
-    setOpenDeleteDialog(false);
-    setDeletingCustomer(null);
+  const openEdit = (customer: any) => {
+    setEditingCustomer(customer);
+    setFormData({
+      name: customer.name || '',
+      phone: customer.phone || '',
+      email: customer.email || '',
+      businessName: customer.businessName || '',
+      defaultAddress: customer.defaultAddress || customer.address || '',
+      notes: customer.notes || '',
+      serviceTime: '',
+      timeWindows: '',
+      callAheadRequired: '',
+      gateCode: '',
+      dockHours: '',
+      vehicleRestrictions: '',
+      signatureRequired: '',
+      weekendRestrictions: '',
+      preferredTerritory: '',
+      additionalConstraints: customer.exceptions || '',
+    });
+    setDialogOpen(true);
   };
 
   const handleSubmit = async () => {
-    if (!addressValid) {
-      return;
-    }
+    const payload = {
+      name: formData.name,
+      phone: formData.phone,
+      email: formData.email,
+      businessName: formData.businessName,
+      defaultAddress: formData.defaultAddress,
+      notes: formData.notes,
+      exceptions: buildConstraintsSummary(formData),
+    };
 
-    setSubmitting(true);
     try {
-      const customerData = {
-        ...formData,
-        defaultAddress: formatAddress(addressData),
-        defaultAddressStructured: addressData,
-      };
-
       if (editingCustomer) {
-        await fetch(`${API_BASE_URL}/api/customers/${editingCustomer.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(customerData),
-        });
+        await updateCustomer(editingCustomer.id, payload);
       } else {
-        await fetch(`${API_BASE_URL}/api/customers`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(customerData),
-        });
+        await createCustomer(payload as any);
       }
-      handleCloseDialog();
-      await loadCustomers();
+      setDialogOpen(false);
+      const data = await getCustomers();
+      const safeCustomers = Array.isArray(data) ? data : [];
+      setCustomers(safeCustomers);
+      setSelectedCustomerId(safeCustomers[0]?.id || '');
     } catch (error) {
-      console.error('Error saving customer:', error);
-    } finally {
-      setSubmitting(false);
+      console.error('Failed to save customer', error);
     }
   };
 
   const handleDelete = async () => {
-    if (!deletingCustomer) return;
-
-    setSubmitting(true);
+    if (!selectedCustomer) return;
     try {
-      await fetch(`${API_BASE_URL}/api/customers/${deletingCustomer.id}`, {
-        method: 'DELETE',
-      });
-      handleCloseDeleteDialog();
-      await loadCustomers();
+      await deleteCustomer(selectedCustomer.id);
+      const data = await getCustomers();
+      const safeCustomers = Array.isArray(data) ? data : [];
+      setCustomers(safeCustomers);
+      setSelectedCustomerId(safeCustomers[0]?.id || '');
     } catch (error) {
-      console.error('Error deleting customer:', error);
-    } finally {
-      setSubmitting(false);
+      console.error('Failed to delete customer', error);
     }
-  };
-
-  const getInitials = (name: string) => {
-    const parts = name.split(' ');
-    if (parts.length >= 2) {
-      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-    }
-    return name.slice(0, 2).toUpperCase();
   };
 
   if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-        <CircularProgress />
-      </Box>
-    );
+    return <LoadingState label="Loading customers..." minHeight="50vh" />;
   }
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" fontWeight={600}>
-          Customers
-        </Typography>
-        <Button
-          variant="contained"
-          color="primary"
-          startIcon={<Add />}
-          onClick={() => handleOpenDialog()}
-          data-testid="add-customer-button"
-          sx={{
-            textTransform: 'none',
-            borderRadius: 2,
-          }}
-        >
-          Add Customer
-        </Button>
-      </Box>
+      <PageHeader eyebrow="Resources" title="Customers" subtitle="Contact details, service notes, and operational constraints now have a clear home." actions={<Button variant="contained" onClick={openCreate}>Add Customer</Button>} />
 
-      <motion.div variants={container} initial="hidden" animate="show">
-        <TableContainer
-          component={Paper}
-          sx={{
-            boxShadow: 2,
-            borderRadius: 2,
-            overflow: 'hidden',
-          }}
-        >
-          <Table>
-            <TableHead sx={{ bgcolor: 'grey.100' }}>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 600 }}>Customer</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Address</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Business</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Exceptions</TableCell>
-                <TableCell sx={{ fontWeight: 600 }}>Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {customers.length > 0 ? (
-                customers.map((customer: any) => (
-                  <TableRow
-                    key={customer.id}
-                    component={motion.tr}
-                    variants={item}
-                    sx={{
-                      '&:hover': { bgcolor: 'action.hover' },
-                      transition: 'background-color 0.2s',
-                    }}
-                  >
-                    <TableCell>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Avatar sx={{ bgcolor: 'secondary.main', width: 40, height: 40 }}>
-                          {customer.businessName ? (
-                            <Business fontSize="small" />
-                          ) : (
-                            getInitials(customer.name)
-                          )}
-                        </Avatar>
-                        <Box>
-                          <Typography variant="body1" fontWeight={500}>
-                            {customer.name}
-                          </Typography>
-                          {customer.businessName && (
-                            <Typography variant="caption" color="text.secondary">
-                              {customer.businessName}
-                            </Typography>
-                          )}
-                        </Box>
-                      </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">
-                        {customer.defaultAddress || customer.address || 'No address saved'}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      {customer.businessName ? (
-                        <Typography variant="body2">{customer.businessName}</Typography>
-                      ) : (
-                        <Typography variant="body2" color="text.secondary">
-                          Individual
-                        </Typography>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {customer.exceptions ? (
-                        <Chip
-                          label="Has Exceptions"
-                          color="warning"
-                          size="small"
-                          variant="outlined"
-                        />
-                      ) : (
-                        <Typography variant="body2" color="text.secondary">
-                          None
-                        </Typography>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', gap: 0.5 }}>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleOpenDialog(customer)}
-                          sx={{
-                            '&:hover': {
-                              bgcolor: 'primary.light',
-                              color: 'primary.contrastText',
-                            },
-                            transition: 'all 0.2s',
-                          }}
-                        >
-                          <Edit fontSize="small" />
-                        </IconButton>
-                        <IconButton
-                          size="small"
-                          onClick={() => handleOpenDeleteDialog(customer)}
-                          sx={{
-                            '&:hover': {
-                              bgcolor: 'error.light',
-                              color: 'error.contrastText',
-                            },
-                            transition: 'all 0.2s',
-                          }}
-                        >
-                          <Delete fontSize="small" />
-                        </IconButton>
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={5} align="center">
-                    <Box sx={{ py: 4 }}>
-                      <Person sx={{ fontSize: 48, color: 'grey.400', mb: 2 }} />
-                      <Typography variant="h6" color="textSecondary">
-                        No customers found
-                      </Typography>
-                      <Typography variant="body2" color="textSecondary">
-                        Click "Add Customer" to create your first customer
-                      </Typography>
-                    </Box>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </motion.div>
+      <Grid container spacing={2.5}>
+        <Grid item xs={12} lg={4}>
+          <SurfacePanel sx={{ p: 0, overflow: 'hidden' }}>
+            <Box sx={{ px: 2.5, py: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+              <Typography variant="h5">Customer List</Typography>
+            </Box>
+            <List disablePadding>
+              {customers.map((customer) => (
+                <ListItemButton key={customer.id} selected={customer.id === selectedCustomer?.id} onClick={() => setSelectedCustomerId(customer.id)}>
+                  <ListItemText primary={customer.name} secondary={customer.businessName || customer.defaultAddress || customer.address || 'Operational profile pending'} />
+                </ListItemButton>
+              ))}
+            </List>
+          </SurfacePanel>
+        </Grid>
 
-      {/* Add/Edit Dialog */}
-      <Dialog
-        open={openDialog}
-        onClose={handleCloseDialog}
-        maxWidth="sm"
-        fullWidth
-        PaperProps={{
-          sx: {
-            borderRadius: 2,
-          },
-        }}
-      >
-        <DialogTitle>
-          {editingCustomer ? 'Edit Customer' : 'Add New Customer'}
-        </DialogTitle>
-        <DialogContent>
-          <Box sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <TextField
-              label="Name"
-              name="name"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              fullWidth
-              required
-              placeholder="John Doe"
-            />
-            <TextField
-              label="Phone"
-              name="phone"
-              value={formData.phone}
-              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-              fullWidth
-              placeholder="(555) 123-4567"
-            />
-            <TextField
-              label="Email"
-              name="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              fullWidth
-              placeholder="customer@example.com"
-            />
-            <AddressInput
-              label="Address"
-              value={addressData}
-              onChange={setAddressData}
-              onValidationChange={setAddressValid}
-              required
-            />
-            <TextField
-              label="Business Name"
-              name="businessName"
-              value={formData.businessName}
-              onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
-              fullWidth
-              placeholder="Optional: ABC Company Inc."
-            />
-            <TextField
-              label="Notes"
-              name="notes"
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              fullWidth
-              multiline
-              rows={3}
-              placeholder="Additional notes about the customer..."
-            />
-            <TextField
-              label="Exceptions"
-              name="exceptions"
-              value={formData.exceptions}
-              onChange={(e) => setFormData({ ...formData, exceptions: e.target.value })}
-              fullWidth
-              multiline
-              rows={2}
-              placeholder="Special delivery instructions, access restrictions, etc."
-              helperText="Special handling requirements or delivery restrictions"
-            />
-          </Box>
+        <Grid item xs={12} lg={8}>
+          <SurfacePanel>
+            {selectedCustomer ? (
+              <>
+                <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={1.5} sx={{ mb: 2 }}>
+                  <Box>
+                    <Typography variant="h4">{selectedCustomer.name}</Typography>
+                    <Typography variant="body2" color="text.secondary">{selectedCustomer.businessName || 'Individual customer'}</Typography>
+                  </Box>
+                  <Stack direction="row" spacing={1}>
+                    <Button variant="outlined" onClick={() => openEdit(selectedCustomer)}>Edit</Button>
+                    <Button variant="outlined" color="error" onClick={() => void handleDelete()}>Delete</Button>
+                  </Stack>
+                </Stack>
+
+                <Tabs value={detailTab} onChange={(_, value) => setDetailTab(value)} sx={{ mb: 2 }}>
+                  <Tab label="Overview" />
+                  <Tab label="Operational Constraints" />
+                  <Tab label="Notes" />
+                </Tabs>
+
+                {detailTab === 0 ? (
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={6}>
+                      <SurfacePanel sx={{ bgcolor: 'rgba(255, 248, 242, 1)' }}>
+                        <Typography variant="subtitle2" color="text.secondary">Contact details</Typography>
+                        <Typography variant="body2" sx={{ mt: 1 }}>{selectedCustomer.phone || 'Phone not set'}</Typography>
+                        <Typography variant="body2">{selectedCustomer.email || 'Email not set'}</Typography>
+                      </SurfacePanel>
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <SurfacePanel sx={{ bgcolor: 'rgba(243, 236, 228, 0.8)' }}>
+                        <Typography variant="subtitle2" color="text.secondary">Address</Typography>
+                        <Typography variant="body2" sx={{ mt: 1 }}>{selectedCustomer.defaultAddress || selectedCustomer.address || 'No address saved'}</Typography>
+                      </SurfacePanel>
+                    </Grid>
+                  </Grid>
+                ) : null}
+
+                {detailTab === 1 ? (
+                  <SurfacePanel sx={{ bgcolor: 'rgba(255, 248, 242, 1)' }}>
+                    <Typography variant="subtitle2" color="text.secondary">Operational constraints</Typography>
+                    <Typography variant="body2" sx={{ mt: 1, whiteSpace: 'pre-line' }}>{selectedCustomer.exceptions || 'No operational constraints recorded yet.'}</Typography>
+                  </SurfacePanel>
+                ) : null}
+
+                {detailTab === 2 ? (
+                  <SurfacePanel sx={{ bgcolor: 'rgba(243, 236, 228, 0.8)' }}>
+                    <Typography variant="subtitle2" color="text.secondary">Notes</Typography>
+                    <Typography variant="body2" sx={{ mt: 1, whiteSpace: 'pre-line' }}>{selectedCustomer.notes || 'No notes recorded yet.'}</Typography>
+                  </SurfacePanel>
+                ) : null}
+              </>
+            ) : (
+              <Typography variant="body2" color="text.secondary">No customer selected.</Typography>
+            )}
+          </SurfacePanel>
+        </Grid>
+      </Grid>
+
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="md">
+        <DialogTitle>{editingCustomer ? 'Edit Customer' : 'Add Customer'}</DialogTitle>
+        <DialogContent sx={{ display: 'grid', gap: 2, pt: 2 }}>
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={6}><TextField label="Name" value={formData.name} onChange={(event) => setFormData((current) => ({ ...current, name: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={6}><TextField label="Business name" value={formData.businessName} onChange={(event) => setFormData((current) => ({ ...current, businessName: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={6}><TextField label="Phone" value={formData.phone} onChange={(event) => setFormData((current) => ({ ...current, phone: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={6}><TextField label="Email" value={formData.email} onChange={(event) => setFormData((current) => ({ ...current, email: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12}><TextField label="Address" multiline minRows={3} value={formData.defaultAddress} onChange={(event) => setFormData((current) => ({ ...current, defaultAddress: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={6}><TextField label="Service time" value={formData.serviceTime} onChange={(event) => setFormData((current) => ({ ...current, serviceTime: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={6}><TextField label="Time windows" value={formData.timeWindows} onChange={(event) => setFormData((current) => ({ ...current, timeWindows: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={4}><TextField label="Call ahead required" value={formData.callAheadRequired} onChange={(event) => setFormData((current) => ({ ...current, callAheadRequired: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={4}><TextField label="Gate code" value={formData.gateCode} onChange={(event) => setFormData((current) => ({ ...current, gateCode: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={4}><TextField label="Dock hours" value={formData.dockHours} onChange={(event) => setFormData((current) => ({ ...current, dockHours: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={6}><TextField label="Vehicle restrictions" value={formData.vehicleRestrictions} onChange={(event) => setFormData((current) => ({ ...current, vehicleRestrictions: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={6}><TextField label="Preferred territory" value={formData.preferredTerritory} onChange={(event) => setFormData((current) => ({ ...current, preferredTerritory: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={6}><TextField label="Signature required" value={formData.signatureRequired} onChange={(event) => setFormData((current) => ({ ...current, signatureRequired: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={6}><TextField label="Weekend restrictions" value={formData.weekendRestrictions} onChange={(event) => setFormData((current) => ({ ...current, weekendRestrictions: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12}><TextField label="Additional operational constraints" multiline minRows={3} value={formData.additionalConstraints} onChange={(event) => setFormData((current) => ({ ...current, additionalConstraints: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12}><TextField label="Notes" multiline minRows={3} value={formData.notes} onChange={(event) => setFormData((current) => ({ ...current, notes: event.target.value }))} fullWidth /></Grid>
+          </Grid>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={handleCloseDialog} disabled={submitting}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            variant="contained"
-            disabled={submitting || !formData.name || !addressValid}
-            data-testid="save-customer-button"
-            startIcon={submitting ? <CircularProgress size={16} /> : null}
-          >
-            {submitting ? 'Saving...' : editingCustomer ? 'Update' : 'Create'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog
-        open={openDeleteDialog}
-        onClose={handleCloseDeleteDialog}
-        maxWidth="xs"
-        fullWidth
-        PaperProps={{
-          sx: {
-            borderRadius: 2,
-          },
-        }}
-      >
-        <DialogTitle>Delete Customer?</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Are you sure you want to delete <strong>{deletingCustomer?.name}</strong>? This action cannot be undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={handleCloseDeleteDialog} disabled={submitting}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleDelete}
-            variant="contained"
-            color="error"
-            disabled={submitting}
-            startIcon={submitting ? <CircularProgress size={16} /> : null}
-          >
-            {submitting ? 'Deleting...' : 'Delete'}
-          </Button>
+        <DialogActions>
+          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={() => void handleSubmit()}>Save Customer</Button>
         </DialogActions>
       </Dialog>
     </Box>

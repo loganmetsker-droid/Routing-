@@ -13,7 +13,6 @@ import {
   Divider,
   Typography,
 } from '@mui/material';
-import LogoutIcon from '@mui/icons-material/Logout';
 import type { ReactNode } from 'react';
 import { moduleAccents, shellTokens } from '../../theme/tokens';
 
@@ -65,7 +64,7 @@ function NavList({
                 onClick={onItemClick}
                 selected={selected}
                 sx={{
-                  minHeight: 44,
+                  minHeight: 40,
                   justifyContent: compact ? 'center' : 'flex-start',
                   borderRadius: `${shellTokens.radius.md}px`,
                   px: compact ? 0 : 1.5,
@@ -96,6 +95,25 @@ function NavList({
   );
 }
 
+function LogoutGlyph() {
+  return (
+    <Box
+      sx={{
+        width: 18,
+        height: 18,
+        borderRadius: '5px',
+        display: 'grid',
+        placeItems: 'center',
+        border: '1px solid currentColor',
+      }}
+    >
+      <Typography sx={{ fontSize: 9, lineHeight: 1, fontWeight: 800 }}>
+        L
+      </Typography>
+    </Box>
+  );
+}
+
 export default function IconSidebar({
   items,
   activePath,
@@ -116,6 +134,7 @@ export default function IconSidebar({
           '& .MuiDrawer-paper': {
             width: shellTokens.sidebar.mobileWidth,
             boxSizing: 'border-box',
+            borderRight: (theme) => `1px solid ${alpha(theme.palette.divider, 0.7)}`,
           },
         }}
       >
@@ -123,7 +142,9 @@ export default function IconSidebar({
           <Typography variant="overline" sx={{ color: 'text.secondary', letterSpacing: '0.12em', fontWeight: 700 }}>
             Operations
           </Typography>
-          <Typography variant="h6">Signal Ops</Typography>
+          <Typography variant="h6" sx={{ color: 'primary.main', letterSpacing: '0.06em' }}>
+            TROVAN
+          </Typography>
         </Box>
         <Divider />
         <NavList
@@ -137,7 +158,7 @@ export default function IconSidebar({
         <Box sx={{ p: 1.25 }}>
           <ListItemButton onClick={onLogout} sx={{ borderRadius: `${shellTokens.radius.md}px` }}>
             <ListItemIcon sx={{ minWidth: 34 }}>
-              <LogoutIcon />
+              <LogoutGlyph />
             </ListItemIcon>
             <ListItemText primary="Logout" />
           </ListItemButton>
@@ -153,25 +174,22 @@ export default function IconSidebar({
             width: shellTokens.sidebar.compactWidth,
             boxSizing: 'border-box',
             borderRight: (theme) => `1px solid ${alpha(theme.palette.divider, 0.7)}`,
+            bgcolor: (theme) => alpha(theme.palette.background.paper, 0.94),
           },
         }}
       >
-        <Box sx={{ py: 2, display: 'flex', justifyContent: 'center' }}>
-          <Box
+        <Box sx={{ py: 1.5, display: 'flex', justifyContent: 'center' }}>
+          <Typography
+            variant="caption"
             sx={{
-              width: 30,
-              height: 30,
-              borderRadius: 1.5,
-              bgcolor: moduleAccents[activeModule],
-              color: '#fff',
-              fontSize: 13,
+              color: 'primary.main',
               fontWeight: 800,
-              display: 'grid',
-              placeItems: 'center',
+              letterSpacing: '0.12em',
+              transform: 'rotate(-90deg)',
             }}
           >
-            SO
-          </Box>
+            TROVAN
+          </Typography>
         </Box>
         <NavList items={items} activePath={activePath} activeModule={activeModule} compact />
         <Box sx={{ mt: 'auto', p: 1, display: 'flex', justifyContent: 'center' }}>
@@ -183,7 +201,7 @@ export default function IconSidebar({
                 border: (theme) => `1px solid ${alpha(theme.palette.divider, 0.9)}`,
               }}
             >
-              <LogoutIcon fontSize="small" />
+              <LogoutGlyph />
             </IconButton>
           </Tooltip>
         </Box>

@@ -8,10 +8,12 @@ import { ShiftsService } from './shifts.service';
 import { ShiftsController } from './shifts.controller';
 import { ShiftCompletionCron } from './shift-completion.cron';
 
+const scheduleImports = process.env.ENABLE_SCHEDULER === '1' ? [ScheduleModule.forRoot()] : [];
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([Shift, Driver, Vehicle]),
-    ScheduleModule.forRoot(),
+    ...scheduleImports,
   ],
   controllers: [ShiftsController],
   providers: [ShiftsService, ShiftCompletionCron],

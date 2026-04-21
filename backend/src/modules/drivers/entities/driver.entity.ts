@@ -19,6 +19,10 @@ export class Driver {
   @Field(() => ID)
   id: string;
 
+  @Column({ name: 'organization_id', type: 'uuid', nullable: true })
+  @Field({ nullable: true })
+  organizationId?: string;
+
   // Personal information
   @Column({ name: 'first_name', length: 100 })
   @Field()

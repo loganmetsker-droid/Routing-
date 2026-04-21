@@ -105,11 +105,17 @@ celerybeat.pid
 # Environments
 .env
 .venv
+.venv*/
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+
+# Local agent/runtime temp files
+.tmp/
+playwright-report*/
+frontend/artifacts/
 
 # Spyder project settings
 .spyderproject

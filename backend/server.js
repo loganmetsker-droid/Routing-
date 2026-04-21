@@ -3,12 +3,27 @@ const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const db = require('./db');
 
+if (process.env.LEGACY_SERVER_ENABLED !== 'true') {
+  throw new Error(
+    'Legacy Express server is disabled. Use the NestJS backend entrypoint instead.',
+  );
+}
+
 const app = express();
 const PORT = process.env.PORT || 3000;
+const allowedOrigins = (process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 // Middleware
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Origin not allowed'));
+  },
   credentials: true
 }));
 app.use(express.json());

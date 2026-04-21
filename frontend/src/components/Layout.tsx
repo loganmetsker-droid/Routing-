@@ -1,31 +1,10 @@
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import {
-  Dashboard as DashboardIcon,
-  DriveEta as VehiclesIcon,
-  Person as DriversIcon,
-  People as CustomersIcon,
-  LocalShipping as DispatchIcon,
-  Work as JobsIcon,
-  GpsFixed as TrackingIcon,
-} from '@mui/icons-material';
-import AppShell, { type ShellNavItem } from './shell/AppShell';
-import { useThemeMode } from '../contexts/ThemeContext';
+import { Outlet, useNavigate } from 'react-router-dom';
+import AppShell from '../layout/AppShell';
 import { clearAuthSession } from '../services/api';
-
-const menuItems: ShellNavItem[] = [
-  { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
-  { text: 'Jobs', icon: <JobsIcon />, path: '/jobs' },
-  { text: 'Dispatch', icon: <DispatchIcon />, path: '/dispatch' },
-  { text: 'Tracking', icon: <TrackingIcon />, path: '/tracking' },
-  { text: 'Drivers', icon: <DriversIcon />, path: '/drivers' },
-  { text: 'Vehicles', icon: <VehiclesIcon />, path: '/vehicles' },
-  { text: 'Customers', icon: <CustomersIcon />, path: '/customers' },
-];
+import ErrorBoundary from './ui/ErrorBoundary';
 
 export function Layout() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const { mode, toggleTheme } = useThemeMode();
 
   const handleLogout = () => {
     clearAuthSession();
@@ -33,15 +12,19 @@ export function Layout() {
   };
 
   return (
-    <AppShell
-      items={menuItems}
-      currentPath={location.pathname}
-      mode={mode}
-      onToggleTheme={toggleTheme}
-      onLogout={handleLogout}
+    <ErrorBoundary
+      title="Shell Render Error"
+      message="The Trovan shell failed to render one of its regions. Reload the interface and inspect the current build if the problem persists."
     >
-      <Outlet />
-    </AppShell>
+      <AppShell onLogout={handleLogout}>
+        <ErrorBoundary
+          title="Page Render Error"
+          message="This page failed to render. Reload to retry after the shell recovers."
+        >
+          <Outlet />
+        </ErrorBoundary>
+      </AppShell>
+    </ErrorBoundary>
   );
 }
 

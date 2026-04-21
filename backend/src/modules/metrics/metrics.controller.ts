@@ -1,4 +1,5 @@
 import { Controller, Get, Header } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { MetricsService } from './metrics.service';
 import { Public } from '../../common/decorators/public.decorator';
@@ -10,6 +11,7 @@ export class MetricsController {
 
   @Get()
   @Public()
+  @SkipThrottle()
   @Header('Content-Type', 'text/plain; version=0.0.4; charset=utf-8')
   @ApiOperation({
     summary: 'Get Prometheus metrics',

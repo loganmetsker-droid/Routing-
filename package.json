@@ -13,14 +13,27 @@
     "dev:frontend": "npm run dev --workspace=frontend",
     "build": "npm run build --workspaces",
     "test": "npm run test --workspaces",
+    "check:backend-deps": "npm ls --workspace=backend @nestjs/common @nestjs/core @nestjs/platform-express @nestjs/typeorm typeorm",
+    "desktop:dev": "npm --prefix desktop/electron run dev",
+    "desktop:stable": "npm --prefix desktop/electron run stable",
+    "desktop:install-linux": "bash desktop/linux/install-desktop-entry.sh",
+    "test:e2e:vertical-slice": "bash -lc 'status=0; bash scripts/stop_all.sh >/dev/null 2>&1 || true; bash scripts/start_stable.sh || status=$?; if [ \"$status\" -eq 0 ]; then npx playwright test -c playwright.vertical-slice.config.ts e2e-tests/routing-vertical-slice.spec.ts || status=$?; fi; bash scripts/stop_all.sh >/dev/null 2>&1 || true; exit $status'",
     "docker:dev": "docker-compose -f infrastructure/docker/docker-compose.dev.yml up",
     "docker:prod": "docker-compose -f infrastructure/docker/docker-compose.yml up",
     "k8s:deploy": "kubectl apply -f infrastructure/k8s/"
+  },
+  "dependencies": {
+    "@as-integrations/express5": "^1.1.2"
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",
     "concurrently": "^8.2.2",
     "typescript": "^5.3.3"
+  },
+  "overrides": {
+    "@nestjs/common": "11.1.17",
+    "@nestjs/core": "11.1.17",
+    "@nestjs/platform-express": "11.1.17"
   },
   "engines": {
     "node": ">=20.0.0",

@@ -15,6 +15,10 @@ export class Vehicle {
   @Field(() => ID)
   id: string;
 
+  @Column({ name: 'organization_id', type: 'uuid', nullable: true })
+  @Field({ nullable: true })
+  organizationId?: string;
+
   // Vehicle identification
   @Column({ length: 100 })
   @Field()

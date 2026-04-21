@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { BullModule } from '@nestjs/bull';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TerminusModule } from '@nestjs/terminus';
 import { APP_GUARD } from '@nestjs/core';
 import { join } from 'path';
@@ -14,9 +15,12 @@ import { graphqlConfig } from './config/graphql.config';
 
 // Guards
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { RolesGuard } from './common/guards/roles.guard';
 
 // Feature modules
 import { AuthModule } from './modules/auth/auth.module';
+import { OrganizationsModule } from './modules/organizations/organizations.module';
+import { DepotsModule } from './modules/depots/depots.module';
 import { DriversModule } from './modules/drivers/drivers.module';
 import { VehiclesModule } from './modules/vehicles/vehicles.module';
 import { ShiftsModule } from './modules/shifts/shifts.module';
@@ -26,19 +30,34 @@ import { DispatchModule } from './modules/dispatch/dispatch.module';
 import { RoutesModule } from './modules/routes/routes.module';
 import { DispatchesModule } from './modules/dispatches/dispatches.module';
 import { TrackingModule } from './modules/tracking/tracking.module';
+import { PlanningModule } from './modules/planning/planning.module';
 import { HealthModule } from './modules/health/health.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { AuditModule } from './common/audit/audit.module';
+import { RuntimeStatusModule } from './common/runtime/runtime-status.module';
 
 @Module({
   imports: [
     // Global configuration module
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: ['.env.local', '.env'],
+      envFilePath: [
+        join(process.cwd(), '.env.local'),
+        join(process.cwd(), '.env'),
+        join(process.cwd(), '..', '.env.local'),
+        join(process.cwd(), '..', '.env'),
+      ],
       cache: true,
       expandVariables: true,
     }),
+
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60_000,
+        limit: 120,
+      },
+    ]),
 
     // Database - PostgreSQL with TimescaleDB
     TypeOrmModule.forRootAsync({
@@ -90,11 +109,15 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
 
     // Health checks and monitoring
     TerminusModule,
+    RuntimeStatusModule,
     HealthModule,
     MetricsModule,
+    AuditModule,
 
     // Feature modules
     AuthModule,
+    OrganizationsModule,
+    DepotsModule,
     DriversModule,
     VehiclesModule,
     ShiftsModule,
@@ -104,14 +127,21 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
     RoutesModule,
     DispatchesModule,
     TrackingModule,
+    PlanningModule,
     SubscriptionsModule,
   ],
   providers: [
-    // Global JWT authentication guard
-    // Use @Public() decorator to bypass authentication on specific endpoints
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
     },
   ],
 })

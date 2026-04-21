@@ -11,6 +11,12 @@ const SOCKET_URL = (
   .replace(/\/+$/, '')
   .replace(/\/api$/, '');
 
+const SOCKETS_ENABLED =
+  import.meta.env.VITE_ENABLE_SOCKETS !== 'false' &&
+  import.meta.env.VITE_MOCK_PREVIEW !== 'true';
+
+let previewSocketsDisabledLogged = false;
+
 // Tracking namespace socket
 let trackingSocket: Socket | null = null;
 
@@ -20,24 +26,29 @@ let trackingSocket: Socket | null = null;
 export const getTrackingSocket = (): Socket => {
   if (!trackingSocket) {
     trackingSocket = io(`${SOCKET_URL}/tracking`, {
-      autoConnect: true,
-      reconnection: true,
+      autoConnect: SOCKETS_ENABLED,
+      reconnection: SOCKETS_ENABLED,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: Infinity,
     });
 
-    trackingSocket.on('connect', () => {
-      console.log('✅ Connected to tracking socket');
-    });
+    if (SOCKETS_ENABLED) {
+      trackingSocket.on('connect', () => {
+        console.log('✅ Connected to tracking socket');
+      });
 
-    trackingSocket.on('disconnect', (reason) => {
-      console.log('❌ Disconnected from tracking socket:', reason);
-    });
+      trackingSocket.on('disconnect', (reason) => {
+        console.log('❌ Disconnected from tracking socket:', reason);
+      });
 
-    trackingSocket.on('error', (error) => {
-      console.error('Socket error:', error);
-    });
+      trackingSocket.on('error', (error) => {
+        console.error('Socket error:', error);
+      });
+    } else if (!previewSocketsDisabledLogged) {
+      console.info('ℹ️ Sockets disabled via env; running in mock/preview mode.');
+      previewSocketsDisabledLogged = true;
+    }
   }
 
   return trackingSocket;
@@ -62,17 +73,22 @@ let dispatchSocket: Socket | null = null;
 export const getDispatchSocket = (): Socket => {
   if (!dispatchSocket) {
     dispatchSocket = io(`${SOCKET_URL}/dispatch`, {
-      autoConnect: true,
-      reconnection: true,
+      autoConnect: SOCKETS_ENABLED,
+      reconnection: SOCKETS_ENABLED,
     });
 
-    dispatchSocket.on('connect', () => {
-      console.log('✅ Connected to dispatch socket');
-    });
+    if (SOCKETS_ENABLED) {
+      dispatchSocket.on('connect', () => {
+        console.log('✅ Connected to dispatch socket');
+      });
 
-    dispatchSocket.on('disconnect', (reason) => {
-      console.log('❌ Disconnected from dispatch socket:', reason);
-    });
+      dispatchSocket.on('disconnect', (reason) => {
+        console.log('❌ Disconnected from dispatch socket:', reason);
+      });
+    } else if (!previewSocketsDisabledLogged) {
+      console.info('ℹ️ Sockets disabled via env; running in mock/preview mode.');
+      previewSocketsDisabledLogged = true;
+    }
   }
 
   return dispatchSocket;
@@ -93,6 +109,14 @@ export const disconnectDispatchSocket = () => {
  * into the SSE-style payloads used throughout the UI.
  */
 export const connectDispatchRealtime = (onMessage: (data: any) => void) => {
+  if (!SOCKETS_ENABLED) {
+    return {
+      close: () => {
+        // No-op in preview mode
+      },
+    };
+  }
+
   const socket = getDispatchSocket();
   const recent = new Map<string, number>();
   const DEDUPE_MS = 500;

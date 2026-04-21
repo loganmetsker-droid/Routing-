@@ -1,6 +1,5 @@
 import { alpha } from '@mui/material/styles';
 import { Box, IconButton, Tooltip, Typography } from '@mui/material';
-import { Menu as MenuIcon, Brightness4 as DarkModeIcon, Brightness7 as LightModeIcon } from '@mui/icons-material';
 import StatusPill from '../ui/StatusPill';
 import { moduleAccents, shellTokens } from '../../theme/tokens';
 
@@ -24,25 +23,27 @@ export default function Topbar({
   return (
     <Box
       sx={{
-        height: 72,
-        px: { xs: 2, md: 3 },
+        height: 64,
+        px: { xs: 2, md: 2.5 },
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         borderBottom: (theme) => `1px solid ${alpha(theme.palette.divider, 0.8)}`,
-        backdropFilter: 'blur(8px)',
+        backdropFilter: 'blur(12px)',
         bgcolor: mode === 'dark' ? shellTokens.background.topbarDark : shellTokens.background.topbarLight,
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
         <IconButton onClick={onOpenMobileNav} sx={{ display: { md: 'none' } }}>
-          <MenuIcon />
+          <Typography sx={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.06em' }}>
+            MENU
+          </Typography>
         </IconButton>
         <Box>
-          <Typography variant="caption" sx={{ display: 'block', letterSpacing: '0.1em', color: 'text.secondary' }}>
-            SIGNAL OPS
+          <Typography variant="caption" sx={{ display: 'block', letterSpacing: '0.12em', color: 'primary.main', fontWeight: 700 }}>
+            TROVAN OPS
           </Typography>
-          <Typography variant="h6" sx={{ lineHeight: 1.2 }}>
+          <Typography variant="subtitle1" sx={{ lineHeight: 1.1, fontWeight: 700 }}>
             {title}
           </Typography>
         </Box>
@@ -50,7 +51,7 @@ export default function Topbar({
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
         <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
-          <StatusPill label={activeModule.toUpperCase()} color={moduleAccents[activeModule]} />
+          <StatusPill compact label={activeModule.toUpperCase()} color={moduleAccents[activeModule]} />
         </Box>
         <Tooltip title={mode === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}>
           <IconButton
@@ -60,7 +61,9 @@ export default function Topbar({
               borderRadius: `${shellTokens.radius.sm}px`,
             }}
           >
-            {mode === 'dark' ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
+            <Typography sx={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.04em' }}>
+              {mode === 'dark' ? 'LIGHT' : 'DARK'}
+            </Typography>
           </IconButton>
         </Tooltip>
       </Box>

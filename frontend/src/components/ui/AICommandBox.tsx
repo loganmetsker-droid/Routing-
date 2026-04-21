@@ -10,7 +10,7 @@ export default function AICommandBox({ defaultText = 'Suggest route balancing an
     <Box
       sx={{
         p: { xs: 2, md: 2.5 },
-        borderRadius: 4,
+        borderRadius: 2.5,
         border: '1px solid',
         borderColor: 'divider',
         bgcolor: 'background.paper',
@@ -30,7 +30,7 @@ export default function AICommandBox({ defaultText = 'Suggest route balancing an
         defaultValue={defaultText}
         placeholder="Type dispatch intent..."
       />
-      <Stack direction="row" spacing={1} sx={{ mt: 1.25 }}>
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1.25 }}>
         <Button size="small" variant="outlined" startIcon={<Tune />} sx={{ borderRadius: 2 }}>
           Refine
         </Button>

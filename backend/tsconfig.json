@@ -25,9 +25,11 @@
       "@/*": ["src/*"],
       "@modules/*": ["src/modules/*"],
       "@common/*": ["src/common/*"],
-      "@config/*": ["src/config/*"]
+      "@config/*": ["src/config/*"],
+      "@shared/*": ["../shared/*"],
+      "@nestjs/*": ["./node_modules/@nestjs/*"]
     }
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "../shared/**/*"],
   "exclude": ["node_modules", "dist", "test"]
 }

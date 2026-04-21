@@ -12,7 +12,11 @@ DATABASE_URL = os.getenv(
 )
 
 # Create SQLAlchemy engine
-engine = create_engine(DATABASE_URL, echo=True)
+engine = create_engine(
+    DATABASE_URL,
+    echo=os.getenv("SQL_ECHO", "false").lower() == "true",
+    pool_pre_ping=True,
+)
 
 # Create SessionLocal class
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)

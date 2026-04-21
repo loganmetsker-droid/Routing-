@@ -5,7 +5,7 @@ export interface DispatchJob {
   pickupAddress?: string;
   status: string;
   priority?: string;
-  assignedRouteId?: string;
+  assignedRouteId?: string | null;
   assignedVehicleId?: string;
   stopSequence?: number;
   createdAt?: string;
@@ -37,6 +37,7 @@ export interface DispatchRoute {
   completedStops?: number;
   totalStops?: number;
   estimatedTimeRemaining?: number;
+  eta?: string;
   path?: [number, number][];
   routeData?: any;
   dataQuality?: 'live' | 'degraded' | 'simulated';

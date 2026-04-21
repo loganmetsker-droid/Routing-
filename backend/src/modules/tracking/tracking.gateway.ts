@@ -11,11 +11,7 @@ import {
 import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { Interval } from '@nestjs/schedule';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { TrackingService, VehicleLocation } from './tracking.service';
-import { Vehicle } from '../vehicles/entities/vehicle.entity';
-import { Telemetry } from './entities/telemetry.entity';
 
 /**
  * WebSocket Gateway for real-time vehicle tracking
@@ -36,13 +32,7 @@ export class TrackingGateway
   private readonly logger = new Logger(TrackingGateway.name);
   private connectedClients = new Set<string>();
 
-  constructor(
-    private readonly trackingService: TrackingService,
-    @InjectRepository(Vehicle)
-    private readonly vehicleRepository: Repository<Vehicle>,
-    @InjectRepository(Telemetry)
-    private readonly telemetryRepository: Repository<Telemetry>,
-  ) {}
+  constructor(private readonly trackingService: TrackingService) {}
 
   /**
    * Gateway initialization
@@ -254,30 +244,20 @@ export class TrackingGateway
       );
 
       // Validate data
-      if (!data.vehicleId || !data.lat || !data.lng) {
+      if (
+        !data.vehicleId ||
+        typeof data.lat !== 'number' ||
+        Number.isNaN(data.lat) ||
+        typeof data.lng !== 'number' ||
+        Number.isNaN(data.lng)
+      ) {
         return {
           event: 'error',
           data: { message: 'Missing required fields: vehicleId, lat, lng' },
         };
       }
 
-      // Update vehicle current location
-      await this.vehicleRepository.update(data.vehicleId, {
-        currentLocation: { lat: data.lat, lng: data.lng } as any,
-      });
-
-      // Store in telemetry table for history
-      const telemetry = this.telemetryRepository.create({
-        vehicleId: data.vehicleId,
-        location: { lat: data.lat, lng: data.lng },
-        speed: data.speed || null,
-        heading: data.heading || null,
-        timestamp: new Date(data.timestamp),
-      });
-      await this.telemetryRepository.save(telemetry);
-
-      // Broadcast to all connected clients (dispatchers, other drivers)
-      this.server.emit('vehicle:location-update', {
+      const persisted = await this.trackingService.ingestTelemetry({
         vehicleId: data.vehicleId,
         lat: data.lat,
         lng: data.lng,
@@ -286,15 +266,25 @@ export class TrackingGateway
         timestamp: data.timestamp,
       });
 
+      // Broadcast to all connected clients (dispatchers, other drivers)
+      this.server.emit('vehicle:location-update', {
+        vehicleId: persisted.vehicleId,
+        lat: data.lat,
+        lng: data.lng,
+        speed: data.speed,
+        heading: data.heading,
+        timestamp: persisted.timestamp,
+      });
+
       this.logger.log(
-        `✅ Location updated for vehicle ${data.vehicleId} and broadcast to clients`,
+        `✅ Location updated for vehicle ${persisted.vehicleId} and broadcast to clients`,
       );
 
       return {
         event: 'location:acknowledged',
         data: {
-          vehicleId: data.vehicleId,
-          timestamp: new Date().toISOString(),
+          vehicleId: persisted.vehicleId,
+          timestamp: persisted.timestamp,
         },
       };
     } catch (error) {

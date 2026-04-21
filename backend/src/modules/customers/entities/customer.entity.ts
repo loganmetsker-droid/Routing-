@@ -18,6 +18,10 @@ export class Customer {
   @Field(() => ID)
   id: string;
 
+  @Column({ name: 'organization_id', type: 'uuid', nullable: true })
+  @Field({ nullable: true })
+  organizationId?: string;
+
   @Column({ length: 200 })
   @Field()
   name: string;

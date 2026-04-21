@@ -1,0 +1,68 @@
+{
+  "product": "dispatch-saas-foundation",
+  "operatingModel": "local-delivery",
+  "planningScope": {
+    "serviceWindow": "single-day",
+    "depotModel": "single-primary-depot",
+    "dispatcherModel": "single-dispatcher-workflow"
+  },
+  "architecture": "modular-monolith",
+  "versions": [
+    {
+      "version": "v1.0",
+      "phase": 0,
+      "slug": "stabilize-direction",
+      "title": "Stabilize Direction",
+      "file": "v1.0-phase-0-stabilize-direction.md",
+      "recall": ["v1.0", "phase-0", "stabilize-direction"]
+    },
+    {
+      "version": "v1.1",
+      "phase": 1,
+      "slug": "core-domain-and-schema",
+      "title": "Core Domain and Schema",
+      "file": "v1.1-phase-1-core-domain-and-schema.md",
+      "recall": ["v1.1", "phase-1", "core-domain-schema"]
+    },
+    {
+      "version": "v1.2",
+      "phase": 2,
+      "slug": "planning-workflow",
+      "title": "Planning Workflow",
+      "file": "v1.2-phase-2-planning-workflow.md",
+      "recall": ["v1.2", "phase-2", "planning-workflow"]
+    },
+    {
+      "version": "v1.3",
+      "phase": 3,
+      "slug": "execution-workflow",
+      "title": "Execution Workflow",
+      "file": "v1.3-phase-3-execution-workflow.md",
+      "recall": ["v1.3", "phase-3", "execution-workflow"]
+    },
+    {
+      "version": "v1.4",
+      "phase": 4,
+      "slug": "optimizer-foundation",
+      "title": "Optimizer Foundation",
+      "file": "v1.4-phase-4-optimizer-foundation.md",
+      "recall": ["v1.4", "phase-4", "optimizer-foundation"]
+    },
+    {
+      "version": "v1.5",
+      "phase": 5,
+      "slug": "saas-foundation",
+      "title": "SaaS Foundation",
+      "file": "v1.5-phase-5-saas-foundation.md",
+      "recall": ["v1.5", "phase-5", "saas-foundation"]
+    },
+    {
+      "version": "v1.6",
+      "phase": 6,
+      "slug": "production-hardening",
+      "title": "Production Hardening",
+      "file": "v1.6-phase-6-production-hardening.md",
+      "recall": ["v1.6", "phase-6", "production-hardening"]
+    }
+  ]
+}

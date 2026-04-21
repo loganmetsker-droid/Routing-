@@ -42,6 +42,10 @@ export class Job {
   @Field(() => ID)
   id: string;
 
+  @Column({ name: 'organization_id', type: 'uuid', nullable: true })
+  @Field({ nullable: true })
+  organizationId?: string;
+
   @Column({ name: 'customer_name', length: 200 })
   @Field()
   customerName: string;

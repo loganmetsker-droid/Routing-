@@ -7,6 +7,10 @@ export interface JwtPayload {
   sub: string; // User ID
   email: string;
   role?: string;
+  roles?: string[];
+  organizationId?: string;
+  organizationSlug?: string;
+  membershipId?: string;
   iat?: number;
   exp?: number;
 }
@@ -21,10 +25,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: configService.get<string>(
-        'JWT_SECRET',
-        'your-secret-key-change-in-production',
-      ),
+      secretOrKey:
+        configService.get<string>('JWT_SECRET') ||
+        (configService.get<string>('NODE_ENV') === 'development'
+          ? 'development-only-jwt-secret'
+          : undefined),
     });
   }
 
@@ -41,6 +46,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       userId: payload.sub,
       email: payload.email,
       role: payload.role,
+      roles: Array.isArray(payload.roles)
+        ? payload.roles.map((role) => String(role).trim().toUpperCase())
+        : payload.role
+          ? [String(payload.role).trim().toUpperCase()]
+          : [],
+      organizationId: payload.organizationId,
+      organizationSlug: payload.organizationSlug,
+      membershipId: payload.membershipId,
     };
   }
 }

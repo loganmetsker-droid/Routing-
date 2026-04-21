@@ -8,6 +8,7 @@ import {
 
 export type DispatchEventSource = 'optimizer' | 'reroute' | 'workflow' | 'system';
 export type DispatchEventLevel = 'info' | 'warning' | 'error';
+export type DispatchAggregateType = 'ROUTE' | 'JOB' | 'VEHICLE' | 'ROUTE_VERSION';
 
 @Entity('dispatch_events')
 @Index(['routeId', 'createdAt'])
@@ -22,6 +23,18 @@ export class DispatchEvent {
 
   @Column({ name: 'route_id', type: 'uuid', nullable: true })
   routeId?: string | null;
+
+  @Column({ name: 'aggregate_type', type: 'varchar', length: 32, default: 'ROUTE' })
+  aggregateType: DispatchAggregateType;
+
+  @Column({ name: 'aggregate_id', type: 'uuid', nullable: true })
+  aggregateId?: string | null;
+
+  @Column({ name: 'event_type', type: 'varchar', length: 120, default: 'UNKNOWN' })
+  eventType: string;
+
+  @Column({ name: 'actor_user_id', type: 'varchar', length: 128, nullable: true })
+  actorUserId?: string | null;
 
   @Column({ type: 'varchar', length: 32 })
   source: DispatchEventSource;

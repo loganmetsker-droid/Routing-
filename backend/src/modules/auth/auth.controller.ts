@@ -41,6 +41,10 @@ export class AuthController {
             id: { type: 'string' },
             email: { type: 'string' },
             role: { type: 'string' },
+            roles: {
+              type: 'array',
+              items: { type: 'string' },
+            },
           },
         },
       },
@@ -55,7 +59,12 @@ export class AuthController {
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: 'Get authenticated session user' })
   @ApiResponse({ status: 200, description: 'Current authenticated user' })
-  me(@Req() req: { user: { userId: string; email: string; role?: string } }) {
+  me(
+    @Req()
+    req: {
+      user: { userId: string; email: string; role?: string; roles?: string[] };
+    },
+  ) {
     return {
       user: this.authService.getSessionUser(req.user),
     };

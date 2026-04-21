@@ -1,7 +1,8 @@
 import { alpha, createTheme, ThemeOptions } from '@mui/material/styles';
+import { shellTokens, trovanTokens } from './theme/tokens';
 
-const headingFont = '"Space Grotesk", "Inter", "Segoe UI", sans-serif';
-const bodyFont = '"Inter", "Segoe UI", sans-serif';
+const headingFont = trovanTokens.typography.heading;
+const bodyFont = trovanTokens.typography.body;
 
 export const createAppTheme = (mode: 'light' | 'dark' = 'light') => {
   const isDark = mode === 'dark';
@@ -10,90 +11,90 @@ export const createAppTheme = (mode: 'light' | 'dark' = 'light') => {
     ? {
         mode,
         primary: {
-          main: '#14B8A6',
-          light: '#5EEAD4',
-          dark: '#0F766E',
-          contrastText: '#031716',
+          main: trovanTokens.color.copper[400],
+          light: trovanTokens.color.copper[300],
+          dark: trovanTokens.color.copper[500],
+          contrastText: trovanTokens.color.slate[950],
         },
         secondary: {
-          main: '#F59E0B',
-          light: '#FCD34D',
-          dark: '#B45309',
-          contrastText: '#1C1202',
+          main: trovanTokens.color.slate[300],
+          light: trovanTokens.color.slate[200],
+          dark: trovanTokens.color.slate[500],
+          contrastText: trovanTokens.color.slate[950],
         },
         success: {
-          main: '#22C55E',
-          light: '#4ADE80',
-          dark: '#15803D',
+          main: '#43A87A',
+          light: '#67C192',
+          dark: '#2E7D58',
         },
         warning: {
-          main: '#F59E0B',
-          light: '#FBBF24',
-          dark: '#B45309',
+          main: '#D09A43',
+          light: '#E1B56A',
+          dark: '#B7791F',
         },
         error: {
-          main: '#F87171',
-          light: '#FCA5A5',
-          dark: '#DC2626',
+          main: '#D56B6B',
+          light: '#E09292',
+          dark: '#B23A3A',
         },
         info: {
-          main: '#60A5FA',
-          light: '#93C5FD',
-          dark: '#2563EB',
+          main: '#5C88B3',
+          light: '#7AA2C7',
+          dark: '#2F6EA8',
         },
         background: {
-          default: '#111827',
-          paper: '#17212B',
+          default: trovanTokens.color.slate[950],
+          paper: trovanTokens.color.slate[900],
         },
         text: {
-          primary: '#E5E7EB',
-          secondary: '#A7B1BC',
+          primary: '#E8EEF4',
+          secondary: '#A8B7C6',
         },
-        divider: alpha('#E5E7EB', 0.1),
+        divider: alpha('#E8EEF4', 0.12),
       }
     : {
         mode,
         primary: {
-          main: '#0F766E',
-          light: '#2DA79D',
-          dark: '#115E59',
-          contrastText: '#F6F5F0',
+          main: trovanTokens.color.copper[500],
+          light: trovanTokens.color.copper[400],
+          dark: trovanTokens.color.copper[700],
+          contrastText: '#FFF9F2',
         },
         secondary: {
-          main: '#C96F2D',
-          light: '#DD8B4E',
-          dark: '#A85B25',
-          contrastText: '#FFF8F2',
+          main: trovanTokens.color.slate[700],
+          light: trovanTokens.color.slate[600],
+          dark: trovanTokens.color.slate[900],
+          contrastText: '#F4F7FB',
         },
         success: {
-          main: '#2F855A',
-          light: '#48BB78',
-          dark: '#276749',
+          main: trovanTokens.color.semantic.success,
+          light: '#4C9A72',
+          dark: '#246045',
         },
         warning: {
-          main: '#D69E2E',
-          light: '#ECC94B',
-          dark: '#B7791F',
+          main: trovanTokens.color.semantic.warning,
+          light: '#CC9238',
+          dark: '#93611A',
         },
         error: {
-          main: '#C53030',
-          light: '#E53E3E',
-          dark: '#9B2C2C',
+          main: trovanTokens.color.semantic.danger,
+          light: '#CF5D5D',
+          dark: '#8C2D2D',
         },
         info: {
-          main: '#2B6CB0',
-          light: '#4299E1',
-          dark: '#2C5282',
+          main: trovanTokens.color.semantic.info,
+          light: '#4D82B3',
+          dark: '#245781',
         },
         background: {
-          default: '#F3F1EC',
-          paper: '#FBF9F4',
+          default: trovanTokens.color.slate[50],
+          paper: '#FFFFFF',
         },
         text: {
-          primary: '#1F2A2E',
-          secondary: '#55636B',
+          primary: '#1A252F',
+          secondary: '#5A6D7E',
         },
-        divider: alpha('#1F2A2E', 0.12),
+        divider: alpha('#1A252F', 0.12),
       };
 
   const themeOptions: ThemeOptions = {
@@ -140,15 +141,13 @@ export const createAppTheme = (mode: 'light' | 'dark' = 'light') => {
       },
     },
     shape: {
-      borderRadius: 16,
+      borderRadius: trovanTokens.radius.md,
     },
     components: {
       MuiCssBaseline: {
         styleOverrides: {
           body: {
-            background: isDark
-              ? 'radial-gradient(circle at top left, rgba(20,184,166,0.14), transparent 28%), radial-gradient(circle at top right, rgba(245,158,11,0.12), transparent 24%), #111827'
-              : 'radial-gradient(circle at top left, rgba(15,118,110,0.10), transparent 28%), radial-gradient(circle at top right, rgba(201,111,45,0.10), transparent 24%), #F3F1EC',
+            background: isDark ? trovanTokens.color.slate[950] : trovanTokens.color.slate[50],
             color: palette.text.primary,
             minHeight: '100vh',
             scrollbarWidth: 'thin',
@@ -179,7 +178,7 @@ export const createAppTheme = (mode: 'light' | 'dark' = 'light') => {
             color: palette.text.primary,
             borderBottom: `1px solid ${alpha(palette.text.primary, 0.08)}`,
             boxShadow: 'none',
-            backdropFilter: 'blur(14px)',
+            backdropFilter: 'blur(12px)',
           },
         },
       },
@@ -196,18 +195,14 @@ export const createAppTheme = (mode: 'light' | 'dark' = 'light') => {
       MuiButton: {
         styleOverrides: {
           root: {
-            borderRadius: 12,
+            borderRadius: trovanTokens.radius.md,
             padding: '10px 18px',
-            transition: 'all 0.2s ease',
-            '&:active': {
-              transform: 'scale(0.98)',
-            },
+            transition: 'background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease',
           },
           contained: {
-            boxShadow: `0 14px 22px -16px ${alpha(palette.primary.main, 0.55)}`,
+            boxShadow: `0 10px 22px -16px ${alpha(palette.primary.main, 0.45)}`,
             '&:hover': {
-              boxShadow: `0 18px 28px -16px ${alpha(palette.primary.main, 0.65)}`,
-              transform: 'translateY(-1px)',
+              boxShadow: `0 14px 24px -16px ${alpha(palette.primary.main, 0.52)}`,
             },
           },
           outlined: {
@@ -224,7 +219,7 @@ export const createAppTheme = (mode: 'light' | 'dark' = 'light') => {
           root: {
             backgroundImage: 'none',
             border: `1px solid ${alpha(palette.text.primary, 0.08)}`,
-            boxShadow: `0 18px 36px -30px ${alpha('#000000', isDark ? 0.75 : 0.25)}`,
+            boxShadow: isDark ? `0 18px 36px -30px ${alpha('#000000', 0.75)}` : shellTokens.shadow.soft,
           },
         },
       },
@@ -233,31 +228,27 @@ export const createAppTheme = (mode: 'light' | 'dark' = 'light') => {
           root: {
             backgroundImage: 'none',
             border: `1px solid ${alpha(palette.text.primary, 0.08)}`,
-            boxShadow: `0 18px 36px -30px ${alpha('#000000', isDark ? 0.75 : 0.2)}`,
-            transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-            '&:hover': {
-              transform: 'translateY(-2px)',
-            },
+            boxShadow: isDark ? `0 18px 36px -30px ${alpha('#000000', 0.75)}` : shellTokens.shadow.soft,
+            transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
           },
         },
       },
       MuiChip: {
         styleOverrides: {
           root: {
-            borderRadius: 999,
-            fontWeight: 700,
+            borderRadius: trovanTokens.radius.sm,
+            fontWeight: 600,
           },
         },
       },
       MuiListItemButton: {
         styleOverrides: {
           root: {
-            borderRadius: 14,
+            borderRadius: trovanTokens.radius.md,
             margin: '4px 10px',
-            transition: 'all 0.2s ease',
+            transition: 'background-color 0.2s ease, border-color 0.2s ease',
             '&:hover': {
               backgroundColor: alpha(palette.primary.main, 0.08),
-              transform: 'translateX(3px)',
             },
             '&.Mui-selected': {
               backgroundColor: alpha(palette.primary.main, 0.14),
@@ -284,7 +275,7 @@ export const createAppTheme = (mode: 'light' | 'dark' = 'light') => {
         styleOverrides: {
           root: {
             '& .MuiOutlinedInput-root': {
-              borderRadius: 14,
+              borderRadius: trovanTokens.radius.sm,
               '&.Mui-focused': {
                 boxShadow: `0 0 0 4px ${alpha(palette.primary.main, 0.12)}`,
               },

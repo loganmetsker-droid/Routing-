@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Dispatch Functionality', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('http://localhost:5174/dispatches');
+    await page.goto('http://127.0.0.1:5184/dispatch');
     // Wait for the page to load
     await page.waitForLoadState('networkidle');
   });

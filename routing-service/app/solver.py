@@ -1,64 +1,262 @@
 """Google OR-Tools VRP solver for route optimization."""
 
-from typing import List, Dict, Any, Tuple
-from ortools.constraint_solver import routing_enums_pb2
-from ortools.constraint_solver import pywrapcp
+from __future__ import annotations
+
 import math
 from datetime import datetime, timedelta
+from typing import Any, Dict, List, Tuple
+
+from ortools.constraint_solver import pywrapcp, routing_enums_pb2
+
+from app.schemas import (
+    OptimizeRequest,
+    OptimizeResponse,
+    RouteOutput,
+    RouteStopOutput,
+)
 
 
-def calculate_distance(loc1: Tuple[float, float], loc2: Tuple[float, float]) -> float:
-    """
-    Calculate Haversine distance between two lat/lon points in kilometers.
+LatLng = Tuple[float, float]
 
-    Args:
-        loc1: (latitude, longitude) tuple
-        loc2: (latitude, longitude) tuple
 
-    Returns:
-        Distance in kilometers
-    """
+def calculate_distance(loc1: LatLng, loc2: LatLng) -> float:
     lat1, lon1 = loc1
     lat2, lon2 = loc2
-
-    # Radius of Earth in kilometers
-    R = 6371.0
-
-    # Convert to radians
+    radius_km = 6371.0
     lat1_rad = math.radians(lat1)
     lat2_rad = math.radians(lat2)
     dlon = math.radians(lon2 - lon1)
     dlat = math.radians(lat2 - lat1)
-
-    # Haversine formula
-    a = math.sin(dlat / 2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2)**2
+    a = (
+        math.sin(dlat / 2) ** 2
+        + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
+    )
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    distance = R * c
-
-    return distance
+    return radius_km * c
 
 
-def create_distance_matrix(locations: List[Tuple[float, float]]) -> List[List[int]]:
-    """
-    Create distance matrix from list of locations.
-
-    Args:
-        locations: List of (latitude, longitude) tuples
-
-    Returns:
-        Distance matrix in meters (as integers)
-    """
-    n = len(locations)
-    matrix = [[0] * n for _ in range(n)]
-
-    for i in range(n):
-        for j in range(n):
-            if i != j:
-                # Convert km to meters and round to integer
-                distance_km = calculate_distance(locations[i], locations[j])
-                matrix[i][j] = int(distance_km * 1000)
-
+def create_distance_matrix(locations: List[LatLng]) -> List[List[int]]:
+    matrix = [[0] * len(locations) for _ in locations]
+    for i, origin in enumerate(locations):
+        for j, destination in enumerate(locations):
+            if i == j:
+                continue
+            matrix[i][j] = int(calculate_distance(origin, destination) * 1000)
     return matrix
+
+
+def build_time_matrix(
+    locations: List[LatLng], avg_speed_kph: float = 35.0
+) -> List[List[int]]:
+    matrix: List[List[int]] = []
+    for i, origin in enumerate(locations):
+        row: List[int] = []
+        for j, destination in enumerate(locations):
+            if i == j:
+                row.append(0)
+                continue
+            km = calculate_distance(origin, destination)
+            seconds = int((km / avg_speed_kph) * 3600)
+            row.append(seconds)
+        matrix.append(row)
+    return matrix
+
+
+def create_time_callback(manager, time_matrix, service_seconds):
+    def time_callback(from_index, to_index):
+        from_node = manager.IndexToNode(from_index)
+        to_node = manager.IndexToNode(to_index)
+        travel = time_matrix[from_node][to_node]
+        service = service_seconds[from_node]
+        return travel + service
+
+    return time_callback
+
+
+def solve_optimize_request(request: OptimizeRequest) -> OptimizeResponse:
+    if not request.vehicles:
+        return OptimizeResponse(
+            routes=[],
+            unassigned_stop_ids=[stop.id for stop in request.stops],
+            warnings=["No vehicles were provided."],
+        )
+
+    if not request.stops:
+        return OptimizeResponse(routes=[], unassigned_stop_ids=[], warnings=[])
+
+    num_vehicles = len(request.vehicles)
+    num_stops = len(request.stops)
+
+    start_locations = [
+        (vehicle.start_lat, vehicle.start_lng) for vehicle in request.vehicles
+    ]
+    end_locations = [
+        (
+            vehicle.end_lat if vehicle.end_lat is not None else vehicle.start_lat,
+            vehicle.end_lng if vehicle.end_lng is not None else vehicle.start_lng,
+        )
+        for vehicle in request.vehicles
+    ]
+    stop_locations = [(stop.lat, stop.lng) for stop in request.stops]
+    locations = start_locations + stop_locations + end_locations
+
+    starts = list(range(num_vehicles))
+    ends = [num_vehicles + num_stops + idx for idx in range(num_vehicles)]
+
+    manager = pywrapcp.RoutingIndexManager(
+        len(locations),
+        num_vehicles,
+        starts,
+        ends,
+    )
+    routing = pywrapcp.RoutingModel(manager)
+
+    distance_matrix = create_distance_matrix(locations)
+    time_matrix = build_time_matrix(locations)
+    service_seconds = [0] * len(locations)
+    demand_values = [0] * len(locations)
+
+    for stop_idx, stop in enumerate(request.stops):
+        node_idx = num_vehicles + stop_idx
+        service_seconds[node_idx] = max(0, int(stop.service_minutes * 60))
+        demand_values[node_idx] = max(0, int(stop.volume * 100))
+
+    def distance_callback(from_index, to_index):
+        from_node = manager.IndexToNode(from_index)
+        to_node = manager.IndexToNode(to_index)
+        return distance_matrix[from_node][to_node]
+
+    distance_callback_index = routing.RegisterTransitCallback(distance_callback)
+    routing.SetArcCostEvaluatorOfAllVehicles(distance_callback_index)
+
+    time_callback_index = routing.RegisterTransitCallback(
+        create_time_callback(manager, time_matrix, service_seconds)
+    )
+    routing.AddDimension(
+        time_callback_index,
+        3600,
+        max(vehicle.max_route_minutes for vehicle in request.vehicles) * 60,
+        True,
+        "Time",
+    )
+    time_dimension = routing.GetDimensionOrDie("Time")
+
+    for vehicle_idx, vehicle in enumerate(request.vehicles):
+        time_dimension.CumulVar(routing.End(vehicle_idx)).SetMax(
+            max(0, vehicle.max_route_minutes * 60)
+        )
+
+    def demand_callback(from_index):
+        from_node = manager.IndexToNode(from_index)
+        return demand_values[from_node]
+
+    demand_callback_index = routing.RegisterUnaryTransitCallback(demand_callback)
+    routing.AddDimensionWithVehicleCapacity(
+        demand_callback_index,
+        0,
+        [max(0, int(vehicle.capacity_volume * 100)) for vehicle in request.vehicles],
+        True,
+        "Capacity",
+    )
+
+    planning_epoch = request.plan_date
+    for stop_idx, stop in enumerate(request.stops):
+        index = manager.NodeToIndex(num_vehicles + stop_idx)
+        start_window = (
+            int((stop.tw_start - planning_epoch).total_seconds())
+            if stop.tw_start
+            else 0
+        )
+        end_window = (
+            int((stop.tw_end - planning_epoch).total_seconds())
+            if stop.tw_end
+            else 24 * 3600
+        )
+        if end_window < start_window:
+            end_window = start_window
+        time_dimension.CumulVar(index).SetRange(start_window, end_window)
+
+        penalty = {1: 100_000, 2: 50_000, 3: 10_000, 4: 5_000}.get(stop.priority, 10_000)
+        routing.AddDisjunction([index], penalty)
+
+        if stop.locked_vehicle_id:
+            for vehicle_idx, vehicle in enumerate(request.vehicles):
+                if vehicle.id == stop.locked_vehicle_id:
+                    routing.SetAllowedVehiclesForIndex([vehicle_idx], index)
+                    break
+
+    search_parameters = pywrapcp.DefaultRoutingSearchParameters()
+    search_parameters.first_solution_strategy = (
+        routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
+    )
+    search_parameters.local_search_metaheuristic = (
+        routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
+    )
+    search_parameters.time_limit.seconds = 10
+
+    solution = routing.SolveWithParameters(search_parameters)
+    if not solution:
+        return OptimizeResponse(
+            routes=[],
+            unassigned_stop_ids=[stop.id for stop in request.stops],
+            warnings=["No feasible solution found."],
+        )
+
+    assigned_stop_ids: set[str] = set()
+    routes: List[RouteOutput] = []
+
+    for vehicle_idx, vehicle in enumerate(request.vehicles):
+        ordered_stops: List[RouteStopOutput] = []
+        index = routing.Start(vehicle_idx)
+        total_distance_m = 0
+
+        while not routing.IsEnd(index):
+            node_index = manager.IndexToNode(index)
+            previous_index = index
+            next_index = solution.Value(routing.NextVar(index))
+
+            if num_vehicles <= node_index < num_vehicles + num_stops:
+                stop_idx = node_index - num_vehicles
+                stop = request.stops[stop_idx]
+                eta_seconds = solution.Value(time_dimension.CumulVar(index))
+                ordered_stops.append(
+                    RouteStopOutput(
+                        stop_id=stop.id,
+                        sequence=len(ordered_stops) + 1,
+                        eta=planning_epoch + timedelta(seconds=eta_seconds),
+                    )
+                )
+                assigned_stop_ids.add(stop.id)
+
+            total_distance_m += routing.GetArcCostForVehicle(
+                previous_index, next_index, vehicle_idx
+            )
+            index = next_index
+
+        total_duration_s = solution.Value(time_dimension.CumulVar(routing.End(vehicle_idx)))
+        routes.append(
+            RouteOutput(
+                vehicle_id=vehicle.id,
+                ordered_stops=ordered_stops,
+                total_distance_m=float(total_distance_m),
+                total_duration_s=float(total_duration_s),
+            )
+        )
+
+    unassigned_stop_ids = [
+        stop.id for stop in request.stops if stop.id not in assigned_stop_ids
+    ]
+    warnings = []
+    if unassigned_stop_ids:
+        warnings.append(
+            f"{len(unassigned_stop_ids)} stop(s) could not be assigned within current constraints."
+        )
+
+    return OptimizeResponse(
+        routes=routes,
+        unassigned_stop_ids=unassigned_stop_ids,
+        warnings=warnings,
+    )
 
 
 def solve_vrp(
@@ -71,174 +269,73 @@ def solve_vrp(
     priorities: List[int],
     job_volumes: List[float],
 ) -> Dict[str, Any]:
-    """
-    Solve Multi-Vehicle Routing Problem using Google OR-Tools.
-
-    Args:
-        vehicle_locations: List of (lat, lon) for each vehicle's current position
-        vehicle_ids: List of vehicle UUIDs
-        vehicle_capacities: List of vehicle volume capacities
-        job_locations: List of (lat, lon) for each job's delivery location
-        job_ids: List of job UUIDs
-        time_windows: List of (start, end) datetime tuples for each job
-        priorities: List of priority values
-        job_volumes: List of volume limits for jobs
-
-    Returns:
-        Dictionary with optimized routes for each vehicle
-    """
-    # Prepare locations: [all depots] + [all jobs]
-    locations = vehicle_locations + job_locations
-    num_vehicles = len(vehicle_locations)
-    num_locations = len(locations)
-
-    starts = list(range(num_vehicles))
-    ends = list(range(num_vehicles))
-
-    # Create distance matrix
-    distance_matrix = create_distance_matrix(locations)
-
-    # Create routing index manager
-    manager = pywrapcp.RoutingIndexManager(
-        num_locations,
-        num_vehicles,
-        starts,
-        ends
-    )
-
-    # Create routing model
-    routing = pywrapcp.RoutingModel(manager)
-
-    # Define cost of each arc (distance callback)
-    def distance_callback(from_index, to_index):
-        """Return distance between two nodes."""
-        from_node = manager.IndexToNode(from_index)
-        to_node = manager.IndexToNode(to_index)
-        return distance_matrix[from_node][to_node]
-
-    transit_callback_index = routing.RegisterTransitCallback(distance_callback)
-    routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
-
-    # Add time window constraints
-    time_dimension_name = 'Time'
-    # We enforce a hard limit of 90 minutes (5400 seconds) for the vehicle's total trip duration.
-    routing.AddDimension(
-        transit_callback_index,
-        3600,  # Allow waiting time
-        5400,  # Maximum time per vehicle (90 minutes)
-        False,  # Don't force start cumul to zero
-        time_dimension_name
-    )
-    time_dimension = routing.GetDimensionOrDie(time_dimension_name)
-
-    # Add Capacity constraints
-    def demand_callback(from_index):
-        from_node = manager.IndexToNode(from_index)
-        if from_node < num_vehicles:
-            return 0
-        job_idx = from_node - num_vehicles
-        return int(job_volumes[job_idx] * 100)
-
-    demand_callback_index = routing.RegisterUnaryTransitCallback(demand_callback)
-    routing.AddDimensionWithVehicleCapacity(
-        demand_callback_index,
-        0,
-        [int(cap * 100) for cap in vehicle_capacities],
-        True,
-        'Capacity'
-    )
-
-    # Add time windows for jobs
-    for location_idx in range(num_vehicles, num_locations):
-        index = manager.NodeToIndex(location_idx)
-        job_idx = location_idx - num_vehicles
-
-        start_time = int(time_windows[job_idx][0].timestamp())
-        end_time = int(time_windows[job_idx][1].timestamp())
-
-        time_dimension.CumulVar(index).SetRange(start_time, end_time)
-
-    # Priority
-    for location_idx in range(num_vehicles, num_locations):
-        index = manager.NodeToIndex(location_idx)
-        job_idx = location_idx - num_vehicles
-        priority_penalty = priorities[job_idx] * 1000
-        routing.AddDisjunction([index], priority_penalty)
-
-    # Set search parameters
-    search_parameters = pywrapcp.DefaultRoutingSearchParameters()
-    search_parameters.first_solution_strategy = (
-        routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
-    )
-    search_parameters.local_search_metaheuristic = (
-        routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
-    )
-    search_parameters.time_limit.seconds = 10
-
-    solution = routing.SolveWithParameters(search_parameters)
-
-    if not solution:
-        return {
-            "success": False,
-            "error": "No solution found",
-            "routes": {},
-            "unassigned_jobs": job_ids
-        }
-
-    routes = {}
-    assigned_jobs = set()
-
-    for vehicle_idx in range(num_vehicles):
-        vehicle_id = vehicle_ids[vehicle_idx]
-        route = []
-        total_distance = 0
-        index = routing.Start(vehicle_idx)
-
-        while not routing.IsEnd(index):
-            node_index = manager.IndexToNode(index)
-
-            if node_index >= num_vehicles:
-                job_idx = node_index - num_vehicles
-                time_var = time_dimension.CumulVar(index)
-                arrival_time = solution.Value(time_var)
-                
-                route.append({
-                    "job_id": job_ids[job_idx],
-                    "sequence": len(route) + 1,
-                    "location": {
-                        "latitude": job_locations[job_idx][0],
-                        "longitude": job_locations[job_idx][1]
-                    },
-                    "estimated_arrival": datetime.fromtimestamp(arrival_time).isoformat(),
-                    "time_window_start": time_windows[job_idx][0].isoformat(),
-                    "time_window_end": time_windows[job_idx][1].isoformat(),
-                    "priority": priorities[job_idx],
-                    "volume": job_volumes[job_idx]
-                })
-                assigned_jobs.add(job_ids[job_idx])
-
-            previous_index = index
-            index = solution.Value(routing.NextVar(index))
-            total_distance += routing.GetArcCostForVehicle(previous_index, index, vehicle_idx)
-
-        total_distance_km = total_distance / 1000.0
-        total_duration_minutes = (total_distance_km / 40.0) * 60
-
-        routes[vehicle_id] = {
-            "route": route,
-            "total_distance_km": round(total_distance_km, 2),
-            "total_duration_minutes": round(total_duration_minutes, 2),
-            "num_jobs": len(route),
-            "vehicle_start_location": {
-                "latitude": vehicle_locations[vehicle_idx][0],
-                "longitude": vehicle_locations[vehicle_idx][1]
+    request = OptimizeRequest(
+        plan_date=min((window[0] for window in time_windows), default=datetime.utcnow()),
+        vehicles=[
+            {
+                "id": vehicle_id,
+                "start_lat": vehicle_locations[idx][0],
+                "start_lng": vehicle_locations[idx][1],
+                "capacity_volume": vehicle_capacities[idx],
+                "max_route_minutes": 480,
             }
+            for idx, vehicle_id in enumerate(vehicle_ids)
+        ],
+        stops=[
+            {
+                "id": job_ids[idx],
+                "lat": job_locations[idx][0],
+                "lng": job_locations[idx][1],
+                "service_minutes": 10,
+                "tw_start": time_windows[idx][0],
+                "tw_end": time_windows[idx][1],
+                "priority": priorities[idx],
+                "volume": job_volumes[idx],
+            }
+            for idx in range(len(job_ids))
+        ],
+    )
+
+    result = solve_optimize_request(request)
+    routes: Dict[str, Any] = {}
+    stop_lookup = {stop.id: stop for stop in request.stops}
+    for route in result.routes:
+        ordered = []
+        for stop in route.ordered_stops:
+            stop_input = stop_lookup[stop.stop_id]
+            ordered.append(
+                {
+                    "job_id": stop.stop_id,
+                    "sequence": stop.sequence,
+                    "location": {
+                        "latitude": stop_input.lat,
+                        "longitude": stop_input.lng,
+                    },
+                    "estimated_arrival": stop.eta.isoformat() if stop.eta else None,
+                    "time_window_start": stop_input.tw_start.isoformat()
+                    if stop_input.tw_start
+                    else None,
+                    "time_window_end": stop_input.tw_end.isoformat()
+                    if stop_input.tw_end
+                    else None,
+                    "priority": stop_input.priority,
+                    "volume": stop_input.volume,
+                }
+            )
+        routes[route.vehicle_id] = {
+            "route": ordered,
+            "total_distance_km": round(route.total_distance_m / 1000, 2),
+            "total_duration_minutes": round(route.total_duration_s / 60, 2),
+            "num_jobs": len(ordered),
+            "vehicle_start_location": {
+                "latitude": request.vehicles[vehicle_ids.index(route.vehicle_id)].start_lat,
+                "longitude": request.vehicles[vehicle_ids.index(route.vehicle_id)].start_lng,
+            },
         }
-    
-    unassigned_jobs = [jid for jid in job_ids if jid not in assigned_jobs]
 
     return {
         "success": True,
         "routes": routes,
-        "unassigned_jobs": unassigned_jobs
+        "unassigned_jobs": result.unassigned_stop_ids,
+        "warnings": result.warnings,
     }

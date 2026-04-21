@@ -1,459 +1,255 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Box,
-  Typography,
-  Tabs,
-  Tab,
-  Grid,
-  Card,
-  CardContent,
-  CardActions,
   Button,
   Chip,
-  CircularProgress,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   Dialog,
-  DialogTitle,
-  DialogContent,
   DialogActions,
+  DialogContent,
+  DialogTitle,
+  Grid,
+  MenuItem,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
-  IconButton,
+  Typography,
 } from '@mui/material';
-import {
-  Add,
-  DirectionsCar,
-  Build,
-  LocalShipping,
-  Edit,
-} from '@mui/icons-material';
-import { motion } from 'framer-motion';
+import { PageHeader } from '../components/PageHeader';
+import { SurfacePanel } from '../components/SurfacePanel';
+import LoadingState from '../components/ui/LoadingState';
+import { getVehicles as fetchVehicles, createVehicle, updateVehicle } from '../services/api';
 
-const API_BASE_URL = (import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(/\/+$/, '').replace(/\/api$/, '');
+const VEHICLE_TYPES = ['CAR', 'PICKUP', 'CARGO_VAN', 'SPRINTER_VAN', 'BOX_TRUCK', 'STRAIGHT_TRUCK', 'SEMI_TRACTOR', 'REEFER', 'FLATBED'] as const;
 
-const container = {
-  hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.05,
-    },
-  },
-};
-
-const item = {
-  hidden: { scale: 0.9, opacity: 0 },
-  show: { scale: 1, opacity: 1 },
+const VEHICLE_META: Record<string, { label: string; weight: string; volume: string; extras: string[] }> = {
+  CAR: { label: 'Car', weight: '400 lb', volume: '60 cu ft', extras: ['Urban only'] },
+  PICKUP: { label: 'Pickup', weight: '1500 lb', volume: '80 cu ft', extras: ['Open bed'] },
+  CARGO_VAN: { label: 'Cargo van', weight: '3500 lb', volume: '260 cu ft', extras: ['Parcel ready'] },
+  SPRINTER_VAN: { label: 'Sprinter van', weight: '4200 lb', volume: '420 cu ft', extras: ['Tall cargo'] },
+  BOX_TRUCK: { label: 'Box truck', weight: '10000 lb', volume: '900 cu ft', extras: ['Dock friendly'] },
+  STRAIGHT_TRUCK: { label: 'Straight truck', weight: '18000 lb', volume: '1200 cu ft', extras: ['Regional route'] },
+  SEMI_TRACTOR: { label: 'Semi tractor', weight: '45000 lb', volume: 'Trailer dependent', extras: ['Long haul'] },
+  REEFER: { label: 'Reefer', weight: '12000 lb', volume: '1000 cu ft', extras: ['Refrigeration'] },
+  FLATBED: { label: 'Flatbed', weight: '22000 lb', volume: 'Open deck', extras: ['Oversized freight'] },
 };
 
 export default function VehiclesPage() {
-  const [tab, setTab] = useState(0);
-  const [selectedType, setSelectedType] = useState('truck');
-  const [openDialog, setOpenDialog] = useState(false);
-  const [editingVehicle, setEditingVehicle] = useState<any>(null);
+  const [vehicles, setVehicles] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState('all');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingVehicle, setEditingVehicle] = useState<any | null>(null);
   const [formData, setFormData] = useState({
     make: '',
     model: '',
     year: new Date().getFullYear(),
     licensePlate: '',
-    vehicleType: 'TRUCK',
+    vehicleType: 'BOX_TRUCK',
     status: 'AVAILABLE',
     vin: '',
     fuelType: 'DIESEL',
     capacity: 1000,
+    volumeCapacity: '',
+    weightCapacity: '',
+    territoryRestriction: '',
+    maxRouteMinutes: '',
   });
-  const [submitting, setSubmitting] = useState(false);
-  const [vehicles, setVehicles] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  const loadVehicles = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/vehicles`);
-      const data = await response.json();
-      setVehicles(data.vehicles || []);
-    } catch (error) {
-      console.error('Error loading vehicles:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   useEffect(() => {
-    loadVehicles();
+    let mounted = true;
+    const load = async () => {
+      try {
+        const data = await fetchVehicles();
+        if (!mounted) return;
+        setVehicles(Array.isArray(data) ? data : []);
+      } catch (error) {
+        console.error('Failed to load vehicles', error);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  const handleOpenDialog = (vehicle?: any) => {
-    if (vehicle) {
-      setEditingVehicle(vehicle);
-      setFormData({
-        make: vehicle.make || '',
-        model: vehicle.model || '',
-        year: vehicle.year || new Date().getFullYear(),
-        licensePlate: vehicle.licensePlate || '',
-        vehicleType: vehicle.vehicleType || vehicle.type || 'TRUCK',
-        status: vehicle.status || 'AVAILABLE',
-        vin: vehicle.vin || '',
-        fuelType: vehicle.fuelType || 'DIESEL',
-        capacity: vehicle.capacity || 1000,
-      });
-    } else {
-      setEditingVehicle(null);
-      setFormData({
-        make: '',
-        model: '',
-        year: new Date().getFullYear(),
-        licensePlate: '',
-        vehicleType: 'TRUCK',
-        status: 'AVAILABLE',
-        vin: '',
-        fuelType: 'DIESEL',
-        capacity: 1000,
-      });
-    }
-    setOpenDialog(true);
+  const visibleVehicles = useMemo(() => {
+    if (filter === 'all') return vehicles;
+    return vehicles.filter((vehicle) => String(vehicle.vehicleType || vehicle.type).toUpperCase() === filter);
+  }, [filter, vehicles]);
+
+  const openCreate = () => {
+    setEditingVehicle(null);
+    setFormData({
+      make: '',
+      model: '',
+      year: new Date().getFullYear(),
+      licensePlate: '',
+      vehicleType: 'BOX_TRUCK',
+      status: 'AVAILABLE',
+      vin: '',
+      fuelType: 'DIESEL',
+      capacity: 1000,
+      volumeCapacity: '',
+      weightCapacity: '',
+      territoryRestriction: '',
+      maxRouteMinutes: '',
+    });
+    setDialogOpen(true);
   };
 
-  const handleCloseDialog = () => {
-    setOpenDialog(false);
-    setEditingVehicle(null);
+  const openEdit = (vehicle: any) => {
+    setEditingVehicle(vehicle);
+    setFormData({
+      make: vehicle.make || '',
+      model: vehicle.model || '',
+      year: vehicle.year || new Date().getFullYear(),
+      licensePlate: vehicle.licensePlate || '',
+      vehicleType: vehicle.vehicleType || vehicle.type || 'BOX_TRUCK',
+      status: vehicle.status || 'AVAILABLE',
+      vin: vehicle.vin || '',
+      fuelType: vehicle.fuelType || 'DIESEL',
+      capacity: vehicle.capacity || 1000,
+      volumeCapacity: vehicle.volumeCapacity || '',
+      weightCapacity: vehicle.weightCapacity || '',
+      territoryRestriction: vehicle.territoryRestriction || '',
+      maxRouteMinutes: vehicle.maxRouteMinutes || '',
+    });
+    setDialogOpen(true);
   };
 
   const handleSubmit = async () => {
-    setSubmitting(true);
+    const payload = {
+      make: formData.make,
+      model: formData.model,
+      year: formData.year,
+      licensePlate: formData.licensePlate,
+      vehicleType: formData.vehicleType,
+      status: formData.status,
+      vin: formData.vin,
+      fuelType: formData.fuelType,
+      capacity: formData.capacity,
+    };
+
     try {
       if (editingVehicle) {
-        await fetch(`${API_BASE_URL}/api/vehicles/${editingVehicle.id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData),
-        });
+        await updateVehicle(editingVehicle.id, payload);
       } else {
-        await fetch(`${API_BASE_URL}/api/vehicles`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData),
-        });
+        await createVehicle(payload as any);
       }
-      handleCloseDialog();
-      await loadVehicles();
+      setDialogOpen(false);
+      const data = await fetchVehicles();
+      setVehicles(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error('Error saving vehicle:', error);
-    } finally {
-      setSubmitting(false);
+      console.error('Failed to save vehicle', error);
     }
   };
 
-  const getVehicles = () => {
-    if (tab === 0) return vehicles;
-    if (tab === 1) return vehicles.filter(v => v.vehicleType?.toLowerCase() === selectedType.toLowerCase() || v.type?.toLowerCase() === selectedType.toLowerCase());
-    return vehicles.filter(v => v.status?.toUpperCase() === 'MAINTENANCE');
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status?.toUpperCase()) {
-      case 'AVAILABLE':
-        return 'success';
-      case 'IN_ROUTE':
-        return 'primary';
-      case 'MAINTENANCE':
-        return 'warning';
-      case 'OFF_DUTY':
-        return 'default';
-      default:
-        return 'default';
-    }
-  };
-
-  const getVehicleIcon = (type: string) => {
-    switch (type?.toUpperCase()) {
-      case 'TRUCK':
-      case 'BOX_TRUCK':
-        return <LocalShipping sx={{ fontSize: 40, color: 'primary.main' }} />;
-      case 'VAN':
-      case 'CARGO_VAN':
-        return <DirectionsCar sx={{ fontSize: 40, color: 'secondary.main' }} />;
-      default:
-        return <DirectionsCar sx={{ fontSize: 40, color: 'grey.500' }} />;
-    }
-  };
-
-  const displayedVehicles = getVehicles();
+  if (loading) {
+    return <LoadingState label="Loading vehicles..." minHeight="50vh" />;
+  }
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" fontWeight={600}>
-          Fleet Management
-        </Typography>
-        <Button
-          variant="contained"
-          color="primary"
-          startIcon={<Add />}
-          onClick={() => handleOpenDialog()}
-          data-testid="add-vehicle-button"
-          sx={{ textTransform: 'none', borderRadius: 2 }}
-        >
-          Add Vehicle
-        </Button>
-      </Box>
+      <PageHeader eyebrow="Resources" title="Vehicles" subtitle="Fleet semantics now reflect actual routing operations, not a tiny generic CRUD grid." actions={<Button variant="contained" onClick={openCreate}>Add Vehicle</Button>} />
 
-      <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
-        <Tab label="All Vehicles" sx={{ textTransform: 'none', fontWeight: 600 }} />
-        <Tab label="By Type" sx={{ textTransform: 'none', fontWeight: 600 }} />
-        <Tab label="Needs Maintenance" sx={{ textTransform: 'none', fontWeight: 600 }} />
-      </Tabs>
+      <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 2 }}>
+        <Chip clickable label="All" color={filter === 'all' ? 'primary' : 'default'} onClick={() => setFilter('all')} />
+        {VEHICLE_TYPES.map((type) => <Chip key={type} clickable label={VEHICLE_META[type].label} color={filter === type ? 'primary' : 'default'} onClick={() => setFilter(type)} />)}
+      </Stack>
 
-      {tab === 1 && (
-        <FormControl sx={{ mb: 3, minWidth: 200 }}>
-          <InputLabel>Vehicle Type</InputLabel>
-          <Select
-            value={selectedType}
-            label="Vehicle Type"
-            onChange={(e) => setSelectedType(e.target.value)}
-          >
-            <MenuItem value="truck">Truck</MenuItem>
-            <MenuItem value="van">Van</MenuItem>
-            <MenuItem value="car">Car</MenuItem>
-          </Select>
-        </FormControl>
-      )}
-
-      {loading ? (
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="50vh">
-          <CircularProgress size={48} />
-        </Box>
-      ) : displayedVehicles.length > 0 ? (
-        <motion.div variants={container} initial="hidden" animate="show">
-          <Grid container spacing={3}>
-            {displayedVehicles.map((vehicle: any) => (
-              <Grid item xs={12} sm={6} md={4} lg={3} key={vehicle.id}>
-                <motion.div variants={item}>
-                  <Card
-                    sx={{
-                      height: '100%',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      transition: 'transform 0.2s, box-shadow 0.2s',
-                      '&:hover': {
-                        transform: 'translateY(-4px)',
-                        boxShadow: 4,
-                      },
-                    }}
-                  >
-                    <CardContent sx={{ flexGrow: 1 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                        <Box
-                          sx={{
-                            bgcolor: 'grey.100',
-                            borderRadius: 2,
-                            p: 1.5,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                          }}
-                        >
-                          {getVehicleIcon(vehicle.vehicleType || vehicle.type)}
-                        </Box>
-                        <Chip
-                          label={vehicle.status}
-                          color={getStatusColor(vehicle.status)}
-                          size="small"
-                          sx={{ fontWeight: 500 }}
-                        />
-                      </Box>
-                      <Typography variant="h6" fontWeight={600} gutterBottom>
-                        {vehicle.make} {vehicle.model}
-                      </Typography>
-                      <Typography variant="body2" color="textSecondary" gutterBottom>
-                        {vehicle.year} • {vehicle.vehicleType || vehicle.type}
-                      </Typography>
-                      <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                        <Typography variant="caption" color="textSecondary">
-                          License Plate: <strong>{vehicle.licensePlate}</strong>
-                        </Typography>
-                        {vehicle.capacity && (
-                          <Typography variant="caption" color="textSecondary">
-                            Capacity: <strong>{vehicle.capacity} kg</strong>
-                          </Typography>
-                        )}
-                      </Box>
-                    </CardContent>
-                    <CardActions sx={{ px: 2, pb: 2 }}>
-                      <Button
-                        size="small"
-                        startIcon={<Build />}
-                        sx={{ textTransform: 'none' }}
-                      >
-                        Maintenance
-                      </Button>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleOpenDialog(vehicle)}
-                        sx={{
-                          ml: 'auto',
-                          '&:hover': {
-                            bgcolor: 'primary.light',
-                            color: 'primary.contrastText',
-                          },
-                        }}
-                      >
-                        <Edit fontSize="small" />
-                      </IconButton>
-                    </CardActions>
-                  </Card>
-                </motion.div>
-              </Grid>
-            ))}
+      <Grid container spacing={2.5} sx={{ mb: 2.5 }}>
+        {VEHICLE_TYPES.slice(0, 4).map((type) => (
+          <Grid item xs={12} md={6} xl={3} key={type}>
+            <SurfacePanel>
+              <Typography variant="subtitle2" color="text.secondary">{VEHICLE_META[type].label}</Typography>
+              <Typography variant="h4" sx={{ mt: 1 }}>{vehicles.filter((vehicle) => String(vehicle.vehicleType || vehicle.type).toUpperCase() === type).length}</Typography>
+              <Typography variant="body2" color="text.secondary">{VEHICLE_META[type].weight} • {VEHICLE_META[type].volume}</Typography>
+            </SurfacePanel>
           </Grid>
-        </motion.div>
-      ) : (
-        <Box sx={{ textAlign: 'center', py: 8 }}>
-          <DirectionsCar sx={{ fontSize: 64, color: 'grey.400', mb: 2 }} />
-          <Typography variant="h6" color="textSecondary" gutterBottom>
-            No vehicles found
-          </Typography>
-          <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
-            Add your first vehicle to start managing your fleet
-          </Typography>
-          <Button variant="contained" startIcon={<Add />} onClick={() => handleOpenDialog()}>
-            Add Vehicle
-          </Button>
-        </Box>
-      )}
+        ))}
+      </Grid>
 
-      {/* Add/Edit Dialog */}
-      <Dialog
-        open={openDialog}
-        onClose={handleCloseDialog}
-        maxWidth="md"
-        fullWidth
-        PaperProps={{ sx: { borderRadius: 2 } }}
-      >
-        <DialogTitle>
-          {editingVehicle ? 'Edit Vehicle' : 'Add New Vehicle'}
-        </DialogTitle>
-        <DialogContent>
-          <Box sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Make"
-                  name="make"
-                  value={formData.make}
-                  onChange={(e) => setFormData({ ...formData, make: e.target.value })}
-                  fullWidth
-                  required
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Model"
-                  name="model"
-                  value={formData.model}
-                  onChange={(e) => setFormData({ ...formData, model: e.target.value })}
-                  fullWidth
-                  required
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Year"
-                  name="year"
-                  type="number"
-                  value={formData.year}
-                  onChange={(e) => setFormData({ ...formData, year: parseInt(e.target.value) })}
-                  fullWidth
-                  required
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="License Plate"
-                  name="licensePlate"
-                  value={formData.licensePlate}
-                  onChange={(e) => setFormData({ ...formData, licensePlate: e.target.value })}
-                  fullWidth
-                  required
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="VIN"
-                  value={formData.vin}
-                  onChange={(e) => setFormData({ ...formData, vin: e.target.value })}
-                  fullWidth
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Vehicle Type"
-                  select
-                  value={formData.vehicleType}
-                  onChange={(e) => setFormData({ ...formData, vehicleType: e.target.value })}
-                  fullWidth
-                >
-                  <MenuItem value="TRUCK">Truck</MenuItem>
-                  <MenuItem value="VAN">Van</MenuItem>
-                  <MenuItem value="CAR">Car</MenuItem>
-                </TextField>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Fuel Type"
-                  select
-                  value={formData.fuelType}
-                  onChange={(e) => setFormData({ ...formData, fuelType: e.target.value })}
-                  fullWidth
-                >
-                  <MenuItem value="DIESEL">Diesel</MenuItem>
-                  <MenuItem value="GASOLINE">Gasoline</MenuItem>
-                  <MenuItem value="ELECTRIC">Electric</MenuItem>
-                  <MenuItem value="HYBRID">Hybrid</MenuItem>
-                </TextField>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  label="Capacity (kg)"
-                  type="number"
-                  value={formData.capacity}
-                  onChange={(e) => setFormData({ ...formData, capacity: parseInt(e.target.value) })}
-                  fullWidth
-                  helperText="Vehicle weight capacity in kilograms"
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  label="Status"
-                  select
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  fullWidth
-                >
-                  <MenuItem value="AVAILABLE">Available</MenuItem>
-                  <MenuItem value="IN_ROUTE">In Route</MenuItem>
-                  <MenuItem value="MAINTENANCE">Maintenance</MenuItem>
-                  <MenuItem value="OFF_DUTY">Off Duty</MenuItem>
-                </TextField>
-              </Grid>
-            </Grid>
-          </Box>
+      <SurfacePanel sx={{ p: 0, overflow: 'hidden' }}>
+        <Box sx={{ px: 2.5, py: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+          <Typography variant="h5">Fleet Directory</Typography>
+          <Typography variant="body2" color="text.secondary">Vehicle types, capacities, and operational attributes are ready for richer fleet rules.</Typography>
+        </Box>
+        <TableContainer>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Vehicle</TableCell>
+                <TableCell>Type</TableCell>
+                <TableCell>Operational profile</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {visibleVehicles.map((vehicle) => {
+                const key = String(vehicle.vehicleType || vehicle.type || 'BOX_TRUCK').toUpperCase();
+                const meta = VEHICLE_META[key] || VEHICLE_META.BOX_TRUCK;
+                return (
+                  <TableRow key={vehicle.id} hover>
+                    <TableCell>
+                      <Stack spacing={0.25}>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>{vehicle.make} {vehicle.model}</Typography>
+                        <Typography variant="caption" color="text.secondary">{vehicle.licensePlate || 'Plate pending'} • {vehicle.year || 'Year pending'}</Typography>
+                      </Stack>
+                    </TableCell>
+                    <TableCell>{meta.label}</TableCell>
+                    <TableCell>
+                      <Stack spacing={0.25}>
+                        <Typography variant="body2">Weight: {vehicle.weightCapacity || meta.weight}</Typography>
+                        <Typography variant="body2">Volume: {vehicle.volumeCapacity || meta.volume}</Typography>
+                        <Typography variant="caption" color="text.secondary">{vehicle.territoryRestriction || 'Territory open'} • {vehicle.maxRouteMinutes || 'Route duration ready'}</Typography>
+                      </Stack>
+                    </TableCell>
+                    <TableCell>
+                      <Stack direction="row" spacing={1} flexWrap="wrap">
+                        <Chip size="small" label={vehicle.status || 'AVAILABLE'} color={String(vehicle.status).toUpperCase() === 'AVAILABLE' ? 'success' : 'default'} />
+                        {meta.extras.map((extra) => <Chip key={extra} size="small" variant="outlined" label={extra} />)}
+                      </Stack>
+                    </TableCell>
+                    <TableCell><Button size="small" onClick={() => openEdit(vehicle)}>Edit</Button></TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </SurfacePanel>
+
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="md">
+        <DialogTitle>{editingVehicle ? 'Edit Vehicle' : 'Add Vehicle'}</DialogTitle>
+        <DialogContent sx={{ display: 'grid', gap: 2, pt: 2 }}>
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={6}><TextField label="Make" value={formData.make} onChange={(event) => setFormData((current) => ({ ...current, make: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={6}><TextField label="Model" value={formData.model} onChange={(event) => setFormData((current) => ({ ...current, model: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={4}><TextField label="Year" type="number" value={formData.year} onChange={(event) => setFormData((current) => ({ ...current, year: Number(event.target.value) }))} fullWidth /></Grid>
+            <Grid item xs={12} md={4}><TextField label="License plate" value={formData.licensePlate} onChange={(event) => setFormData((current) => ({ ...current, licensePlate: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={4}><TextField label="VIN" value={formData.vin} onChange={(event) => setFormData((current) => ({ ...current, vin: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={4}><TextField select label="Vehicle type" value={formData.vehicleType} onChange={(event) => setFormData((current) => ({ ...current, vehicleType: event.target.value }))} fullWidth>{VEHICLE_TYPES.map((type) => <MenuItem key={type} value={type}>{VEHICLE_META[type].label}</MenuItem>)}</TextField></Grid>
+            <Grid item xs={12} md={4}><TextField select label="Status" value={formData.status} onChange={(event) => setFormData((current) => ({ ...current, status: event.target.value }))} fullWidth><MenuItem value="AVAILABLE">Available</MenuItem><MenuItem value="IN_ROUTE">In route</MenuItem><MenuItem value="MAINTENANCE">Maintenance</MenuItem><MenuItem value="OFF_DUTY">Off duty</MenuItem></TextField></Grid>
+            <Grid item xs={12} md={4}><TextField label="Capacity" type="number" value={formData.capacity} onChange={(event) => setFormData((current) => ({ ...current, capacity: Number(event.target.value) }))} fullWidth /></Grid>
+            <Grid item xs={12} md={4}><TextField label="Volume capacity" value={formData.volumeCapacity} onChange={(event) => setFormData((current) => ({ ...current, volumeCapacity: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={4}><TextField label="Weight capacity" value={formData.weightCapacity} onChange={(event) => setFormData((current) => ({ ...current, weightCapacity: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={4}><TextField label="Max route minutes" value={formData.maxRouteMinutes} onChange={(event) => setFormData((current) => ({ ...current, maxRouteMinutes: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={6}><TextField label="Territory restriction" value={formData.territoryRestriction} onChange={(event) => setFormData((current) => ({ ...current, territoryRestriction: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={6}><TextField select label="Fuel type" value={formData.fuelType} onChange={(event) => setFormData((current) => ({ ...current, fuelType: event.target.value }))} fullWidth><MenuItem value="DIESEL">Diesel</MenuItem><MenuItem value="GAS">Gas</MenuItem><MenuItem value="ELECTRIC">Electric</MenuItem></TextField></Grid>
+          </Grid>
+          <Typography variant="body2" color="text.secondary">Expanded fleet semantics are available in the UI now. Backend persistence for the advanced operational fields can be wired separately without blocking this redesign.</Typography>
         </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={handleCloseDialog} disabled={submitting}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            variant="contained"
-            disabled={submitting}
-            data-testid="save-vehicle-button"
-            startIcon={submitting ? <CircularProgress size={16} /> : null}
-          >
-            {submitting ? 'Saving...' : editingVehicle ? 'Update' : 'Create'}
-          </Button>
+        <DialogActions>
+          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={() => void handleSubmit()}>Save Vehicle</Button>
         </DialogActions>
       </Dialog>
     </Box>

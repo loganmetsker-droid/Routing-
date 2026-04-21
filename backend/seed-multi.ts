@@ -1,189 +1,199 @@
-// backend/seed-multi.ts
-import { DataSource } from 'typeorm';
-import { Driver } from './src/modules/drivers/entities/driver.entity';
-import { Vehicle } from './src/modules/vehicles/entities/vehicle.entity';
-import { Job } from './src/modules/jobs/entities/job.entity';
-import { Route, RouteStatus } from './src/modules/dispatch/entities/route.entity';
 import { AppDataSource } from './src/data-source';
-
-type Address = {
-  street: string;
-  street2?: string;
-  city: string;
-  state: string;
-  zip: string;
-};
-
-function generateAddresses(): Address[] {
-  const streets = ['Main St', 'Oak Ave', 'Pine Rd', 'Elm St', 'Maple Ln', 'Cedar Ct'];
-  const cities = ['Denver', 'Aurora', 'Boulder', 'Lakewood', 'Englewood'];
-  const states = ['CO'];
-  const zips = ['80202', '80203', '80204', '80205', '80206'];
-
-  const addresses: Address[] = [];
-  for (let i = 0; i < 20; i++) {
-    addresses.push({
-      street: `${Math.floor(Math.random() * 999)} ${streets[Math.floor(Math.random() * streets.length)]}`,
-      street2: Math.random() > 0.5 ? `Apt ${Math.floor(Math.random() * 999)}` : '',
-      city: cities[Math.floor(Math.random() * cities.length)],
-      state: states[0],
-      zip: zips[Math.floor(Math.random() * zips.length)],
-    });
-  }
-  return addresses;
-}
+import { AuditLog } from './src/common/audit/audit-log.entity';
+import { Route, RouteStatus, RouteWorkflowStatus } from './src/modules/dispatch/entities/route.entity';
+import { DispatchException } from './src/modules/dispatch/entities/dispatch-exception.entity';
+import { ProofArtifact } from './src/modules/dispatch/entities/proof-artifact.entity';
+import { RouteAssignment } from './src/modules/dispatch/entities/route-assignment.entity';
+import { RouteRunStop } from './src/modules/dispatch/entities/route-run-stop.entity';
+import { StopEvent } from './src/modules/dispatch/entities/stop-event.entity';
+import { Driver } from './src/modules/drivers/entities/driver.entity';
+import { Job, JobPriority } from './src/modules/jobs/entities/job.entity';
+import { JobStop } from './src/modules/jobs/entities/job-stop.entity';
+import { AppUser } from './src/modules/organizations/entities/app-user.entity';
+import { OrganizationMembership } from './src/modules/organizations/entities/organization-membership.entity';
+import { Organization } from './src/modules/organizations/entities/organization.entity';
+import { Depot } from './src/modules/depots/entities/depot.entity';
+import { RoutePlanGroup } from './src/modules/planning/entities/route-plan-group.entity';
+import { RoutePlanStop } from './src/modules/planning/entities/route-plan-stop.entity';
+import { RoutePlan } from './src/modules/planning/entities/route-plan.entity';
+import { Vehicle } from './src/modules/vehicles/entities/vehicle.entity';
 
 async function seed() {
   await AppDataSource.initialize();
-  console.log('Database connected ✅');
+  const manager = AppDataSource.manager;
 
-  // --- Clear existing test data first ---
-  const routeRepo = AppDataSource.getRepository(Route);
-  const jobRepo = AppDataSource.getRepository(Job);
-  const vehicleRepo = AppDataSource.getRepository(Vehicle);
-  const driverRepo = AppDataSource.getRepository(Driver);
+  const orgRepo = manager.getRepository(Organization);
+  const userRepo = manager.getRepository(AppUser);
+  const membershipRepo = manager.getRepository(OrganizationMembership);
+  const depotRepo = manager.getRepository(Depot);
+  const driverRepo = manager.getRepository(Driver);
+  const vehicleRepo = manager.getRepository(Vehicle);
+  const jobRepo = manager.getRepository(Job);
+  const jobStopRepo = manager.getRepository(JobStop);
+  const routePlanRepo = manager.getRepository(RoutePlan);
+  const routePlanGroupRepo = manager.getRepository(RoutePlanGroup);
+  const routePlanStopRepo = manager.getRepository(RoutePlanStop);
+  const routeRepo = manager.getRepository(Route);
+  const routeRunStopRepo = manager.getRepository(RouteRunStop);
+  const assignmentRepo = manager.getRepository(RouteAssignment);
+  const exceptionRepo = manager.getRepository(DispatchException);
+  const proofRepo = manager.getRepository(ProofArtifact);
+  const eventRepo = manager.getRepository(StopEvent);
+  const auditRepo = manager.getRepository(AuditLog);
 
-  console.log('Clearing existing test data...');
-  // Delete in correct order to avoid foreign key constraints
-  await AppDataSource.query('DELETE FROM routes');
-  await AppDataSource.query('DELETE FROM jobs');
-  await AppDataSource.query('DELETE FROM vehicles');
-  await AppDataSource.query('DELETE FROM drivers');
-  console.log('Existing test data cleared ✅');
+  await manager.query('DELETE FROM audit_logs');
+  await manager.query('DELETE FROM proof_artifacts');
+  await manager.query('DELETE FROM exceptions');
+  await manager.query('DELETE FROM stop_events');
+  await manager.query('DELETE FROM route_assignments');
+  await manager.query('DELETE FROM route_run_stops');
+  await manager.query('DELETE FROM route_plan_stops');
+  await manager.query('DELETE FROM route_plan_groups');
+  await manager.query('DELETE FROM route_plans');
+  await manager.query('DELETE FROM job_stops');
+  await manager.query('DELETE FROM routes');
+  await manager.query('DELETE FROM jobs');
+  await manager.query('DELETE FROM vehicles');
+  await manager.query('DELETE FROM drivers');
+  await manager.query('DELETE FROM depots');
+  await manager.query('DELETE FROM organization_memberships');
+  await manager.query('DELETE FROM app_users');
+  await manager.query('DELETE FROM organizations');
 
-  // --- 1. Create Drivers ---
-  const drivers = [
-    driverRepo.create({
-      firstName: 'Alice',
-      lastName: 'Johnson',
-      email: 'alice@example.com',
-      phone: '555-0101',
-      licenseNumber: 'DL-ALICE-001',
-      licenseExpiryDate: new Date('2027-12-31'),
-      roles: ['DRIVER'],
-    }),
-    driverRepo.create({
-      firstName: 'Bob',
-      lastName: 'Smith',
-      email: 'bob@example.com',
-      phone: '555-0102',
-      licenseNumber: 'DL-BOB-002',
-      licenseExpiryDate: new Date('2027-12-31'),
-      roles: ['DRIVER'],
-    }),
-    driverRepo.create({
-      firstName: 'Charlie',
-      lastName: 'Brown',
-      email: 'charlie@example.com',
-      phone: '555-0103',
-      licenseNumber: 'DL-CHARLIE-003',
-      licenseExpiryDate: new Date('2027-12-31'),
-      roles: ['DRIVER'],
-    }),
-  ];
-  await driverRepo.save(drivers);
-  console.log('Drivers created ✅');
+  const organization = await orgRepo.save(orgRepo.create({
+    name: 'Default Organization',
+    slug: 'default',
+    serviceTimezone: 'America/Chicago',
+    settings: { serviceDate: new Date().toISOString().slice(0, 10), seeded: true },
+  }));
 
-  // --- 2. Create Vehicles ---
-  const vehicles = drivers.map((driver, i) =>
-    vehicleRepo.create({
-      make: 'Ford',
-      model: `Transit ${i + 1}`,
-      year: 2023,
-      licensePlate: `ABC${100 + i}`,
-      vehicleType: 'van',
-      fuelType: 'diesel',
-      currentLocation: { lat: 39.7392 + i * 0.001, lng: -104.9903 - i * 0.001 },
-    }),
-  );
-  await vehicleRepo.save(vehicles);
-  console.log('Vehicles created ✅');
+  const user = await userRepo.save(userRepo.create({
+    email: 'admin@routing.local',
+    displayName: 'Local Admin',
+    authProvider: 'local-config',
+    isActive: true,
+  }));
 
-  // --- 3. Generate Jobs ---
-  const addresses = generateAddresses();
-  const jobs: Job[] = [];
+  await membershipRepo.save(membershipRepo.create({
+    organizationId: organization.id,
+    userId: user.id,
+    role: 'OWNER',
+    roles: ['OWNER', 'ADMIN', 'DISPATCHER'],
+    isDefault: true,
+  }));
 
-  const statuses = ['unscheduled', 'scheduled', 'in_progress', 'completed'];
-  const billingStatuses = ['unpaid', 'paid'];
+  const depot = await depotRepo.save(depotRepo.create({
+    organizationId: organization.id,
+    name: 'Kansas City Depot',
+    address: '100 Dispatch Way, Kansas City, MO 64106',
+    location: { lat: 39.0997, lng: -94.5786 },
+    isPrimary: true,
+  }));
 
-  for (let i = 0; i < 20; i++) {
-    const pickup = addresses[i];
-    const delivery = addresses[(i + 10) % 20];
-    const status = statuses[i % 4];
-    const hasStartDate = status !== 'unscheduled';
-    const baseDate = new Date();
-    baseDate.setDate(baseDate.getDate() + (i - 10)); // Mix of past and future jobs
+  const drivers = await driverRepo.save([
+    driverRepo.create({ organizationId: organization.id, firstName: 'Alice', lastName: 'Johnson', email: 'alice@trovan.test', phone: '555-0101', licenseNumber: 'DL-ALICE-001', licenseExpiryDate: new Date('2027-12-31'), roles: ['DRIVER'] }),
+    driverRepo.create({ organizationId: organization.id, firstName: 'Bob', lastName: 'Smith', email: 'bob@trovan.test', phone: '555-0102', licenseNumber: 'DL-BOB-002', licenseExpiryDate: new Date('2027-12-31'), roles: ['DRIVER'] }),
+  ]);
 
-    jobs.push(
-      jobRepo.create({
-        customerName: `Customer ${i + 1}`,
-        customerPhone: `555-02${String(i).padStart(2, '0')}`,
-        customerEmail: `customer${i + 1}@example.com`,
-        // Legacy format address
-        pickupAddress: `${pickup.street}${pickup.street2 ? ', ' + pickup.street2 : ''}, ${pickup.city}, ${pickup.state} ${pickup.zip}`,
-        deliveryAddress: `${delivery.street}${delivery.street2 ? ', ' + delivery.street2 : ''}, ${delivery.city}, ${delivery.state} ${delivery.zip}`,
-        // Structured addresses
-        pickupAddressStructured: {
-          line1: pickup.street,
-          line2: pickup.street2 || null,
-          city: pickup.city,
-          state: pickup.state,
-          zip: pickup.zip,
-        },
-        deliveryAddressStructured: {
-          line1: delivery.street,
-          line2: delivery.street2 || null,
-          city: delivery.city,
-          state: delivery.state,
-          zip: delivery.zip,
-        },
-        timeWindowStart: new Date(baseDate.getTime() + 8 * 60 * 60 * 1000), // 8 AM
-        timeWindowEnd: new Date(baseDate.getTime() + 17 * 60 * 60 * 1000), // 5 PM
-        weight: 100 + Math.random() * 200,
-        priority: ['normal', 'high', 'urgent'][i % 3] as any,
-        status: status as any,
-        // Multi-day job support
-        startDate: hasStartDate ? new Date(baseDate.getTime() + 9 * 60 * 60 * 1000) : undefined,
-        endDate: hasStartDate ? new Date(baseDate.getTime() + 16 * 60 * 60 * 1000) : undefined,
-        // Billing
-        billingStatus: billingStatuses[i % 2] as any,
-        billingAmount: Math.floor(Math.random() * 500) + 100,
-        billingNotes: i % 2 === 0 ? `Invoice #INV-${1000 + i}` : undefined,
-        invoiceRef: i % 2 === 0 ? `INV-${1000 + i}` : undefined,
-        notes: i % 3 === 0 ? 'Handle with care - fragile items' : undefined,
-      }),
-    );
+  const vehicles = await vehicleRepo.save([
+    vehicleRepo.create({ organizationId: organization.id, make: 'Ford', model: 'Transit', year: 2023, licensePlate: 'TRO-101', vehicleType: 'van', fuelType: 'diesel', status: 'available', capacityWeightKg: 1200, capacityVolumeM3: 14 }),
+    vehicleRepo.create({ organizationId: organization.id, make: 'Mercedes', model: 'Sprinter', year: 2024, licensePlate: 'TRO-102', vehicleType: 'van', fuelType: 'diesel', status: 'available', capacityWeightKg: 1500, capacityVolumeM3: 16 }),
+  ]);
+
+  const serviceDate = new Date().toISOString().slice(0, 10);
+  const jobs = await jobRepo.save([
+    jobRepo.create({ organizationId: organization.id, customerName: 'Jane Bakery', customerPhone: '555-0201', deliveryAddress: '1425 Market Ave, Kansas City, MO', pickupAddress: '100 Dispatch Way, Kansas City, MO', timeWindowStart: new Date(`${serviceDate}T09:00:00Z`), timeWindowEnd: new Date(`${serviceDate}T11:00:00Z`), weight: 120, volume: 2, priority: JobPriority.HIGH, status: 'pending' as any, estimatedDuration: 20 } as any),
+    jobRepo.create({ organizationId: organization.id, customerName: 'Omega Medical', customerPhone: '555-0202', deliveryAddress: '2100 Santa Fe Dr, Kansas City, MO', pickupAddress: '100 Dispatch Way, Kansas City, MO', timeWindowStart: new Date(`${serviceDate}T10:00:00Z`), timeWindowEnd: new Date(`${serviceDate}T12:00:00Z`), weight: 80, volume: 1, priority: JobPriority.URGENT, status: 'pending' as any, estimatedDuration: 15 } as any),
+    jobRepo.create({ organizationId: organization.id, customerName: 'Riverfront Catering', customerPhone: '555-0203', deliveryAddress: '870 W Evans Ave, Kansas City, MO', pickupAddress: '100 Dispatch Way, Kansas City, MO', timeWindowStart: new Date(`${serviceDate}T11:00:00Z`), timeWindowEnd: new Date(`${serviceDate}T14:00:00Z`), weight: 50, volume: 1, priority: JobPriority.NORMAL, status: 'pending' as any, estimatedDuration: 12 } as any),
+  ] as any);
+
+  const jobStops: JobStop[] = [];
+  for (const job of jobs) {
+    jobStops.push(jobStopRepo.create({ organizationId: organization.id, jobId: job.id, stopOrder: 1, stopType: 'PICKUP', address: job.pickupAddress || depot.address, location: depot.location, serviceDurationMinutes: 10, timeWindowStart: job.timeWindowStart, timeWindowEnd: job.timeWindowEnd, demandWeightKg: job.weight || null, demandVolumeM3: job.volume || null }));
+    jobStops.push(jobStopRepo.create({ organizationId: organization.id, jobId: job.id, stopOrder: 2, stopType: 'DROPOFF', address: job.deliveryAddress, location: { lat: 39.1 + Math.random() * 0.1, lng: -94.5 - Math.random() * 0.1 }, serviceDurationMinutes: 12, timeWindowStart: job.timeWindowStart, timeWindowEnd: job.timeWindowEnd, demandWeightKg: job.weight || null, demandVolumeM3: job.volume || null }));
   }
-  await jobRepo.save(jobs);
-  console.log('Jobs created ✅');
+  const savedJobStops = await jobStopRepo.save(jobStops);
 
-  // --- 4. Create Routes ---
-  const routes: Route[] = [];
+  const routePlan = await routePlanRepo.save(routePlanRepo.create({
+    organizationId: organization.id,
+    serviceDate,
+    depotId: depot.id,
+    status: 'DRAFT',
+    objective: 'distance',
+    metrics: { routeCount: 1 },
+    warnings: [],
+    createdByUserId: user.id,
+  }));
 
-  for (let r = 0; r < 5; r++) {
-    const routeJobs = jobs.slice(r * 4, r * 4 + 4); // 4 stops per route
-    routes.push(
-      routeRepo.create({
-        vehicleId: vehicles[r % vehicles.length].id,
-        driverId: drivers[r % drivers.length].id,
-        jobIds: routeJobs.map((j) => j.id),
-        jobCount: routeJobs.length,
-        status: 'planned' as any,
-        totalDistanceKm: 0,
-        totalDurationMinutes: 0,
-        color: ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6'][r],
-      }),
-    );
-  }
+  const routePlanGroup = await routePlanGroupRepo.save(routePlanGroupRepo.create({
+    routePlanId: routePlan.id,
+    groupIndex: 1,
+    label: 'Draft Route 1',
+    driverId: drivers[0].id,
+    vehicleId: vehicles[0].id,
+    totalDistanceKm: 28,
+    totalDurationMinutes: 165,
+    serviceTimeMinutes: 66,
+    totalWeightKg: 250,
+    totalVolumeM3: 4,
+    warnings: [],
+  }));
 
-  await routeRepo.save(routes);
-  console.log('Routes created ✅');
+  const publishedRoute = await routeRepo.save(routeRepo.create({
+    organizationId: organization.id,
+    vehicleId: vehicles[0].id,
+    driverId: drivers[0].id,
+    jobIds: jobs.map((job) => job.id),
+    jobCount: jobs.length,
+    status: RouteStatus.ASSIGNED,
+    workflowStatus: RouteWorkflowStatus.READY_FOR_DISPATCH,
+    totalDistanceKm: 28,
+    totalDurationMinutes: 165,
+    plannedStart: new Date(`${serviceDate}T08:00:00Z`),
+    routeData: { seed: true, routePlanId: routePlan.id },
+    notes: 'Seeded published route run',
+  }));
 
-  console.log('Seeding complete! 🎉');
-  process.exit(0);
+  const planStops = await routePlanStopRepo.save(savedJobStops.map((stop, index) => routePlanStopRepo.create({
+    routePlanId: routePlan.id,
+    routePlanGroupId: routePlanGroup.id,
+    jobId: stop.jobId,
+    jobStopId: stop.id,
+    stopSequence: index + 1,
+    isLocked: index === 0,
+    plannedArrival: stop.timeWindowStart,
+    plannedDeparture: stop.timeWindowEnd,
+    metadata: { stopType: stop.stopType, address: stop.address },
+  })));
+
+  const runStops = await routeRunStopRepo.save(planStops.map((stop) => routeRunStopRepo.create({
+    organizationId: organization.id,
+    routeId: publishedRoute.id,
+    jobId: stop.jobId,
+    jobStopId: stop.jobStopId,
+    stopSequence: stop.stopSequence,
+    status: stop.stopSequence === 1 ? 'SERVICED' : 'DISPATCHED',
+    plannedArrival: stop.plannedArrival || null,
+    actualArrival: stop.stopSequence === 1 ? new Date(`${serviceDate}T09:10:00Z`) : null,
+    actualDeparture: stop.stopSequence === 1 ? new Date(`${serviceDate}T09:20:00Z`) : null,
+    proofRequired: stop.stopSequence === 1,
+    notes: null,
+  })));
+
+  await assignmentRepo.save(assignmentRepo.create({ organizationId: organization.id, routeId: publishedRoute.id, routePlanGroupId: routePlanGroup.id, driverId: drivers[0].id, vehicleId: vehicles[0].id, assignedByUserId: user.id, reason: 'Seeded dispatch assignment' }));
+  await exceptionRepo.save(exceptionRepo.create({ organizationId: organization.id, routeId: publishedRoute.id, routeRunStopId: runStops[1].id, code: 'STOP_FAILED', message: 'Customer unavailable', status: 'OPEN', details: { reason: 'customer_unavailable' } }));
+  await proofRepo.save(proofRepo.create({ organizationId: organization.id, routeRunStopId: runStops[0].id, type: 'signature', uri: 'seed://proof/signature-1', createdByUserId: user.id, metadata: { signer: 'Jane Bakery' } }));
+  await eventRepo.save(eventRepo.create({ organizationId: organization.id, routeRunStopId: runStops[0].id, eventType: 'SERVICED', actorUserId: user.id, payload: { note: 'Seeded service complete' } }));
+  await auditRepo.save(auditRepo.create({ organizationId: organization.id, actorId: user.id, actorType: 'user', entityType: 'route_plan', entityId: routePlan.id, action: 'seed.route-plan.created', source: 'system', newValue: { routePlanId: routePlan.id } }));
+
+  console.log('Seeded organization, users, depot, drivers, vehicles, jobs, job stops, route plan, route run, exception, and proof artifacts ✅');
+  await AppDataSource.destroy();
 }
 
-seed().catch((err) => {
-  console.error('Seeding failed ❌', err);
+seed().catch(async (error) => {
+  console.error('Seeding failed ❌', error);
+  if (AppDataSource.isInitialized) {
+    await AppDataSource.destroy();
+  }
   process.exit(1);
 });

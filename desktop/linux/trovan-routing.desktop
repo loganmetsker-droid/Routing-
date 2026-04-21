@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=Trovan Routing
+Comment=Trovan routing and dispatch desktop wrapper
+Exec=__TROVAN_EXEC__
+Icon=__TROVAN_ICON__
+Terminal=false
+Categories=Utility;Office;
+StartupNotify=true

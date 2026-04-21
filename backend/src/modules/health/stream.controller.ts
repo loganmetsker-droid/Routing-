@@ -1,4 +1,5 @@
 import { Controller, Get, Req, Res } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { Request, Response } from 'express';
 import { Public } from '../../common/decorators/public.decorator';
 
@@ -6,6 +7,7 @@ import { Public } from '../../common/decorators/public.decorator';
 export class StreamController {
   @Get()
   @Public()
+  @SkipThrottle()
   streamRoute(@Req() req: Request, @Res() res: Response) {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');

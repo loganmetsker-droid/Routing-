@@ -32,4 +32,4 @@ stop_from_pid_file "Mock preview API" "${MOCK_PID_FILE}"
 
 # Fallback cleanup for processes started outside PID file tracking.
 pkill -f "node .*scripts/mock-preview-api.mjs" 2>/dev/null && echo "Mock preview API: stopped matching process pattern." || true
-pkill -f "vite --host 127.0.0.1 --port 5173" 2>/dev/null && echo "Frontend preview: stopped matching vite process pattern." || true
+pkill -f "vite --host 127.0.0.1 --port 5184" 2>/dev/null && echo "Frontend preview: stopped matching process pattern." || true

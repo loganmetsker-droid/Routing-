@@ -1,157 +1,194 @@
-// TypeORM Migration Runner for Production
-const { DataSource } = require('typeorm');
-const { Client } = require('pg');
 const fs = require('fs');
 const path = require('path');
-require('dotenv').config();
+const { DataSource } = require('typeorm');
+const { Client } = require('pg');
+const dotenv = require('dotenv');
+const { chooseMigrationBaseline } = require('./migration-runtime');
+require('reflect-metadata');
 
-async function runSQLMigrations(databaseUrl) {
-  const isProduction = process.env.NODE_ENV === 'production' ||
+dotenv.config({ path: path.join(__dirname, '.env.local') });
+dotenv.config({ path: path.join(__dirname, '.env') });
+
+const TRACKED_TABLES = [
+  'drivers',
+  'vehicles',
+  'routes',
+  'customers',
+  'jobs',
+  'reroute_requests',
+  'dispatch_events',
+  'route_versions',
+  'organizations',
+  'app_users',
+  'organization_memberships',
+  'depots',
+  'job_stops',
+  'route_plans',
+  'route_plan_groups',
+  'route_plan_stops',
+  'route_run_stops',
+  'route_assignments',
+  'stop_events',
+  'exceptions',
+  'proof_artifacts',
+  'audit_logs',
+];
+
+function isProductionDatabase(databaseUrl = '') {
+  return (
+    process.env.NODE_ENV === 'production' ||
     databaseUrl.includes('railway.app') ||
     databaseUrl.includes('rlwy.net') ||
-    databaseUrl.includes('render.com');
-
-  const client = new Client({
-    connectionString: databaseUrl,
-    ssl: isProduction ? { rejectUnauthorized: false } : false,
-  });
-
-  try {
-    console.log('Connecting to database...');
-    await client.connect();
-    console.log('✅ Connected to database');
-
-    // Run SQL migrations in order
-    const sqlMigrations = [
-      'src/database/migrations/V1_create_tables.sql',
-      'src/database/migrations/V2_create_hypertables.sql',
-      'migrations/add-job-workflow-fields.sql',
-    ];
-
-    for (const migrationFile of sqlMigrations) {
-      const migrationPath = path.join(__dirname, migrationFile);
-
-      if (!fs.existsSync(migrationPath)) {
-        console.log(`⚠️  Skipping ${migrationFile} - file not found`);
-        continue;
-      }
-
-      console.log(`\nRunning SQL migration: ${migrationFile}...`);
-      const migrationSQL = fs.readFileSync(migrationPath, 'utf8');
-
-      try {
-        await client.query(migrationSQL);
-        console.log(`✅ ${migrationFile} completed`);
-      } catch (error) {
-        // Ignore errors for tables that already exist
-        if (error.message.includes('already exists')) {
-          console.log(`⚠️  ${migrationFile} - objects already exist (skipping)`);
-        } else {
-          throw error;
-        }
-      }
-    }
-
-    console.log('\n✅ SQL migrations completed');
-  } finally {
-    await client.end();
-  }
+    databaseUrl.includes('render.com') ||
+    databaseUrl.includes('supabase.co')
+  );
 }
 
-async function runTypeORMMigrations() {
-  const isProduction = process.env.NODE_ENV === 'production' ||
-    (process.env.DATABASE_URL && (
-      process.env.DATABASE_URL.includes('railway.app') ||
-      process.env.DATABASE_URL.includes('rlwy.net') ||
-      process.env.DATABASE_URL.includes('render.com')
-    ));
+function createTypeOrmDataSource() {
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error('DATABASE_URL environment variable is not set');
+  }
 
-  const dataSource = new DataSource({
+  const useDist = fs.existsSync(path.join(__dirname, 'dist', 'backend', 'src', 'database', 'migrations'));
+  if (!useDist) {
+    require('ts-node/register/transpile-only');
+  }
+
+  return new DataSource({
     type: 'postgres',
-    url: process.env.DATABASE_URL,
-    entities: [path.join(__dirname, 'dist', '**', '*.entity.js')],
-    migrations: [path.join(__dirname, 'dist', 'database', 'migrations', '*.js')],
+    url: databaseUrl,
+    entities: [
+      useDist
+        ? path.join(__dirname, 'dist', 'backend', 'src', '**', '*.entity.js')
+        : path.join(__dirname, 'src', '**', '*.entity.ts'),
+    ],
+    migrations: [
+      useDist
+        ? path.join(__dirname, 'dist', 'backend', 'src', 'database', 'migrations', '*.js')
+        : path.join(__dirname, 'src', 'database', 'migrations', '*.ts'),
+    ],
     synchronize: false,
-    logging: true,
-    ssl: isProduction ? { rejectUnauthorized: false } : false,
+    logging: ['error', 'warn', 'migration'],
+    ssl: isProductionDatabase(databaseUrl) ? { rejectUnauthorized: false } : false,
   });
+}
 
-  try {
-    console.log('\nInitializing TypeORM DataSource...');
-    await dataSource.initialize();
-    console.log('✅ TypeORM DataSource initialized');
+async function ensureMigrationMetadata(client) {
+  await client.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"');
+  await client.query(`
+    CREATE TABLE IF NOT EXISTS migrations (
+      id SERIAL PRIMARY KEY,
+      timestamp BIGINT NOT NULL,
+      name VARCHAR(255) NOT NULL
+    )
+  `);
+}
 
-    console.log('\nRunning TypeORM migrations...');
-    const migrations = await dataSource.runMigrations({ transaction: 'all' });
+async function inspectSchema(client) {
+  const tables = {};
+  const columns = {};
 
-    if (migrations.length === 0) {
-      console.log('✅ No TypeORM migrations to run (all up to date)');
-    } else {
-      console.log(`✅ Executed ${migrations.length} TypeORM migration(s):`);
-      migrations.forEach(migration => {
-        console.log(`  - ${migration.name}`);
-      });
-    }
+  const tableRows = await client.query(
+    `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`,
+  );
+  for (const row of tableRows.rows) {
+    tables[row.table_name] = true;
+  }
 
-    // Verify jobs table exists
-    console.log('\nVerifying jobs table...');
-    const result = await dataSource.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables
-        WHERE table_name = 'jobs'
-      );
-    `);
+  for (const table of TRACKED_TABLES) {
+    if (!tables[table]) continue;
+    const result = await client.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name=$1 ORDER BY ordinal_position`,
+      [table],
+    );
+    columns[table] = result.rows.map((row) => row.column_name);
+  }
 
-    if (result[0].exists) {
-      console.log('✅ Jobs table exists');
+  const migrationCount = Number((await client.query('SELECT COUNT(*)::int AS count FROM migrations')).rows[0].count || 0);
+  return { tables, columns, migrationCount };
+}
 
-      // Check for job_number column
-      const columns = await dataSource.query(`
-        SELECT column_name
-        FROM information_schema.columns
-        WHERE table_name = 'jobs'
-        ORDER BY ordinal_position;
-      `);
-      console.log(`   Found ${columns.length} columns in jobs table`);
-    } else {
-      console.error('❌ Jobs table does not exist!');
-      process.exit(1);
-    }
+async function baselineExistingSchema(client) {
+  const schema = await inspectSchema(client);
+  const baseline = chooseMigrationBaseline(schema);
+  if (!baseline.length) {
+    console.log('No migration baseline reconciliation needed.');
+    return;
+  }
 
-  } finally {
-    if (dataSource.isInitialized) {
-      await dataSource.destroy();
-    }
+  const existing = new Set(
+    (await client.query('SELECT name FROM migrations')).rows.map((row) => row.name),
+  );
+
+  let inserted = 0;
+  for (const migration of baseline) {
+    if (existing.has(migration.name)) continue;
+    await client.query(
+      'INSERT INTO migrations(timestamp, name) VALUES($1, $2)',
+      [migration.timestamp, migration.name],
+    );
+    inserted += 1;
+  }
+
+  if (inserted > 0) {
+    console.log(`Baselined ${inserted} existing migration(s) from live schema reality.`);
+  } else {
+    console.log('Migration baseline already matches the live schema.');
   }
 }
 
 async function runMigrations() {
-  if (!process.env.DATABASE_URL) {
-    console.error('❌ DATABASE_URL environment variable is not set');
-    process.exit(1);
+  const databaseUrl = process.env.DATABASE_URL;
+  if (!databaseUrl) {
+    throw new Error('DATABASE_URL environment variable is not set');
   }
+
+  const client = new Client({
+    connectionString: databaseUrl,
+    ssl: isProductionDatabase(databaseUrl) ? { rejectUnauthorized: false } : false,
+  });
+
+  const dataSource = createTypeOrmDataSource();
 
   try {
     console.log('='.repeat(60));
     console.log('Starting Database Migrations');
     console.log('='.repeat(60));
 
-    // Step 1: Run SQL migrations
-    await runSQLMigrations(process.env.DATABASE_URL);
+    await client.connect();
+    console.log('Connected to database');
 
-    // Step 2: Run TypeORM migrations
-    await runTypeORMMigrations();
+    await ensureMigrationMetadata(client);
+    await baselineExistingSchema(client);
 
-    console.log('\n' + '='.repeat(60));
-    console.log('✅ All migrations completed successfully!');
+    await dataSource.initialize();
+    const migrations = await dataSource.runMigrations({ transaction: 'all' });
+
+    if (migrations.length === 0) {
+      console.log('No pending TypeORM migrations.');
+    } else {
+      console.log(`Executed ${migrations.length} migration(s):`);
+      for (const migration of migrations) {
+        console.log(`  - ${migration.name}`);
+      }
+    }
+
     console.log('='.repeat(60));
-  } catch (error) {
-    console.error('\n' + '='.repeat(60));
-    console.error('❌ Migration failed:');
-    console.error(error.message);
-    console.error('='.repeat(60));
-    process.exit(1);
+    console.log('Migration pass complete');
+    console.log('='.repeat(60));
+  } finally {
+    if (dataSource.isInitialized) {
+      await dataSource.destroy();
+    }
+    await client.end();
   }
 }
 
-runMigrations();
+runMigrations().catch((error) => {
+  console.error('='.repeat(60));
+  console.error('Migration failed:');
+  console.error(error && error.stack ? error.stack : error);
+  console.error('='.repeat(60));
+  process.exit(1);
+});

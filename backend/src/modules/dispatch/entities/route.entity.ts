@@ -39,6 +39,10 @@ export class Route {
   @Field(() => ID)
   id: string;
 
+  @Column({ name: 'organization_id', type: 'uuid', nullable: true })
+  @Field({ nullable: true })
+  organizationId?: string;
+
   @Column({ name: 'vehicle_id', type: 'uuid' })
   @Field()
   vehicleId: string;

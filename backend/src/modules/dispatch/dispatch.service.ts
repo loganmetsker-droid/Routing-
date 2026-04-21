@@ -3,6 +3,7 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
   Inject,
   forwardRef,
 } from '@nestjs/common';
@@ -19,6 +20,7 @@ import {
   RerouteRequest,
 } from './entities/reroute-request.entity';
 import { DispatchEvent } from './entities/dispatch-event.entity';
+import { RouteVersion, RouteVersionStatus } from './entities/route-version.entity';
 import { Vehicle } from '../vehicles/entities/vehicle.entity';
 import { Driver } from '../drivers/entities/driver.entity';
 import { Job, JobStatus } from '../jobs/entities/job.entity';
@@ -34,6 +36,10 @@ import {
   RoutingServiceResponse,
   GlobalRoutingServiceRequest,
   GlobalRoutingServiceResponse,
+  RouteInfo,
+  OptimizeRequest,
+  OptimizeResponse,
+  OptimizeRouteOutput,
   DataQuality,
   OptimizationStatus,
   OptimizerHealth,
@@ -61,6 +67,14 @@ import {
   buildRerouteAlternatives,
   evaluateRerouteConstraints,
 } from './reroute-constraints';
+import { OptimizationJobLifecycleService } from './services/optimization-job-lifecycle.service';
+
+export type DispatchActorContext = {
+  userId?: string | null;
+  email?: string | null;
+  organizationId?: string | null;
+  roles?: string[];
+};
 
 @Injectable()
 export class DispatchService {
@@ -97,15 +111,74 @@ export class DispatchService {
     private readonly rerouteRequestRepository: Repository<RerouteRequest>,
     @InjectRepository(DispatchEvent)
     private readonly dispatchEventRepository: Repository<DispatchEvent>,
+    @InjectRepository(RouteVersion)
+    private readonly routeVersionRepository: Repository<RouteVersion>,
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
     @Inject(forwardRef(() => DispatchGateway))
     private readonly dispatchGateway: DispatchGateway,
+    private readonly optimizationJobs: OptimizationJobLifecycleService,
   ) {
-    this.routingServiceUrl = this.configService.get<string>(
-      'ROUTING_SERVICE_URL',
-      'http://localhost:8000',
+    this.routingServiceUrl =
+      this.configService.get<string>('ROUTING_SERVICE_URL') ||
+      this.configService.get<string>('ROUTING_PROVIDER_URL') ||
+      'http://localhost:8000';
+  }
+
+  private async ensureOrganizationScope(
+    organizationId: string | null | undefined,
+    vehicles: Vehicle[],
+    jobs: Job[],
+  ) {
+    if (!organizationId) {
+      return;
+    }
+
+    const mismatchedVehicles = vehicles.filter(
+      (vehicle) => vehicle.organizationId && vehicle.organizationId !== organizationId,
     );
+    if (mismatchedVehicles.length > 0) {
+      throw new BadRequestException('VEHICLES_OUTSIDE_ORGANIZATION_SCOPE');
+    }
+
+    const mismatchedJobs = jobs.filter(
+      (job) => job.organizationId && job.organizationId !== organizationId,
+    );
+    if (mismatchedJobs.length > 0) {
+      throw new BadRequestException('JOBS_OUTSIDE_ORGANIZATION_SCOPE');
+    }
+
+    const orphanVehicleIds = vehicles
+      .filter((vehicle) => !vehicle.organizationId)
+      .map((vehicle) => vehicle.id);
+    if (orphanVehicleIds.length > 0) {
+      await this.vehicleRepository
+        .createQueryBuilder()
+        .update()
+        .set({ organizationId })
+        .where('id IN (:...ids)', { ids: orphanVehicleIds })
+        .execute();
+      vehicles.forEach((vehicle) => {
+        if (!vehicle.organizationId) {
+          vehicle.organizationId = organizationId;
+        }
+      });
+    }
+
+    const orphanJobIds = jobs.filter((job) => !job.organizationId).map((job) => job.id);
+    if (orphanJobIds.length > 0) {
+      await this.jobRepository
+        .createQueryBuilder()
+        .update()
+        .set({ organizationId })
+        .where('id IN (:...ids)', { ids: orphanJobIds })
+        .execute();
+      jobs.forEach((job) => {
+        if (!job.organizationId) {
+          job.organizationId = organizationId;
+        }
+      });
+    }
   }
 
   private ensureValidRouteTransition(current: RouteStatus, next: RouteStatus) {
@@ -136,6 +209,10 @@ export class DispatchService {
     level?: 'info' | 'warning' | 'error';
     code: string;
     message: string;
+    aggregateType?: 'ROUTE' | 'JOB' | 'VEHICLE' | 'ROUTE_VERSION';
+    aggregateId?: string | null;
+    eventType?: string;
+    actorUserId?: string | null;
     payload?: Record<string, any>;
     reasonCode?: string | null;
     action?: string | null;
@@ -152,14 +229,18 @@ export class DispatchService {
       });
       const entity = this.dispatchEventRepository.create({
         routeId: event.routeId || null,
+        aggregateType: event.aggregateType || 'ROUTE',
+        aggregateId: event.aggregateId || event.routeId || null,
+        eventType: event.eventType || event.code,
+        actorUserId: event.actorUserId || null,
         source: event.source,
         level: event.level || 'info',
         code: event.code,
         message: event.message,
-        payload: event.payload || null,
+        payload: event.payload || {},
         reasonCode: indexed.reasonCode,
         action: indexed.action,
-        actor: indexed.actor,
+        actor: indexed.actor || event.actor || event.actorUserId || 'system',
         packId: indexed.packId,
       });
       await this.dispatchEventRepository.save(entity);
@@ -167,6 +248,176 @@ export class DispatchService {
     } catch (error) {
       this.logger.warn(`Failed to persist dispatch event (${event.code}): ${error?.message || error}`);
     }
+  }
+
+  private getActorLabel(actor?: DispatchActorContext | null) {
+    if (!actor) return null;
+    return actor.email || actor.userId || null;
+  }
+
+  private getActorUserId(actor?: DispatchActorContext | null) {
+    return actor?.userId || null;
+  }
+
+  private buildRouteVersionSnapshot(route: Route): Record<string, unknown> {
+    return {
+      route: this.buildRouteSnapshot(route),
+      driverId: route.driverId || null,
+      vehicleId: route.vehicleId,
+      polyline: route.polyline || null,
+      routeData: route.routeData || {},
+      notes: route.notes || null,
+      plannedStart: route.plannedStart?.toISOString() || null,
+    };
+  }
+
+  private buildRouteVersionMetadata(
+    version: Pick<RouteVersion, 'id' | 'versionNumber' | 'status' | 'publishedAt'>,
+    extras: Record<string, unknown> = {},
+  ) {
+    return {
+      versionId: version.id,
+      versionNumber: version.versionNumber,
+      status: version.status,
+      publishedAt: version.publishedAt?.toISOString() || null,
+      ...extras,
+    };
+  }
+
+  private async getNextRouteVersionNumber(routeId: string) {
+    const latest = await this.routeVersionRepository.findOne({
+      where: { routeId },
+      order: { versionNumber: 'DESC' },
+    });
+    return (latest?.versionNumber || 0) + 1;
+  }
+
+  private async seedPublishedRouteVersion(
+    route: Route,
+    actor?: DispatchActorContext,
+  ) {
+    const existingVersion = await this.routeVersionRepository.findOne({
+      where: { routeId: route.id },
+      order: { versionNumber: 'DESC' },
+    });
+
+    if (existingVersion) {
+      return existingVersion;
+    }
+
+    const version = this.routeVersionRepository.create({
+      routeId: route.id,
+      versionNumber: 1,
+      status: 'PUBLISHED',
+      snapshot: this.buildRouteVersionSnapshot(route),
+      createdByUserId: this.getActorUserId(actor),
+      publishedByUserId: this.getActorUserId(actor),
+      publishedAt: new Date(),
+    });
+    const saved = await this.routeVersionRepository.save(version);
+    route.routeData = {
+      ...(route.routeData || {}),
+      route_version: this.buildRouteVersionMetadata(saved),
+    };
+    await this.routeRepository.save(route);
+    return saved;
+  }
+
+  private async ensureRouteVersionBackfill(
+    route: Route,
+    actor?: DispatchActorContext,
+  ): Promise<RouteVersion> {
+    const existingVersion = await this.routeVersionRepository.findOne({
+      where: { routeId: route.id },
+      order: { versionNumber: 'DESC' },
+    });
+
+    if (existingVersion) {
+      if (!route.routeData?.route_version) {
+        route.routeData = {
+          ...(route.routeData || {}),
+          route_version: this.buildRouteVersionMetadata(existingVersion, {
+            lastPublishedVersionId: existingVersion.id,
+            lastPublishedVersionNumber: existingVersion.versionNumber,
+          }),
+        };
+        await this.routeRepository.save(route);
+      }
+      return existingVersion;
+    }
+
+    const backfilled = await this.seedPublishedRouteVersion(route, actor);
+    await this.logDispatchEvent({
+      routeId: route.id,
+      aggregateType: 'ROUTE_VERSION',
+      aggregateId: backfilled.id,
+      eventType: 'ROUTE_VERSION_BACKFILLED',
+      source: 'system',
+      code: 'ROUTE_VERSION_BACKFILLED',
+      message: 'Published route version backfilled for existing route.',
+      actor: this.getActorLabel(actor) || 'system',
+      actorUserId: this.getActorUserId(actor),
+      payload: {
+        routeId: route.id,
+        versionId: backfilled.id,
+        versionNumber: backfilled.versionNumber,
+      },
+    });
+    return backfilled;
+  }
+
+  private async ensurePlanningDraftVersion(
+    route: Route,
+    actor?: DispatchActorContext,
+    mutationType?: string,
+  ): Promise<RouteVersion> {
+    const latestVersion = await this.ensureRouteVersionBackfill(route, actor);
+
+    if (latestVersion.status !== 'PUBLISHED') {
+      route.routeData = {
+        ...(route.routeData || {}),
+        route_version: this.buildRouteVersionMetadata(latestVersion),
+      };
+      return latestVersion;
+    }
+
+    const draftVersion = this.routeVersionRepository.create({
+      routeId: route.id,
+      versionNumber: await this.getNextRouteVersionNumber(route.id),
+      status: 'DRAFT',
+      snapshot: this.buildRouteVersionSnapshot(route),
+      createdByUserId: this.getActorUserId(actor),
+    });
+    const savedDraft = await this.routeVersionRepository.save(draftVersion);
+    route.routeData = {
+      ...(route.routeData || {}),
+      route_version: this.buildRouteVersionMetadata(savedDraft, {
+        lastPublishedVersionId: latestVersion.id,
+        lastPublishedVersionNumber: latestVersion.versionNumber,
+        lastPublishedAt: latestVersion.publishedAt?.toISOString() || null,
+        forkedFromVersionId: latestVersion.id,
+      }),
+    };
+    await this.logDispatchEvent({
+      routeId: route.id,
+      aggregateType: 'ROUTE_VERSION',
+      aggregateId: savedDraft.id,
+      eventType: 'ROUTE_DRAFT_FORKED_FROM_PUBLISHED',
+      source: 'workflow',
+      code: 'ROUTE_DRAFT_FORKED_FROM_PUBLISHED',
+      message: `Planning draft forked from published route before ${mutationType || 'mutation'}.`,
+      actor: this.getActorLabel(actor),
+      actorUserId: this.getActorUserId(actor),
+      payload: {
+        routeId: route.id,
+        mutationType: mutationType || 'unknown',
+        draftVersionId: savedDraft.id,
+        draftVersionNumber: savedDraft.versionNumber,
+        publishedVersionId: latestVersion.id,
+        publishedVersionNumber: latestVersion.versionNumber,
+      },
+    });
+    return savedDraft;
   }
 
   private async markOptimizerSuccess() {
@@ -234,6 +485,10 @@ export class DispatchService {
 
   getOptimizerHealth(): OptimizerHealth {
     return { ...this.optimizerHealth };
+  }
+
+  getOptimizationJobs(limit = 100) {
+    return this.optimizationJobs.list(limit);
   }
 
   async getOptimizerEvents(limit = 50): Promise<OptimizerEvent[]> {
@@ -621,6 +876,148 @@ export class DispatchService {
     };
   }
 
+  private getVehicleCoordinates(vehicle: Vehicle) {
+    const lat = Number(vehicle.currentLocation?.lat);
+    const lng = Number(vehicle.currentLocation?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      throw new BadRequestException(
+        `Vehicle ${vehicle.id} does not have valid current coordinates.`,
+      );
+    }
+    return { lat, lng };
+  }
+
+  private getJobCoordinates(job: Job) {
+    const lat = Number(job.deliveryLocation?.lat);
+    const lng = Number(job.deliveryLocation?.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      throw new BadRequestException(
+        `Job ${job.id} does not have valid delivery coordinates.`,
+      );
+    }
+    return { lat, lng };
+  }
+
+  private mapJobPriority(priority?: string) {
+    switch (String(priority || '').toLowerCase()) {
+      case 'urgent':
+        return 1;
+      case 'high':
+        return 2;
+      case 'low':
+        return 4;
+      default:
+        return 3;
+    }
+  }
+
+  private buildOptimizeRequest(vehicles: Vehicle[], jobs: Job[]): OptimizeRequest {
+    return {
+      plan_date: new Date().toISOString(),
+      vehicles: vehicles.map((vehicle) => {
+        const start = this.getVehicleCoordinates(vehicle);
+        return {
+          id: vehicle.id,
+          start_lat: start.lat,
+          start_lng: start.lng,
+          capacity_volume: Number(vehicle.capacityVolumeM3 || 0),
+          max_route_minutes: Number(vehicle.metadata?.maxRouteMinutes || 480),
+        };
+      }),
+      stops: jobs.map((job) => {
+        const location = this.getJobCoordinates(job);
+        return {
+          id: job.id,
+          lat: location.lat,
+          lng: location.lng,
+          service_minutes: Number(job.estimatedDuration || 10),
+          tw_start: job.timeWindowStart?.toISOString(),
+          tw_end: job.timeWindowEnd?.toISOString(),
+          priority: this.mapJobPriority(job.priority),
+          volume: Number(job.volume || 0),
+          locked_vehicle_id:
+            typeof job.assignedRouteId === 'string' && job.assignedRouteId.length > 0
+              ? null
+              : null,
+        };
+      }),
+    };
+  }
+
+  private mapOptimizeRouteToLegacy(
+    route: OptimizeRouteOutput,
+    vehicle: Vehicle,
+    jobsById: Map<string, Job>,
+    warnings: string[],
+    droppedJobIds: string[],
+  ): RouteInfo {
+    const start = this.getVehicleCoordinates(vehicle);
+    return {
+      route: route.ordered_stops.map((stop) => {
+        const job = jobsById.get(stop.stop_id);
+        const location = job ? this.getJobCoordinates(job) : { lat: 0, lng: 0 };
+        return {
+          job_id: stop.stop_id,
+          sequence: stop.sequence,
+          location: {
+            latitude: location.lat,
+            longitude: location.lng,
+          },
+          estimated_arrival:
+            stop.eta || job?.timeWindowStart?.toISOString() || new Date().toISOString(),
+          time_window_start:
+            job?.timeWindowStart?.toISOString() || new Date().toISOString(),
+          time_window_end:
+            job?.timeWindowEnd?.toISOString() || new Date().toISOString(),
+          priority: this.mapJobPriority(job?.priority),
+        };
+      }),
+      total_distance_km: Number((route.total_distance_m / 1000).toFixed(2)),
+      total_duration_minutes: Number((route.total_duration_s / 60).toFixed(2)),
+      num_jobs: route.ordered_stops.length,
+      vehicle_start_location: {
+        latitude: start.lat,
+        longitude: start.lng,
+      },
+      data_quality: 'live',
+      optimization_status: 'optimized',
+      warnings,
+      dropped_jobs: droppedJobIds,
+      planner_diagnostics: {},
+    };
+  }
+
+  private async callOptimizerV2(
+    request: OptimizeRequest,
+  ): Promise<OptimizeResponse> {
+    const requestUrl = `${this.routingServiceUrl}/optimize`;
+    this.logger.log(
+      `[ROUTING:REQUEST] Calling routing service v2 at ${requestUrl} for ${request.vehicles.length} vehicles and ${request.stops.length} stops`,
+    );
+    this.logger.debug(`[ROUTING:REQUEST] Payload: ${JSON.stringify(request)}`);
+
+    const startTime = Date.now();
+    const response: any = await firstValueFrom(
+      this.httpService.post<OptimizeResponse>(requestUrl, request, {
+        timeout: 60_000,
+      }) as any,
+    );
+
+    const duration = Date.now() - startTime;
+    const data = response?.data as OptimizeResponse;
+    this.logger.log(
+      `[ROUTING:RESPONSE] v2 received response in ${duration}ms with ${data?.routes?.length || 0} routes`,
+    );
+
+    if (!data || !Array.isArray(data.routes)) {
+      throw new BadRequestException(
+        'ROUTING_SERVICE_EMPTY_RESPONSE: Routing service returned an invalid optimize response',
+      );
+    }
+    await this.markOptimizerSuccess();
+    return data;
+  }
+
   /**
    * Call the Python routing-service to optimize route
    */
@@ -628,62 +1025,55 @@ export class DispatchService {
     vehicleId: string,
     jobIds: string[],
   ): Promise<RoutingServiceResponse> {
-    const requestUrl = `${this.routingServiceUrl}/route`;
-    this.logger.log(
-      `[ROUTING:REQUEST] Calling routing service at ${requestUrl} for vehicle ${vehicleId.substring(0, 8)} with ${jobIds.length} jobs`,
-    );
-
-    const request: RoutingServiceRequest = {
-      vehicle_id: vehicleId,
-      job_ids: jobIds,
-    };
-
+    const requestUrl = `${this.routingServiceUrl}/optimize`;
     try {
-      this.logger.debug(`[ROUTING:REQUEST] Payload: ${JSON.stringify(request)}`);
-      const startTime = Date.now();
+      const vehicle = await this.vehicleRepository.findOne({
+        where: { id: vehicleId },
+      });
+      if (!vehicle) {
+        throw new NotFoundException(`Vehicle ${vehicleId} not found`);
+      }
+      const jobs = await this.jobRepository.findByIds(jobIds);
+      if (jobs.length !== jobIds.length) {
+        throw new BadRequestException('ROUTING_SERVICE_ERROR: Some jobs were not found');
+      }
 
-      const response: any = await firstValueFrom(
-        this.httpService.post<RoutingServiceResponse>(
-          requestUrl,
-          request,
-          { timeout: 30000 }, // 30 second timeout
-        ) as any,
+      const optimizeResponse = await this.callOptimizerV2(
+        this.buildOptimizeRequest([vehicle], jobs),
+      );
+      const optimizedRoute = optimizeResponse.routes.find(
+        (route) => route.vehicle_id === vehicleId,
       );
 
-      const duration = Date.now() - startTime;
-      const data = response?.data as RoutingServiceResponse;
-
-      this.logger.log(
-        `[ROUTING:RESPONSE] Received response in ${duration}ms - success: ${data?.success}`,
-      );
-
-      if (!data) {
+      if (!optimizedRoute || optimizedRoute.ordered_stops.length === 0) {
         throw new BadRequestException(
-          `ROUTING_SERVICE_EMPTY_RESPONSE: Routing service returned empty response`,
+          'ROUTING_OPTIMIZATION_FAILED: No feasible route returned for the requested vehicle',
         );
       }
 
-      if (!data.success) {
-        throw new BadRequestException(
-          `ROUTING_OPTIMIZATION_FAILED: ${data.error || 'Unknown routing error'}`,
-        );
-      }
-      await this.markOptimizerSuccess();
-
-      data.optimization_status = data.optimization_status || 'optimized';
-      data.data_quality = data.data_quality || 'live';
-      data.is_fallback = data.is_fallback || false;
-      data.warnings = Array.isArray(data.warnings) ? data.warnings : [];
-      data.dropped_jobs = Array.isArray(data.dropped_jobs) ? data.dropped_jobs : [];
-      data.planner_diagnostics = data.planner_diagnostics || {};
-
-      this.logger.log(
-        `[ROUTING:SUCCESS] Route optimized - distance: ${data.total_distance_km}km, duration: ${data.total_duration_minutes}min, stops: ${data.num_jobs}`,
+      const jobsById = new Map(jobs.map((job) => [job.id, job]));
+      const mapped = this.mapOptimizeRouteToLegacy(
+        optimizedRoute,
+        vehicle,
+        jobsById,
+        optimizeResponse.warnings || [],
+        optimizeResponse.unassigned_stop_ids || [],
       );
 
-      return data;
+      return {
+        success: true,
+        route: mapped.route,
+        total_distance_km: mapped.total_distance_km,
+        total_duration_minutes: mapped.total_duration_minutes,
+        num_jobs: mapped.num_jobs,
+        vehicle_start_location: mapped.vehicle_start_location,
+        optimization_status: 'optimized',
+        data_quality: 'live',
+        warnings: mapped.warnings,
+        dropped_jobs: mapped.dropped_jobs,
+        planner_diagnostics: mapped.planner_diagnostics,
+      };
     } catch (error) {
-      // Categorize errors for better debugging
       let errorCode = 'ROUTING_SERVICE_ERROR';
       let errorMessage = error.message;
 
@@ -720,49 +1110,45 @@ export class DispatchService {
     vehicleIds: string[],
     jobIds: string[],
   ): Promise<GlobalRoutingServiceResponse> {
-    const requestUrl = `${this.routingServiceUrl}/route/global`;
-    this.logger.log(`[ROUTING:REQUEST] Calling global routing service at ${requestUrl} for ${vehicleIds.length} vehicles and ${jobIds.length} jobs`);
-
-    const request: GlobalRoutingServiceRequest = {
-      vehicle_ids: vehicleIds,
-      job_ids: jobIds,
-    };
-
+    const requestUrl = `${this.routingServiceUrl}/optimize`;
     try {
-      this.logger.debug(`[ROUTING:REQUEST] Payload: ${JSON.stringify(request)}`);
-      const startTime = Date.now();
+      const vehicles = await this.vehicleRepository.findByIds(vehicleIds);
+      const jobs = await this.jobRepository.findByIds(jobIds);
+      if (vehicles.length !== vehicleIds.length) {
+        throw new BadRequestException('ROUTING_SERVICE_ERROR: Some vehicles were not found');
+      }
+      if (jobs.length !== jobIds.length) {
+        throw new BadRequestException('ROUTING_SERVICE_ERROR: Some jobs were not found');
+      }
 
-      const response: any = await firstValueFrom(
-        this.httpService.post<GlobalRoutingServiceResponse>(
-          requestUrl,
-          request,
-          { timeout: 60000 },
-        ) as any,
+      const optimizeResponse = await this.callOptimizerV2(
+        this.buildOptimizeRequest(vehicles, jobs),
       );
+      const jobsById = new Map(jobs.map((job) => [job.id, job]));
+      const vehiclesById = new Map(vehicles.map((vehicle) => [vehicle.id, vehicle]));
+      const routes: Record<string, RouteInfo> = {};
 
-      const duration = Date.now() - startTime;
-      const data = response?.data as GlobalRoutingServiceResponse;
-
-      this.logger.log(`[ROUTING:RESPONSE] Received response in ${duration}ms - success: ${data?.success}`);
-
-      if (!data) {
-        throw new BadRequestException(`ROUTING_SERVICE_EMPTY_RESPONSE: Routing service returned empty response`);
+      for (const route of optimizeResponse.routes) {
+        const vehicle = vehiclesById.get(route.vehicle_id);
+        if (!vehicle) continue;
+        routes[route.vehicle_id] = this.mapOptimizeRouteToLegacy(
+          route,
+          vehicle,
+          jobsById,
+          optimizeResponse.warnings || [],
+          optimizeResponse.unassigned_stop_ids || [],
+        );
       }
 
-      if (!data.success) {
-        throw new BadRequestException(`ROUTING_OPTIMIZATION_FAILED: ${data.error || 'Unknown routing error'}`);
-      }
-      await this.markOptimizerSuccess();
-      data.optimization_status = data.optimization_status || 'optimized';
-      data.data_quality = data.data_quality || 'live';
-      data.is_fallback = data.is_fallback || false;
-      data.warnings = Array.isArray(data.warnings) ? data.warnings : [];
-      data.planner_diagnostics = data.planner_diagnostics || {};
-
-      const numRoutes = Object.keys(data.routes).length;
-      this.logger.log(`[ROUTING:SUCCESS] Global route optimized - ${numRoutes} routes created`);
-
-      return data;
+      return {
+        success: true,
+        routes,
+        unassigned_jobs: optimizeResponse.unassigned_stop_ids || [],
+        optimization_status: 'optimized',
+        data_quality: 'live',
+        warnings: optimizeResponse.warnings || [],
+        planner_diagnostics: {},
+      };
     } catch (error) {
       let errorCode = 'ROUTING_SERVICE_ERROR';
       let errorMessage = error.message;
@@ -797,7 +1183,10 @@ export class DispatchService {
   /**
    * Create global routes with optimization for multiple vehicles
    */
-  async createGlobalRoutes(dto: { vehicleIds: string[]; jobIds: string[] }): Promise<{
+  async createGlobalRoutes(
+    dto: { vehicleIds: string[]; jobIds: string[] },
+    actor?: DispatchActorContext,
+  ): Promise<{
     routes: Route[];
     optimizationStatus: OptimizationStatus;
     dataQuality: DataQuality;
@@ -828,7 +1217,30 @@ export class DispatchService {
     }
 
     // Step 3: Call global routing service
-    const routingResponse = await this.callGlobalRoutingService(dto.vehicleIds, dto.jobIds);
+    const organizationId =
+      actor?.organizationId ||
+      vehicles[0]?.organizationId ||
+      jobs[0]?.organizationId ||
+      null;
+    await this.ensureOrganizationScope(organizationId, vehicles, jobs);
+
+    const optimizationJob = this.optimizationJobs.create({
+      kind: 'global-route',
+      organizationId: organizationId || undefined,
+      vehicleIds: dto.vehicleIds,
+      jobIds: dto.jobIds,
+    });
+    this.optimizationJobs.update(optimizationJob.id, 'running');
+
+    let routingResponse: GlobalRoutingServiceResponse;
+    try {
+      routingResponse = await this.callGlobalRoutingService(dto.vehicleIds, dto.jobIds);
+    } catch (error: any) {
+      this.optimizationJobs.update(optimizationJob.id, 'failed', {
+        error: error?.message || 'global optimization failed',
+      });
+      throw error;
+    }
 
     const savedRoutes: Route[] = [];
 
@@ -841,6 +1253,7 @@ export class DispatchService {
       const color = this.getNextRouteColor();
 
       const routeEntity = this.routeRepository.create({
+        organizationId: organizationId || undefined,
         vehicleId,
         driverId: null, // assigned later
         jobIds: optimizedJobIds,
@@ -859,6 +1272,8 @@ export class DispatchService {
           planner_diagnostics: routeInfo.planner_diagnostics || routingResponse.planner_diagnostics || {},
           is_fallback: routingResponse.is_fallback || false,
           fallback_reason: routingResponse.fallback_reason || null,
+          optimization_job_id: optimizationJob.id,
+          optimization_job_status: 'completed',
         },
         status: RouteStatus.PLANNED,
         totalDistanceKm: routeInfo.total_distance_km,
@@ -871,6 +1286,7 @@ export class DispatchService {
       this.syncPersistedWorkflowStatus(routeEntity as Route);
 
       const savedRoute = await this.routeRepository.save(routeEntity);
+      await this.seedPublishedRouteVersion(savedRoute, actor);
       savedRoutes.push(savedRoute);
 
       await this.jobRepository
@@ -881,10 +1297,36 @@ export class DispatchService {
         .execute();
 
       this.dispatchGateway.emitRouteCreated(savedRoute);
+      await this.logDispatchEvent({
+        routeId: savedRoute.id,
+        source: 'workflow',
+        code: 'ROUTE_CREATED',
+        message: 'Route created from global optimization result.',
+        eventType: 'ROUTE_CREATED',
+        actor: this.getActorLabel(actor),
+        actorUserId: this.getActorUserId(actor),
+        payload: {
+          vehicleId,
+          jobCount: optimizedJobIds.length,
+          status: savedRoute.status,
+        },
+      });
     }
 
     const duration = Date.now() - startTime;
     this.logger.log(`[ROUTE:CREATE_GLOBAL] Created ${savedRoutes.length} routes in ${duration}ms`);
+
+    this.optimizationJobs.update(optimizationJob.id, 'completed', {
+      fallbackUsed: Boolean(routingResponse.is_fallback),
+      warnings: routingResponse.warnings || [],
+      resultRouteIds: savedRoutes.map((route) => route.id),
+      metrics: {
+        routeCount: savedRoutes.length,
+        droppedJobCount: routingResponse.unassigned_jobs?.length || 0,
+        optimizationStatus: routingResponse.optimization_status || 'optimized',
+        dataQuality: routingResponse.data_quality || 'live',
+      },
+    });
 
     return {
       routes: savedRoutes,
@@ -899,7 +1341,17 @@ export class DispatchService {
   /**
    * Create a new route with optimization
    */
-  async create(createRouteDto: CreateRouteDto): Promise<Route> {
+  async create(
+    createRouteDto: CreateRouteDto,
+    actor?: DispatchActorContext,
+  ): Promise<Route> {
+    const optimizationJob = this.optimizationJobs.create({
+      kind: 'single-route',
+      organizationId: actor?.organizationId || undefined,
+      vehicleIds: [createRouteDto.vehicleId],
+      jobIds: createRouteDto.jobIds,
+    });
+    this.optimizationJobs.update(optimizationJob.id, 'running');
     const startTime = Date.now();
     this.logger.log(
       `[ROUTE:CREATE] Starting route creation for vehicle ${createRouteDto.vehicleId.substring(0, 8)} with ${createRouteDto.jobIds.length} jobs`,
@@ -939,13 +1391,27 @@ export class DispatchService {
       );
     }
     this.logger.log(`[ROUTE:CREATE:STEP2] All ${jobs.length} jobs validated successfully`);
+    const organizationId =
+      actor?.organizationId ||
+      vehicle.organizationId ||
+      jobs[0]?.organizationId ||
+      null;
+    await this.ensureOrganizationScope(organizationId, [vehicle], jobs);
 
     // Step 3: Call routing service for optimization
     this.logger.log(`[ROUTE:CREATE:STEP3] Calling routing service for route optimization...`);
-    const routingResponse = await this.callRoutingService(
-      createRouteDto.vehicleId,
-      createRouteDto.jobIds,
-    );
+    let routingResponse: RoutingServiceResponse;
+    try {
+      routingResponse = await this.callRoutingService(
+        createRouteDto.vehicleId,
+        createRouteDto.jobIds,
+      );
+    } catch (error: any) {
+      this.optimizationJobs.update(optimizationJob.id, 'failed', {
+        error: error?.message || 'optimization failed',
+      });
+      throw error;
+    }
 
     // Step 4: Extract optimized job order
     this.logger.log(`[ROUTE:CREATE:STEP4] Extracting optimized job order...`);
@@ -974,6 +1440,7 @@ export class DispatchService {
     // Step 6: Create and save route entity
     this.logger.log(`[ROUTE:CREATE:STEP6] Saving route entity to database...`);
     const route = this.routeRepository.create({
+      organizationId: organizationId || undefined,
       vehicleId: createRouteDto.vehicleId,
       driverId: createRouteDto.driverId,
       jobIds: optimizedJobIds,
@@ -986,6 +1453,8 @@ export class DispatchService {
         planner_diagnostics: routingResponse.planner_diagnostics || {},
         is_fallback: routingResponse.is_fallback || false,
         fallback_reason: routingResponse.fallback_reason || null,
+        optimization_job_id: optimizationJob.id,
+        optimization_job_status: 'completed',
       },
       status: RouteStatus.PLANNED,
       totalDistanceKm: routingResponse.total_distance_km,
@@ -1002,6 +1471,7 @@ export class DispatchService {
     this.syncPersistedWorkflowStatus(route as Route);
 
     const savedRoute = await this.routeRepository.save(route);
+    await this.seedPublishedRouteVersion(savedRoute, actor);
 
     const duration = Date.now() - startTime;
     this.logger.log(
@@ -1022,23 +1492,51 @@ export class DispatchService {
     // Step 8: Broadcast via WebSocket
     this.logger.log(`[ROUTE:CREATE:STEP8] Broadcasting route creation via WebSocket...`);
     this.dispatchGateway.emitRouteCreated(savedRoute);
+    await this.logDispatchEvent({
+      routeId: savedRoute.id,
+      source: 'workflow',
+      code: 'ROUTE_CREATED',
+      message: 'Route created from dispatch planning request.',
+      eventType: 'ROUTE_CREATED',
+      actor: this.getActorLabel(actor),
+      actorUserId: this.getActorUserId(actor),
+      payload: {
+        vehicleId: savedRoute.vehicleId,
+        jobCount: savedRoute.jobIds.length,
+        status: savedRoute.status,
+      },
+    });
 
+    this.optimizationJobs.update(optimizationJob.id, 'completed', {
+      routeId: savedRoute.id,
+      fallbackUsed: Boolean(routingResponse.is_fallback),
+      warnings: routingResponse.warnings || [],
+      resultRouteIds: [savedRoute.id],
+      metrics: {
+        droppedJobCount: routingResponse.dropped_jobs?.length || 0,
+        optimizationStatus: routingResponse.optimization_status || 'optimized',
+        dataQuality: routingResponse.data_quality || 'live',
+        totalDistanceKm: routingResponse.total_distance_km,
+        totalDurationMinutes: routingResponse.total_duration_minutes,
+      },
+    });
     return savedRoute;
   }
 
   /**
    * Find all routes
    */
-  async findAll(status?: RouteStatus): Promise<Route[]> {
+  async findAll(status?: RouteStatus, actor?: DispatchActorContext): Promise<Route[]> {
     if (status) {
       return this.routeRepository.find({
-        where: { status },
+        where: { status, ...(actor?.organizationId ? { organizationId: actor.organizationId } : {}) } as any,
         relations: ['vehicle'],
         order: { createdAt: 'DESC' },
       });
     }
 
     return this.routeRepository.find({
+      where: actor?.organizationId ? ({ organizationId: actor.organizationId } as any) : undefined,
       relations: ['vehicle'],
       order: { createdAt: 'DESC' },
     });
@@ -1047,9 +1545,9 @@ export class DispatchService {
   /**
    * Find one route by ID
    */
-  async findOne(id: string): Promise<Route> {
+  async findOne(id: string, actor?: DispatchActorContext): Promise<Route> {
     const route = await this.routeRepository.findOne({
-      where: { id },
+      where: { id, ...(actor?.organizationId ? { organizationId: actor.organizationId } : {}) } as any,
       relations: ['vehicle'],
     });
 
@@ -1060,11 +1558,222 @@ export class DispatchService {
     return route;
   }
 
+  async listRouteVersions(routeId: string, actor?: DispatchActorContext): Promise<RouteVersion[]> {
+    const route = await this.findOne(routeId, actor);
+    await this.ensureRouteVersionBackfill(route);
+    return this.routeVersionRepository.find({
+      where: { routeId, ...(actor?.organizationId ? { organizationId: actor.organizationId } : {}) } as any,
+      order: { versionNumber: 'DESC' },
+    });
+  }
+
+  async createRouteVersionSnapshot(
+    routeId: string,
+    actor?: DispatchActorContext,
+  ): Promise<RouteVersion> {
+    const route = await this.findOne(routeId, actor);
+    await this.ensureRouteVersionBackfill(route, actor);
+    const version = this.routeVersionRepository.create({
+      routeId,
+      versionNumber: await this.getNextRouteVersionNumber(routeId),
+      status: 'DRAFT',
+      snapshot: this.buildRouteVersionSnapshot(route),
+      createdByUserId: this.getActorUserId(actor),
+    });
+    const saved = await this.routeVersionRepository.save(version);
+    await this.logDispatchEvent({
+      routeId,
+      aggregateType: 'ROUTE_VERSION',
+      aggregateId: saved.id,
+      eventType: 'ROUTE_VERSION_CREATED',
+      source: 'workflow',
+      code: 'ROUTE_VERSION_CREATED',
+      message: 'Route version snapshot created.',
+      actor: this.getActorLabel(actor),
+      actorUserId: this.getActorUserId(actor),
+      payload: {
+        versionId: saved.id,
+        versionNumber: saved.versionNumber,
+        routeSnapshot: this.buildRouteSnapshot(route),
+      },
+    });
+    return saved;
+  }
+
+  async reviewRouteVersion(
+    routeId: string,
+    versionId: string,
+    actor?: DispatchActorContext,
+  ): Promise<RouteVersion> {
+    await this.findOne(routeId, actor);
+    const version = await this.routeVersionRepository.findOne({
+      where: { id: versionId, routeId },
+    });
+
+    if (!version) {
+      throw new NotFoundException(`Route version ${versionId} not found`);
+    }
+    if (version.status !== 'DRAFT') {
+      throw new BadRequestException(
+        `Only DRAFT versions can be reviewed. Current: ${version.status}`,
+      );
+    }
+
+    version.status = 'REVIEWED';
+    version.reviewedByUserId = this.getActorUserId(actor);
+    version.reviewedAt = new Date();
+    const saved = await this.routeVersionRepository.save(version);
+    await this.logDispatchEvent({
+      routeId,
+      aggregateType: 'ROUTE_VERSION',
+      aggregateId: saved.id,
+      eventType: 'ROUTE_VERSION_REVIEWED',
+      source: 'workflow',
+      code: 'ROUTE_VERSION_REVIEWED',
+      message: 'Route version moved to review state.',
+      actor: this.getActorLabel(actor),
+      actorUserId: this.getActorUserId(actor),
+      payload: {
+        versionId: saved.id,
+        versionNumber: saved.versionNumber,
+      },
+    });
+    return saved;
+  }
+
+  async approveRouteVersion(
+    routeId: string,
+    versionId: string,
+    actor?: DispatchActorContext,
+  ): Promise<RouteVersion> {
+    await this.findOne(routeId, actor);
+    const version = await this.routeVersionRepository.findOne({
+      where: { id: versionId, routeId },
+    });
+
+    if (!version) {
+      throw new NotFoundException(`Route version ${versionId} not found`);
+    }
+    if (!['DRAFT', 'REVIEWED'].includes(version.status)) {
+      throw new BadRequestException(
+        `Only DRAFT or REVIEWED versions can be approved. Current: ${version.status}`,
+      );
+    }
+
+    version.status = 'APPROVED';
+    version.approvedByUserId = this.getActorUserId(actor);
+    version.approvedAt = new Date();
+    const saved = await this.routeVersionRepository.save(version);
+    await this.logDispatchEvent({
+      routeId,
+      aggregateType: 'ROUTE_VERSION',
+      aggregateId: saved.id,
+      eventType: 'ROUTE_VERSION_APPROVED',
+      source: 'workflow',
+      code: 'ROUTE_VERSION_APPROVED',
+      message: 'Route version approved for publish.',
+      actor: this.getActorLabel(actor),
+      actorUserId: this.getActorUserId(actor),
+      payload: {
+        versionId: saved.id,
+        versionNumber: saved.versionNumber,
+      },
+    });
+    return saved;
+  }
+
+  async publishRouteVersion(
+    routeId: string,
+    versionId: string,
+    actor?: DispatchActorContext,
+  ): Promise<RouteVersion> {
+    const route = await this.findOne(routeId, actor);
+    if ([RouteStatus.IN_PROGRESS, RouteStatus.COMPLETED, RouteStatus.CANCELLED].includes(route.status)) {
+      throw new BadRequestException(
+        `Route ${routeId} cannot publish versions while in status ${route.status}`,
+      );
+    }
+
+    const version = await this.routeVersionRepository.findOne({
+      where: { id: versionId, routeId },
+    });
+    if (!version) {
+      throw new NotFoundException(`Route version ${versionId} not found`);
+    }
+    if (version.status !== 'APPROVED') {
+      throw new BadRequestException(
+        `Only APPROVED versions can be published. Current: ${version.status}`,
+      );
+    }
+
+    await this.routeVersionRepository.update(
+      { routeId, status: 'PUBLISHED' },
+      { status: 'SUPERSEDED' },
+    );
+
+    version.status = 'PUBLISHED';
+    version.publishedByUserId = this.getActorUserId(actor);
+    version.publishedAt = new Date();
+
+    const snapshotRoute = (version.snapshot?.route || {}) as Record<string, unknown>;
+    route.jobIds = Array.isArray(snapshotRoute.jobIds)
+      ? (snapshotRoute.jobIds as string[])
+      : route.jobIds;
+    route.driverId =
+      typeof version.snapshot?.driverId === 'string'
+        ? String(version.snapshot.driverId)
+        : route.driverId;
+    route.polyline = (version.snapshot?.polyline as any) || route.polyline;
+    route.routeData = {
+      ...((version.snapshot?.routeData as Record<string, unknown>) || route.routeData || {}),
+      route_version: this.buildRouteVersionMetadata(version, {
+        lastPublishedVersionId: version.id,
+        lastPublishedVersionNumber: version.versionNumber,
+      }),
+    };
+    route.totalDistanceKm =
+      typeof snapshotRoute.totalDistanceKm === 'number'
+        ? Number(snapshotRoute.totalDistanceKm)
+        : route.totalDistanceKm;
+    route.totalDurationMinutes =
+      typeof snapshotRoute.totalDurationMinutes === 'number'
+        ? Number(snapshotRoute.totalDurationMinutes)
+        : route.totalDurationMinutes;
+    route.jobCount = Array.isArray(route.jobIds) ? route.jobIds.length : route.jobCount;
+    this.syncPersistedWorkflowStatus(route);
+    await this.routeRepository.save(route);
+
+    const saved = await this.routeVersionRepository.save(version);
+
+    await this.logDispatchEvent({
+      routeId,
+      aggregateType: 'ROUTE_VERSION',
+      aggregateId: saved.id,
+      eventType: 'ROUTE_VERSION_PUBLISHED',
+      source: 'workflow',
+      code: 'ROUTE_VERSION_PUBLISHED',
+      message: 'Route version published as the active plan.',
+      actor: this.getActorLabel(actor),
+      actorUserId: this.getActorUserId(actor),
+      payload: {
+        versionId: saved.id,
+        versionNumber: saved.versionNumber,
+      },
+    });
+    this.dispatchGateway.emitRouteUpdated(route);
+    return saved;
+  }
+
   /**
    * Update a route
    */
-  async update(id: string, updateRouteDto: UpdateRouteDto): Promise<Route> {
-    const route = await this.findOne(id);
+  async update(
+    id: string,
+    updateRouteDto: UpdateRouteDto,
+    actor?: DispatchActorContext,
+  ): Promise<Route> {
+    const route = await this.findOne(id, actor);
+    const beforeSnapshot = this.buildRouteSnapshot(route);
 
     if (updateRouteDto.status) {
       const normalizedNextStatus = this.normalizeRouteStatus(updateRouteDto.status);
@@ -1075,27 +1784,46 @@ export class DispatchService {
       this.ensureValidRouteTransition(route.status, updateRouteDto.status as RouteStatus);
 
       if (updateRouteDto.status === RouteStatus.IN_PROGRESS) {
-        return this.startRoute(id);
+        return this.startRoute(id, actor);
       }
       if (updateRouteDto.status === RouteStatus.COMPLETED) {
-        return this.completeRoute(id);
+        return this.completeRoute(id, actor);
       }
       if (updateRouteDto.status === RouteStatus.CANCELLED) {
-        return this.cancelRoute(id);
+        return this.cancelRoute(id, actor);
       }
     }
 
+    await this.ensurePlanningDraftVersion(route, actor, 'route_update');
     Object.assign(route, updateRouteDto);
     this.syncPersistedWorkflowStatus(route);
 
-    return this.routeRepository.save(route);
+    const updatedRoute = await this.routeRepository.save(route);
+    await this.logDispatchEvent({
+      routeId: updatedRoute.id,
+      source: 'workflow',
+      code: 'ROUTE_UPDATED',
+      message: 'Route details updated.',
+      eventType: 'ROUTE_UPDATED',
+      actor: this.getActorLabel(actor),
+      actorUserId: this.getActorUserId(actor),
+      payload: {
+        before: beforeSnapshot,
+        after: this.buildRouteSnapshot(updatedRoute),
+      },
+    });
+    return updatedRoute;
   }
 
   /**
    * Assign a driver to a route and update related statuses
    */
-  async assignDriver(routeId: string, driverId: string): Promise<Route> {
-    const route = await this.findOne(routeId);
+  async assignDriver(
+    routeId: string,
+    driverId: string,
+    actor?: DispatchActorContext,
+  ): Promise<Route> {
+    const route = await this.findOne(routeId, actor);
 
     if ([RouteStatus.COMPLETED, RouteStatus.CANCELLED].includes(route.status)) {
       throw new BadRequestException(
@@ -1111,6 +1839,7 @@ export class DispatchService {
       throw new NotFoundException(`Driver ${driverId} not found`);
     }
 
+    await this.ensurePlanningDraftVersion(route, actor, 'assign_driver');
     route.driverId = driverId;
     if (route.status === RouteStatus.PLANNED) {
       route.status = RouteStatus.ASSIGNED;
@@ -1135,16 +1864,30 @@ export class DispatchService {
 
     const updatedRoute = await this.routeRepository.save(route);
     this.dispatchGateway.emitRouteUpdated(updatedRoute);
+    await this.logDispatchEvent({
+      routeId: updatedRoute.id,
+      source: 'workflow',
+      code: 'ROUTE_DRIVER_ASSIGNED',
+      message: 'Driver assigned to route.',
+      eventType: 'ROUTE_DRIVER_ASSIGNED',
+      actor: this.getActorLabel(actor),
+      actorUserId: this.getActorUserId(actor),
+      payload: {
+        driverId,
+        vehicleId: updatedRoute.vehicleId,
+        status: updatedRoute.status,
+      },
+    });
     return updatedRoute;
   }
 
   /**
    * Start a route (assign to vehicle/driver)
    */
-  async startRoute(id: string): Promise<Route> {
+  async startRoute(id: string, actor?: DispatchActorContext): Promise<Route> {
     this.logger.log(`[ROUTE:START] Initiating route start for ${id.substring(0, 8)}...`);
 
-    const route = await this.findOne(id);
+    const route = await this.findOne(id, actor);
     if (isDispatchBlockedByRerouteState(route.routeData?.reroute_state || null)) {
       throw new BadRequestException(
         `Route ${id} has pending reroute state '${route.routeData?.reroute_state}' and cannot be dispatched`,
@@ -1191,7 +1934,10 @@ export class DispatchService {
       source: 'workflow',
       level: 'info',
       code: 'ROUTE_STARTED',
+      eventType: 'ROUTE_STARTED',
       message: `Route ${route.id} started`,
+      actor: this.getActorLabel(actor),
+      actorUserId: this.getActorUserId(actor),
       payload: { status: updatedRoute.status, workflowStatus: updatedRoute.workflowStatus },
     });
 
@@ -1205,8 +1951,8 @@ export class DispatchService {
   /**
    * Complete a route
    */
-  async completeRoute(id: string): Promise<Route> {
-    const route = await this.findOne(id);
+  async completeRoute(id: string, actor?: DispatchActorContext): Promise<Route> {
+    const route = await this.findOne(id, actor);
 
     if (route.status !== RouteStatus.IN_PROGRESS) {
       throw new BadRequestException(
@@ -1243,7 +1989,10 @@ export class DispatchService {
       source: 'workflow',
       level: 'info',
       code: 'ROUTE_COMPLETED',
+      eventType: 'ROUTE_COMPLETED',
       message: `Route ${route.id} completed`,
+      actor: this.getActorLabel(actor),
+      actorUserId: this.getActorUserId(actor),
       payload: { status: completedRoute.status, workflowStatus: completedRoute.workflowStatus },
     });
 
@@ -1253,8 +2002,8 @@ export class DispatchService {
   /**
    * Cancel a route
    */
-  async cancelRoute(id: string): Promise<Route> {
-    const route = await this.findOne(id);
+  async cancelRoute(id: string, actor?: DispatchActorContext): Promise<Route> {
+    const route = await this.findOne(id, actor);
     this.ensureValidRouteTransition(route.status, RouteStatus.CANCELLED);
 
     const wasInProgress = route.status === RouteStatus.IN_PROGRESS;
@@ -1283,7 +2032,10 @@ export class DispatchService {
       source: 'workflow',
       level: 'warning',
       code: 'ROUTE_CANCELLED',
+      eventType: 'ROUTE_CANCELLED',
       message: `Route ${route.id} cancelled`,
+      actor: this.getActorLabel(actor),
+      actorUserId: this.getActorUserId(actor),
       payload: { status: cancelledRoute.status, workflowStatus: cancelledRoute.workflowStatus },
     });
     return cancelledRoute;
@@ -1292,9 +2044,9 @@ export class DispatchService {
   /**
    * Get routes by vehicle
    */
-  async findByVehicle(vehicleId: string): Promise<Route[]> {
+  async findByVehicle(vehicleId: string, actor?: DispatchActorContext): Promise<Route[]> {
     return this.routeRepository.find({
-      where: { vehicleId },
+      where: { vehicleId, ...(actor?.organizationId ? { organizationId: actor.organizationId } : {}) } as any,
       order: { createdAt: 'DESC' },
     });
   }
@@ -1302,12 +2054,17 @@ export class DispatchService {
   /**
    * Reorder stops in a route and recalculate polyline
    */
-  async reorderStops(routeId: string, newJobOrder: string[]): Promise<Route> {
+  async reorderStops(
+    routeId: string,
+    newJobOrder: string[],
+    actor?: DispatchActorContext,
+  ): Promise<Route> {
     this.logger.log(
       `Reordering stops for route ${routeId} with ${newJobOrder.length} jobs`,
     );
 
-    const route = await this.findOne(routeId);
+    const route = await this.findOne(routeId, actor);
+    const beforeSnapshot = this.buildRouteSnapshot(route);
 
     if (route.status === RouteStatus.COMPLETED || route.status === RouteStatus.CANCELLED) {
       throw new BadRequestException(
@@ -1329,6 +2086,7 @@ export class DispatchService {
       );
     }
 
+    await this.ensurePlanningDraftVersion(route, actor, 'reorder_stops');
     // Call routing service with new order to get updated polyline and metrics
     const routingResponse = await this.callRoutingService(
       route.vehicleId,
@@ -1372,6 +2130,19 @@ export class DispatchService {
 
     // Broadcast route update via WebSocket
     this.dispatchGateway.emitRouteUpdated(updatedRoute);
+    await this.logDispatchEvent({
+      routeId: updatedRoute.id,
+      source: 'workflow',
+      code: 'ROUTE_REORDERED',
+      message: 'Route stop order updated.',
+      eventType: 'ROUTE_REORDERED',
+      actor: this.getActorLabel(actor),
+      actorUserId: this.getActorUserId(actor),
+      payload: {
+        before: beforeSnapshot,
+        after: this.buildRouteSnapshot(updatedRoute),
+      },
+    });
 
     return updatedRoute;
   }
@@ -1426,8 +2197,9 @@ export class DispatchService {
     routeId: string,
     action: RerouteAction,
     payload: Record<string, any> | undefined,
+    actor?: DispatchActorContext,
   ) {
-    const route = await this.findOne(routeId);
+    const route = await this.findOne(routeId, actor);
     validateRerouteActionPayload(action, payload, route);
     const beforeSnapshot = this.buildRouteSnapshot(route);
     const afterSnapshot = this.buildAfterSnapshotFromSimulation(
@@ -1586,16 +2358,20 @@ export class DispatchService {
     };
   }
 
-  async getRerouteHistory(routeId: string): Promise<RerouteRequest[]> {
-    await this.findOne(routeId);
+  async getRerouteHistory(routeId: string, actor?: DispatchActorContext): Promise<RerouteRequest[]> {
+    await this.findOne(routeId, actor);
     return this.rerouteRequestRepository.find({
-      where: { routeId },
+      where: { routeId, ...(actor?.organizationId ? { organizationId: actor.organizationId } : {}) } as any,
       order: { createdAt: 'DESC' },
     });
   }
 
-  async requestReroute(routeId: string, dto: RequestRerouteDto): Promise<RerouteRequest> {
-    const route = await this.findOne(routeId);
+  async requestReroute(
+    routeId: string,
+    dto: RequestRerouteDto,
+    actor?: DispatchActorContext,
+  ): Promise<RerouteRequest> {
+    const route = await this.findOne(routeId, actor);
     const now = new Date();
     validateRerouteActionPayload(dto.action as RerouteAction, dto.requestPayload, route);
 
@@ -1648,7 +2424,7 @@ export class DispatchService {
         },
       },
       beforeSnapshot,
-      requesterId: dto.requesterId || null,
+      requesterId: this.getActorUserId(actor) || dto.requesterId || null,
       requestedAt: now,
     });
 
@@ -1687,6 +2463,7 @@ export class DispatchService {
       source: 'reroute',
       level: 'warning',
       code: 'REROUTE_REQUESTED',
+      eventType: 'REROUTE_REQUESTED',
       message: `Reroute requested (${dto.action}) due to ${dto.exceptionCategory}`,
       payload: {
         requestId: saved.id,
@@ -1698,7 +2475,8 @@ export class DispatchService {
       },
       reasonCode: requestConstraintDiagnostics.reasonCodes[0] || null,
       action: dto.action,
-      actor: dto.requesterId || null,
+      actor: this.getActorLabel(actor),
+      actorUserId: this.getActorUserId(actor),
       packId: requestConstraintDiagnostics.selectedPackId,
     });
 
@@ -1709,8 +2487,9 @@ export class DispatchService {
     routeId: string,
     requestId: string,
     dto: ReviewRerouteDto,
+    actor?: DispatchActorContext,
   ): Promise<RerouteRequest> {
-    const route = await this.findOne(routeId);
+    const route = await this.findOne(routeId, actor);
     const request = await this.findRerouteRequest(routeId, requestId);
 
     if (!canTransitionRerouteRequest(request.status, 'approved')) {
@@ -1720,7 +2499,7 @@ export class DispatchService {
     }
 
     request.status = 'approved';
-    request.reviewerId = dto.reviewerId || null;
+    request.reviewerId = this.getActorUserId(actor) || dto.reviewerId || null;
     request.reviewNote = dto.reviewNote || null;
     request.reviewedAt = new Date();
     const saved = await this.rerouteRequestRepository.save(request);
@@ -1743,10 +2522,12 @@ export class DispatchService {
       source: 'reroute',
       level: 'info',
       code: 'REROUTE_APPROVED',
+      eventType: 'REROUTE_APPROVED',
       message: `Reroute request ${request.id} approved`,
       payload: { requestId: request.id },
       action: request.action,
-      actor: dto.reviewerId || null,
+      actor: this.getActorLabel(actor),
+      actorUserId: this.getActorUserId(actor),
     });
 
     return saved;
@@ -1756,8 +2537,9 @@ export class DispatchService {
     routeId: string,
     requestId: string,
     dto: ReviewRerouteDto,
+    actor?: DispatchActorContext,
   ): Promise<RerouteRequest> {
-    const route = await this.findOne(routeId);
+    const route = await this.findOne(routeId, actor);
     const request = await this.findRerouteRequest(routeId, requestId);
 
     if (!canTransitionRerouteRequest(request.status, 'rejected')) {
@@ -1767,7 +2549,7 @@ export class DispatchService {
     }
 
     request.status = 'rejected';
-    request.reviewerId = dto.reviewerId || null;
+    request.reviewerId = this.getActorUserId(actor) || dto.reviewerId || null;
     request.reviewNote = dto.reviewNote || null;
     request.reviewedAt = new Date();
     const saved = await this.rerouteRequestRepository.save(request);
@@ -1790,10 +2572,12 @@ export class DispatchService {
       source: 'reroute',
       level: 'info',
       code: 'REROUTE_REJECTED',
+      eventType: 'REROUTE_REJECTED',
       message: `Reroute request ${request.id} rejected`,
       payload: { requestId: request.id },
       action: request.action,
-      actor: dto.reviewerId || null,
+      actor: this.getActorLabel(actor),
+      actorUserId: this.getActorUserId(actor),
     });
 
     return saved;
@@ -1803,8 +2587,9 @@ export class DispatchService {
     routeId: string,
     requestId: string,
     dto: ApplyRerouteDto,
+    actor?: DispatchActorContext,
   ): Promise<RerouteRequest> {
-    const route = await this.findOne(routeId);
+    const route = await this.findOne(routeId, actor);
     const request = await this.findRerouteRequest(routeId, requestId);
 
     if (
@@ -1843,6 +2628,7 @@ export class DispatchService {
         source: 'reroute',
         level: 'error',
         code: 'REROUTE_APPLY_BLOCKED_CONSTRAINTS',
+        eventType: 'REROUTE_APPLY_BLOCKED_CONSTRAINTS',
         message: `Reroute apply blocked for ${request.action}`,
         payload: {
           requestId: request.id,
@@ -1870,6 +2656,7 @@ export class DispatchService {
         source: 'reroute',
         level: 'warning',
         code: 'REROUTE_APPLY_OVERRIDE_APPROVED',
+        eventType: 'REROUTE_APPLY_OVERRIDE_APPROVED',
         message: `Operator override applied for infeasible reroute action ${request.action}`,
         payload: {
           requestId: request.id,
@@ -1881,9 +2668,12 @@ export class DispatchService {
         reasonCode: constraintDiagnostics.reasonCodes[0] || null,
         action: request.action,
         actor: overrideActor,
+        actorUserId: overrideActor,
         packId: constraintDiagnostics.selectedPackId,
       });
     }
+
+    await this.ensurePlanningDraftVersion(route, actor, 'apply_reroute');
 
     // Deterministic reroute actions for this sprint foundation.
     if (
@@ -1928,6 +2718,11 @@ export class DispatchService {
           `Cannot move stop to ${targetRoute.status} target route`,
         );
       }
+      await this.ensurePlanningDraftVersion(
+        targetRoute,
+        actor,
+        'apply_reroute_target_route',
+      );
       route.jobIds = route.jobIds.filter((id) => id !== effectivePayload.jobId);
       route.jobCount = route.jobIds.length;
       this.syncPersistedWorkflowStatus(route);
@@ -1959,6 +2754,7 @@ export class DispatchService {
         source: 'reroute',
         level: 'info',
         code: 'REROUTE_STOP_REASSIGNED_TO_ROUTE',
+        eventType: 'REROUTE_STOP_REASSIGNED_TO_ROUTE',
         message: `Stop ${effectivePayload.jobId} moved from ${route.id} to ${targetRoute.id}`,
         payload: {
           sourceRouteId: route.id,
@@ -1977,7 +2773,7 @@ export class DispatchService {
     }
 
     request.status = 'applied';
-    request.appliedBy = dto.appliedBy || null;
+    request.appliedBy = this.getActorUserId(actor) || dto.appliedBy || null;
     request.appliedAt = new Date();
     request.afterSnapshot = this.buildRouteSnapshot(route);
     request.impactSummary = this.computeImpactSummary(beforeSnapshot, request.afterSnapshot);
@@ -2035,6 +2831,7 @@ export class DispatchService {
       source: 'reroute',
       level: 'warning',
       code: 'REROUTE_APPLIED',
+      eventType: 'REROUTE_APPLIED',
       message: `Reroute request ${request.id} applied (${request.action})`,
       payload: {
         requestId: request.id,
@@ -2048,7 +2845,11 @@ export class DispatchService {
       },
       reasonCode: constraintDiagnostics.reasonCodes[0] || null,
       action: request.action,
-      actor: !constraintDiagnostics.feasible && overrideRequested ? overrideActor : dto.appliedBy || null,
+      actor: !constraintDiagnostics.feasible && overrideRequested ? overrideActor : this.getActorLabel(actor),
+      actorUserId:
+        !constraintDiagnostics.feasible && overrideRequested
+          ? overrideActor
+          : this.getActorUserId(actor),
       packId: constraintDiagnostics.selectedPackId,
     });
 
@@ -2058,15 +2859,20 @@ export class DispatchService {
   /**
    * Get statistics
    */
-  async getStatistics() {
+  async getStatistics(actor?: DispatchActorContext) {
+    if (!actor?.organizationId) {
+      throw new ForbiddenException('Organization scope required');
+    }
+
     const [byStatus, total] = await Promise.all([
       this.routeRepository
         .createQueryBuilder('route')
+        .where('route.organizationId = :organizationId', { organizationId: actor.organizationId })
         .select('route.status', 'status')
         .addSelect('COUNT(*)', 'count')
         .groupBy('route.status')
         .getRawMany(),
-      this.routeRepository.count(),
+      this.routeRepository.count({ where: { organizationId: actor.organizationId } as any }),
     ]);
 
     return {

@@ -94,6 +94,7 @@ type Customer {
   id: ID!
   name: String!
   notes: String
+  organizationId: String
   phone: String
   updatedAt: DateTime!
 }
@@ -121,6 +122,7 @@ type Driver {
   licenseClass: String
   licenseExpiryDate: DateTime!
   licenseNumber: String!
+  organizationId: String
   phone: String!
   roles: [String!]!
   status: String!
@@ -154,6 +156,7 @@ type Job {
   id: ID!
   invoiceRef: String
   notes: String
+  organizationId: String
   pickupAddress: String!
   priority: String!
   quantity: Int
@@ -385,6 +388,7 @@ type Vehicle {
   make: String!
   model: String!
   nextMaintenanceKm: Float
+  organizationId: String
   status: String!
   updatedAt: DateTime!
   vehicleType: String!

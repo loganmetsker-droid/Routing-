@@ -1,3 +1,4 @@
+import { BillingStatus, JobPriority, JobStatus } from '../jobs/entities/job.entity';
 import { RouteStatus } from './entities/route.entity';
 import {
   buildRerouteAlternatives,
@@ -13,11 +14,26 @@ describe('reroute constraints', () => {
 
   const mkJob = (id: string, overrides: Record<string, any> = {}) => ({
     id,
-    weight: 10,
-    volume: 2,
-    estimatedDuration: 15,
+    customerName: `Customer ${id}`,
+    customerPhone: '+1-555-0100',
+    customerEmail: `customer-${id}@example.com`,
+    pickupAddress: '100 Pickup St, Denver, CO',
+    deliveryAddress: '200 Delivery Ave, Denver, CO',
+    pickupAddressStructured: null,
+    deliveryAddressStructured: null,
+    pickupLocation: null,
+    deliveryLocation: null,
+    timeWindow: { start: '2026-01-01T08:00:00.000Z', end: '2026-01-01T12:00:00.000Z' },
     timeWindowStart: new Date('2026-01-01T08:00:00.000Z'),
     timeWindowEnd: new Date('2026-01-01T12:00:00.000Z'),
+    priority: JobPriority.NORMAL,
+    status: JobStatus.SCHEDULED,
+    billingStatus: BillingStatus.UNPAID,
+    assignedRouteId: null,
+    assignedVehicleId: null,
+    stopSequence: null,
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    updatedAt: new Date('2026-01-01T00:00:00.000Z'),
     ...overrides,
   });
 
@@ -28,7 +44,10 @@ describe('reroute constraints', () => {
       payload: {},
       beforeSnapshot: { jobIds: ['j1', 'j2'] },
       afterSnapshot: { jobIds: ['j1', 'j2'], dataQuality: 'live' },
-      jobs: [mkJob('j1'), mkJob('j2')],
+      jobs: [
+        mkJob('j1', { weight: 10, volume: 2 }),
+        mkJob('j2', { weight: 10, volume: 2 }),
+      ],
       vehicle: { capacityWeightKg: 15, capacityVolumeM3: 3 } as any,
       driver: null,
     });

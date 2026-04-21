@@ -11,6 +11,7 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -25,6 +26,14 @@ import { Job, JobStatus, JobPriority } from './entities/job.entity';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
 
+type AuthenticatedRequest = {
+  user?: {
+    userId?: string;
+    organizationId?: string;
+    roles?: string[];
+  };
+};
+
 @ApiTags('jobs')
 @Controller('jobs')
 @ApiBearerAuth()
@@ -35,9 +44,23 @@ export class JobsController {
   @ApiOperation({ summary: 'Create a new job' })
   @ApiResponse({ status: 201, description: 'Job created successfully', type: Job })
   @ApiResponse({ status: 400, description: 'Invalid input data or validation failed' })
-  async create(@Body() createJobDto: CreateJobDto): Promise<{ job: Job }> {
-    const job = await this.jobsService.create(createJobDto);
+  async create(
+    @Req() req: AuthenticatedRequest,
+    @Body() createJobDto: CreateJobDto,
+  ): Promise<{ job: Job }> {
+    const job = await this.jobsService.create(createJobDto, req.user);
     return { job };
+  }
+
+  @Post('import')
+  @ApiOperation({ summary: 'Import multiple jobs' })
+  @ApiResponse({ status: 201, description: 'Jobs imported successfully' })
+  async importJobs(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: { jobs: CreateJobDto[] },
+  ): Promise<{ jobs: Job[]; count: number }> {
+    const jobs = await this.jobsService.importJobs(body.jobs || [], req.user);
+    return { jobs, count: jobs.length };
   }
 
   @Get()
@@ -56,10 +79,11 @@ export class JobsController {
   })
   @ApiResponse({ status: 200, description: 'List of jobs', type: [Job] })
   findAll(
+    @Req() req: AuthenticatedRequest,
     @Query('status') status?: string,
     @Query('priority') priority?: string,
   ): Promise<{ jobs: Job[] }> {
-    return this.jobsService.findAll(status, priority).then((jobs) => ({ jobs }));
+    return this.jobsService.findAll(status, priority, undefined, undefined, undefined, req.user).then((jobs) => ({ jobs }));
   }
 
   @Get('statistics')
@@ -82,15 +106,15 @@ export class JobsController {
       },
     },
   })
-  getStatistics() {
-    return this.jobsService.getStatistics();
+  getStatistics(@Req() req: AuthenticatedRequest) {
+    return this.jobsService.getStatistics(req.user);
   }
 
   @Get('pending')
   @ApiOperation({ summary: 'Get all pending jobs' })
   @ApiResponse({ status: 200, description: 'List of pending jobs', type: [Job] })
-  findPending(): Promise<{ jobs: Job[] }> {
-    return this.jobsService.findPending().then((jobs) => ({ jobs }));
+  findPending(@Req() req: AuthenticatedRequest): Promise<{ jobs: Job[] }> {
+    return this.jobsService.findPending(req.user).then((jobs) => ({ jobs }));
   }
 
   @Get('queue')
@@ -143,10 +167,11 @@ export class JobsController {
   @ApiResponse({ status: 200, description: 'Jobs within time window', type: [Job] })
   @ApiResponse({ status: 400, description: 'Invalid date format' })
   findByTimeWindow(
+    @Req() req: AuthenticatedRequest,
     @Query('start') start: string,
     @Query('end') end: string,
   ): Promise<Job[]> {
-    return this.jobsService.findByTimeWindow(new Date(start), new Date(end));
+    return this.jobsService.findByTimeWindow(new Date(start), new Date(end), req.user);
   }
 
   @Get(':id')
@@ -154,8 +179,11 @@ export class JobsController {
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Job found', type: Job })
   @ApiResponse({ status: 404, description: 'Job not found' })
-  async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<{ job: Job }> {
-    const job = await this.jobsService.findOne(id);
+  async findOne(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ job: Job }> {
+    const job = await this.jobsService.findOne(id, req.user);
     return { job };
   }
 
@@ -166,10 +194,11 @@ export class JobsController {
   @ApiResponse({ status: 404, description: 'Job not found' })
   @ApiResponse({ status: 400, description: 'Invalid input data or validation failed' })
   update(
+    @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateJobDto: UpdateJobDto,
   ): Promise<{ job: Job }> {
-    return this.jobsService.update(id, updateJobDto).then((job) => ({ job }));
+    return this.jobsService.update(id, updateJobDto, req.user).then((job) => ({ job }));
   }
 
   @Patch(':id')
@@ -179,10 +208,11 @@ export class JobsController {
   @ApiResponse({ status: 404, description: 'Job not found' })
   @ApiResponse({ status: 400, description: 'Invalid input data or validation failed' })
   patch(
+    @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateJobDto: UpdateJobDto,
   ): Promise<{ job: Job }> {
-    return this.jobsService.update(id, updateJobDto).then((job) => ({ job }));
+    return this.jobsService.update(id, updateJobDto, req.user).then((job) => ({ job }));
   }
 
   @Delete(':id')
@@ -191,7 +221,10 @@ export class JobsController {
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 204, description: 'Job deleted successfully' })
   @ApiResponse({ status: 404, description: 'Job not found' })
-  remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    return this.jobsService.remove(id);
+  remove(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
+    return this.jobsService.remove(id, req.user);
   }
 }

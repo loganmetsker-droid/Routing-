@@ -95,3 +95,51 @@ export class GlobalRoutingServiceResponse {
   warnings?: string[];
   planner_diagnostics?: Record<string, any>;
 }
+
+export class OptimizeVehicleInput {
+  id: string;
+  start_lat: number;
+  start_lng: number;
+  end_lat?: number;
+  end_lng?: number;
+  capacity_volume: number;
+  max_route_minutes: number;
+}
+
+export class OptimizeStopInput {
+  id: string;
+  lat: number;
+  lng: number;
+  service_minutes: number;
+  tw_start?: string;
+  tw_end?: string;
+  priority: number;
+  volume: number;
+  locked_vehicle_id?: string | null;
+}
+
+export class OptimizeRequest {
+  plan_date: string;
+  depot_id?: string | null;
+  vehicles: OptimizeVehicleInput[];
+  stops: OptimizeStopInput[];
+}
+
+export class OptimizeRouteStopOutput {
+  stop_id: string;
+  sequence: number;
+  eta?: string;
+}
+
+export class OptimizeRouteOutput {
+  vehicle_id: string;
+  ordered_stops: OptimizeRouteStopOutput[];
+  total_distance_m: number;
+  total_duration_s: number;
+}
+
+export class OptimizeResponse {
+  routes: OptimizeRouteOutput[];
+  unassigned_stop_ids: string[];
+  warnings: string[];
+}

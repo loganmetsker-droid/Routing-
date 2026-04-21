@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bull';
 import { Job } from './entities/job.entity';
 import { Customer } from '../customers/entities/customer.entity';
+import { Route } from '../dispatch/entities/route.entity';
 import { JobsService } from './jobs.service';
 import { JobsController } from './jobs.controller';
 import { JobsProcessor } from './jobs.processor';
@@ -13,7 +14,7 @@ const hasRedis = Boolean(process.env.REDIS_URL || process.env.REDIS_HOST);
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Job, Customer]),
+    TypeOrmModule.forFeature([Job, Customer, Route]),
     ...(hasRedis
       ? [
           BullModule.registerQueue({

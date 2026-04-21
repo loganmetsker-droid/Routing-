@@ -21,6 +21,11 @@ import {
   normalizeLifecycleJobStatus,
 } from './jobs-workflow';
 
+type Actor = {
+  userId?: string;
+  organizationId?: string;
+};
+
 @Injectable()
 export class JobsService {
   private readonly logger = new Logger(JobsService.name);
@@ -103,7 +108,21 @@ export class JobsService {
     return normalizedNext;
   }
 
-  async create(createJobDto: CreateJobDto): Promise<Job> {
+  private organizationWhere(actor?: Actor) {
+    return actor?.organizationId ? ({ organizationId: actor.organizationId } as const) : {};
+  }
+
+  private requireCustomerScope(customer: Customer, actor?: Actor) {
+    if (
+      actor?.organizationId &&
+      customer.organizationId &&
+      customer.organizationId !== actor.organizationId
+    ) {
+      throw new BadRequestException(`Customer with ID ${customer.id} not found`);
+    }
+  }
+
+  async create(createJobDto: CreateJobDto, actor?: Actor): Promise<Job> {
     const now = new Date();
     const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
 
@@ -157,7 +176,7 @@ export class JobsService {
 
     const linkedCustomer = createJobDto.customerId
       ? await this.customerRepository.findOne({
-          where: { id: createJobDto.customerId },
+          where: { id: createJobDto.customerId, ...this.organizationWhere(actor) },
         })
       : null;
 
@@ -165,6 +184,10 @@ export class JobsService {
       throw new BadRequestException(
         `Customer with ID ${createJobDto.customerId} not found`,
       );
+    }
+
+    if (linkedCustomer) {
+      this.requireCustomerScope(linkedCustomer, actor);
     }
 
     const resolvedCustomerName = createJobDto.customerName || linkedCustomer?.name;
@@ -184,6 +207,7 @@ export class JobsService {
     // Create job with automatic "pending" status
     const job = this.jobRepository.create({
       ...createJobDto,
+      ...this.organizationWhere(actor),
       pickupAddressStructured: this.normalizeStructuredAddress(
         createJobDto.pickupAddressStructured as any,
       ),
@@ -214,17 +238,32 @@ export class JobsService {
     return savedJob;
   }
 
+  async importJobs(items: CreateJobDto[], actor?: Actor): Promise<Job[]> {
+    const created: Job[] = [];
+    for (const item of items) {
+      created.push(await this.create(item, actor));
+    }
+    return created;
+  }
+
   async findAll(
     status?: string,
     priority?: string,
     billingStatus?: string,
     startDate?: Date,
     endDate?: Date,
+    actor?: Actor,
   ): Promise<Job[]> {
     const queryBuilder = this.jobRepository.createQueryBuilder('job');
 
     // Exclude archived jobs by default
     queryBuilder.andWhere('job.archived_at IS NULL');
+
+    if (actor?.organizationId) {
+      queryBuilder.andWhere('job.organization_id = :organizationId', {
+        organizationId: actor.organizationId,
+      });
+    }
 
     if (status) {
       queryBuilder.andWhere('job.status = :status', { status });
@@ -251,8 +290,10 @@ export class JobsService {
     return queryBuilder.getMany();
   }
 
-  async findOne(id: string): Promise<Job> {
-    const job = await this.jobRepository.findOne({ where: { id } });
+  async findOne(id: string, actor?: Actor): Promise<Job> {
+    const job = await this.jobRepository.findOne({
+      where: { id, ...this.organizationWhere(actor) },
+    });
 
     if (!job) {
       throw new NotFoundException(`Job with ID ${id} not found`);
@@ -261,35 +302,41 @@ export class JobsService {
     return job;
   }
 
-  async findByStatus(status: JobStatus): Promise<Job[]> {
+  async findByStatus(status: JobStatus, actor?: Actor): Promise<Job[]> {
     return this.jobRepository.find({
-      where: { status },
+      where: { status, ...this.organizationWhere(actor) },
       order: { priority: 'DESC', createdAt: 'ASC' },
     });
   }
 
-  async findByPriority(priority: JobPriority): Promise<Job[]> {
+  async findByPriority(priority: JobPriority, actor?: Actor): Promise<Job[]> {
     return this.jobRepository.find({
-      where: { priority },
+      where: { priority, ...this.organizationWhere(actor) },
       order: { createdAt: 'ASC' },
     });
   }
 
-  async findPending(): Promise<Job[]> {
-    return this.findByStatus(JobStatus.PENDING);
+  async findPending(actor?: Actor): Promise<Job[]> {
+    return this.findByStatus(JobStatus.PENDING, actor);
   }
 
-  async findByTimeWindow(start: Date, end: Date): Promise<Job[]> {
-    return this.jobRepository
+  async findByTimeWindow(start: Date, end: Date, actor?: Actor): Promise<Job[]> {
+    const queryBuilder = this.jobRepository
       .createQueryBuilder('job')
       .where('job.time_window_start >= :start', { start })
-      .andWhere('job.time_window_end <= :end', { end })
-      .orderBy('job.time_window_start', 'ASC')
-      .getMany();
+      .andWhere('job.time_window_end <= :end', { end });
+
+    if (actor?.organizationId) {
+      queryBuilder.andWhere('job.organization_id = :organizationId', {
+        organizationId: actor.organizationId,
+      });
+    }
+
+    return queryBuilder.orderBy('job.time_window_start', 'ASC').getMany();
   }
 
-  async update(id: string, updateJobDto: UpdateJobDto): Promise<Job> {
-    const job = await this.findOne(id);
+  async update(id: string, updateJobDto: UpdateJobDto, actor?: Actor): Promise<Job> {
+    const job = await this.findOne(id, actor);
 
     // Support legacy archive payloads from older UI screens.
     const { archived, driverId, assignedVehicleId, stopSequence, ...safeUpdateDto } =
@@ -434,8 +481,8 @@ export class JobsService {
     return this.jobRepository.save(job);
   }
 
-  async remove(id: string): Promise<void> {
-    const job = await this.findOne(id);
+  async remove(id: string, actor?: Actor): Promise<void> {
+    const job = await this.findOne(id, actor);
 
     // Remove from queue if pending
     if (job.status === JobStatus.PENDING) {
@@ -445,21 +492,29 @@ export class JobsService {
     await this.jobRepository.softRemove(job);
   }
 
-  async getStatistics() {
+  async getStatistics(actor?: Actor) {
+    const baseQuery = () => {
+      const query = this.jobRepository.createQueryBuilder('job');
+      if (actor?.organizationId) {
+        query.andWhere('job.organization_id = :organizationId', {
+          organizationId: actor.organizationId,
+        });
+      }
+      return query;
+    };
+
     const [byStatus, byPriority, total] = await Promise.all([
-      this.jobRepository
-        .createQueryBuilder('job')
+      baseQuery()
         .select('job.status', 'status')
         .addSelect('COUNT(*)', 'count')
         .groupBy('job.status')
         .getRawMany(),
-      this.jobRepository
-        .createQueryBuilder('job')
+      baseQuery()
         .select('job.priority', 'priority')
         .addSelect('COUNT(*)', 'count')
         .groupBy('job.priority')
         .getRawMany(),
-      this.jobRepository.count(),
+      this.jobRepository.count({ where: this.organizationWhere(actor) as any }),
     ]);
 
     return {
@@ -594,8 +649,8 @@ export class JobsService {
 
   // New workflow methods
 
-  async updateBilling(id: string, updateBillingDto: UpdateBillingDto): Promise<Job> {
-    const job = await this.findOne(id);
+  async updateBilling(id: string, updateBillingDto: UpdateBillingDto, actor?: Actor): Promise<Job> {
+    const job = await this.findOne(id, actor);
 
     Object.assign(job, {
       billingStatus: updateBillingDto.billingStatus,
@@ -607,8 +662,8 @@ export class JobsService {
     return this.jobRepository.save(job);
   }
 
-  async updateLifecycle(id: string, updateLifecycleDto: UpdateLifecycleDto): Promise<Job> {
-    const job = await this.findOne(id);
+  async updateLifecycle(id: string, updateLifecycleDto: UpdateLifecycleDto, actor?: Actor): Promise<Job> {
+    const job = await this.findOne(id, actor);
     const nextStatus = this.ensureValidStatusTransition(job.status, updateLifecycleDto.status);
 
     Object.assign(job, {
@@ -628,8 +683,8 @@ export class JobsService {
     return this.jobRepository.save(job);
   }
 
-  async cloneJob(id: string): Promise<Job> {
-    const sourceJob = await this.findOne(id);
+  async cloneJob(id: string, actor?: Actor): Promise<Job> {
+    const sourceJob = await this.findOne(id, actor);
 
     // Create new job with same properties but reset status and dates
     const clonedJob = this.jobRepository.create({
@@ -649,6 +704,7 @@ export class JobsService {
       notes: sourceJob.notes,
       specialInstructions: sourceJob.specialInstructions,
       customerId: sourceJob.customerId,
+      organizationId: sourceJob.organizationId,
       timeWindowStart: sourceJob.timeWindowStart,
       timeWindowEnd: sourceJob.timeWindowEnd,
       // Reset workflow fields
@@ -664,30 +720,32 @@ export class JobsService {
     return this.jobRepository.save(clonedJob);
   }
 
-  async findHistory(start: Date, end: Date): Promise<Job[]> {
+  async findHistory(start: Date, end: Date, actor?: Actor): Promise<Job[]> {
     return this.jobRepository.find({
       where: [
         {
           startDate: Between(start, end),
+          ...this.organizationWhere(actor),
         },
         {
           endDate: Between(start, end),
+          ...this.organizationWhere(actor),
         },
       ],
       order: { startDate: 'ASC' },
     });
   }
 
-  async findCustomerHistory(customerId: string): Promise<Job[]> {
+  async findCustomerHistory(customerId: string, actor?: Actor): Promise<Job[]> {
     return this.jobRepository.find({
-      where: { customerId },
+      where: { customerId, ...this.organizationWhere(actor) },
       order: { createdAt: 'DESC' },
     });
   }
 
-  async findArchived(): Promise<Job[]> {
+  async findArchived(actor?: Actor): Promise<Job[]> {
     return this.jobRepository.find({
-      where: { status: JobStatus.ARCHIVED },
+      where: { status: JobStatus.ARCHIVED, ...this.organizationWhere(actor) },
       order: { archivedAt: 'DESC' },
     });
   }

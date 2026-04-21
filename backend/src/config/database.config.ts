@@ -11,6 +11,17 @@ export const databaseConfig = (
   const databaseUrl = configService.get('DATABASE_URL');
   const nodeEnv = configService.get('NODE_ENV') || 'development';
   const isProduction = nodeEnv === 'production';
+  const allowSelfSignedSsl =
+    configService.get<string>('DB_SSL_ALLOW_SELF_SIGNED', 'false') === 'true';
+
+  if (
+    configService.get<string>('TYPEORM_SYNCHRONIZE', 'false') === 'true' &&
+    !['development', 'test', 'local'].includes(nodeEnv)
+  ) {
+    throw new Error(
+      'TYPEORM_SYNCHRONIZE must remain disabled outside local development environments.',
+    );
+  }
 
   // Log database connection attempt
   if (databaseUrl) {
@@ -20,12 +31,23 @@ export const databaseConfig = (
       logger.error(`[DB:CONFIG] Current value starts with: ${databaseUrl.substring(0, 15)}...`);
     }
 
-    // Mask password in URL for logging
-    const maskedUrl = databaseUrl.replace(/:([^:@]+)@/, ':****@');
-    logger.log(`[DB:CONFIG] Using DATABASE_URL: ${maskedUrl}`);
-    logger.log(`[DB:CONFIG] Environment: ${nodeEnv}, SSL: ${isProduction ? 'enabled (rejectUnauthorized=false)' : 'disabled'}`);
+    let parsedHost = 'unknown';
+    let parsedPort = '5432';
+    let parsedDb = 'unknown';
+    try {
+      const parsed = new URL(databaseUrl);
+      parsedHost = parsed.hostname;
+      parsedPort = parsed.port || '5432';
+      parsedDb = parsed.pathname.replace(/^\//, '') || 'unknown';
+    } catch {
+      // keep defaults
+    }
+    logger.log(`[DB:CONFIG] Source: DATABASE_URL (${parsedHost}:${parsedPort}/${parsedDb})`);
+    logger.log(
+      `[DB:CONFIG] Environment: ${nodeEnv}, SSL: ${isProduction ? 'enabled' : 'disabled'}`,
+    );
   } else {
-    logger.log(`[DB:CONFIG] Using individual connection params (host/port/user/db)`);
+    logger.log(`[DB:CONFIG] Source: individual connection params (DATABASE_HOST/DB_HOST, etc.)`);
   }
 
   // If DATABASE_URL is provided, use it (Render, Railway, etc.)
@@ -48,11 +70,9 @@ export const databaseConfig = (
       logging: !isProduction ? ['error', 'warn', 'schema', 'migration'] : ['error'],
       logger: 'advanced-console',
       // SSL required for Render/Railway hosted PostgreSQL
-      ssl: useSSL ? { rejectUnauthorized: false } : false,
+      ssl: useSSL ? { rejectUnauthorized: !allowSelfSignedSsl } : false,
       extra: {
-        // Force SSL mode in connection string if not present
-        ssl: useSSL ? { rejectUnauthorized: false } : false,
-        // Reduce pool size for Render free tier (max 5 connections)
+        ssl: useSSL ? { rejectUnauthorized: !allowSelfSignedSsl } : false,
         max: isProduction ? 3 : configService.get<number>('DB_POOL_SIZE', 5),
         min: 0,
         connectionTimeoutMillis: 30000,
@@ -69,7 +89,9 @@ export const databaseConfig = (
 
     // Use console.log to ensure output in Render logs even if Nest logger isn't ready
     if (useSSL) {
-      console.log('  [DB] SSL Connection Enabled (rejectUnauthorized=false)');
+      console.log(
+        `  [DB] SSL Connection Enabled (rejectUnauthorized=${allowSelfSignedSsl ? 'false' : 'true'})`,
+      );
     }
     console.log(`  [DB] Pool Size: ${config.extra?.max}, Retries: ${config.retryAttempts}`);
 
@@ -108,4 +130,3 @@ export const databaseConfig = (
     retryDelay: 5000,
   };
 };
-

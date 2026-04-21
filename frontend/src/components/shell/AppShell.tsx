@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { Box, Container } from '@mui/material';
+import { Box } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import IconSidebar from './IconSidebar';
 import Topbar from './Topbar';
@@ -82,13 +82,13 @@ export default function AppShell({
         <Box
           component="main"
           sx={{
-            px: { xs: 2, md: 3 },
-            py: { xs: 2, md: 3 },
+            px: { xs: 1, md: 2 },
+            py: { xs: 1, md: 1.75 },
           }}
         >
-          <Container maxWidth="xl" sx={{ px: { xs: 0, md: 1 } }}>
+          <Box sx={{ width: '100%', minWidth: 0 }}>
             {children}
-          </Container>
+          </Box>
         </Box>
       </Box>
     </Box>
