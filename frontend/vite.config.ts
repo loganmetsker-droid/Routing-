@@ -11,7 +11,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
-    exclude: ['tests/**', 'e2e-tests/**'],
+    exclude: [],
   },
   resolve: {
     alias: {
