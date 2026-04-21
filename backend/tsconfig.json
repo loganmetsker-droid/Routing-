@@ -27,7 +27,9 @@
       "@common/*": ["src/common/*"],
       "@config/*": ["src/config/*"],
       "@shared/*": ["../shared/*"],
-      "@nestjs/*": ["./node_modules/@nestjs/*"]
+      "@nestjs/*": ["./node_modules/@nestjs/*"],
+      "rxjs": ["./node_modules/rxjs"],
+      "rxjs/*": ["./node_modules/rxjs/*"]
     }
   },
   "include": ["src/**/*", "../shared/**/*"],
