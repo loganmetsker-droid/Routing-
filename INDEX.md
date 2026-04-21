@@ -33,7 +33,6 @@
 
 ### 🧪 Testing
 - **TESTING_GUIDE.md** - Testing strategies
-- **TEST_RESULTS.md** - Test execution results
 
 ### 🤖 Claude Code Workflows (NEW!)
 - **WORKFLOWS_SUMMARY.txt** - Installation summary ⭐
@@ -86,7 +85,7 @@ my-awesome-project/
 
 #### ...run tests
 1. Read: **TESTING_GUIDE.md**
-2. Check: **TEST_RESULTS.md**
+2. Check recent changes for current test coverage
 
 #### ...set up real-time tracking
 1. Read: **VEHICLE_TRACKING_COMPLETE.md**
@@ -114,7 +113,7 @@ my-awesome-project/
 
 ### For QA/Testing
 1. **TESTING_GUIDE.md** - How to test
-2. **TEST_RESULTS.md** - Current test status
+2. Current QA notes are captured in relevant feature docs
 
 ## ⭐ NEW: Claude Code Workflows
 

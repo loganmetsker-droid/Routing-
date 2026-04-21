@@ -169,7 +169,7 @@ cd frontend && npm run dev
 
 - **Complete Guide:** `CLAUDE.md`
 - **Setup Instructions:** `WORKFLOWS_SETUP.md`
-- **Design Principles:** `context/design-principles.md`
+- **Design guidelines:** documented in `CLAUDE.md`
 
 ## 🔗 Resources
 

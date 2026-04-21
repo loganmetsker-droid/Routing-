@@ -148,10 +148,8 @@ LOW:
    - Priority matrix
    - Common issues & fixes
 
-📖 context/design-principles.md
-   - Design system checklist
-   - S-Tier SaaS standards
-   - Accessibility guidelines
+📖 WORKFLOWS_SETUP.md
+   - Setup instructions for workflow configuration
 
 ═══════════════════════════════════════════════════════════════
   CUSTOMIZATION:

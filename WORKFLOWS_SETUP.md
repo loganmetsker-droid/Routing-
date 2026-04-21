@@ -359,7 +359,7 @@ PROJECT-SPECIFIC CHECKS:
 - Input sanitization in resolvers
 ```
 
-**Edit `context/design-principles.md`:**
+**Edit `CLAUDE.md`:**
 ```markdown
 # Add your brand guidelines:
 
@@ -473,8 +473,8 @@ npm run dev
 
 2. **Customize for your needs:**
    - Edit `.claude/commands/*.md` files
-   - Update `context/design-principles.md`
    - Add project-specific rules
+   - Update `CLAUDE.md` for workflow guidance updates
 
 3. **Integrate with CI/CD:**
    - Add GitHub Actions
@@ -500,7 +500,7 @@ npm run dev
 ✅ **Code Review** workflow installed at `.claude/commands/review.md`
 ✅ **Security Review** workflow installed at `.claude/commands/security.md`
 ✅ **Design Review** workflow installed at `.claude/commands/design.md`
-✅ **Design Principles** documented in `context/design-principles.md`
+✅ **Design principles** documented in `CLAUDE.md`
 ✅ **Complete Guide** available in `CLAUDE.md`
 
 **Ready to use!** Type `/review`, `/security`, or `/design` to start.
