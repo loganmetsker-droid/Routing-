@@ -142,8 +142,13 @@ uri: 'http://localhost:3000/graphql'
 
 ## 📖 Documentation
 
-- **Database Setup**: See `SETUP_DATABASE.md`
-- **Starting Apps**: See `START_APPS.md`
+- **Database Setup**: `SETUP_DATABASE.md`
+- **Starting Apps**: `START_APPS.md`
+- **Troubleshooting**: `TROUBLESHOOTING.md`
+- **Testing**: `TESTING_GUIDE.md`
+- **OSRM Setup**: `OSRM_SETUP.md`
+- **Tracking Setup**: `TRACKING_SETUP.md`
+- **Workflow Guide**: `CLAUDE.md`
 ## 🐛 Troubleshooting
 
 ### Backend won't start
@@ -202,9 +207,11 @@ ISC
 
 ## 👥 Support
 
-For issues or questions, check the troubleshooting guides in:
+For issues or questions, check:
 - `SETUP_DATABASE.md`
 - `START_APPS.md`
+- `TROUBLESHOOTING.md`
+- `TESTING_GUIDE.md`
 - `frontend/src/App.tsx`
 - `frontend/src/components/Layout.tsx`
 
