@@ -1,5 +1,6 @@
-import { Box, Chip, Stack, Typography } from '@mui/material';
-import { SurfacePanel } from './SurfacePanel';
+import { Box, Stack, Typography } from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import { trovanColors } from '../theme/designTokens';
 
 export function PreviewBanner() {
   const showPreviewBanner =
@@ -12,24 +13,35 @@ export function PreviewBanner() {
   }
 
   return (
-    <SurfacePanel
+    <Stack
+      direction="row"
+      spacing={0.7}
+      alignItems="center"
       sx={{
-        mb: 2,
-        p: 1.75,
-        bgcolor: 'rgba(250, 241, 234, 0.85)',
-        borderColor: 'rgba(216, 162, 127, 0.45)',
+        px: 0.85,
+        py: 0.45,
+        borderRadius: 1.1,
+        bgcolor: alpha('#FFFDFB', 0.84),
+        border: `1px solid ${alpha(trovanColors.copper[500], 0.11)}`,
+        width: 'fit-content',
       }}
     >
-      <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} justifyContent="space-between">
-        <Box>
-          <Typography variant="h6">Routing Dispatch Preview</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Frontend: {typeof window !== 'undefined' ? window.location.origin : 'local'} • API:{' '}
-            {import.meta.env.VITE_REST_API_URL || 'mock'}
-          </Typography>
-        </Box>
-        <Chip label="Preview only" color="primary" />
-      </Stack>
-    </SurfacePanel>
+      <Box
+        sx={{
+          width: 7,
+          height: 7,
+          borderRadius: '999px',
+          bgcolor: trovanColors.copper[500],
+          boxShadow: `0 0 0 3px ${alpha(trovanColors.copper[500], 0.12)}`,
+          flexShrink: 0,
+        }}
+      />
+      <Typography variant="caption" sx={{ fontWeight: 700, lineHeight: 1 }}>
+        Preview
+      </Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1 }}>
+        {import.meta.env.VITE_REST_API_URL || 'Mock API'}
+      </Typography>
+    </Stack>
   );
 }

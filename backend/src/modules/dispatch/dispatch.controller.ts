@@ -30,6 +30,7 @@ import { Route, RouteStatus } from './entities/route.entity';
 import { RouteVersion } from './entities/route-version.entity';
 import { CreateRouteDto } from './dto/create-route.dto';
 import { CreateGlobalRouteDto } from './dto/create-global-route.dto';
+import { ManualDispatchDto } from './dto/manual-dispatch.dto';
 import { UpdateRouteDto } from './dto/update-route.dto';
 import { OptimizerEvent, OptimizerHealth } from './dto/routing-service.dto';
 import {
@@ -39,6 +40,19 @@ import {
   ReviewRerouteDto,
 } from './dto/reroute.dto';
 import { RerouteRequest } from './entities/reroute-request.entity';
+import type {
+  DispatchCreateGlobalResponse,
+  DispatchOptimizationJobsResponse,
+  DispatchRerouteHistoryResponse,
+  DispatchRerouteResponse,
+  DispatchRouteResponse,
+  DispatchRoutesResponse,
+  DispatchTimelineFilters,
+  DispatchTimelineResponse,
+  DispatchVersionResponse,
+  DispatchVersionsResponse,
+} from './dispatch.types';
+import type { OptimizationJobRecord } from './services/optimization-job-lifecycle.service';
 
 type AuthenticatedRequest = {
   user?: {
@@ -60,6 +74,42 @@ export class DispatchController {
     private readonly auditService: AuditService,
   ) { }
 
+  private presentRouteResponse(route: Route): DispatchRouteResponse {
+    return {
+      route: this.dispatchService.presentRoute(route),
+      optimizerHealth: this.dispatchService.getOptimizerHealth(),
+    };
+  }
+
+  private presentRoutesResponse(routes: Route[]): DispatchRoutesResponse {
+    return {
+      routes: routes.map((route) => this.dispatchService.presentRoute(route)),
+      optimizerHealth: this.dispatchService.getOptimizerHealth(),
+    };
+  }
+
+  private presentMoveStopResponse(sourceRoute: Route, targetRoute: Route) {
+    return {
+      sourceRoute: this.dispatchService.presentRoute(sourceRoute),
+      targetRoute: this.dispatchService.presentRoute(targetRoute),
+      optimizerHealth: this.dispatchService.getOptimizerHealth(),
+    };
+  }
+
+  private parseTimelineSource(
+    source?: string,
+  ): DispatchTimelineFilters['source'] | undefined {
+    if (
+      source === 'optimizer' ||
+      source === 'reroute' ||
+      source === 'workflow' ||
+      source === 'system'
+    ) {
+      return source;
+    }
+    return undefined;
+  }
+
   @Post('routes/global')
   @Roles('OWNER', 'ADMIN', 'DISPATCHER')
   @ApiOperation({ summary: 'Create and optimize global multi-vehicle routes' })
@@ -71,14 +121,7 @@ export class DispatchController {
   async createGlobal(
     @Req() req: AuthenticatedRequest,
     @Body() createGlobalRouteDto: CreateGlobalRouteDto,
-  ): Promise<{
-    routes: Route[];
-    optimizationStatus: string;
-    dataQuality: string;
-    droppedJobIds: string[];
-    warnings: string[];
-    optimizerHealth: OptimizerHealth;
-  }> {
+  ): Promise<DispatchCreateGlobalResponse> {
     const result = await this.dispatchService.createGlobalRoutes(
       createGlobalRouteDto,
       req.user,
@@ -86,7 +129,7 @@ export class DispatchController {
     return {
       ...result,
       routes: result.routes.map((route) => this.dispatchService.presentRoute(route)),
-    } as any;
+    };
   }
 
   @Post('routes')
@@ -102,7 +145,7 @@ export class DispatchController {
   async create(
     @Req() req: AuthenticatedRequest,
     @Body() createRouteDto: CreateRouteDto,
-  ): Promise<{ route: Route; optimizerHealth: OptimizerHealth }> {
+  ): Promise<DispatchRouteResponse> {
     const route = await this.dispatchService.create(createRouteDto, req.user);
     this.auditService.record({
       actorId: req.user?.userId || 'unknown',
@@ -113,10 +156,7 @@ export class DispatchController {
       source: 'user',
       newValue: { vehicleId: route.vehicleId, status: route.status },
     });
-    return {
-      route: this.dispatchService.presentRoute(route) as any,
-      optimizerHealth: this.dispatchService.getOptimizerHealth(),
-    };
+    return this.presentRouteResponse(route);
   }
 
   @Get('routes')
@@ -132,12 +172,9 @@ export class DispatchController {
   async findAll(
     @Req() req: AuthenticatedRequest,
     @Query('status') status?: RouteStatus,
-  ): Promise<{ routes: Route[]; optimizerHealth: OptimizerHealth }> {
+  ): Promise<DispatchRoutesResponse> {
     const routes = await this.dispatchService.findAll(status, req.user);
-    return {
-      routes: routes.map((route) => this.dispatchService.presentRoute(route)) as any,
-      optimizerHealth: this.dispatchService.getOptimizerHealth(),
-    };
+    return this.presentRoutesResponse(routes);
   }
 
   @Get('routes/statistics')
@@ -170,12 +207,9 @@ export class DispatchController {
   async findOne(
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
-  ): Promise<{ route: Route; optimizerHealth: OptimizerHealth }> {
+  ): Promise<DispatchRouteResponse> {
     const route = await this.dispatchService.findOne(id, req.user);
-    return {
-      route: this.dispatchService.presentRoute(route) as any,
-      optimizerHealth: this.dispatchService.getOptimizerHealth(),
-    };
+    return this.presentRouteResponse(route);
   }
 
   @Get('vehicles/:vehicleId/routes')
@@ -190,11 +224,10 @@ export class DispatchController {
   findByVehicle(
     @Req() req: AuthenticatedRequest,
     @Param('vehicleId', ParseUUIDPipe) vehicleId: string,
-  ): Promise<{ routes: Route[]; optimizerHealth: OptimizerHealth }> {
-    return this.dispatchService.findByVehicle(vehicleId, req.user).then((routes) => ({
-      routes: routes.map((route) => this.dispatchService.presentRoute(route)) as any,
-      optimizerHealth: this.dispatchService.getOptimizerHealth(),
-    }));
+  ): Promise<DispatchRoutesResponse> {
+    return this.dispatchService
+      .findByVehicle(vehicleId, req.user)
+      .then((routes) => this.presentRoutesResponse(routes));
   }
 
   @Put('routes/:id')
@@ -207,11 +240,10 @@ export class DispatchController {
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateRouteDto: UpdateRouteDto,
-  ): Promise<{ route: Route; optimizerHealth: OptimizerHealth }> {
-    return this.dispatchService.update(id, updateRouteDto, req.user).then((route) => ({
-      route: this.dispatchService.presentRoute(route) as any,
-      optimizerHealth: this.dispatchService.getOptimizerHealth(),
-    }));
+  ): Promise<DispatchRouteResponse> {
+    return this.dispatchService
+      .update(id, updateRouteDto, req.user)
+      .then((route) => this.presentRouteResponse(route));
   }
 
   @Patch('routes/:id')
@@ -224,7 +256,7 @@ export class DispatchController {
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateRouteDto: UpdateRouteDto,
-  ): Promise<{ route: Route; optimizerHealth: OptimizerHealth }> {
+  ): Promise<DispatchRouteResponse> {
     this.auditService.record({
       actorId: req.user?.userId || 'unknown',
       actorType: 'user',
@@ -234,10 +266,9 @@ export class DispatchController {
       source: 'user',
       newValue: updateRouteDto as Record<string, unknown>,
     });
-    return this.dispatchService.update(id, updateRouteDto, req.user).then((route) => ({
-      route: this.dispatchService.presentRoute(route) as any,
-      optimizerHealth: this.dispatchService.getOptimizerHealth(),
-    }));
+    return this.dispatchService
+      .update(id, updateRouteDto, req.user)
+      .then((route) => this.presentRouteResponse(route));
   }
 
   @Post('routes/:id/assign')
@@ -263,7 +294,7 @@ export class DispatchController {
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) routeId: string,
     @Body('driverId', ParseUUIDPipe) driverId: string,
-  ): Promise<{ route: Route; optimizerHealth: OptimizerHealth }> {
+  ): Promise<DispatchRouteResponse> {
     const route = await this.dispatchService.assignDriver(routeId, driverId, req.user);
     this.auditService.record({
       actorId: req.user?.userId || 'unknown',
@@ -274,10 +305,7 @@ export class DispatchController {
       source: 'user',
       newValue: { routeId, driverId },
     });
-    return {
-      route: this.dispatchService.presentRoute(route) as any,
-      optimizerHealth: this.dispatchService.getOptimizerHealth(),
-    };
+    return this.presentRouteResponse(route);
   }
 
   @Patch('routes/:id/start')
@@ -289,11 +317,10 @@ export class DispatchController {
   startRoute(
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
-  ): Promise<{ route: Route; optimizerHealth: OptimizerHealth }> {
-    return this.dispatchService.startRoute(id, req.user).then((route) => ({
-      route: this.dispatchService.presentRoute(route) as any,
-      optimizerHealth: this.dispatchService.getOptimizerHealth(),
-    }));
+  ): Promise<DispatchRouteResponse> {
+    return this.dispatchService
+      .startRoute(id, req.user)
+      .then((route) => this.presentRouteResponse(route));
   }
 
   @Patch('routes/:id/complete')
@@ -305,11 +332,10 @@ export class DispatchController {
   completeRoute(
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
-  ): Promise<{ route: Route; optimizerHealth: OptimizerHealth }> {
-    return this.dispatchService.completeRoute(id, req.user).then((route) => ({
-      route: this.dispatchService.presentRoute(route) as any,
-      optimizerHealth: this.dispatchService.getOptimizerHealth(),
-    }));
+  ): Promise<DispatchRouteResponse> {
+    return this.dispatchService
+      .completeRoute(id, req.user)
+      .then((route) => this.presentRouteResponse(route));
   }
 
   @Patch('routes/:id/cancel')
@@ -320,11 +346,10 @@ export class DispatchController {
   cancelRoute(
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
-  ): Promise<{ route: Route; optimizerHealth: OptimizerHealth }> {
-    return this.dispatchService.cancelRoute(id, req.user).then((route) => ({
-      route: this.dispatchService.presentRoute(route) as any,
-      optimizerHealth: this.dispatchService.getOptimizerHealth(),
-    }));
+  ): Promise<DispatchRouteResponse> {
+    return this.dispatchService
+      .cancelRoute(id, req.user)
+      .then((route) => this.presentRouteResponse(route));
   }
 
   @Patch('routes/:id/reorder')
@@ -356,11 +381,51 @@ export class DispatchController {
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
     @Body('newJobOrder') newJobOrder: string[],
-  ): Promise<{ route: Route; optimizerHealth: OptimizerHealth }> {
-    return this.dispatchService.reorderStops(id, newJobOrder, req.user).then((route) => ({
-      route: this.dispatchService.presentRoute(route) as any,
-      optimizerHealth: this.dispatchService.getOptimizerHealth(),
-    }));
+  ): Promise<DispatchRouteResponse> {
+    return this.dispatchService
+      .reorderStops(id, newJobOrder, req.user)
+      .then((route) => this.presentRouteResponse(route));
+  }
+
+  @Post('routes/:id/move-stop')
+  @Roles('OWNER', 'ADMIN', 'DISPATCHER')
+  @ApiOperation({
+    summary: 'Move a future stop to a different eligible route',
+  })
+  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        jobId: { type: 'string', format: 'uuid' },
+        targetRouteId: { type: 'string', format: 'uuid' },
+        targetSequence: { type: 'number' },
+      },
+      required: ['jobId', 'targetRouteId'],
+    },
+  })
+  async moveStop(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body()
+    body: { jobId: string; targetRouteId: string; targetSequence?: number },
+  ) {
+    const result = await this.dispatchService.moveStopToRoute(id, body, req.user);
+    this.auditService.record({
+      actorId: req.user?.userId || 'unknown',
+      actorType: 'user',
+      entityType: 'route_stop',
+      entityId: body.jobId,
+      action: DomainEvents.stop.updated,
+      source: 'user',
+      newValue: {
+        sourceRouteId: id,
+        targetRouteId: body.targetRouteId,
+        targetSequence: body.targetSequence || null,
+      },
+      metadata: { organizationId: req.user?.organizationId },
+    });
+    return this.presentMoveStopResponse(result.sourceRoute, result.targetRoute);
   }
 
   @Get('optimizer/health')
@@ -386,9 +451,15 @@ export class DispatchController {
   @ApiOperation({ summary: 'Get in-memory optimization job lifecycle records' })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'Optimization job lifecycle records' })
-  getOptimizationJobs(@Query('limit') limit?: string): { jobs: any[] } {
+  getOptimizationJobs(
+    @Query('limit') limit?: string,
+  ): DispatchOptimizationJobsResponse {
     const parsedLimit = limit ? Number(limit) : 100;
-    return { jobs: this.dispatchService.getOptimizationJobs(parsedLimit) };
+    return {
+      jobs: this.dispatchService.getOptimizationJobs(
+        parsedLimit,
+      ) as OptimizationJobRecord[],
+    };
   }
 
   @Get('timeline')
@@ -412,14 +483,14 @@ export class DispatchController {
     @Query('source') source?: string,
     @Query('before') before?: string,
     @Query('packId') packId?: string,
-  ): Promise<{ events: any[] }> {
+  ): Promise<DispatchTimelineResponse> {
     const parsedLimit = limit ? Number(limit) : 100;
     return {
       events: await this.dispatchService.getDispatchTimeline(routeId, parsedLimit, {
         reasonCode,
         action,
         actor,
-        source: source as any,
+        source: this.parseTimelineSource(source),
         before,
         packId,
       }),
@@ -435,7 +506,7 @@ export class DispatchController {
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) routeId: string,
     @Body() dto: RequestRerouteDto,
-  ): Promise<{ rerouteRequest: RerouteRequest; route: Route; optimizerHealth: OptimizerHealth }> {
+  ): Promise<DispatchRerouteResponse> {
     const rerouteRequest = await this.dispatchService.requestReroute(
       routeId,
       dto,
@@ -453,8 +524,7 @@ export class DispatchController {
     const route = await this.dispatchService.findOne(routeId, req.user);
     return {
       rerouteRequest,
-      route: this.dispatchService.presentRoute(route) as any,
-      optimizerHealth: this.dispatchService.getOptimizerHealth(),
+      ...this.presentRouteResponse(route),
     };
   }
 
@@ -469,7 +539,7 @@ export class DispatchController {
     @Param('id', ParseUUIDPipe) routeId: string,
     @Param('requestId', ParseUUIDPipe) requestId: string,
     @Body() dto: ReviewRerouteDto,
-  ): Promise<{ rerouteRequest: RerouteRequest; route: Route; optimizerHealth: OptimizerHealth }> {
+  ): Promise<DispatchRerouteResponse> {
     const rerouteRequest = await this.dispatchService.approveReroute(
       routeId,
       requestId,
@@ -488,8 +558,7 @@ export class DispatchController {
     const route = await this.dispatchService.findOne(routeId, req.user);
     return {
       rerouteRequest,
-      route: this.dispatchService.presentRoute(route) as any,
-      optimizerHealth: this.dispatchService.getOptimizerHealth(),
+      ...this.presentRouteResponse(route),
     };
   }
 
@@ -504,7 +573,7 @@ export class DispatchController {
     @Param('id', ParseUUIDPipe) routeId: string,
     @Param('requestId', ParseUUIDPipe) requestId: string,
     @Body() dto: ReviewRerouteDto,
-  ): Promise<{ rerouteRequest: RerouteRequest; route: Route; optimizerHealth: OptimizerHealth }> {
+  ): Promise<DispatchRerouteResponse> {
     const rerouteRequest = await this.dispatchService.rejectReroute(
       routeId,
       requestId,
@@ -523,8 +592,7 @@ export class DispatchController {
     const route = await this.dispatchService.findOne(routeId, req.user);
     return {
       rerouteRequest,
-      route: this.dispatchService.presentRoute(route) as any,
-      optimizerHealth: this.dispatchService.getOptimizerHealth(),
+      ...this.presentRouteResponse(route),
     };
   }
 
@@ -539,7 +607,7 @@ export class DispatchController {
     @Param('id', ParseUUIDPipe) routeId: string,
     @Param('requestId', ParseUUIDPipe) requestId: string,
     @Body() dto: ApplyRerouteDto,
-  ): Promise<{ rerouteRequest: RerouteRequest; route: Route; optimizerHealth: OptimizerHealth }> {
+  ): Promise<DispatchRerouteResponse> {
     const rerouteRequest = await this.dispatchService.applyReroute(
       routeId,
       requestId,
@@ -558,8 +626,7 @@ export class DispatchController {
     const route = await this.dispatchService.findOne(routeId, req.user);
     return {
       rerouteRequest,
-      route: this.dispatchService.presentRoute(route) as any,
-      optimizerHealth: this.dispatchService.getOptimizerHealth(),
+      ...this.presentRouteResponse(route),
     };
   }
 
@@ -571,7 +638,7 @@ export class DispatchController {
   async getRerouteHistory(
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) routeId: string,
-  ): Promise<{ rerouteRequests: RerouteRequest[] }> {
+  ): Promise<DispatchRerouteHistoryResponse> {
     const rerouteRequests = await this.dispatchService.getRerouteHistory(routeId, req.user);
     return { rerouteRequests };
   }
@@ -585,10 +652,10 @@ export class DispatchController {
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) routeId: string,
     @Body() dto: ReroutePreviewDto,
-  ): Promise<{ preview: any }> {
+  ): Promise<{ preview: unknown }> {
     const preview = await this.dispatchService.previewReroute(
       routeId,
-      dto.action as any,
+      dto.action,
       dto.payload || {},
       req.user,
     );
@@ -601,7 +668,7 @@ export class DispatchController {
   async listRouteVersions(
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) routeId: string,
-  ): Promise<{ versions: RouteVersion[] }> {
+  ): Promise<DispatchVersionsResponse> {
     const versions = await this.dispatchService.listRouteVersions(routeId, req.user);
     return { versions };
   }
@@ -612,7 +679,7 @@ export class DispatchController {
   async snapshotRouteVersion(
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) routeId: string,
-  ): Promise<{ version: RouteVersion }> {
+  ): Promise<DispatchVersionResponse> {
     const version = await this.dispatchService.createRouteVersionSnapshot(
       routeId,
       req.user,
@@ -627,7 +694,7 @@ export class DispatchController {
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) routeId: string,
     @Param('versionId', ParseUUIDPipe) versionId: string,
-  ): Promise<{ version: RouteVersion }> {
+  ): Promise<DispatchVersionResponse> {
     const version = await this.dispatchService.reviewRouteVersion(
       routeId,
       versionId,
@@ -643,7 +710,7 @@ export class DispatchController {
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) routeId: string,
     @Param('versionId', ParseUUIDPipe) versionId: string,
-  ): Promise<{ version: RouteVersion }> {
+  ): Promise<DispatchVersionResponse> {
     const version = await this.dispatchService.approveRouteVersion(
       routeId,
       versionId,
@@ -659,7 +726,7 @@ export class DispatchController {
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) routeId: string,
     @Param('versionId', ParseUUIDPipe) versionId: string,
-  ): Promise<{ version: RouteVersion }> {
+  ): Promise<DispatchVersionResponse> {
     const version = await this.dispatchService.publishRouteVersion(
       routeId,
       versionId,
@@ -695,8 +762,8 @@ export class DispatchController {
     },
   })
   @ApiResponse({ status: 500, description: 'Auto-dispatch failed' })
-  async manualDispatch() {
-    const result = await this.dispatchWorker.manualDispatch();
+  async manualDispatch(@Body() payload: ManualDispatchDto = {}) {
+    const result = await this.dispatchWorker.manualDispatch(payload.objective);
     return {
       ...result,
       timestamp: new Date(),

@@ -1,7 +1,11 @@
-import type { ReactNode } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
-import { trovanTheme } from '../theme/trovanTheme';
+import { createTrovanTheme, type TrovanThemeMode } from '../theme/trovanTheme';
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  return <MuiThemeProvider theme={trovanTheme}>{children}</MuiThemeProvider>;
+  const mode: TrovanThemeMode = 'light';
+
+  const theme = useMemo(() => createTrovanTheme(mode), [mode]);
+
+  return <MuiThemeProvider theme={theme}>{children}</MuiThemeProvider>;
 }

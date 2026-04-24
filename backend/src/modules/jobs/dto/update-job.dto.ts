@@ -1,6 +1,6 @@
 import { InputType, Field, PartialType } from '@nestjs/graphql';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsDateString, IsBoolean, IsString, IsNumber } from 'class-validator';
+import { IsEnum, IsOptional, IsDateString, IsString } from 'class-validator';
 import { CreateJobDto } from './create-job.dto';
 import { JobStatus } from '../entities/job.entity';
 
@@ -34,15 +34,6 @@ export class UpdateJobDto extends PartialType(CreateJobDto) {
   assignedRouteId?: string;
 
   @ApiPropertyOptional({
-    description: 'Legacy archive flag from older frontend screens',
-    example: true,
-  })
-  @IsOptional()
-  @IsBoolean()
-  @Field({ nullable: true })
-  archived?: boolean;
-
-  @ApiPropertyOptional({
     description: 'Archive timestamp',
     example: '2024-01-15T17:30:00Z',
   })
@@ -50,22 +41,4 @@ export class UpdateJobDto extends PartialType(CreateJobDto) {
   @IsDateString()
   @Field({ nullable: true })
   archivedAt?: string;
-
-  @ApiPropertyOptional({ description: 'Legacy assigned vehicle id' })
-  @IsOptional()
-  @IsString()
-  @Field({ nullable: true })
-  assignedVehicleId?: string;
-
-  @ApiPropertyOptional({ description: 'Legacy stop sequence' })
-  @IsOptional()
-  @IsNumber()
-  @Field({ nullable: true })
-  stopSequence?: number;
-
-  @ApiPropertyOptional({ description: 'Legacy driver assignment field' })
-  @IsOptional()
-  @IsString()
-  @Field({ nullable: true })
-  driverId?: string;
 }

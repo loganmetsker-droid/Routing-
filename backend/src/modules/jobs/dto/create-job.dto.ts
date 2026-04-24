@@ -111,14 +111,6 @@ export class CreateJobDto {
   @Field({ nullable: true })
   timeWindowEnd?: string;
 
-  @ApiPropertyOptional({
-    description: 'Legacy nested time window payload',
-    example: { start: '2024-01-15T09:00:00Z', end: '2024-01-15T17:00:00Z' },
-  })
-  @IsOptional()
-  @Field(() => GraphQLJSON, { nullable: true })
-  timeWindow?: { start?: string; end?: string };
-
   @ApiPropertyOptional({ description: 'Weight in kg', minimum: 0 })
   @IsOptional()
   @IsNumber()
@@ -173,7 +165,7 @@ export class CreateJobDto {
   specialInstructions?: string;
 
   @ApiPropertyOptional({
-    description: 'Legacy status field accepted from UI',
+    description: 'Job lifecycle status',
     enum: JobStatus,
   })
   @IsOptional()

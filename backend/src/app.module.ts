@@ -34,8 +34,12 @@ import { PlanningModule } from './modules/planning/planning.module';
 import { HealthModule } from './modules/health/health.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
+import { PlatformModule } from './modules/platform/platform.module';
+import { PublicApiModule } from './modules/public-api/public-api.module';
 import { AuditModule } from './common/audit/audit.module';
 import { RuntimeStatusModule } from './common/runtime/runtime-status.module';
+import { WorkosModule } from './common/integrations/workos.module';
 
 @Module({
   imports: [
@@ -109,6 +113,7 @@ import { RuntimeStatusModule } from './common/runtime/runtime-status.module';
 
     // Health checks and monitoring
     TerminusModule,
+    WorkosModule,
     RuntimeStatusModule,
     HealthModule,
     MetricsModule,
@@ -129,6 +134,9 @@ import { RuntimeStatusModule } from './common/runtime/runtime-status.module';
     TrackingModule,
     PlanningModule,
     SubscriptionsModule,
+    NotificationsModule,
+    PlatformModule,
+    PublicApiModule,
   ],
   providers: [
     {

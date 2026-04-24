@@ -1,87 +1,184 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Box, Button, Chip, Grid, LinearProgress, List, ListItem, ListItemText, Stack, Typography } from '@mui/material';
+import {
+  LocalShippingOutlined,
+  ReportProblemOutlined,
+  RouteOutlined,
+  SpeedOutlined,
+} from '@mui/icons-material';
+import {
+  Box,
+  Button,
+  Grid,
+  List,
+  ListItem,
+  ListItemText,
+  Stack,
+  Typography,
+} from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import MultiRouteMap from '../components/maps/MultiRouteMap';
 import { PageHeader } from '../components/PageHeader';
+import { StatusPill } from '../components/StatusPill';
 import { SurfacePanel } from '../components/SurfacePanel';
-import { KpiTile } from '../components/KpiTile';
 import LoadingState from '../components/ui/LoadingState';
-import { getDrivers, getVehicles, getJobs, getRoutes, getDispatchOptimizerHealth, type OptimizerHealth } from '../services/api';
+import { useDispatchBoardQuery } from '../features/dispatch/api/routeRunsApi';
+import { buildDispatchMapRoutes } from '../features/dispatch/utils/opsMapData';
+import { useRoutesQuery } from '../services/dispatchApi';
+import { useDriversQuery, useVehiclesQuery } from '../services/fleetApi';
+import { useJobsQuery } from '../services/jobsApi';
+import { trovanColors } from '../theme/designTokens';
+
+type MetricCard = {
+  label: string;
+  value: string | number;
+  note: string;
+  tone?: 'default' | 'success' | 'warning' | 'danger' | 'info' | 'accent';
+  icon: typeof LocalShippingOutlined;
+};
+
+function metricTone(value: number) {
+  if (value >= 6) return 'danger';
+  if (value >= 3) return 'warning';
+  return 'accent';
+}
+
+function statusTone(status: string) {
+  const normalized = String(status || '').toLowerCase();
+  if (['completed', 'serviced', 'resolved'].includes(normalized)) return 'success';
+  if (['failed', 'cancelled'].includes(normalized)) return 'danger';
+  if (['assigned', 'ready_for_dispatch', 'in_progress', 'arrived'].includes(normalized)) return 'info';
+  if (['open', 'rescheduled', 'urgent'].includes(normalized)) return 'warning';
+  return 'default';
+}
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [drivers, setDrivers] = useState<any[]>([]);
-  const [vehicles, setVehicles] = useState<any[]>([]);
-  const [jobs, setJobs] = useState<any[]>([]);
-  const [routes, setRoutes] = useState<any[]>([]);
-  const [optimizerHealth, setOptimizerHealth] = useState<OptimizerHealth | null>(null);
-  const [loading, setLoading] = useState(true);
+  const jobsQuery = useJobsQuery();
+  const routesQuery = useRoutesQuery();
+  const driversQuery = useDriversQuery();
+  const vehiclesQuery = useVehiclesQuery();
+  const boardQuery = useDispatchBoardQuery();
 
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      try {
-        const [driversData, vehiclesData, jobsData, routesData, healthData] = await Promise.all([
-          getDrivers(),
-          getVehicles(),
-          getJobs(),
-          getRoutes(),
-          getDispatchOptimizerHealth(),
-        ]);
-        if (!mounted) return;
-        setDrivers(Array.isArray(driversData) ? driversData : []);
-        setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
-        setJobs(Array.isArray(jobsData) ? jobsData : []);
-        setRoutes(Array.isArray(routesData) ? routesData : []);
-        setOptimizerHealth(healthData);
-      } catch (error) {
-        console.error('Failed to load dashboard', error);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-    void load();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const jobs = jobsQuery.data ?? [];
+  const routes = routesQuery.data ?? [];
+  const drivers = driversQuery.data ?? [];
+  const vehicles = vehiclesQuery.data ?? [];
+  const board = boardQuery.data;
+
+  const loading =
+    jobsQuery.isLoading ||
+    routesQuery.isLoading ||
+    driversQuery.isLoading ||
+    vehiclesQuery.isLoading ||
+    boardQuery.isLoading;
 
   const todayKey = new Date().toISOString().slice(0, 10);
 
-  const stats = useMemo(() => {
-    const jobsToday = jobs.filter((job) => String(job.createdAt || '').slice(0, 10) === todayKey).length;
-    const unassigned = jobs.filter((job) => (job.status || 'pending') === 'pending').length;
-    const activeRoutes = routes.filter((route) => ['assigned', 'in_progress', 'active', 'live'].includes(String(route.status))).length;
-    const atRisk =
-      routes.filter((route) => ['requested', 'approved'].includes(String(route.rerouteState))).length +
-      jobs.filter((job) => ['high', 'urgent'].includes(String(job.priority).toLowerCase()) && (job.status || 'pending') !== 'completed').length;
-    return { jobsToday, unassigned, activeRoutes, atRisk };
-  }, [jobs, routes, todayKey]);
+  const dashboardState = useMemo(() => {
+    const urgentJobs = jobs.filter((job) =>
+      ['high', 'urgent'].includes(String(job.priority || '').toLowerCase()),
+    );
+    const activeRoutes = routes.filter((route) =>
+      ['assigned', 'ready_for_dispatch', 'in_progress'].includes(
+        String(route.workflowStatus || route.status || '').toLowerCase(),
+      ),
+    );
+    const todayJobs = jobs.filter(
+      (job) => String(job.createdAt || '').slice(0, 10) === todayKey,
+    );
+    const readyDrivers = drivers.filter((driver) =>
+      ['active', 'on_duty', 'on_route'].includes(
+        String(driver.status || '').toLowerCase(),
+      ),
+    );
+    const readyVehicles = vehicles.filter((vehicle) =>
+      ['available', 'active', 'ready'].includes(
+        String(vehicle.status || '').toLowerCase(),
+      ),
+    );
+    const openExceptions =
+      board?.exceptions?.filter((item) => item.status === 'OPEN') ?? [];
 
-  const resourceHealth = useMemo(() => {
-    const activeDrivers = drivers.filter((driver) => String(driver.status).toUpperCase() === 'ACTIVE').length;
-    const availableVehicles = vehicles.filter((vehicle) => String(vehicle.status).toUpperCase() === 'AVAILABLE').length;
-    const driverCapacity = drivers.length ? Math.round((activeDrivers / drivers.length) * 100) : 0;
-    const fleetCapacity = vehicles.length ? Math.round((availableVehicles / vehicles.length) * 100) : 0;
-    return { activeDrivers, availableVehicles, driverCapacity, fleetCapacity };
-  }, [drivers, vehicles]);
+    const metricCards: MetricCard[] = [
+      {
+        label: 'Live routes',
+        value: activeRoutes.length,
+        note: `${routes.length} total planned or active`,
+        tone: activeRoutes.length ? 'info' : 'default',
+        icon: RouteOutlined,
+      },
+      {
+        label: 'Jobs waiting',
+        value: jobs.filter((job) => !job.assignedRouteId).length,
+        note: `${todayJobs.length} landed today`,
+        tone: urgentJobs.length ? 'warning' : 'default',
+        icon: LocalShippingOutlined,
+      },
+      {
+        label: 'At risk',
+        value: openExceptions.length + urgentJobs.length,
+        note: `${openExceptions.length} open exceptions`,
+        tone: metricTone(openExceptions.length + urgentJobs.length),
+        icon: ReportProblemOutlined,
+      },
+      {
+        label: 'Today readiness',
+        value: `${drivers.length ? Math.round((readyDrivers.length / drivers.length) * 100) : 0}%`,
+        note: `${readyVehicles.length}/${vehicles.length || 0} vehicles ready`,
+        tone: readyVehicles.length >= Math.max(1, vehicles.length - 1) ? 'success' : 'accent',
+        icon: SpeedOutlined,
+      },
+    ];
 
-  const activityFeed = useMemo(
-    () =>
-      jobs.slice(0, 5).map((job) => ({
-        id: job.id,
-        title: job.customerName || 'New customer job',
-        meta: (job.deliveryAddress || 'Address pending') + ' • ' + (job.priority || 'normal') + ' priority',
-        status: job.status || 'pending',
+    const urgentQueue = urgentJobs.slice(0, 6).map((job) => ({
+      id: job.id,
+      title: job.customerName || 'Priority job',
+      detail: job.deliveryAddress || 'Address pending',
+      status: String(job.status || 'pending'),
+    }));
+
+    const routeFeed = routes.slice(0, 7).map((route) => ({
+      id: route.id,
+      label: route.vehicleId ? `Route ${route.id.slice(0, 8)}` : route.id,
+      detail: `${route.jobIds?.length || 0} stops • ${Number(route.totalDistanceKm || 0).toFixed(1)} km`,
+      status: String(route.workflowStatus || route.status || 'planned'),
+    }));
+
+    const activity = [
+      ...openExceptions.slice(0, 3).map((item) => ({
+        id: item.id,
+        title: item.code,
+        detail: item.message,
+        tone: 'warning' as const,
       })),
-    [jobs],
-  );
+      ...todayJobs.slice(0, 2).map((job) => ({
+        id: job.id,
+        title: `Job ${job.id.slice(0, 8)}`,
+        detail: `${job.customerName || 'Customer'} added to intake`,
+        tone: 'accent' as const,
+      })),
+    ];
 
-  const routingSummary = useMemo(() => {
-    const ready = routes.filter((route) => ['draft', 'planned', 'review'].includes(String(route.status))).length;
-    const live = routes.filter((route) => ['assigned', 'in_progress', 'active', 'live'].includes(String(route.status))).length;
-    const completed = routes.filter((route) => String(route.status) === 'completed').length;
-    return { ready, live, completed };
-  }, [routes]);
+    return {
+      metricCards,
+      urgentQueue,
+      routeFeed,
+      activity,
+      openExceptions,
+    };
+  }, [board?.exceptions, drivers, jobs, routes, todayKey, vehicles]);
+
+  const mapRoutes = useMemo(
+    () =>
+      buildDispatchMapRoutes({
+        routes,
+        jobs,
+        drivers,
+        vehicles,
+      }),
+    [drivers, jobs, routes, vehicles],
+  );
 
   if (loading) {
     return <LoadingState label="Loading dashboard..." minHeight="50vh" />;
@@ -92,140 +189,283 @@ export default function Dashboard() {
       <PageHeader
         eyebrow="Operations"
         title="Dashboard"
-        subtitle="What needs attention today, where capacity is tightening, and which workflow to open next."
+        subtitle="Live execution pressure, route readiness, and the next actions that matter."
         actions={
           <>
             <Button variant="contained" onClick={() => navigate('/jobs?create=true')}>
-              Create Job
+              New job
             </Button>
             <Button variant="outlined" onClick={() => navigate('/routing')}>
-              Go to Routing
+              Open routing
             </Button>
-            <Chip
-              label={optimizerHealth?.status === 'healthy' ? 'System healthy' : 'Needs review'}
-              color={optimizerHealth?.status === 'healthy' ? 'success' : 'warning'}
-            />
+            <Button variant="outlined" onClick={() => navigate('/dispatch')}>
+              Open dispatch
+            </Button>
           </>
         }
       />
 
-      <Grid container spacing={2.5} sx={{ mb: 2.5 }}>
-        <Grid item xs={12} md={6} xl={3}><KpiTile label="Jobs Today" value={stats.jobsToday} meta="New work created today" /></Grid>
-        <Grid item xs={12} md={6} xl={3}><KpiTile label="Unassigned" value={stats.unassigned} meta="Still waiting for routing" tone={stats.unassigned > 0 ? 'warning' : 'success'} /></Grid>
-        <Grid item xs={12} md={6} xl={3}><KpiTile label="Active Routes" value={stats.activeRoutes} meta="Published or live runs" tone="success" /></Grid>
-        <Grid item xs={12} md={6} xl={3}><KpiTile label="At Risk" value={stats.atRisk} meta="Exceptions, reroutes, or urgent backlog" tone={stats.atRisk > 0 ? 'danger' : 'success'} /></Grid>
-      </Grid>
-
-      <Grid container spacing={2.5} sx={{ mb: 2.5 }}>
-        <Grid item xs={12} lg={7}>
-          <SurfacePanel>
-            <Stack spacing={2}>
-              <Box>
-                <Typography variant="h5">Today in Operations</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Route planning should happen before dispatch publish. Keep the queue moving from jobs into routing, then publish reviewed plans into Dispatch.
-                </Typography>
-              </Box>
-              <Grid container spacing={2}>
-                <Grid item xs={12} md={4}>
-                  <SurfacePanel sx={{ bgcolor: 'rgba(250, 241, 234, 0.48)' }}>
-                    <Typography variant="subtitle2" color="text.secondary">Queue pressure</Typography>
-                    <Typography variant="h4" sx={{ mt: 1 }}>{stats.unassigned}</Typography>
-                    <Typography variant="body2" color="text.secondary">Jobs still waiting for scenario selection.</Typography>
-                  </SurfacePanel>
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <SurfacePanel sx={{ bgcolor: 'rgba(255, 248, 242, 1)' }}>
-                    <Typography variant="subtitle2" color="text.secondary">Driver availability</Typography>
-                    <Typography variant="h4" sx={{ mt: 1 }}>{resourceHealth.activeDrivers}/{drivers.length || 0}</Typography>
-                    <Typography variant="body2" color="text.secondary">Drivers available for assignment right now.</Typography>
-                  </SurfacePanel>
-                </Grid>
-                <Grid item xs={12} md={4}>
-                  <SurfacePanel sx={{ bgcolor: 'rgba(243, 236, 228, 0.75)' }}>
-                    <Typography variant="subtitle2" color="text.secondary">Fleet readiness</Typography>
-                    <Typography variant="h4" sx={{ mt: 1 }}>{resourceHealth.availableVehicles}/{vehicles.length || 0}</Typography>
-                    <Typography variant="body2" color="text.secondary">Vehicles available before route publish.</Typography>
-                  </SurfacePanel>
-                </Grid>
-              </Grid>
-            </Stack>
-          </SurfacePanel>
-        </Grid>
-        <Grid item xs={12} lg={5}>
-          <SurfacePanel>
-            <Stack spacing={2}>
-              <Box>
-                <Typography variant="h5">Routing Summary</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Keep routing separate from dispatch. Review draft scenarios, then push approved plans into the board.
-                </Typography>
-              </Box>
-              <Stack spacing={1.5}>
-                {[
-                  { label: 'Draft / review routes', value: routingSummary.ready, color: 'warning.main' },
-                  { label: 'Live routes', value: routingSummary.live, color: 'success.main' },
-                  { label: 'Completed routes', value: routingSummary.completed, color: 'info.main' },
-                ].map((item) => (
-                  <Box key={item.label}>
-                    <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.75 }}>
-                      <Typography variant="body2">{item.label}</Typography>
-                      <Typography variant="body2" sx={{ color: item.color }}>{item.value}</Typography>
-                    </Stack>
-                    <LinearProgress variant="determinate" value={Math.min(100, item.value * 18)} sx={{ height: 8, borderRadius: 999, bgcolor: 'rgba(233, 222, 211, 0.7)' }} />
-                  </Box>
-                ))}
-              </Stack>
-              <Button variant="text" onClick={() => navigate('/routing')}>Open routing workspace</Button>
-            </Stack>
-          </SurfacePanel>
-        </Grid>
-      </Grid>
-
-      <Grid container spacing={2.5}>
-        <Grid item xs={12} lg={7}>
-          <SurfacePanel>
-            <Stack spacing={2}>
-              <Box>
-                <Typography variant="h5">Activity Feed</Typography>
-                <Typography variant="body2" color="text.secondary">Recent customer demand and status changes.</Typography>
-              </Box>
-              <List disablePadding>
-                {activityFeed.map((entry) => (
-                  <ListItem key={entry.id} disableGutters sx={{ py: 1.25, borderBottom: '1px solid', borderColor: 'divider' }}>
-                    <ListItemText primary={entry.title} secondary={entry.meta} primaryTypographyProps={{ fontWeight: 600 }} />
-                    <Chip label={String(entry.status).replace(/_/g, ' ')} size="small" />
-                  </ListItem>
-                ))}
-              </List>
-            </Stack>
-          </SurfacePanel>
-        </Grid>
-        <Grid item xs={12} lg={5}>
-          <SurfacePanel>
-            <Stack spacing={2}>
-              <Box>
-                <Typography variant="h5">Operational Health</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Confidence indicators keep the workspace honest. Raise visibility on stale telemetry, reroutes, and capacity stress.
-                </Typography>
-              </Box>
-              <Stack direction="row" spacing={1} flexWrap="wrap">
-                <Chip label={String(resourceHealth.driverCapacity) + '% driver coverage'} color="success" variant="outlined" />
-                <Chip label={String(resourceHealth.fleetCapacity) + '% fleet ready'} color="info" variant="outlined" />
-                <Chip label={String(stats.atRisk) + ' items need review'} color={stats.atRisk ? 'warning' : 'success'} variant="outlined" />
-              </Stack>
-              <SurfacePanel sx={{ bgcolor: 'rgba(255, 248, 242, 1)' }}>
-                <Stack direction="row" spacing={1.25} alignItems="flex-start">
-                  <Box sx={{ width: 14, height: 14, borderRadius: '50%', bgcolor: stats.atRisk ? 'warning.main' : 'success.main', mt: 0.5, flexShrink: 0 }} />
-                  <Box>
-                    <Typography variant="subtitle1">{optimizerHealth?.message || 'Optimizer healthy and ready for scenario runs.'}</Typography>
-                    <Typography variant="body2" color="text.secondary">Status: {optimizerHealth?.status || 'unknown'}</Typography>
-                  </Box>
+      <Grid container spacing={1.2} sx={{ mb: 1.35 }}>
+        {dashboardState.metricCards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <Grid item xs={12} sm={6} xl={3} key={card.label}>
+              <SurfacePanel variant="panel" padding={1.45}>
+                <Stack spacing={0.9}>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                    <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                      {card.label}
+                    </Typography>
+                    <Box
+                      sx={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: 1,
+                        display: 'grid',
+                        placeItems: 'center',
+                        bgcolor: alpha(trovanColors.copper[500], 0.08),
+                        color: trovanColors.copper[600],
+                      }}
+                    >
+                      <Icon sx={{ fontSize: 14 }} />
+                    </Box>
+                  </Stack>
+                  <Typography variant="h5" sx={{ lineHeight: 1.05 }}>
+                    {card.value}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {card.note}
+                  </Typography>
                 </Stack>
               </SurfacePanel>
-            </Stack>
-          </SurfacePanel>
+            </Grid>
+          );
+        })}
+      </Grid>
+
+      <Grid container spacing={1.5}>
+        <Grid item xs={12} xl={3}>
+          <Stack spacing={1.5}>
+            <SurfacePanel variant="panel" padding={0}>
+              <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+                <Typography variant="h6">Urgent queue</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  High-priority work that still needs routing or dispatch attention.
+                </Typography>
+              </Box>
+              <List disablePadding>
+                {dashboardState.urgentQueue.length === 0 ? (
+                  <ListItem sx={{ py: 2.5 }}>
+                    <ListItemText
+                      primary="No urgent jobs waiting"
+                      secondary="The intake queue is clear right now."
+                    />
+                  </ListItem>
+                ) : (
+                  dashboardState.urgentQueue.map((entry) => (
+                    <ListItem
+                      key={entry.id}
+                      sx={{
+                        py: 1.5,
+                        px: 2,
+                        borderBottom: '1px solid',
+                        borderColor: 'divider',
+                        alignItems: 'flex-start',
+                      }}
+                    >
+                      <ListItemText
+                        primary={entry.title}
+                        secondary={entry.detail}
+                        primaryTypographyProps={{ fontWeight: 700 }}
+                      />
+                      <StatusPill
+                        label={entry.status.replace(/_/g, ' ')}
+                        tone={statusTone(entry.status)}
+                      />
+                    </ListItem>
+                  ))
+                )}
+              </List>
+            </SurfacePanel>
+
+            <SurfacePanel variant="subtle" padding={1.5}>
+              <Typography variant="h6" sx={{ mb: 1.25 }}>
+                Needs attention
+              </Typography>
+              <Stack spacing={1.1}>
+                {dashboardState.activity.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    No new alerts or intake activity.
+                  </Typography>
+                ) : (
+                  dashboardState.activity.map((item) => (
+                    <Box
+                      key={item.id}
+                      sx={{
+                        px: 1,
+                        py: 0.85,
+                        borderRadius: 1,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        bgcolor: 'background.paper',
+                      }}
+                    >
+                      <Stack direction="row" justifyContent="space-between" gap={1}>
+                        <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                          {item.title}
+                        </Typography>
+                        <StatusPill
+                          label={item.tone === 'warning' ? 'Review' : 'New'}
+                          tone={item.tone === 'warning' ? 'warning' : 'accent'}
+                        />
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary">
+                        {item.detail}
+                      </Typography>
+                    </Box>
+                  ))
+                )}
+              </Stack>
+            </SurfacePanel>
+          </Stack>
+        </Grid>
+
+        <Grid item xs={12} xl={6}>
+          <Stack spacing={1.5}>
+            <SurfacePanel variant="canvas" padding={0} sx={{ overflow: 'hidden' }}>
+              <Stack
+                direction="row"
+                justifyContent="space-between"
+                alignItems="center"
+                sx={{ px: 2, py: 1.4, borderBottom: '1px solid', borderColor: 'divider' }}
+              >
+                <Box>
+                  <Typography variant="h6">Live operations map</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    A shared view across active, assigned, and in-progress route geometry.
+                  </Typography>
+                </Box>
+                <StatusPill
+                  label={`${mapRoutes.length} routes`}
+                  tone={mapRoutes.length ? 'accent' : 'default'}
+                />
+              </Stack>
+              <Box sx={{ height: 460 }}>
+                {mapRoutes.length ? (
+                  <MultiRouteMap routes={mapRoutes} height="460px" />
+                ) : (
+                  <Box sx={{ p: 3 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      No route geometry is available yet. Publish a plan to populate the live map.
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
+            </SurfacePanel>
+
+            <Grid container spacing={1.5}>
+              <Grid item xs={12} md={4}>
+                <SurfacePanel variant="subtle" padding={1.5}>
+                  <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase' }}>
+                    Throughput
+                  </Typography>
+                  <Typography variant="h5" sx={{ mt: 0.75 }}>
+                    {jobs.filter((job) => String(job.status).toLowerCase() === 'completed').length}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Jobs completed from the current queue snapshot.
+                  </Typography>
+                </SurfacePanel>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <SurfacePanel variant="subtle" padding={1.5}>
+                  <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase' }}>
+                    SLA pressure
+                  </Typography>
+                  <Typography variant="h5" sx={{ mt: 0.75 }}>
+                    {dashboardState.openExceptions.length}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Open delivery exceptions affecting today&apos;s routes.
+                  </Typography>
+                </SurfacePanel>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <SurfacePanel variant="subtle" padding={1.5}>
+                  <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase' }}>
+                    Capacity
+                  </Typography>
+                  <Typography variant="h5" sx={{ mt: 0.75 }}>
+                    {vehicles.filter((vehicle) => String(vehicle.status).toLowerCase() === 'available').length}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Vehicles available for additional work or rebalancing.
+                  </Typography>
+                </SurfacePanel>
+              </Grid>
+            </Grid>
+          </Stack>
+        </Grid>
+
+        <Grid item xs={12} xl={3}>
+          <Stack spacing={1.5}>
+            <SurfacePanel variant="panel" padding={0}>
+              <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+                <Typography variant="h6">Route feed</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Current route state, stop count, and dispatch readiness.
+                </Typography>
+              </Box>
+              <List disablePadding>
+                {dashboardState.routeFeed.length === 0 ? (
+                  <ListItem sx={{ py: 2.5 }}>
+                    <ListItemText
+                      primary="No route activity"
+                      secondary="Generate or publish work to populate the live feed."
+                    />
+                  </ListItem>
+                ) : (
+                  dashboardState.routeFeed.map((route) => (
+                    <ListItem
+                      key={route.id}
+                      sx={{
+                        py: 1.5,
+                        px: 2,
+                        borderBottom: '1px solid',
+                        borderColor: 'divider',
+                        alignItems: 'flex-start',
+                      }}
+                    >
+                      <ListItemText
+                        primary={route.label}
+                        secondary={route.detail}
+                        primaryTypographyProps={{ fontWeight: 700 }}
+                      />
+                      <StatusPill
+                        label={route.status.replace(/_/g, ' ')}
+                        tone={statusTone(route.status)}
+                      />
+                    </ListItem>
+                  ))
+                )}
+              </List>
+            </SurfacePanel>
+
+            <SurfacePanel variant="subtle">
+              <Stack spacing={1.1}>
+                <Typography variant="h6">Next actions</Typography>
+                <Button variant="outlined" fullWidth onClick={() => navigate('/routing')}>
+                  Review draft routes
+                </Button>
+                <Button variant="outlined" fullWidth onClick={() => navigate('/dispatch')}>
+                  Open dispatch board
+                </Button>
+                <Button variant="outlined" fullWidth onClick={() => navigate('/exceptions')}>
+                  Resolve exception queue
+                </Button>
+              </Stack>
+            </SurfacePanel>
+          </Stack>
         </Grid>
       </Grid>
     </Box>

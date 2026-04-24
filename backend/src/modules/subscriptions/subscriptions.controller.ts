@@ -47,6 +47,31 @@ export class SubscriptionsController {
     return this.subscriptionsService.createSubscription(dto);
   }
 
+  @Get('plans')
+  @Roles('OWNER', 'ADMIN')
+  @ApiOperation({ summary: 'Get subscription plan catalog and billing readiness' })
+  @ApiResponse({ status: 200, description: 'Subscription plans and Stripe readiness' })
+  async getPlans() {
+    return this.subscriptionsService.getPlanCatalog();
+  }
+
+  @Get('overview')
+  @Roles('OWNER', 'ADMIN')
+  @ApiOperation({ summary: 'Get billing overview for the authenticated workspace' })
+  @ApiResponse({ status: 200, description: 'Billing overview and current subscriptions' })
+  async getOverview(
+    @Req()
+    req: Request & {
+      user?: { userId?: string; email?: string; organizationId?: string };
+    },
+  ) {
+    return this.subscriptionsService.getBillingOverview({
+      userId: req.user?.userId,
+      email: req.user?.email,
+      organizationId: req.user?.organizationId,
+    });
+  }
+
   @Get('customers/:userId/subscriptions')
   @Roles('OWNER', 'ADMIN')
   @ApiOperation({ summary: 'Get all subscriptions for a customer' })

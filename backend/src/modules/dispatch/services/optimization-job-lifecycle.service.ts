@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
+import type { OptimizationObjective } from '../../../../../shared/contracts';
 
 export type OptimizationJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 export type OptimizationJobKind = 'single-route' | 'global-route' | 'reroute';
@@ -7,6 +8,7 @@ export type OptimizationJobKind = 'single-route' | 'global-route' | 'reroute';
 export interface OptimizationJobRecord {
   id: string;
   kind: OptimizationJobKind;
+  objective?: OptimizationObjective;
   routeId?: string;
   organizationId?: string;
   vehicleIds?: string[];

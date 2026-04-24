@@ -1,8 +1,16 @@
-import { Controller, Get, Header } from '@nestjs/common';
+import { Controller, Get, Header, Req } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { MetricsService } from './metrics.service';
 import { Public } from '../../common/decorators/public.decorator';
+import { ApiBearerAuth } from '@nestjs/swagger';
+import { Roles } from '../../common/decorators/roles.decorator';
+
+type AuthenticatedRequest = {
+  user?: {
+    organizationId?: string;
+  };
+};
 
 @ApiTags('Metrics')
 @Controller('metrics')
@@ -38,5 +46,17 @@ fleet_ontime_delivery_rate_percent 94.5`,
   })
   async getMetrics(): Promise<string> {
     return this.metricsService.getMetrics();
+  }
+
+  @Get('overview')
+  @ApiBearerAuth('JWT-auth')
+  @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'VIEWER')
+  @ApiOperation({
+    summary: 'Get dashboard analytics overview',
+    description: 'Returns operational KPIs and live fleet health for the current organization',
+  })
+  @ApiResponse({ status: 200, description: 'Analytics overview payload' })
+  async getOverview(@Req() req: AuthenticatedRequest) {
+    return this.metricsService.getAnalyticsOverview(req.user?.organizationId);
   }
 }

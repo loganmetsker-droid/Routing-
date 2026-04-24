@@ -3,10 +3,12 @@ import { Test } from '@nestjs/testing';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import request from 'supertest';
 import { AuthController } from '../auth/auth.controller';
 import { AuthService } from '../auth/auth.service';
 import { JwtStrategy } from '../auth/strategies/jwt.strategy';
+import { AuthSession } from '../auth/entities/auth-session.entity';
 import { OrganizationsService } from '../organizations/organizations.service';
 import { DispatchController } from './dispatch.controller';
 import { DispatchService } from './dispatch.service';
@@ -14,12 +16,14 @@ import { DispatchWorker } from './dispatch.worker';
 import { AuditService } from '../../common/audit/audit.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
+import { WorkosService } from '../../common/integrations/workos.service';
 
 describe('Dispatch HTTP integration', () => {
   let app: INestApplication;
   let jwtService: JwtService;
 
   const routeId = '11111111-1111-4111-8111-111111111111';
+  const targetRouteId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
   const driverId = '22222222-2222-4222-8222-222222222222';
   const publishedVersionId = '33333333-3333-4333-8333-333333333333';
   const autoDraftVersionId = '44444444-4444-4444-8444-444444444444';
@@ -36,6 +40,22 @@ describe('Dispatch HTTP integration', () => {
       routeData: {
         route_version: {
           versionId: publishedVersionId,
+          versionNumber: 1,
+          status: 'PUBLISHED',
+          publishedAt: '2026-04-10T10:00:00.000Z',
+        },
+      },
+    },
+    targetRoute: {
+      id: targetRouteId,
+      vehicleId: '99999999-9999-4999-8999-999999999999',
+      driverId: '88888888-8888-4888-8888-888888888888',
+      jobIds: [],
+      status: 'assigned',
+      workflowStatus: 'ready_for_dispatch',
+      routeData: {
+        route_version: {
+          versionId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
           versionNumber: 1,
           status: 'PUBLISHED',
           publishedAt: '2026-04-10T10:00:00.000Z',
@@ -66,6 +86,25 @@ describe('Dispatch HTTP integration', () => {
       message: 'ok',
     }),
     findAll: async () => [state.route],
+    moveStopToRoute: async (_routeId: string, payload: any, actor: any) => {
+      state.route = {
+        ...state.route,
+        jobIds: state.route.jobIds.filter((jobId) => jobId !== payload.jobId),
+      };
+      state.targetRoute = {
+        ...state.targetRoute,
+        jobIds: [
+          ...state.targetRoute.jobIds.slice(0, payload.targetSequence),
+          payload.jobId,
+          ...state.targetRoute.jobIds.slice(payload.targetSequence),
+        ],
+      };
+      state.actors.push({ action: 'moveStop', actorUserId: actor.userId, role: actor.roles?.[0] });
+      return {
+        sourceRoute: state.route,
+        targetRoute: state.targetRoute,
+      };
+    },
     assignDriver: async (_routeId: string, assignedDriverId: string, actor: any) => {
       state.route = {
         ...state.route,
@@ -178,6 +217,7 @@ describe('Dispatch HTTP integration', () => {
               AUTH_ADMIN_PASSWORD: 'ChangeMe123!',
               AUTH_ADMIN_ROLE: 'ADMIN',
               AUTH_ADMIN_ROLES: 'ADMIN,DISPATCHER',
+              AUTH_SESSION_ENFORCEMENT: 'false',
               JWT_SECRET: 'integration-secret',
               NODE_ENV: 'test',
             }),
@@ -206,6 +246,40 @@ describe('Dispatch HTTP integration', () => {
             })),
           },
         },
+        {
+          provide: WorkosService,
+          useValue: {
+            getConfiguration: vi.fn(() => ({
+              preferredProvider: 'local-config',
+              localLoginAllowed: true,
+              enabled: false,
+              configured: false,
+              workos: {
+                clientIdConfigured: false,
+              },
+            })),
+            isConfigured: vi.fn(() => false),
+          },
+        },
+        {
+          provide: getRepositoryToken(AuthSession),
+          useValue: {
+            create: vi.fn((value) => value),
+            save: vi.fn(async (value) => ({
+              id: 'session-1',
+              ...value,
+              createdAt: new Date('2026-04-10T10:00:00.000Z'),
+              updatedAt: new Date('2026-04-10T10:00:00.000Z'),
+              revokedAt: null,
+            })),
+            findOne: vi.fn(async () => ({
+              id: 'session-1',
+              userId: 'user-1',
+              revokedAt: null,
+              lastSeenAt: new Date(),
+            })),
+          },
+        },
         { provide: DispatchService, useValue: dispatchServiceMock },
         { provide: DispatchWorker, useValue: {} },
         { provide: AuditService, useValue: { record: vi.fn() } },
@@ -221,7 +295,9 @@ describe('Dispatch HTTP integration', () => {
   });
 
   afterAll(async () => {
-    await app.close();
+    if (app) {
+      await app.close();
+    }
   });
 
   it('supports authenticated dispatch lifecycle and rejects unauthorized mutation', async () => {
@@ -249,6 +325,22 @@ describe('Dispatch HTTP integration', () => {
       .expect((response) => {
         expect(response.body.route.driverId).toBe(driverId);
         expect(response.body.route.routeData.route_version.status).toBe('DRAFT');
+      });
+
+    await request(app.getHttpServer())
+      .post(`/api/dispatch/routes/${routeId}/move-stop`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({
+        jobId: '66666666-6666-4666-8666-666666666666',
+        targetRouteId,
+        targetSequence: 0,
+      })
+      .expect(201)
+      .expect((response) => {
+        expect(response.body.sourceRoute.id).toBe(routeId);
+        expect(response.body.targetRoute.id).toBe(targetRouteId);
+        expect(response.body.targetRoute.jobIds).toContain('66666666-6666-4666-8666-666666666666');
+        expect(response.body.optimizerHealth.status).toBe('healthy');
       });
 
     const snapshotResponse = await request(app.getHttpServer())
@@ -301,6 +393,7 @@ describe('Dispatch HTTP integration', () => {
     expect(state.actors).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ action: 'assignDriver', actorUserId: 'user-1' }),
+        expect.objectContaining({ action: 'moveStop', actorUserId: 'user-1' }),
         expect.objectContaining({ action: 'snapshot', actorUserId: 'user-1' }),
         expect.objectContaining({ action: 'approve', actorUserId: 'user-1' }),
         expect.objectContaining({ action: 'publish', actorUserId: 'user-1' }),

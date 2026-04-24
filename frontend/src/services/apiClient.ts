@@ -92,9 +92,9 @@ export async function apiFetchResponse(
       credentials: 'include',
       signal: controller.signal,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     clearTimeout(timer);
-    if (error?.name === 'AbortError') {
+    if (error instanceof Error && error.name === 'AbortError') {
       throw new ApiError('Request timed out. Backend may be unavailable.', 408);
     }
     throw new ApiError(

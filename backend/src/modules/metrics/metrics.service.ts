@@ -1,10 +1,15 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Registry, Gauge, Counter, Histogram, collectDefaultMetrics } from 'prom-client';
 import { Vehicle } from '../vehicles/entities/vehicle.entity';
 import { Telemetry } from '../tracking/entities/telemetry.entity';
 import { Shift } from '../drivers/entities/shift.entity';
+import { Driver } from '../drivers/entities/driver.entity';
+import { Route, RouteStatus } from '../dispatch/entities/route.entity';
+import { RouteRunStop } from '../dispatch/entities/route-run-stop.entity';
+import { DispatchException } from '../dispatch/entities/dispatch-exception.entity';
+import { ProofArtifact } from '../dispatch/entities/proof-artifact.entity';
 
 @Injectable()
 export class MetricsService implements OnModuleInit {
@@ -24,6 +29,16 @@ export class MetricsService implements OnModuleInit {
     private readonly telemetryRepository: Repository<Telemetry>,
     @InjectRepository(Shift)
     private readonly shiftRepository: Repository<Shift>,
+    @InjectRepository(Driver)
+    private readonly driverRepository: Repository<Driver>,
+    @InjectRepository(Route)
+    private readonly routeRepository: Repository<Route>,
+    @InjectRepository(RouteRunStop)
+    private readonly routeRunStopRepository: Repository<RouteRunStop>,
+    @InjectRepository(DispatchException)
+    private readonly exceptionRepository: Repository<DispatchException>,
+    @InjectRepository(ProofArtifact)
+    private readonly proofRepository: Repository<ProofArtifact>,
   ) {
     this.register = new Registry();
 
@@ -278,5 +293,204 @@ export class MetricsService implements OnModuleInit {
    */
   getRegistry(): Registry {
     return this.register;
+  }
+
+  async getAnalyticsOverview(organizationId?: string) {
+    const now = new Date();
+    const last7Days = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const reportingCutoff = new Date(now.getTime() - 15 * 60 * 1000);
+
+    const routeWhere = organizationId ? { organizationId } : {};
+    const stopWhere = organizationId ? { organizationId } : {};
+    const vehicleWhere = organizationId ? { organizationId } : {};
+    const driverWhere = organizationId ? { organizationId } : {};
+    const exceptionWhere = organizationId ? { organizationId } : {};
+
+    const [
+      totalRoutes,
+      activeRoutes,
+      plannedRoutes,
+      completedRoutesLast7Days,
+      totalVehicles,
+      activeVehicles,
+      totalDrivers,
+      activeDrivers,
+      totalStops,
+      servicedStops,
+      openExceptions,
+      totalExceptions,
+      routeStatusBreakdown,
+      exceptionStatusBreakdown,
+      avgRouteMetrics,
+      onTimeCounts,
+      proofCounts,
+      vehiclesReportingRecently,
+    ] = await Promise.all([
+      this.routeRepository.count({ where: routeWhere }),
+      this.routeRepository.count({
+        where: {
+          ...routeWhere,
+          status: In(['assigned', 'in_progress']),
+        },
+      }),
+      this.routeRepository.count({
+        where: {
+          ...routeWhere,
+          status: RouteStatus.PLANNED,
+        },
+      }),
+      this.routeRepository
+        .createQueryBuilder('route')
+        .where(organizationId ? 'route.organizationId = :organizationId' : '1=1', {
+          organizationId,
+        })
+        .andWhere('route.completedAt >= :last7Days', { last7Days })
+        .getCount(),
+      this.vehicleRepository.count({ where: vehicleWhere }),
+      this.vehicleRepository.count({
+        where: {
+          ...vehicleWhere,
+          status: In(['available', 'in_use', 'active']),
+        },
+      }),
+      this.driverRepository.count({ where: driverWhere }),
+      this.driverRepository.count({
+        where: {
+          ...driverWhere,
+          status: In(['active', 'on_duty', 'on_route']),
+        },
+      }),
+      this.routeRunStopRepository.count({ where: stopWhere }),
+      this.routeRunStopRepository.count({
+        where: {
+          ...stopWhere,
+          status: 'SERVICED',
+        },
+      }),
+      this.exceptionRepository.count({
+        where: {
+          ...exceptionWhere,
+          status: 'OPEN',
+        },
+      }),
+      this.exceptionRepository.count({ where: exceptionWhere }),
+      this.routeRepository
+        .createQueryBuilder('route')
+        .select('route.status', 'status')
+        .addSelect('COUNT(*)', 'count')
+        .where(organizationId ? 'route.organizationId = :organizationId' : '1=1', {
+          organizationId,
+        })
+        .groupBy('route.status')
+        .orderBy('COUNT(*)', 'DESC')
+        .getRawMany<{ status: string; count: string }>(),
+      this.exceptionRepository
+        .createQueryBuilder('exception')
+        .select('exception.status', 'status')
+        .addSelect('COUNT(*)', 'count')
+        .where(
+          organizationId ? 'exception.organizationId = :organizationId' : '1=1',
+          { organizationId },
+        )
+        .groupBy('exception.status')
+        .orderBy('COUNT(*)', 'DESC')
+        .getRawMany<{ status: string; count: string }>(),
+      this.routeRepository
+        .createQueryBuilder('route')
+        .select('AVG(route.totalDistanceKm)', 'avgDistanceKm')
+        .addSelect('AVG(route.totalDurationMinutes)', 'avgDurationMinutes')
+        .where(organizationId ? 'route.organizationId = :organizationId' : '1=1', {
+          organizationId,
+        })
+        .getRawOne<{ avgDistanceKm: string | null; avgDurationMinutes: string | null }>(),
+      this.routeRunStopRepository
+        .createQueryBuilder('stop')
+        .select(
+          'COUNT(*) FILTER (WHERE stop.actualArrival IS NOT NULL)',
+          'eligibleCount',
+        )
+        .addSelect(
+          'COUNT(*) FILTER (WHERE stop.actualArrival IS NOT NULL AND stop.plannedArrival IS NOT NULL AND stop.actualArrival <= stop.plannedArrival)',
+          'onTimeCount',
+        )
+        .where(organizationId ? 'stop.organizationId = :organizationId' : '1=1', {
+          organizationId,
+        })
+        .getRawOne<{ eligibleCount: string | null; onTimeCount: string | null }>(),
+      this.proofRepository
+        .createQueryBuilder('proof')
+        .innerJoin(RouteRunStop, 'stop', 'stop.id = proof.routeRunStopId')
+        .select('COUNT(DISTINCT proof.routeRunStopId)', 'proofedStops')
+        .addSelect(
+          'COUNT(DISTINCT stop.id) FILTER (WHERE stop.status = :status)',
+          'servicedStops',
+        )
+        .where(organizationId ? 'stop.organizationId = :organizationId' : '1=1', {
+          organizationId,
+        })
+        .setParameter('status', 'SERVICED')
+        .getRawOne<{ proofedStops: string | null; servicedStops: string | null }>(),
+      this.telemetryRepository
+        .createQueryBuilder('telemetry')
+        .innerJoin(Vehicle, 'vehicle', 'vehicle.id = telemetry.vehicleId')
+        .select('COUNT(DISTINCT telemetry.vehicleId)', 'count')
+        .where('telemetry.timestamp >= :reportingCutoff', { reportingCutoff })
+        .andWhere(
+          organizationId ? 'vehicle.organizationId = :organizationId' : '1=1',
+          { organizationId },
+        )
+        .getRawOne<{ count: string | null }>(),
+    ]);
+
+    const eligibleOnTimeCount = Number(onTimeCounts?.eligibleCount || 0);
+    const onTimeCount = Number(onTimeCounts?.onTimeCount || 0);
+    const proofedStops = Number(proofCounts?.proofedStops || 0);
+    const servicedStopsWithProofScope = Number(proofCounts?.servicedStops || servicedStops || 0);
+
+    const percent = (numerator: number, denominator: number) =>
+      denominator > 0
+        ? Number(((numerator / denominator) * 100).toFixed(1))
+        : 0;
+
+    return {
+      generatedAt: now.toISOString(),
+      serviceLevel: {
+        onTimeRate: percent(onTimeCount, eligibleOnTimeCount),
+        proofCaptureRate: percent(proofedStops, servicedStopsWithProofScope),
+        exceptionRate: percent(totalExceptions, totalRoutes || 0),
+        completedRouteRunsLast7Days: completedRoutesLast7Days,
+      },
+      operations: {
+        totalRouteRuns: totalRoutes,
+        activeRouteRuns: activeRoutes,
+        plannedRouteRuns: plannedRoutes,
+        averageRouteDistanceKm: Number(
+          Number(avgRouteMetrics?.avgDistanceKm || 0).toFixed(1),
+        ),
+        averageRouteDurationMinutes: Number(
+          Number(avgRouteMetrics?.avgDurationMinutes || 0).toFixed(1),
+        ),
+      },
+      fleet: {
+        totalVehicles,
+        activeVehicles,
+        vehiclesReportingRecently: Number(vehiclesReportingRecently?.count || 0),
+        totalDrivers,
+        activeDrivers,
+      },
+      workload: {
+        totalStops,
+        servicedStops,
+        openExceptions,
+      },
+      routeStatusBreakdown: routeStatusBreakdown.map((item) => ({
+        status: item.status,
+        count: Number(item.count || 0),
+      })),
+      exceptionStatusBreakdown: exceptionStatusBreakdown.map((item) => ({
+        status: item.status,
+        count: Number(item.count || 0),
+      })),
+    };
   }
 }

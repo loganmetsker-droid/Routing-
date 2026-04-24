@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet';
+import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Box, Paper, Typography, Chip } from '@mui/material';
+import { Box, Chip, Paper, Typography } from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import { trovanColors } from '../../theme/designTokens';
+import {
+  MapFilmOverlay,
+  mapFloatingPanelSx,
+  trovanMapLayer,
+} from './mapPresentation';
 
-// Fix Leaflet default icon issue
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 
@@ -17,63 +23,59 @@ const DefaultIcon = L.icon({
 
 L.Marker.prototype.options.icon = DefaultIcon;
 
-// Custom vehicle icon with dynamic color
-const createVehicleIcon = (color: string) => {
-  return L.divIcon({
+const createVehicleIcon = (color: string) =>
+  L.divIcon({
     className: 'custom-vehicle-marker',
     html: `
       <div style="
-        background-color: ${color};
-        width: 36px;
-        height: 36px;
+        background: linear-gradient(180deg, ${color}, ${color});
+        width: 34px;
+        height: 34px;
         border-radius: 50%;
-        border: 3px solid white;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+        border: 2px solid #FFF8F1;
+        box-shadow: 0 10px 24px rgba(65, 42, 24, 0.18);
         display: flex;
         align-items: center;
         justify-content: center;
       ">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="white" viewBox="0 0 24 24" width="22" height="22">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="#FFF8F1" viewBox="0 0 24 24" width="20" height="20">
           <path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/>
         </svg>
       </div>
     `,
-    iconSize: [36, 36],
-    iconAnchor: [18, 18],
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
   });
-};
 
-// Stop marker icon
-const createStopIcon = (index: number, color: string) => {
-  return L.divIcon({
+const createStopIcon = (index: number, color: string) =>
+  L.divIcon({
     className: 'custom-stop-marker',
     html: `
       <div style="
-        background-color: ${color};
-        width: 28px;
-        height: 28px;
+        background: ${color};
+        width: 26px;
+        height: 26px;
         border-radius: 50%;
-        border: 2px solid white;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+        border: 2px solid #FFF8F1;
+        box-shadow: 0 8px 20px rgba(65, 42, 24, 0.16);
         display: flex;
         align-items: center;
         justify-content: center;
-        color: white;
-        font-weight: bold;
-        font-size: 14px;
+        color: #FFF8F1;
+        font-weight: 700;
+        font-size: 12px;
       ">
         ${index + 1}
       </div>
     `,
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
   });
-};
 
 interface RouteData {
   id: string;
   color: string;
-  polyline?: any;
+  polyline?: { coordinates?: [number, number][] } | null;
   vehicle?: {
     id: string;
     make: string;
@@ -104,7 +106,6 @@ interface MultiRouteMapProps {
   showLegend?: boolean;
 }
 
-// Component to auto-fit bounds when routes update
 function FitBounds({ routes }: { routes: RouteData[] }) {
   const map = useMap();
 
@@ -112,32 +113,21 @@ function FitBounds({ routes }: { routes: RouteData[] }) {
     const allPoints: [number, number][] = [];
 
     routes.forEach((route) => {
-      // Add vehicle location if available
       if (route.vehicle?.currentLocation) {
-        allPoints.push([
-          route.vehicle.currentLocation.lat,
-          route.vehicle.currentLocation.lng,
-        ]);
+        allPoints.push([route.vehicle.currentLocation.lat, route.vehicle.currentLocation.lng]);
       }
 
-      // Add stops
-      if (route.stops) {
-        route.stops.forEach((stop) => {
-          allPoints.push([stop.lat, stop.lng]);
-        });
-      }
+      route.stops?.forEach((stop) => {
+        allPoints.push([stop.lat, stop.lng]);
+      });
 
-      // Add polyline coordinates if available
-      if (route.polyline?.coordinates) {
-        route.polyline.coordinates.forEach((coord: [number, number]) => {
-          allPoints.push([coord[1], coord[0]]); // GeoJSON is [lng, lat]
-        });
-      }
+      route.polyline?.coordinates?.forEach((coord: [number, number]) => {
+        allPoints.push([coord[1], coord[0]]);
+      });
     });
 
     if (allPoints.length > 0) {
-      const bounds = L.latLngBounds(allPoints);
-      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+      map.fitBounds(L.latLngBounds(allPoints), { padding: [54, 54], maxZoom: 14 });
     }
   }, [routes, map]);
 
@@ -150,22 +140,15 @@ export default function MultiRouteMap({
   showLegend = true,
 }: MultiRouteMapProps) {
   const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
-
-  // Default center (San Francisco)
   const defaultCenter: [number, number] = [37.7749, -122.4194];
 
-  // Get center from first route's first stop or vehicle location
   const getMapCenter = (): [number, number] => {
     if (routes.length === 0) return defaultCenter;
-
     const firstRoute = routes[0];
     if (firstRoute.vehicle?.currentLocation) {
-      return [
-        firstRoute.vehicle.currentLocation.lat,
-        firstRoute.vehicle.currentLocation.lng,
-      ];
+      return [firstRoute.vehicle.currentLocation.lat, firstRoute.vehicle.currentLocation.lng];
     }
-    if (firstRoute.stops && firstRoute.stops.length > 0) {
+    if (firstRoute.stops?.length) {
       return [firstRoute.stops[0].lat, firstRoute.stops[0].lng];
     }
     return defaultCenter;
@@ -174,8 +157,10 @@ export default function MultiRouteMap({
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'planned':
+      case 'draft':
         return 'success';
       case 'assigned':
+      case 'ready_for_dispatch':
       case 'in_progress':
         return 'primary';
       case 'completed':
@@ -188,17 +173,17 @@ export default function MultiRouteMap({
   };
 
   return (
-    <Box sx={{ position: 'relative', height }}>
-      {/* Legend */}
-      {showLegend && routes.length > 0 && (
+    <Box sx={{ position: 'relative', height }} className="trovan-map">
+      {showLegend && routes.length > 0 ? (
         <Paper
           sx={{
+            ...mapFloatingPanelSx,
             position: 'absolute',
             top: 16,
             right: 16,
             zIndex: 1000,
-            p: 2,
-            maxHeight: '400px',
+            p: 1.65,
+            maxHeight: '420px',
             overflowY: 'auto',
             minWidth: '280px',
           }}
@@ -206,37 +191,39 @@ export default function MultiRouteMap({
           <Typography variant="h6" gutterBottom>
             Active Routes ({routes.length})
           </Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.9 }}>
             {routes.map((route) => (
               <Box
                 key={route.id}
                 sx={{
-                  p: 1.5,
-                  borderRadius: 1,
-                  border: '2px solid',
+                  p: 1.2,
+                  borderRadius: 1.25,
+                  border: '1px solid',
                   borderColor:
-                    selectedRoute === route.id ? route.color : 'transparent',
+                    selectedRoute === route.id
+                      ? alpha(route.color, 0.4)
+                      : alpha(trovanColors.stone[700], 0.08),
                   bgcolor:
-                    selectedRoute === route.id ? `${route.color}15` : 'transparent',
+                    selectedRoute === route.id
+                      ? alpha(route.color, 0.08)
+                      : alpha('#FFFDFC', 0.6),
                   cursor: 'pointer',
-                  transition: 'all 0.2s',
+                  transition: 'all 0.18s ease',
                   '&:hover': {
-                    bgcolor: `${route.color}10`,
+                    bgcolor: alpha(route.color, 0.06),
                   },
                 }}
-                onClick={() =>
-                  setSelectedRoute(selectedRoute === route.id ? null : route.id)
-                }
+                onClick={() => setSelectedRoute(selectedRoute === route.id ? null : route.id)}
               >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.45 }}>
                   <Box
                     sx={{
-                      width: 16,
-                      height: 16,
+                      width: 14,
+                      height: 14,
                       borderRadius: '50%',
                       bgcolor: route.color,
-                      border: '2px solid white',
-                      boxShadow: 1,
+                      border: '2px solid #FFF8F1',
+                      boxShadow: `0 4px 14px ${alpha(route.color, 0.24)}`,
                     }}
                   />
                   <Typography variant="body2" fontWeight={600}>
@@ -244,11 +231,7 @@ export default function MultiRouteMap({
                       ? `${route.vehicle.make} ${route.vehicle.model}`
                       : `Route #${route.id.slice(0, 8)}`}
                   </Typography>
-                  <Chip
-                    label={route.status}
-                    size="small"
-                    color={getStatusColor(route.status) as any}
-                  />
+                  <Chip label={route.status.replace(/_/g, ' ')} size="small" color={getStatusColor(route.status) as never} />
                 </Box>
                 <Typography variant="caption" color="text.secondary" display="block">
                   {route.driver
@@ -256,89 +239,78 @@ export default function MultiRouteMap({
                     : 'No driver assigned'}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" display="block">
-                  Stops: {route.jobCount} | Distance:{' '}
-                  {route.totalDistanceKm?.toFixed(1) || 'N/A'} km
+                  Stops: {route.jobCount} | Distance: {route.totalDistanceKm?.toFixed(1) || 'N/A'} km
                 </Typography>
-                {route.eta && (
+                {route.eta ? (
                   <Typography variant="caption" color="text.secondary" display="block">
                     ETA: {new Date(route.eta).toLocaleTimeString()}
                   </Typography>
-                )}
+                ) : null}
               </Box>
             ))}
           </Box>
         </Paper>
-      )}
+      ) : null}
 
-      {/* Map */}
       <MapContainer
+        attributionControl={false}
         center={getMapCenter()}
         zoom={12}
         style={{ height: '100%', width: '100%' }}
         className="z-0"
       >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+        <TileLayer attribution={trovanMapLayer.attribution} url={trovanMapLayer.url} />
 
-        {/* Render each route */}
         {routes.map((route) => (
           <div key={route.id}>
-            {/* Route polyline */}
-            {route.polyline?.coordinates && (
+            {route.polyline?.coordinates ? (
               <Polyline
                 positions={route.polyline.coordinates.map((coord: [number, number]) => [
                   coord[1],
                   coord[0],
-                ])} // Convert [lng, lat] to [lat, lng]
+                ])}
                 color={route.color}
-                weight={selectedRoute === route.id ? 6 : 4}
-                opacity={selectedRoute === route.id ? 0.9 : 0.6}
-                dashArray={route.status === 'planned' ? '10, 10' : undefined}
+                weight={selectedRoute === route.id ? 5.5 : 4.5}
+                opacity={selectedRoute === route.id ? 0.94 : 0.82}
+                dashArray={route.status === 'planned' || route.status === 'draft' ? '9, 9' : undefined}
               />
-            )}
+            ) : null}
 
-            {/* Vehicle marker at current location or first stop */}
-            {route.vehicle && (
+            {route.vehicle ? (
               <Marker
                 position={
                   route.vehicle.currentLocation
-                    ? [
-                        route.vehicle.currentLocation.lat,
-                        route.vehicle.currentLocation.lng,
-                      ]
-                    : route.stops && route.stops.length > 0
-                    ? [route.stops[0].lat, route.stops[0].lng]
-                    : defaultCenter
+                    ? [route.vehicle.currentLocation.lat, route.vehicle.currentLocation.lng]
+                    : route.stops?.length
+                      ? [route.stops[0].lat, route.stops[0].lng]
+                      : defaultCenter
                 }
                 icon={createVehicleIcon(route.color)}
               >
                 <Popup>
-                  <Box sx={{ p: 1 }}>
+                  <Box sx={{ p: 0.5 }}>
                     <Typography variant="subtitle1" fontWeight={600}>
                       {route.vehicle.make} {route.vehicle.model}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
                       License: {route.vehicle.licensePlate}
                     </Typography>
-                    {route.driver && (
+                    {route.driver ? (
                       <Typography variant="body2" color="text.secondary">
                         Driver: {route.driver.firstName} {route.driver.lastName}
                       </Typography>
-                    )}
+                    ) : null}
                     <Chip
-                      label={route.status}
+                      label={route.status.replace(/_/g, ' ')}
                       size="small"
-                      color={getStatusColor(route.status) as any}
+                      color={getStatusColor(route.status) as never}
                       sx={{ mt: 1 }}
                     />
                   </Box>
                 </Popup>
               </Marker>
-            )}
+            ) : null}
 
-            {/* Stop markers */}
             {route.stops?.map((stop, index) => (
               <Marker
                 key={`${route.id}-stop-${index}`}
@@ -346,7 +318,7 @@ export default function MultiRouteMap({
                 icon={createStopIcon(index, route.color)}
               >
                 <Popup>
-                  <Box sx={{ p: 1 }}>
+                  <Box sx={{ p: 0.5 }}>
                     <Typography variant="subtitle2" fontWeight={600}>
                       Stop #{index + 1}
                     </Typography>
@@ -363,12 +335,12 @@ export default function MultiRouteMap({
           </div>
         ))}
 
-        {/* Auto-fit bounds */}
         <FitBounds routes={routes} />
       </MapContainer>
 
-      {/* Empty state */}
-      {routes.length === 0 && (
+      <MapFilmOverlay />
+
+      {routes.length === 0 ? (
         <Box
           sx={{
             position: 'absolute',
@@ -377,6 +349,12 @@ export default function MultiRouteMap({
             transform: 'translate(-50%, -50%)',
             textAlign: 'center',
             zIndex: 1000,
+            px: 2.5,
+            py: 1.8,
+            borderRadius: 1.5,
+            bgcolor: alpha('#FFFDFC', 0.82),
+            border: `1px solid ${alpha(trovanColors.stone[700], 0.1)}`,
+            backdropFilter: 'blur(18px)',
           }}
         >
           <Typography variant="h6" color="text.secondary">
@@ -386,7 +364,7 @@ export default function MultiRouteMap({
             Create routes to see them on the map
           </Typography>
         </Box>
-      )}
+      ) : null}
     </Box>
   );
 }

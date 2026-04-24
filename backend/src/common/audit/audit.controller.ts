@@ -14,12 +14,26 @@ export class AuditController {
   async list(
     @Req() req: { user?: { organizationId?: string } },
     @Query('limit') limit?: string,
+    @Query('action') action?: string,
+    @Query('entityType') entityType?: string,
+    @Query('actorId') actorId?: string,
   ) {
     return {
       entries: await this.auditService.listPersisted({
         limit: Number(limit || 100),
         organizationId: req.user?.organizationId || undefined,
+        action,
+        entityType,
+        actorId,
       }),
     };
+  }
+
+  @Get('overview')
+  @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'VIEWER')
+  async overview(@Req() req: { user?: { organizationId?: string } }) {
+    return this.auditService.getOverview({
+      organizationId: req.user?.organizationId || undefined,
+    });
   }
 }

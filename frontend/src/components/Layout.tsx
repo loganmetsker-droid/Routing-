@@ -1,13 +1,19 @@
 import { Outlet, useNavigate } from 'react-router-dom';
 import AppShell from '../layout/AppShell';
-import { clearAuthSession } from '../services/api';
+import { clearAuthSession, logout } from '../services/api';
 import ErrorBoundary from './ui/ErrorBoundary';
 
 export function Layout() {
   const navigate = useNavigate();
 
-  const handleLogout = () => {
-    clearAuthSession();
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch {
+      clearAuthSession();
+      navigate('/login');
+      return;
+    }
     navigate('/login');
   };
 

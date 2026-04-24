@@ -74,7 +74,7 @@ export default function MapPanel({
           boxShadow: 'inset 0 0 0 1px rgba(148,163,184,0.08)',
         }}
       >
-        <MapContainer center={mapCenter} zoom={mapZoom} style={{ height: '100%', width: '100%' }} scrollWheelZoom>
+        <MapContainer attributionControl={false} center={mapCenter} zoom={mapZoom} style={{ height: '100%', width: '100%' }} scrollWheelZoom>
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

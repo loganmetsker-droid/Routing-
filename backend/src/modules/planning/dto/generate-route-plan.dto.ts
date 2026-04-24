@@ -1,4 +1,5 @@
 import { IsArray, IsDateString, IsOptional, IsString, IsUUID } from 'class-validator';
+import type { OptimizationObjective } from '../../../../../shared/contracts';
 
 export class GenerateRoutePlanDto {
   @IsDateString()
@@ -10,7 +11,7 @@ export class GenerateRoutePlanDto {
 
   @IsOptional()
   @IsString()
-  objective?: string;
+  objective?: OptimizationObjective | string;
 
   @IsOptional()
   @IsArray()

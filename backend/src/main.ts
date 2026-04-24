@@ -80,7 +80,9 @@ function getConfigSummary() {
   return {
     envSource: process.env.TROVAN_ENV_SOURCES || 'process-environment',
     nodeEnv: process.env.NODE_ENV || 'development',
-    authMode: process.env.NODE_ENV === 'development' ? 'local-admin-jwt' : 'jwt',
+    authMode:
+      process.env.AUTH_PROVIDER ||
+      (process.env.NODE_ENV === 'development' ? 'local-admin-jwt' : 'jwt'),
     queueMode: hasQueueConfig() ? 'redis' : 'disabled',
     queueRequired: String(process.env.QUEUE_REQUIRED || 'false') === 'true',
     optimizationMode:

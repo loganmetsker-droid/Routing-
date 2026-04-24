@@ -14,6 +14,9 @@ export class AppUser {
   @Column({ name: 'auth_provider', length: 32, default: 'local-config' })
   authProvider: string;
 
+  @Column({ name: 'external_id', length: 128, nullable: true })
+  externalId?: string | null;
+
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive: boolean;
 

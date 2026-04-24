@@ -5,7 +5,6 @@ import {
   Box,
   Button,
   Checkbox,
-  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -21,10 +20,18 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { PageHeader } from '../components/PageHeader';
+import { StatusPill, type StatusPillTone } from '../components/StatusPill';
 import { SurfacePanel } from '../components/SurfacePanel';
 import LoadingState from '../components/ui/LoadingState';
-import { getCustomers, getJobs, createJob, updateJob, type Customer } from '../services/api';
+import type { CustomerRecord } from '../services/customersApi';
+import { useCustomersQuery } from '../services/customersApi';
+import {
+  useCreateJobMutation,
+  useJobsQuery,
+  useUpdateJobMutation,
+} from '../services/jobsApi';
 
 interface JobRecord {
   id?: string;
@@ -64,14 +71,6 @@ type ImportCandidate = {
   priority: 'low' | 'normal' | 'high' | 'urgent';
   status: string;
 };
-
-const FILTERS: { key: FilterKey; label: string }[] = [
-  { key: 'all', label: 'All queue' },
-  { key: 'today', label: 'Today' },
-  { key: 'unassigned', label: 'Unassigned' },
-  { key: 'high', label: 'High priority' },
-  { key: 'completed', label: 'Completed' },
-];
 
 const SAVED_VIEWS_STORAGE_KEY = 'trovan.jobs.savedViews';
 const SEARCHABLE_FILTER_KEYS = new Set<FilterKey>(['all', 'today', 'unassigned', 'high', 'completed']);
@@ -162,6 +161,23 @@ const normalizeImportCandidate = (record: Record<string, unknown>): ImportCandid
   status: String(record.status || 'pending').trim() || 'pending',
 });
 
+const jobStatusTone = (status: string | undefined): StatusPillTone => {
+  const normalized = String(status || 'pending').toLowerCase();
+  if (normalized === 'completed') return 'success';
+  if (normalized === 'in_progress') return 'info';
+  if (normalized === 'assigned') return 'accent';
+  if (normalized === 'cancelled' || normalized === 'failed') return 'danger';
+  if (normalized === 'urgent') return 'warning';
+  return 'default';
+};
+
+const priorityTone = (priority: string | undefined): StatusPillTone => {
+  const normalized = String(priority || 'normal').toLowerCase();
+  if (normalized === 'urgent') return 'danger';
+  if (normalized === 'high') return 'warning';
+  return 'default';
+};
+
 const parseImportFile = async (file: File): Promise<ImportCandidate[]> => {
   const contents = await file.text();
   const fileName = file.name.toLowerCase();
@@ -170,7 +186,9 @@ const parseImportFile = async (file: File): Promise<ImportCandidate[]> => {
     const parsed = JSON.parse(contents);
     const records = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.jobs) ? parsed.jobs : [];
     return records
-      .map((record: any) => normalizeImportCandidate(record || {}))
+      .map((record: unknown) =>
+        normalizeImportCandidate((record as Record<string, unknown>) || {}),
+      )
       .filter((record: ImportCandidate) => Boolean(record.deliveryAddress));
   }
 
@@ -201,6 +219,11 @@ export default function JobsPageEnhancedV2() {
   const navigate = useNavigate();
   const location = useLocation();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const jobsQuery = useJobsQuery();
+  const customersQuery = useCustomersQuery();
+  const createJobMutation = useCreateJobMutation();
+  const updateJobMutation = useUpdateJobMutation();
+  const loading = jobsQuery.isLoading || customersQuery.isLoading;
   const searchParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const activeFilter = normalizeFilter(searchParams.get('filter'));
   const searchTerm = searchParams.get('q') || '';
@@ -211,12 +234,10 @@ export default function JobsPageEnhancedV2() {
   const dialogOpen = searchParams.get('create') === 'true';
   const importDialogOpen = searchParams.get('import') === 'true';
   const savedViewsOpen = searchParams.get('views') === 'true';
-  const filtersExpanded = searchParams.get('filters') !== '0';
   const todayKey = new Date().toISOString().slice(0, 10);
 
   const [jobs, setJobs] = useState<JobRecord[]>([]);
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
   const [savedViews, setSavedViews] = useState<SavedViewRecord[]>(() => parseSavedViews());
   const [savedViewName, setSavedViewName] = useState('');
@@ -256,24 +277,16 @@ export default function JobsPageEnhancedV2() {
   };
 
   useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      try {
-        const [jobsData, customerData] = await Promise.all([getJobs(), getCustomers()]);
-        if (!mounted) return;
-        setJobs(Array.isArray(jobsData) ? jobsData : []);
-        setCustomers(Array.isArray(customerData) ? customerData : []);
-      } catch (error) {
-        console.error('Failed to load jobs page', error);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-    void load();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+    if (jobsQuery.data) {
+      setJobs(jobsQuery.data);
+    }
+  }, [jobsQuery.data]);
+
+  useEffect(() => {
+    if (customersQuery.data) {
+      setCustomers(customersQuery.data);
+    }
+  }, [customersQuery.data]);
 
   useEffect(() => {
     persistSavedViews(savedViews);
@@ -334,10 +347,18 @@ export default function JobsPageEnhancedV2() {
 
   const selectedJobs = visibleJobs.filter((job) => job.id && selectedJobIds.includes(job.id));
   const activeView = savedViews.find((view) => view.id === activeViewId) || null;
+  const focusedJob = selectedJobs[0] || visibleJobs[0] || null;
+  const queueCounts = {
+    all: jobs.filter((job) => job.status !== 'archived').length,
+    unassigned: jobs.filter((job) => !job.assignedRouteId && job.status !== 'archived').length,
+    assigned: jobs.filter((job) => Boolean(job.assignedRouteId) && job.status !== 'archived').length,
+    inTransit: jobs.filter((job) => String(job.status).toLowerCase() === 'in_progress').length,
+    completed: jobs.filter((job) => String(job.status).toLowerCase() === 'completed').length,
+  };
 
   const refreshJobs = async () => {
-    const jobsData = await getJobs();
-    setJobs(Array.isArray(jobsData) ? jobsData : []);
+    const jobsData = await jobsQuery.refetch();
+    setJobs(jobsData.data ?? []);
   };
 
   const handleOptimizeSelected = () => {
@@ -347,7 +368,7 @@ export default function JobsPageEnhancedV2() {
   };
 
   const handleArchive = async () => {
-    await Promise.all(selectedJobIds.map((id) => updateJob(id, { status: 'archived' })));
+    await Promise.all(selectedJobIds.map((id) => updateJobMutation.mutateAsync({ id, updates: { status: 'archived' } })));
     setSelectedJobIds([]);
     await refreshJobs();
     setBannerMessage('Selected jobs archived from the operator queue.');
@@ -366,7 +387,7 @@ export default function JobsPageEnhancedV2() {
   const handleSubmit = async () => {
     try {
       const customer = customers.find((item) => item.id === formData.customerId);
-      await createJob({
+      await createJobMutation.mutateAsync({
         customerId: customer?.id,
         customerName: formData.customerName || customer?.name || 'Unknown Customer',
         customerPhone: customer?.phone,
@@ -422,7 +443,7 @@ export default function JobsPageEnhancedV2() {
             return customer.name.toLowerCase() === candidate.customerName.toLowerCase();
           });
 
-          await createJob({
+          await createJobMutation.mutateAsync({
             customerId: matchedCustomer?.id,
             customerName: matchedCustomer?.name || candidate.customerName,
             customerPhone: matchedCustomer?.phone,
@@ -505,15 +526,14 @@ export default function JobsPageEnhancedV2() {
   return (
     <Box>
       <PageHeader
-        eyebrow="Operations"
-        title="Jobs"
-        subtitle="Triage incoming work, stage it for routing, and only move reviewed plans into dispatch."
+        eyebrow="Planning"
+        title="Jobs queue"
+        subtitle="A dense intake workspace for triage, routing staging, and dispatch handoff."
         actions={
           <>
-            <Button variant="contained" onClick={() => updateUrl({ create: 'true' })}>Create Job</Button>
-            <Button variant="outlined" onClick={() => fileInputRef.current?.click()}>Import</Button>
-            <Button variant="outlined" onClick={() => updateUrl({ filters: filtersExpanded ? '0' : '1' })}>{filtersExpanded ? 'Hide Filters' : 'Filters'}</Button>
-            <Button variant="outlined" onClick={() => updateUrl({ views: 'true' })}>Saved Views</Button>
+            <Button variant="outlined" onClick={() => fileInputRef.current?.click()}>Bulk import</Button>
+            <Button variant="outlined" onClick={() => updateUrl({ views: 'true' })}>Saved views</Button>
+            <Button variant="contained" onClick={() => updateUrl({ create: 'true' })}>New job</Button>
           </>
         }
       />
@@ -526,94 +546,126 @@ export default function JobsPageEnhancedV2() {
         </Alert>
       ) : null}
 
-      <SurfacePanel sx={{ mb: 2 }}>
-        <Stack spacing={2}>
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems={{ md: 'center' }}>
+      <SurfacePanel variant="command" padding={1.45} sx={{ mb: 1.5 }}>
+        <Stack spacing={1.25}>
+          <Stack direction={{ xs: 'column', lg: 'row' }} spacing={1} justifyContent="space-between">
+            <Stack direction="row" spacing={1} flexWrap="wrap">
+              <Button
+                size="small"
+                variant={activeFilter === 'all' ? 'contained' : 'outlined'}
+                sx={{ minHeight: 30, px: 1.15 }}
+                onClick={() => updateQueueParams({ filter: 'all', status: 'all', assignment: 'all' })}
+              >
+                All jobs {queueCounts.all}
+              </Button>
+              <Button
+                size="small"
+                variant={activeFilter === 'unassigned' ? 'contained' : 'outlined'}
+                sx={{ minHeight: 30, px: 1.15 }}
+                onClick={() => updateQueueParams({ filter: 'unassigned', assignment: 'unassigned' })}
+              >
+                Unassigned {queueCounts.unassigned}
+              </Button>
+              <Button
+                size="small"
+                variant={assignmentFilter === 'assigned' ? 'contained' : 'outlined'}
+                sx={{ minHeight: 30, px: 1.15 }}
+                onClick={() => updateQueueParams({ assignment: 'assigned' })}
+              >
+                Assigned {queueCounts.assigned}
+              </Button>
+              <Button
+                size="small"
+                variant={statusFilter === 'in_progress' ? 'contained' : 'outlined'}
+                sx={{ minHeight: 30, px: 1.15 }}
+                onClick={() => updateQueueParams({ status: 'in_progress' })}
+              >
+                In transit {queueCounts.inTransit}
+              </Button>
+              <Button
+                size="small"
+                variant={activeFilter === 'completed' ? 'contained' : 'outlined'}
+                sx={{ minHeight: 30, px: 1.15 }}
+                onClick={() => updateQueueParams({ filter: 'completed', status: 'completed' })}
+              >
+                Delivered {queueCounts.completed}
+              </Button>
+            </Stack>
+            <Stack direction="row" spacing={1} flexWrap="wrap">
+              {activeView ? <StatusPill label={`View: ${activeView.name}`} tone="accent" /> : null}
+              <StatusPill label={`${visibleJobs.length} visible`} />
+              <StatusPill label={`${selectedJobIds.length} selected`} tone={selectedJobIds.length ? 'accent' : 'default'} />
+            </Stack>
+          </Stack>
+
+          <Stack direction={{ xs: 'column', xl: 'row' }} spacing={1.2} alignItems={{ xl: 'center' }}>
             <TextField
-              label="Search queue"
+              size="small"
+              label="Search jobs"
               value={searchTerm}
               onChange={(event) => updateQueueParams({ q: event.target.value })}
               placeholder="Customer, address, route, or job ID"
               fullWidth
             />
-            <Stack direction="row" spacing={1} flexWrap="wrap">
-              {activeView ? <Chip color="primary" label={`View: ${activeView.name}`} /> : null}
-              <Chip variant="outlined" label={`${visibleJobs.length} visible`} />
-              <Chip variant="outlined" label={`${jobs.filter((job) => job.status !== 'archived').length} in queue`} />
-            </Stack>
+            <TextField
+              select
+              size="small"
+              label="Status"
+              value={statusFilter}
+              onChange={(event) => updateQueueParams({ status: event.target.value as StatusFilter })}
+              sx={{ minWidth: 150 }}
+            >
+              <MenuItem value="all">All statuses</MenuItem>
+              <MenuItem value="pending">Pending</MenuItem>
+              <MenuItem value="assigned">Assigned</MenuItem>
+              <MenuItem value="in_progress">In progress</MenuItem>
+              <MenuItem value="completed">Completed</MenuItem>
+            </TextField>
+            <TextField
+              select
+              size="small"
+              label="Priority"
+              value={priorityFilter}
+              onChange={(event) => updateQueueParams({ priority: event.target.value as PriorityFilter })}
+              sx={{ minWidth: 140 }}
+            >
+              <MenuItem value="all">All priorities</MenuItem>
+              <MenuItem value="low">Low</MenuItem>
+              <MenuItem value="normal">Normal</MenuItem>
+              <MenuItem value="high">High</MenuItem>
+              <MenuItem value="urgent">Urgent</MenuItem>
+            </TextField>
+            <TextField
+              select
+              size="small"
+              label="Assignment"
+              value={assignmentFilter}
+              onChange={(event) => updateQueueParams({ assignment: event.target.value as AssignmentFilter })}
+              sx={{ minWidth: 150 }}
+            >
+              <MenuItem value="all">All jobs</MenuItem>
+              <MenuItem value="assigned">Assigned</MenuItem>
+              <MenuItem value="unassigned">Unassigned</MenuItem>
+            </TextField>
+            <Button variant="text" onClick={() => updateUrl({ filter: 'all', q: null, status: null, priority: null, assignment: null, view: null })}>
+              Clear
+            </Button>
           </Stack>
-
-          {filtersExpanded ? (
-            <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
-              <TextField
-                select
-                label="Status"
-                value={statusFilter}
-                onChange={(event) => updateQueueParams({ status: event.target.value as StatusFilter })}
-                sx={{ minWidth: 180 }}
-              >
-                <MenuItem value="all">All statuses</MenuItem>
-                <MenuItem value="pending">Pending</MenuItem>
-                <MenuItem value="assigned">Assigned</MenuItem>
-                <MenuItem value="in_progress">In progress</MenuItem>
-                <MenuItem value="completed">Completed</MenuItem>
-              </TextField>
-              <TextField
-                select
-                label="Priority"
-                value={priorityFilter}
-                onChange={(event) => updateQueueParams({ priority: event.target.value as PriorityFilter })}
-                sx={{ minWidth: 180 }}
-              >
-                <MenuItem value="all">All priorities</MenuItem>
-                <MenuItem value="low">Low</MenuItem>
-                <MenuItem value="normal">Normal</MenuItem>
-                <MenuItem value="high">High</MenuItem>
-                <MenuItem value="urgent">Urgent</MenuItem>
-              </TextField>
-              <TextField
-                select
-                label="Assignment"
-                value={assignmentFilter}
-                onChange={(event) => updateQueueParams({ assignment: event.target.value as AssignmentFilter })}
-                sx={{ minWidth: 180 }}
-              >
-                <MenuItem value="all">All jobs</MenuItem>
-                <MenuItem value="assigned">Assigned to route</MenuItem>
-                <MenuItem value="unassigned">Unassigned</MenuItem>
-              </TextField>
-              <Button variant="text" onClick={() => updateUrl({ filter: 'all', q: null, status: null, priority: null, assignment: null, view: null })}>
-                Clear queue filters
-              </Button>
-            </Stack>
-          ) : null}
         </Stack>
       </SurfacePanel>
 
-      <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 2 }}>
-        {FILTERS.map((filter) => (
-          <Chip
-            key={filter.key}
-            clickable
-            color={activeFilter === filter.key ? 'primary' : 'default'}
-            label={filter.label}
-            onClick={() => updateQueueParams({ filter: filter.key })}
-          />
-        ))}
-      </Stack>
-
       {selectedJobIds.length > 0 ? (
-        <SurfacePanel sx={{ mb: 2, bgcolor: 'rgba(250, 241, 234, 0.82)' }}>
+        <SurfacePanel variant="subtle" padding={1.45} sx={{ mb: 1.5 }}>
           <Stack direction={{ xs: 'column', lg: 'row' }} justifyContent="space-between" spacing={1.5} alignItems={{ lg: 'center' }}>
             <Box>
               <Typography variant="h6">{selectedJobIds.length} jobs selected</Typography>
               <Typography variant="body2" color="text.secondary">
-                Use Jobs as the staging queue. Optimize in Routing, then publish approved plans into Dispatch.
+                This queue stages work before it becomes routing and dispatch.
               </Typography>
             </Box>
             <Stack direction="row" spacing={1} flexWrap="wrap">
-              <Button variant="contained" onClick={handleOptimizeSelected}>Optimize Selected</Button>
-              <Button variant="outlined" onClick={() => navigate('/dispatch')}>Assign</Button>
+              <Button variant="contained" onClick={handleOptimizeSelected}>Send selected to routing</Button>
+              <Button variant="outlined" onClick={() => navigate('/dispatch')}>Open dispatch</Button>
               <Button variant="outlined" onClick={() => void handleArchive()}>Archive</Button>
               <Button variant="outlined" onClick={handleExport}>Export</Button>
             </Stack>
@@ -621,14 +673,9 @@ export default function JobsPageEnhancedV2() {
         </SurfacePanel>
       ) : null}
 
-      <SurfacePanel sx={{ p: 0, overflow: 'hidden' }}>
-        <Box sx={{ px: 2.5, py: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
-          <Typography variant="h5">Job Queue</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Dense operational queue with routing-first staging and shareable queue state.
-          </Typography>
-        </Box>
-        <TableContainer sx={{ maxHeight: 'calc(100vh - 320px)' }}>
+      <SurfacePanel variant="command" sx={{ p: 0, overflow: 'hidden' }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: 'minmax(0, 1fr) 320px' }, minHeight: 'calc(100vh - 240px)' }}>
+        <TableContainer sx={{ maxHeight: 'calc(100vh - 240px)' }}>
           <Table stickyHeader size="small">
             <TableHead>
               <TableRow>
@@ -646,17 +693,19 @@ export default function JobsPageEnhancedV2() {
                     }}
                   />
                 </TableCell>
-                <TableCell>Customer</TableCell>
-                <TableCell>Address</TableCell>
-                <TableCell>Priority</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Created</TableCell>
+                <TableCell sx={{ width: 118, whiteSpace: 'nowrap' }}>Job ID</TableCell>
+                <TableCell sx={{ width: 146, whiteSpace: 'nowrap' }}>Status</TableCell>
+                <TableCell sx={{ width: 172, whiteSpace: 'nowrap' }}>Pickup</TableCell>
+                <TableCell sx={{ minWidth: 250 }}>Delivery</TableCell>
+                <TableCell sx={{ width: 170, whiteSpace: 'nowrap' }}>Customer</TableCell>
+                <TableCell sx={{ width: 132, whiteSpace: 'nowrap' }}>Date</TableCell>
+                <TableCell sx={{ width: 104, whiteSpace: 'nowrap' }}>Priority</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {visibleJobs.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6}>
+                  <TableCell colSpan={8}>
                     <Stack spacing={0.75} sx={{ py: 2 }}>
                       <Typography variant="subtitle1">No jobs match this queue view</Typography>
                       <Typography variant="body2" color="text.secondary">
@@ -667,7 +716,23 @@ export default function JobsPageEnhancedV2() {
                 </TableRow>
               ) : null}
               {visibleJobs.map((job) => (
-                <TableRow key={job.id} hover selected={job.id ? selectedJobIds.includes(job.id) : false}>
+                <TableRow
+                  key={job.id}
+                  hover
+                  selected={job.id ? selectedJobIds.includes(job.id) : false}
+                  onClick={() => job.id && setSelectedJobIds([job.id])}
+                  sx={{
+                    cursor: 'pointer',
+                    '&.Mui-selected': {
+                      bgcolor: alpha('#B97129', 0.08),
+                    },
+                    '& .MuiTableCell-root': {
+                      py: 0.8,
+                      verticalAlign: 'top',
+                      fontSize: '0.84rem',
+                    },
+                  }}
+                >
                   <TableCell padding="checkbox">
                     <Checkbox
                       checked={job.id ? selectedJobIds.includes(job.id) : false}
@@ -681,30 +746,131 @@ export default function JobsPageEnhancedV2() {
                       }}
                     />
                   </TableCell>
-                  <TableCell>
-                    <Stack spacing={0.25}>
-                      <Typography variant="body2" sx={{ fontWeight: 700 }}>{job.customerName || 'Unassigned customer'}</Typography>
-                      <Typography variant="caption" color="text.secondary">{job.id}</Typography>
-                    </Stack>
+                  <TableCell sx={{ whiteSpace: 'nowrap', fontWeight: 700, fontSize: '0.82rem' }}>
+                    {job.id?.slice(0, 8) || '—'}
                   </TableCell>
-                  <TableCell>
-                    <Stack spacing={0.25}>
-                      <Typography variant="body2">{job.deliveryAddress || 'Address pending'}</Typography>
-                      {job.assignedRouteId ? <Typography variant="caption" color="text.secondary">Route {job.assignedRouteId}</Typography> : null}
-                    </Stack>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                    <StatusPill
+                      label={String(job.status || 'pending').replace(/_/g, ' ')}
+                      tone={jobStatusTone(job.status)}
+                    />
                   </TableCell>
-                  <TableCell>
-                    <Chip size="small" label={job.priority || 'normal'} color={['high', 'urgent'].includes(String(job.priority).toLowerCase()) ? 'warning' : 'default'} />
+                  <TableCell
+                    sx={{
+                      maxWidth: 172,
+                      color: 'text.secondary',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {job.pickupAddress || '—'}
                   </TableCell>
-                  <TableCell>
-                    <Chip size="small" label={String(job.status || 'pending').replace(/_/g, ' ')} color={(job.status || 'pending') === 'completed' ? 'success' : 'default'} />
+                  <TableCell sx={{ maxWidth: 258 }}>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontWeight: 600,
+                        mb: 0.15,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {job.deliveryAddress || 'Address pending'}
+                    </Typography>
+                    {job.assignedRouteId ? (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ whiteSpace: 'nowrap', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                      >
+                        Route {job.assignedRouteId.slice(0, 8)}
+                      </Typography>
+                    ) : null}
                   </TableCell>
-                  <TableCell>{job.createdAt ? new Date(job.createdAt).toLocaleString() : 'Just now'}</TableCell>
+                  <TableCell
+                    sx={{
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      maxWidth: 170,
+                    }}
+                  >
+                    {job.customerName || 'Unassigned customer'}
+                  </TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap', color: 'text.secondary' }}>{job.createdAt ? new Date(job.createdAt).toLocaleDateString() : 'Just now'}</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                    <StatusPill
+                      label={job.priority || 'normal'}
+                      tone={priorityTone(job.priority)}
+                    />
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </TableContainer>
+        <Box
+          sx={{
+            display: { xs: 'none', xl: 'block' },
+            borderLeft: '1px solid',
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
+            p: 1.6,
+          }}
+        >
+          <Typography variant="subtitle2" sx={{ mb: 0.55, letterSpacing: '0.08em' }}>SELECTED JOB</Typography>
+          {focusedJob ? (
+            <Stack spacing={1.2}>
+              <Typography variant="h5">{focusedJob.customerName || 'Queue item'}</Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap">
+                <StatusPill label={String(focusedJob.status || 'pending').replace(/_/g, ' ')} tone={jobStatusTone(focusedJob.status)} />
+                <StatusPill label={focusedJob.priority || 'normal'} tone={priorityTone(focusedJob.priority)} />
+                {focusedJob.assignedRouteId ? <StatusPill label={`Route ${focusedJob.assignedRouteId.slice(0, 8)}`} tone="accent" /> : null}
+              </Stack>
+              <SurfacePanel variant="muted" padding={1.3}>
+                <Stack spacing={1}>
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">Pickup</Typography>
+                    <Typography variant="body2" sx={{ mt: 0.25 }}>
+                      {focusedJob.pickupAddress || 'Pickup address not set'}
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">Delivery</Typography>
+                    <Typography variant="body2" sx={{ mt: 0.25 }}>
+                      {focusedJob.deliveryAddress || 'Delivery address pending'}
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">Queue context</Typography>
+                    <Typography variant="body2" sx={{ mt: 0.25 }}>
+                      {focusedJob.createdAt ? new Date(focusedJob.createdAt).toLocaleString() : 'Created recently'}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {focusedJob.id || 'ID pending'}
+                    </Typography>
+                  </Box>
+                </Stack>
+              </SurfacePanel>
+              <Button
+                variant="contained"
+                onClick={() =>
+                  focusedJob.id &&
+                  navigate(`/routing?jobId=${encodeURIComponent(focusedJob.id)}`)
+                }
+              >
+                Send to routing
+              </Button>
+            </Stack>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              No job is available in the current queue view.
+            </Typography>
+          )}
+        </Box>
+        </Box>
       </SurfacePanel>
 
       <Dialog open={dialogOpen} onClose={() => updateUrl({ create: null })} fullWidth maxWidth="sm">
@@ -720,7 +886,12 @@ export default function JobsPageEnhancedV2() {
                 ...current,
                 customerId: event.target.value,
                 customerName: customer?.name || current.customerName,
-                deliveryAddress: customer?.defaultAddress || customer?.address || current.deliveryAddress,
+                deliveryAddress:
+                  typeof customer?.defaultAddress === 'string'
+                    ? customer.defaultAddress
+                    : typeof customer?.address === 'string'
+                      ? customer.address
+                      : current.deliveryAddress,
               }));
             }}
           >

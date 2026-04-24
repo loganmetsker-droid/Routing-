@@ -8,6 +8,11 @@ import {
 } from 'typeorm';
 import { ObjectType, Field, ID, Float, Int } from '@nestjs/graphql';
 
+type VehicleLocation = {
+  lat: number;
+  lng: number;
+};
+
 @Entity('vehicles')
 @ObjectType()
 export class Vehicle {
@@ -79,7 +84,7 @@ export class Vehicle {
     type: 'jsonb',
     nullable: true,
   })
-  currentLocation?: any; // Location stored as { lat: number, lng: number }
+  currentLocation?: VehicleLocation;
 
   @Column({
     name: 'current_odometer_km',
@@ -107,7 +112,7 @@ export class Vehicle {
 
   // Metadata
   @Column({ type: 'jsonb', nullable: true })
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 
   // Timestamps
   @CreateDateColumn({ name: 'created_at' })

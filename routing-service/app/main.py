@@ -63,9 +63,10 @@ async def health_check():
 @app.post("/optimize", response_model=OptimizeResponse)
 async def optimize(request: OptimizeRequest):
     logger.info(
-        "Optimizing %s stops across %s vehicles",
+        "Optimizing %s stops across %s vehicles using %s objective",
         len(request.stops),
         len(request.vehicles),
+        request.objective,
     )
     try:
         return solve_optimize_request(request)
@@ -90,6 +91,7 @@ def _vehicle_to_schema(vehicle: Vehicle) -> Dict[str, object]:
         "id": str(vehicle.id),
         "start_lat": geom.y,
         "start_lng": geom.x,
+        "capacity_weight": float(vehicle.capacity_weight_kg or 0),
         "capacity_volume": float(vehicle.capacity_volume_m3 or 0),
         "max_route_minutes": 480,
     }
@@ -110,6 +112,7 @@ def _job_to_schema(job: Job) -> Dict[str, object]:
         "tw_start": job.time_window_start,
         "tw_end": job.time_window_end,
         "priority": _priority_to_number(job.priority),
+        "weight": float(job.weight or 0),
         "volume": float(job.volume or 0),
     }
 
@@ -159,6 +162,7 @@ async def optimize_route(request: Dict[str, List[str] | str], db: Session = Depe
 
     optimize_request = OptimizeRequest(
         plan_date=min((job.time_window_start for job in jobs if job.time_window_start), default=datetime.utcnow()),
+        objective=str(request.get("objective") or "distance"),
         vehicles=[_vehicle_to_schema(vehicle)],
         stops=[_job_to_schema(job) for job in jobs],
     )
@@ -180,6 +184,7 @@ async def optimize_route(request: Dict[str, List[str] | str], db: Session = Depe
             "dropped_jobs": result.unassigned_stop_ids,
             "data_quality": "degraded",
             "optimization_status": "failed",
+            "planner_diagnostics": {"objective_used": result.objective_used},
         }
 
     jobs_by_id = {str(job.id): job for job in jobs}
@@ -197,6 +202,7 @@ async def optimize_route(request: Dict[str, List[str] | str], db: Session = Depe
         "dropped_jobs": result.unassigned_stop_ids,
         "data_quality": "live",
         "optimization_status": "optimized",
+        "planner_diagnostics": {"objective_used": result.objective_used},
     }
 
 
@@ -220,6 +226,7 @@ async def optimize_global_route(
 
     optimize_request = OptimizeRequest(
         plan_date=min((job.time_window_start for job in jobs if job.time_window_start), default=datetime.utcnow()),
+        objective=str(request.get("objective") or "distance"),
         vehicles=[_vehicle_to_schema(vehicle) for vehicle in vehicles],
         stops=[_job_to_schema(job) for job in jobs],
     )
@@ -248,6 +255,7 @@ async def optimize_global_route(
             "optimization_status": "optimized",
             "warnings": result.warnings,
             "dropped_jobs": result.unassigned_stop_ids,
+            "planner_diagnostics": {"objective_used": result.objective_used},
             "vehicle_label": getattr(vehicle, "license_plate", None),
         }
 
@@ -258,4 +266,5 @@ async def optimize_global_route(
         "warnings": result.warnings,
         "data_quality": "live",
         "optimization_status": "optimized",
+        "planner_diagnostics": {"objective_used": result.objective_used},
     }

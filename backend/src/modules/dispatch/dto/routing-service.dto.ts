@@ -2,6 +2,8 @@
  * DTOs for communication with Python routing-service
  */
 
+import type { OptimizationObjective } from '../../../../../shared/contracts';
+
 export type DataQuality = 'live' | 'degraded' | 'simulated';
 export type OptimizationStatus = 'optimized' | 'degraded' | 'failed';
 
@@ -26,6 +28,7 @@ export interface OptimizerEvent {
 export class RoutingServiceRequest {
   vehicle_id: string;
   job_ids: string[];
+  objective?: OptimizationObjective;
 }
 
 export class JobInRoute {
@@ -65,6 +68,7 @@ export class RoutingServiceResponse {
 export class GlobalRoutingServiceRequest {
   vehicle_ids: string[];
   job_ids: string[];
+  objective?: OptimizationObjective;
 }
 
 export class RouteInfo {
@@ -102,6 +106,7 @@ export class OptimizeVehicleInput {
   start_lng: number;
   end_lat?: number;
   end_lng?: number;
+  capacity_weight: number;
   capacity_volume: number;
   max_route_minutes: number;
 }
@@ -114,6 +119,7 @@ export class OptimizeStopInput {
   tw_start?: string;
   tw_end?: string;
   priority: number;
+  weight: number;
   volume: number;
   locked_vehicle_id?: string | null;
 }
@@ -121,6 +127,7 @@ export class OptimizeStopInput {
 export class OptimizeRequest {
   plan_date: string;
   depot_id?: string | null;
+  objective: OptimizationObjective;
   vehicles: OptimizeVehicleInput[];
   stops: OptimizeStopInput[];
 }
@@ -140,6 +147,7 @@ export class OptimizeRouteOutput {
 
 export class OptimizeResponse {
   routes: OptimizeRouteOutput[];
+  objective_used: OptimizationObjective;
   unassigned_stop_ids: string[];
   warnings: string[];
 }

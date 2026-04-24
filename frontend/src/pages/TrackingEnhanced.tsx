@@ -1,81 +1,81 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
-import { Box, Button, Chip, Grid, List, ListItem, ListItemText, Stack, Typography } from '@mui/material';
+import { Box, Button, Grid, List, ListItem, ListItemText, Stack, Typography } from '@mui/material';
+import { useQueryClient } from '@tanstack/react-query';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
+import { StatusPill } from '../components/StatusPill';
 import { PageHeader } from '../components/PageHeader';
 import { SurfacePanel } from '../components/SurfacePanel';
 import { KpiTile } from '../components/KpiTile';
 import LoadingState from '../components/ui/LoadingState';
 import {
-  getRoutes,
-  getDrivers,
-  getDispatchOptimizerHealth,
-  getTrackingLocations,
+  useDispatchOptimizerHealthQuery,
+  useRoutesQuery,
+} from '../services/dispatchApi';
+import { useDriversQuery } from '../services/fleetApi';
+import { queryKeys } from '../services/queryKeys';
+import {
   subscribeToTrackingLocations,
-  type OptimizerHealth,
-  type TrackingLocationsSnapshot,
-} from '../services/api';
+  useTrackingLocationsQuery,
+} from '../services/trackingApi';
+import { trovanColors } from '../theme/designTokens';
+import { MapFilmOverlay, trovanMapLayer } from '../components/maps/mapPresentation';
 
 const STALE_SIGNAL_MS = 15 * 60 * 1000;
 
 export default function TrackingEnhanced() {
-  const [routes, setRoutes] = useState<any[]>([]);
-  const [drivers, setDrivers] = useState<any[]>([]);
-  const [optimizerHealth, setOptimizerHealth] = useState<OptimizerHealth | null>(null);
-  const [trackingSnapshot, setTrackingSnapshot] = useState<TrackingLocationsSnapshot>({
+  const [showHowItWorks, setShowHowItWorks] = useState(false);
+  const queryClient = useQueryClient();
+  const routesQuery = useRoutesQuery();
+  const driversQuery = useDriversQuery();
+  const optimizerHealthQuery = useDispatchOptimizerHealthQuery();
+  const trackingQuery = useTrackingLocationsQuery();
+
+  useEffect(() => {
+    const unsubscribe = subscribeToTrackingLocations((snapshot) => {
+      queryClient.setQueryData(queryKeys.trackingOverview, snapshot);
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [queryClient]);
+
+  const routes = routesQuery.data ?? [];
+  const drivers = driversQuery.data ?? [];
+  const optimizerHealth = optimizerHealthQuery.data ?? null;
+  const trackingSnapshot = trackingQuery.data ?? {
     vehicles: [],
     timestamp: '',
     count: 0,
-  });
-  const [loading, setLoading] = useState(true);
-  const [showHowItWorks, setShowHowItWorks] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-    let unsubscribe: () => void = () => {};
-
-    const load = async () => {
-      try {
-        const [routesData, driversData, healthData, trackingData] = await Promise.all([
-          getRoutes(),
-          getDrivers(),
-          getDispatchOptimizerHealth(),
-          getTrackingLocations(),
-        ]);
-        if (!mounted) return;
-        setRoutes(Array.isArray(routesData) ? routesData : []);
-        setDrivers(Array.isArray(driversData) ? driversData : []);
-        setOptimizerHealth(healthData);
-        setTrackingSnapshot(trackingData);
-        unsubscribe = subscribeToTrackingLocations((snapshot) => {
-          if (mounted) {
-            setTrackingSnapshot(snapshot);
-          }
-        });
-      } catch (error) {
-        console.error('Failed to load tracking', error);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    void load();
-    return () => {
-      mounted = false;
-      unsubscribe();
-    };
-  }, []);
+  };
+  const loading =
+    routesQuery.isLoading ||
+    driversQuery.isLoading ||
+    optimizerHealthQuery.isLoading ||
+    trackingQuery.isLoading;
 
   const liveRoutes = useMemo(
-    () => routes.filter((route) => ['assigned', 'in_progress', 'active', 'live'].includes(String(route.status).toLowerCase())),
+    () =>
+      routes.filter((route) =>
+        ['assigned', 'in_progress', 'active', 'live'].includes(
+          String(route.status).toLowerCase(),
+        ),
+      ),
     [routes],
   );
   const liveLocations = useMemo(
-    () => trackingSnapshot.vehicles.filter((location) => liveRoutes.some((route) => route.vehicleId === location.vehicleId)),
+    () =>
+      trackingSnapshot.vehicles.filter((location) =>
+        liveRoutes.some((route) => route.vehicleId === location.vehicleId),
+      ),
     [liveRoutes, trackingSnapshot.vehicles],
   );
   const staleSignals = useMemo(
-    () => liveLocations.filter((location) => Date.now() - new Date(location.timestamp).getTime() > STALE_SIGNAL_MS).length,
+    () =>
+      liveLocations.filter(
+        (location) =>
+          Date.now() - new Date(location.timestamp).getTime() > STALE_SIGNAL_MS,
+      ).length,
     [liveLocations],
   );
   const adherence = liveLocations.length ? Math.max(62, 100 - staleSignals * 12) : 0;
@@ -99,16 +99,21 @@ export default function TrackingEnhanced() {
   return (
     <Box>
       <PageHeader
-        eyebrow="Operations"
-        title="Tracking"
-        subtitle="Phone or device telemetry only. Live movement is shown from recorded signals, not synthetic map positions."
-        actions={<Chip label={optimizerHealth?.status === 'healthy' ? 'System healthy' : 'Needs review'} color={optimizerHealth?.status === 'healthy' ? 'success' : 'warning'} />}
+        eyebrow="Live Dispatch"
+        title="Telemetry monitoring"
+        subtitle="Persisted vehicle signals, route context, and stale-location pressure without the old toy dashboard treatment."
+        actions={
+          <StatusPill
+            label={optimizerHealth?.status === 'healthy' ? 'System healthy' : 'Needs review'}
+            tone={optimizerHealth?.status === 'healthy' ? 'success' : 'warning'}
+          />
+        }
       />
 
       {emptyState ? (
-        <SurfacePanel sx={{ py: 5, px: { xs: 2.5, md: 4 } }}>
+        <SurfacePanel variant="command" sx={{ py: 5, px: { xs: 2.5, md: 4 } }}>
           <Stack spacing={2.5} alignItems="flex-start" maxWidth={720}>
-            <Chip label="Telemetry offline" color="warning" />
+            <StatusPill label="Telemetry offline" tone="warning" />
             <Box>
               <Typography variant="h3" sx={{ mb: 1 }}>No live telemetry connected</Typography>
               <Typography variant="body1" color="text.secondary">
@@ -122,7 +127,7 @@ export default function TrackingEnhanced() {
               <Button variant="text" onClick={() => setShowHowItWorks((current) => !current)}>View how tracking works</Button>
             </Stack>
             {showHowItWorks ? (
-              <SurfacePanel sx={{ bgcolor: 'rgba(255, 248, 242, 1)' }}>
+              <SurfacePanel variant="muted">
                 <Typography variant="subtitle1">Tracking rollout</Typography>
                 <Typography variant="body2" color="text.secondary">
                   1. Make sure vehicles and drivers are active. 2. Post GPS pings to `/api/tracking/ingest` from your mobile or device middleware using the assigned vehicle ID. 3. Dispatch published routes. 4. Review stale signals and route adherence here.
@@ -141,14 +146,30 @@ export default function TrackingEnhanced() {
 
           <Grid container spacing={2.5}>
             <Grid item xs={12} lg={8}>
-              <SurfacePanel sx={{ p: 0, overflow: 'hidden' }}>
-                <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
-                  <Typography variant="h5">Live Positioning</Typography>
+              <SurfacePanel variant="command" sx={{ p: 0, overflow: 'hidden' }}>
+                <Box
+                  sx={{
+                    p: 2.25,
+                    borderBottom: '1px solid',
+                    borderColor: 'divider',
+                    background:
+                      'linear-gradient(180deg, rgba(255,255,255,0.9), rgba(245,247,250,0.92))',
+                  }}
+                >
+                  <Typography variant="h4">Live positioning</Typography>
                   <Typography variant="body2" color="text.secondary">Latest persisted vehicle telemetry with route context.</Typography>
                 </Box>
-                <Box sx={{ height: 500 }}>
-                  <MapContainer center={mapCenter} zoom={10} style={{ height: '100%', width: '100%' }}>
-                    <TileLayer url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png" attribution="&copy; OpenStreetMap contributors &copy; CARTO" />
+                <Box
+                  sx={{
+                    height: 520,
+                    minHeight: 420,
+                    bgcolor: trovanColors.utility.mapCanvas,
+                    position: 'relative',
+                  }}
+                  className="trovan-map"
+                >
+                  <MapContainer attributionControl={false} center={mapCenter} zoom={10} style={{ height: '100%', width: '100%' }}>
+                    <TileLayer url={trovanMapLayer.url} attribution={trovanMapLayer.attribution} />
                     {liveLocations.map((location) => {
                       const route = liveRoutes.find((item) => item.vehicleId === location.vehicleId);
                       const driver = drivers.find((item) => item.id === route?.driverId);
@@ -161,7 +182,7 @@ export default function TrackingEnhanced() {
                           pathOptions={{
                             color: '#FFFFFF',
                             weight: 2,
-                            fillColor: isStale ? '#B8781C' : '#2F7D5B',
+                            fillColor: isStale ? trovanColors.semantic.warning : trovanColors.semantic.info,
                             fillOpacity: 1,
                           }}
                         >
@@ -178,19 +199,24 @@ export default function TrackingEnhanced() {
                       );
                     })}
                   </MapContainer>
+                  <MapFilmOverlay />
                 </Box>
               </SurfacePanel>
             </Grid>
             <Grid item xs={12} lg={4}>
               <Stack spacing={2.5}>
                 <SurfacePanel>
-                  <Typography variant="h5" sx={{ mb: 1 }}>Live Routes</Typography>
+                  <Typography variant="h4" sx={{ mb: 1.2 }}>Live routes</Typography>
                   <List disablePadding>
                     {liveLocations.map((location) => {
                       const route = liveRoutes.find((item) => item.vehicleId === location.vehicleId);
                       const driver = drivers.find((item) => item.id === route?.driverId);
                       return (
-                        <ListItem key={location.vehicleId} disableGutters sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
+                        <ListItem
+                          key={location.vehicleId}
+                          disableGutters
+                          sx={{ borderBottom: '1px solid', borderColor: 'divider', py: 1.15 }}
+                        >
                           <ListItemText
                             primary={driver ? driver.firstName + ' ' + driver.lastName : (location.vehicleInfo?.licensePlate || 'Vehicle pending')}
                             secondary={'Route: ' + (route?.id || 'unassigned') + ' • Last ping: ' + new Date(location.timestamp).toLocaleTimeString()}
@@ -200,11 +226,11 @@ export default function TrackingEnhanced() {
                     })}
                   </List>
                 </SurfacePanel>
-                <SurfacePanel>
-                  <Typography variant="h6" sx={{ mb: 1 }}>Signal Quality</Typography>
+                <SurfacePanel variant="subtle">
+                  <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>Signal quality</Typography>
                   <Stack direction="row" spacing={1} flexWrap="wrap">
-                    <Chip label={String(staleSignals) + ' stale'} color={staleSignals ? 'warning' : 'success'} variant="outlined" />
-                    <Chip label={String(Math.max(liveLocations.length - staleSignals, 0)) + ' healthy'} color="success" variant="outlined" />
+                    <StatusPill label={String(staleSignals) + ' stale'} tone={staleSignals ? 'warning' : 'success'} />
+                    <StatusPill label={String(Math.max(liveLocations.length - staleSignals, 0)) + ' healthy'} tone="success" />
                   </Stack>
                 </SurfacePanel>
               </Stack>

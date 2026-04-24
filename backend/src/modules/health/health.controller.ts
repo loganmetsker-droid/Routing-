@@ -12,6 +12,8 @@ import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Public } from '../../common/decorators/public.decorator';
 import { JobsService } from '../jobs/jobs.service';
 import { RuntimeStatusService } from '../../common/runtime/runtime-status.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { PlatformService } from '../platform/platform.service';
 
 @ApiTags('health')
 @Controller('health')
@@ -24,6 +26,8 @@ export class HealthController {
     private configService: ConfigService,
     private readonly runtimeStatusService: RuntimeStatusService,
     @Optional() private readonly jobsService?: JobsService,
+    @Optional() private readonly notificationsService?: NotificationsService,
+    @Optional() private readonly platformService?: PlatformService,
   ) {}
 
   private getDiskThresholdPercent() {
@@ -179,6 +183,74 @@ export class HealthController {
       auth: {
         mode: runtime.authMode,
       },
+    };
+  }
+
+  @Get('readiness')
+  @Public()
+  @SkipThrottle()
+  @ApiOperation({ summary: 'Readiness truth for launch-critical dependencies' })
+  @ApiResponse({ status: 200, description: 'Readiness details' })
+  async readiness() {
+    const runtime = this.runtimeStatusService.getSummary();
+    const nodeEnv = this.configService.get('NODE_ENV', 'development');
+    const [notificationsOverview, platformOverview] = await Promise.all([
+      this.notificationsService?.getOverview().catch(() => null) || null,
+      this.platformService?.getOverview(
+        this.configService.get('DEFAULT_ORGANIZATION_ID', 'default'),
+      ).catch(() => null) || null,
+    ]);
+
+    const dependencies = {
+      database: { configured: true, required: true },
+      redis: {
+        configured: Boolean(
+          this.configService.get('REDIS_URL') || this.configService.get('REDIS_HOST'),
+        ),
+        required: String(this.configService.get('QUEUE_REQUIRED', 'false')) === 'true',
+      },
+      workos: runtime.integrations.workos,
+      stripe: runtime.integrations.stripe,
+      postmark: runtime.integrations.postmark,
+      twilio: runtime.integrations.twilio,
+      storage: runtime.integrations.storage,
+    };
+
+    const hostedEnvironment = ['staging', 'production'].includes(nodeEnv);
+    const missingCritical = Object.entries(dependencies)
+      .filter(([name, state]) => {
+        if (name === 'database') {
+          return false;
+        }
+        if ('required' in state && state.required && !state.configured) {
+          return true;
+        }
+        if (
+          hostedEnvironment &&
+          ['workos', 'storage'].includes(name) &&
+          !state.configured
+        ) {
+          return true;
+        }
+        return false;
+      })
+      .map(([name]) => name);
+    const launchWarnings = Object.entries(dependencies)
+      .filter(([name, state]) => name !== 'database' && !state.configured)
+      .map(([name]) => `${name} is not configured`);
+
+    return {
+      status:
+        missingCritical.length > 0
+          ? 'error'
+          : launchWarnings.length > 0
+            ? 'degraded'
+            : 'ok',
+      runtime,
+      dependencies,
+      notifications: notificationsOverview,
+      platform: platformOverview,
+      launchWarnings,
     };
   }
 }

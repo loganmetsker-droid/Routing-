@@ -11,8 +11,10 @@ from ortools.constraint_solver import pywrapcp, routing_enums_pb2
 from app.schemas import (
     OptimizeRequest,
     OptimizeResponse,
+    OptimizationObjective,
     RouteOutput,
     RouteStopOutput,
+    normalize_objective,
 )
 
 
@@ -45,9 +47,17 @@ def create_distance_matrix(locations: List[LatLng]) -> List[List[int]]:
     return matrix
 
 
-def build_time_matrix(
-    locations: List[LatLng], avg_speed_kph: float = 35.0
-) -> List[List[int]]:
+def estimate_segment_speed_kph(km: float) -> float:
+    if km < 2:
+        return 20.0
+    if km < 8:
+        return 30.0
+    if km < 20:
+        return 42.0
+    return 58.0
+
+
+def build_time_matrix(locations: List[LatLng]) -> List[List[int]]:
     matrix: List[List[int]] = []
     for i, origin in enumerate(locations):
         row: List[int] = []
@@ -56,7 +66,8 @@ def build_time_matrix(
                 row.append(0)
                 continue
             km = calculate_distance(origin, destination)
-            seconds = int((km / avg_speed_kph) * 3600)
+            speed_kph = estimate_segment_speed_kph(km)
+            seconds = int((km / speed_kph) * 3600)
             row.append(seconds)
         matrix.append(row)
     return matrix
@@ -73,16 +84,35 @@ def create_time_callback(manager, time_matrix, service_seconds):
     return time_callback
 
 
+def disjunction_penalty(priority: int, objective: OptimizationObjective) -> int:
+    base = {1: 100_000, 2: 50_000, 3: 10_000, 4: 5_000}.get(priority, 10_000)
+    if objective != "balanced":
+        return base
+    if priority == 1:
+        return int(base * 2.5)
+    if priority == 2:
+        return int(base * 1.75)
+    return base
+
+
 def solve_optimize_request(request: OptimizeRequest) -> OptimizeResponse:
+    objective = normalize_objective(request.objective)
+
     if not request.vehicles:
         return OptimizeResponse(
             routes=[],
+            objective_used=objective,
             unassigned_stop_ids=[stop.id for stop in request.stops],
             warnings=["No vehicles were provided."],
         )
 
     if not request.stops:
-        return OptimizeResponse(routes=[], unassigned_stop_ids=[], warnings=[])
+        return OptimizeResponse(
+            routes=[],
+            objective_used=objective,
+            unassigned_stop_ids=[],
+            warnings=[],
+        )
 
     num_vehicles = len(request.vehicles)
     num_stops = len(request.stops)
@@ -114,11 +144,13 @@ def solve_optimize_request(request: OptimizeRequest) -> OptimizeResponse:
     distance_matrix = create_distance_matrix(locations)
     time_matrix = build_time_matrix(locations)
     service_seconds = [0] * len(locations)
+    weight_values = [0] * len(locations)
     demand_values = [0] * len(locations)
 
     for stop_idx, stop in enumerate(request.stops):
         node_idx = num_vehicles + stop_idx
         service_seconds[node_idx] = max(0, int(stop.service_minutes * 60))
+        weight_values[node_idx] = max(0, int(stop.weight * 100))
         demand_values[node_idx] = max(0, int(stop.volume * 100))
 
     def distance_callback(from_index, to_index):
@@ -127,11 +159,15 @@ def solve_optimize_request(request: OptimizeRequest) -> OptimizeResponse:
         return distance_matrix[from_node][to_node]
 
     distance_callback_index = routing.RegisterTransitCallback(distance_callback)
-    routing.SetArcCostEvaluatorOfAllVehicles(distance_callback_index)
-
     time_callback_index = routing.RegisterTransitCallback(
         create_time_callback(manager, time_matrix, service_seconds)
     )
+
+    if objective == "distance":
+        routing.SetArcCostEvaluatorOfAllVehicles(distance_callback_index)
+    else:
+        routing.SetArcCostEvaluatorOfAllVehicles(time_callback_index)
+
     routing.AddDimension(
         time_callback_index,
         3600,
@@ -141,10 +177,35 @@ def solve_optimize_request(request: OptimizeRequest) -> OptimizeResponse:
     )
     time_dimension = routing.GetDimensionOrDie("Time")
 
+    routing.AddDimension(
+        distance_callback_index,
+        0,
+        max(
+            1,
+            sum(max(row) for row in distance_matrix) if distance_matrix else 1,
+        ),
+        True,
+        "Distance",
+    )
+    distance_dimension = routing.GetDimensionOrDie("Distance")
+
     for vehicle_idx, vehicle in enumerate(request.vehicles):
         time_dimension.CumulVar(routing.End(vehicle_idx)).SetMax(
             max(0, vehicle.max_route_minutes * 60)
         )
+
+    if objective == "speed":
+        time_dimension.SetGlobalSpanCostCoefficient(20)
+    elif objective == "balanced":
+        time_dimension.SetGlobalSpanCostCoefficient(120)
+        distance_dimension.SetGlobalSpanCostCoefficient(3)
+        for vehicle_idx in range(num_vehicles):
+            routing.AddVariableMinimizedByFinalizer(
+                time_dimension.CumulVar(routing.End(vehicle_idx))
+            )
+            routing.AddVariableMinimizedByFinalizer(
+                distance_dimension.CumulVar(routing.End(vehicle_idx))
+            )
 
     def demand_callback(from_index):
         from_node = manager.IndexToNode(from_index)
@@ -157,6 +218,19 @@ def solve_optimize_request(request: OptimizeRequest) -> OptimizeResponse:
         [max(0, int(vehicle.capacity_volume * 100)) for vehicle in request.vehicles],
         True,
         "Capacity",
+    )
+
+    def weight_callback(from_index):
+        from_node = manager.IndexToNode(from_index)
+        return weight_values[from_node]
+
+    weight_callback_index = routing.RegisterUnaryTransitCallback(weight_callback)
+    routing.AddDimensionWithVehicleCapacity(
+        weight_callback_index,
+        0,
+        [max(0, int(vehicle.capacity_weight * 100)) for vehicle in request.vehicles],
+        True,
+        "Weight",
     )
 
     planning_epoch = request.plan_date
@@ -176,7 +250,7 @@ def solve_optimize_request(request: OptimizeRequest) -> OptimizeResponse:
             end_window = start_window
         time_dimension.CumulVar(index).SetRange(start_window, end_window)
 
-        penalty = {1: 100_000, 2: 50_000, 3: 10_000, 4: 5_000}.get(stop.priority, 10_000)
+        penalty = disjunction_penalty(stop.priority, objective)
         routing.AddDisjunction([index], penalty)
 
         if stop.locked_vehicle_id:
@@ -198,6 +272,7 @@ def solve_optimize_request(request: OptimizeRequest) -> OptimizeResponse:
     if not solution:
         return OptimizeResponse(
             routes=[],
+            objective_used=objective,
             unassigned_stop_ids=[stop.id for stop in request.stops],
             warnings=["No feasible solution found."],
         )
@@ -228,9 +303,9 @@ def solve_optimize_request(request: OptimizeRequest) -> OptimizeResponse:
                 )
                 assigned_stop_ids.add(stop.id)
 
-            total_distance_m += routing.GetArcCostForVehicle(
-                previous_index, next_index, vehicle_idx
-            )
+            total_distance_m += distance_matrix[manager.IndexToNode(previous_index)][
+                manager.IndexToNode(next_index)
+            ]
             index = next_index
 
         total_duration_s = solution.Value(time_dimension.CumulVar(routing.End(vehicle_idx)))
@@ -254,6 +329,7 @@ def solve_optimize_request(request: OptimizeRequest) -> OptimizeResponse:
 
     return OptimizeResponse(
         routes=routes,
+        objective_used=objective,
         unassigned_stop_ids=unassigned_stop_ids,
         warnings=warnings,
     )

@@ -13,6 +13,9 @@ import { ObjectType, Field, ID, Float, Int } from '@nestjs/graphql';
 import GraphQLJSON from 'graphql-type-json';
 import { Vehicle } from '../../vehicles/entities/vehicle.entity';
 
+type RouteDataRecord = Record<string, unknown>;
+type RoutePolyline = RouteDataRecord | string;
+
 export enum RouteStatus {
   PLANNED = 'planned',
   ASSIGNED = 'assigned',
@@ -65,7 +68,7 @@ export class Route {
     comment: 'Full route optimization response from routing-service',
   })
   @Field(() => GraphQLJSON, { nullable: true })
-  routeData?: any;
+  routeData?: RouteDataRecord;
 
   @Column({
     type: 'enum',
@@ -110,7 +113,7 @@ export class Route {
     comment: 'Route polyline geometry (GeoJSON or encoded polyline)',
   })
   @Field(() => GraphQLJSON, { nullable: true })
-  polyline?: any;
+  polyline?: RoutePolyline;
 
   @Column({
     type: 'varchar',

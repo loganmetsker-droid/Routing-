@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Box,
   Button,
@@ -22,109 +22,129 @@ import {
 import { PageHeader } from '../components/PageHeader';
 import { SurfacePanel } from '../components/SurfacePanel';
 import LoadingState from '../components/ui/LoadingState';
-import { getVehicles as fetchVehicles, createVehicle, updateVehicle } from '../services/api';
+import type { VehicleRecord } from '../services/api.types';
+import {
+  useCreateVehicleMutation,
+  useUpdateVehicleMutation,
+  useVehiclesQuery,
+} from '../services/fleetApi';
 
-const VEHICLE_TYPES = ['CAR', 'PICKUP', 'CARGO_VAN', 'SPRINTER_VAN', 'BOX_TRUCK', 'STRAIGHT_TRUCK', 'SEMI_TRACTOR', 'REEFER', 'FLATBED'] as const;
+const VEHICLE_TYPES = [
+  'car',
+  'pickup',
+  'cargo_van',
+  'sprinter_van',
+  'box_truck',
+  'straight_truck',
+  'semi_truck',
+  'reefer',
+  'flatbed',
+] as const;
 
 const VEHICLE_META: Record<string, { label: string; weight: string; volume: string; extras: string[] }> = {
-  CAR: { label: 'Car', weight: '400 lb', volume: '60 cu ft', extras: ['Urban only'] },
-  PICKUP: { label: 'Pickup', weight: '1500 lb', volume: '80 cu ft', extras: ['Open bed'] },
-  CARGO_VAN: { label: 'Cargo van', weight: '3500 lb', volume: '260 cu ft', extras: ['Parcel ready'] },
-  SPRINTER_VAN: { label: 'Sprinter van', weight: '4200 lb', volume: '420 cu ft', extras: ['Tall cargo'] },
-  BOX_TRUCK: { label: 'Box truck', weight: '10000 lb', volume: '900 cu ft', extras: ['Dock friendly'] },
-  STRAIGHT_TRUCK: { label: 'Straight truck', weight: '18000 lb', volume: '1200 cu ft', extras: ['Regional route'] },
-  SEMI_TRACTOR: { label: 'Semi tractor', weight: '45000 lb', volume: 'Trailer dependent', extras: ['Long haul'] },
-  REEFER: { label: 'Reefer', weight: '12000 lb', volume: '1000 cu ft', extras: ['Refrigeration'] },
-  FLATBED: { label: 'Flatbed', weight: '22000 lb', volume: 'Open deck', extras: ['Oversized freight'] },
+  car: { label: 'Car', weight: '400 lb', volume: '60 cu ft', extras: ['Urban only'] },
+  pickup: { label: 'Pickup', weight: '1500 lb', volume: '80 cu ft', extras: ['Open bed'] },
+  cargo_van: { label: 'Cargo van', weight: '3500 lb', volume: '260 cu ft', extras: ['Parcel ready'] },
+  sprinter_van: { label: 'Sprinter van', weight: '4200 lb', volume: '420 cu ft', extras: ['Tall cargo'] },
+  box_truck: { label: 'Box truck', weight: '10000 lb', volume: '900 cu ft', extras: ['Dock friendly'] },
+  straight_truck: { label: 'Straight truck', weight: '18000 lb', volume: '1200 cu ft', extras: ['Regional route'] },
+  semi_truck: { label: 'Semi truck', weight: '45000 lb', volume: 'Trailer dependent', extras: ['Long haul'] },
+  reefer: { label: 'Reefer', weight: '12000 lb', volume: '1000 cu ft', extras: ['Refrigeration'] },
+  flatbed: { label: 'Flatbed', weight: '22000 lb', volume: 'Open deck', extras: ['Oversized freight'] },
+};
+
+const VEHICLE_TYPE_ALIASES: Record<string, keyof typeof VEHICLE_META> = {
+  van: 'cargo_van',
+  truck: 'box_truck',
+  semi_tractor: 'semi_truck',
+};
+
+const DASHBOARD_VEHICLE_TYPES = ['cargo_van', 'box_truck', 'straight_truck', 'semi_truck'] as const;
+
+const normalizeVehicleType = (value: string | null | undefined): keyof typeof VEHICLE_META => {
+  const normalized = String(value || 'box_truck').trim().toLowerCase();
+  if (normalized in VEHICLE_META) {
+    return normalized as keyof typeof VEHICLE_META;
+  }
+  return VEHICLE_TYPE_ALIASES[normalized] || 'box_truck';
+};
+
+const emptyForm = {
+  make: '',
+  model: '',
+  year: new Date().getFullYear(),
+  licensePlate: '',
+  vehicleType: 'box_truck',
+  status: 'AVAILABLE',
+  vin: '',
+  fuelType: 'DIESEL',
+  capacity: 1000,
+  volumeCapacity: '',
+  weightCapacity: '',
+  territoryRestriction: '',
+  maxRouteMinutes: '',
 };
 
 export default function VehiclesPage() {
-  const [vehicles, setVehicles] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const vehiclesQuery = useVehiclesQuery();
+  const createVehicleMutation = useCreateVehicleMutation();
+  const updateVehicleMutation = useUpdateVehicleMutation();
+  const vehicles = vehiclesQuery.data ?? [];
+  const loading = vehiclesQuery.isLoading;
   const [filter, setFilter] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingVehicle, setEditingVehicle] = useState<any | null>(null);
-  const [formData, setFormData] = useState({
-    make: '',
-    model: '',
-    year: new Date().getFullYear(),
-    licensePlate: '',
-    vehicleType: 'BOX_TRUCK',
-    status: 'AVAILABLE',
-    vin: '',
-    fuelType: 'DIESEL',
-    capacity: 1000,
-    volumeCapacity: '',
-    weightCapacity: '',
-    territoryRestriction: '',
-    maxRouteMinutes: '',
-  });
-
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      try {
-        const data = await fetchVehicles();
-        if (!mounted) return;
-        setVehicles(Array.isArray(data) ? data : []);
-      } catch (error) {
-        console.error('Failed to load vehicles', error);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-    void load();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const [editingVehicle, setEditingVehicle] = useState<VehicleRecord | null>(null);
+  const [formData, setFormData] = useState(emptyForm);
 
   const visibleVehicles = useMemo(() => {
     if (filter === 'all') return vehicles;
-    return vehicles.filter((vehicle) => String(vehicle.vehicleType || vehicle.type).toUpperCase() === filter);
+    return vehicles.filter(
+      (vehicle) => normalizeVehicleType(vehicle.vehicleType || vehicle.type) === filter,
+    );
   }, [filter, vehicles]);
 
   const openCreate = () => {
     setEditingVehicle(null);
-    setFormData({
-      make: '',
-      model: '',
-      year: new Date().getFullYear(),
-      licensePlate: '',
-      vehicleType: 'BOX_TRUCK',
-      status: 'AVAILABLE',
-      vin: '',
-      fuelType: 'DIESEL',
-      capacity: 1000,
-      volumeCapacity: '',
-      weightCapacity: '',
-      territoryRestriction: '',
-      maxRouteMinutes: '',
-    });
+    setFormData(emptyForm);
     setDialogOpen(true);
   };
 
-  const openEdit = (vehicle: any) => {
+  const openEdit = (vehicle: VehicleRecord) => {
     setEditingVehicle(vehicle);
     setFormData({
       make: vehicle.make || '',
       model: vehicle.model || '',
       year: vehicle.year || new Date().getFullYear(),
       licensePlate: vehicle.licensePlate || '',
-      vehicleType: vehicle.vehicleType || vehicle.type || 'BOX_TRUCK',
+      vehicleType: normalizeVehicleType(vehicle.vehicleType || vehicle.type),
       status: vehicle.status || 'AVAILABLE',
       vin: vehicle.vin || '',
       fuelType: vehicle.fuelType || 'DIESEL',
       capacity: vehicle.capacity || 1000,
-      volumeCapacity: vehicle.volumeCapacity || '',
-      weightCapacity: vehicle.weightCapacity || '',
+      volumeCapacity:
+        vehicle.volumeCapacity === null || vehicle.volumeCapacity === undefined
+          ? ''
+          : String(vehicle.volumeCapacity),
+      weightCapacity:
+        vehicle.weightCapacity === null || vehicle.weightCapacity === undefined
+          ? ''
+          : String(vehicle.weightCapacity),
       territoryRestriction: vehicle.territoryRestriction || '',
-      maxRouteMinutes: vehicle.maxRouteMinutes || '',
+      maxRouteMinutes:
+        vehicle.maxRouteMinutes === null || vehicle.maxRouteMinutes === undefined
+          ? ''
+          : String(vehicle.maxRouteMinutes),
     });
     setDialogOpen(true);
   };
 
   const handleSubmit = async () => {
+    const parsedVolumeCapacity =
+      formData.volumeCapacity === '' ? undefined : Number(formData.volumeCapacity);
+    const parsedWeightCapacity =
+      formData.weightCapacity === '' ? undefined : Number(formData.weightCapacity);
+    const parsedMaxRouteMinutes =
+      formData.maxRouteMinutes === '' ? undefined : Number(formData.maxRouteMinutes);
     const payload = {
       make: formData.make,
       model: formData.model,
@@ -135,17 +155,24 @@ export default function VehiclesPage() {
       vin: formData.vin,
       fuelType: formData.fuelType,
       capacity: formData.capacity,
+      capacityWeightKg: parsedWeightCapacity,
+      capacityVolumeM3: parsedVolumeCapacity,
+      metadata: {
+        territoryRestriction: formData.territoryRestriction || undefined,
+        maxRouteMinutes: parsedMaxRouteMinutes,
+      },
     };
 
     try {
       if (editingVehicle) {
-        await updateVehicle(editingVehicle.id, payload);
+        await updateVehicleMutation.mutateAsync({
+          id: editingVehicle.id,
+          updates: payload,
+        });
       } else {
-        await createVehicle(payload as any);
+        await createVehicleMutation.mutateAsync(payload);
       }
       setDialogOpen(false);
-      const data = await fetchVehicles();
-      setVehicles(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Failed to save vehicle', error);
     }
@@ -165,11 +192,13 @@ export default function VehiclesPage() {
       </Stack>
 
       <Grid container spacing={2.5} sx={{ mb: 2.5 }}>
-        {VEHICLE_TYPES.slice(0, 4).map((type) => (
+        {DASHBOARD_VEHICLE_TYPES.map((type) => (
           <Grid item xs={12} md={6} xl={3} key={type}>
             <SurfacePanel>
               <Typography variant="subtitle2" color="text.secondary">{VEHICLE_META[type].label}</Typography>
-              <Typography variant="h4" sx={{ mt: 1 }}>{vehicles.filter((vehicle) => String(vehicle.vehicleType || vehicle.type).toUpperCase() === type).length}</Typography>
+              <Typography variant="h4" sx={{ mt: 1 }}>
+                {vehicles.filter((vehicle) => normalizeVehicleType(vehicle.vehicleType || vehicle.type) === type).length}
+              </Typography>
               <Typography variant="body2" color="text.secondary">{VEHICLE_META[type].weight} • {VEHICLE_META[type].volume}</Typography>
             </SurfacePanel>
           </Grid>
@@ -194,8 +223,8 @@ export default function VehiclesPage() {
             </TableHead>
             <TableBody>
               {visibleVehicles.map((vehicle) => {
-                const key = String(vehicle.vehicleType || vehicle.type || 'BOX_TRUCK').toUpperCase();
-                const meta = VEHICLE_META[key] || VEHICLE_META.BOX_TRUCK;
+                const key = normalizeVehicleType(vehicle.vehicleType || vehicle.type);
+                const meta = VEHICLE_META[key];
                 return (
                   <TableRow key={vehicle.id} hover>
                     <TableCell>
@@ -238,14 +267,13 @@ export default function VehiclesPage() {
             <Grid item xs={12} md={4}><TextField label="VIN" value={formData.vin} onChange={(event) => setFormData((current) => ({ ...current, vin: event.target.value }))} fullWidth /></Grid>
             <Grid item xs={12} md={4}><TextField select label="Vehicle type" value={formData.vehicleType} onChange={(event) => setFormData((current) => ({ ...current, vehicleType: event.target.value }))} fullWidth>{VEHICLE_TYPES.map((type) => <MenuItem key={type} value={type}>{VEHICLE_META[type].label}</MenuItem>)}</TextField></Grid>
             <Grid item xs={12} md={4}><TextField select label="Status" value={formData.status} onChange={(event) => setFormData((current) => ({ ...current, status: event.target.value }))} fullWidth><MenuItem value="AVAILABLE">Available</MenuItem><MenuItem value="IN_ROUTE">In route</MenuItem><MenuItem value="MAINTENANCE">Maintenance</MenuItem><MenuItem value="OFF_DUTY">Off duty</MenuItem></TextField></Grid>
+            <Grid item xs={12} md={4}><TextField label="Fuel type" value={formData.fuelType} onChange={(event) => setFormData((current) => ({ ...current, fuelType: event.target.value }))} fullWidth /></Grid>
             <Grid item xs={12} md={4}><TextField label="Capacity" type="number" value={formData.capacity} onChange={(event) => setFormData((current) => ({ ...current, capacity: Number(event.target.value) }))} fullWidth /></Grid>
             <Grid item xs={12} md={4}><TextField label="Volume capacity" value={formData.volumeCapacity} onChange={(event) => setFormData((current) => ({ ...current, volumeCapacity: event.target.value }))} fullWidth /></Grid>
             <Grid item xs={12} md={4}><TextField label="Weight capacity" value={formData.weightCapacity} onChange={(event) => setFormData((current) => ({ ...current, weightCapacity: event.target.value }))} fullWidth /></Grid>
-            <Grid item xs={12} md={4}><TextField label="Max route minutes" value={formData.maxRouteMinutes} onChange={(event) => setFormData((current) => ({ ...current, maxRouteMinutes: event.target.value }))} fullWidth /></Grid>
             <Grid item xs={12} md={6}><TextField label="Territory restriction" value={formData.territoryRestriction} onChange={(event) => setFormData((current) => ({ ...current, territoryRestriction: event.target.value }))} fullWidth /></Grid>
-            <Grid item xs={12} md={6}><TextField select label="Fuel type" value={formData.fuelType} onChange={(event) => setFormData((current) => ({ ...current, fuelType: event.target.value }))} fullWidth><MenuItem value="DIESEL">Diesel</MenuItem><MenuItem value="GAS">Gas</MenuItem><MenuItem value="ELECTRIC">Electric</MenuItem></TextField></Grid>
+            <Grid item xs={12} md={6}><TextField label="Max route minutes" value={formData.maxRouteMinutes} onChange={(event) => setFormData((current) => ({ ...current, maxRouteMinutes: event.target.value }))} fullWidth /></Grid>
           </Grid>
-          <Typography variant="body2" color="text.secondary">Expanded fleet semantics are available in the UI now. Backend persistence for the advanced operational fields can be wired separately without blocking this redesign.</Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)}>Cancel</Button>

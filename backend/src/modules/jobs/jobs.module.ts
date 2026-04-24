@@ -8,12 +8,14 @@ import { JobsService } from './jobs.service';
 import { JobsController } from './jobs.controller';
 import { JobsProcessor } from './jobs.processor';
 import { JobsResolver } from './jobs.resolver';
+import { PlatformModule } from '../platform/platform.module';
 import './enums-registration'; // Register GraphQL enums
 
 const hasRedis = Boolean(process.env.REDIS_URL || process.env.REDIS_HOST);
 
 @Module({
   imports: [
+    PlatformModule,
     TypeOrmModule.forFeature([Job, Customer, Route]),
     ...(hasRedis
       ? [

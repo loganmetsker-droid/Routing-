@@ -10,6 +10,8 @@ import { AppUser } from '../organizations/entities/app-user.entity';
 import { Organization } from '../organizations/entities/organization.entity';
 import { OrganizationMembership } from '../organizations/entities/organization-membership.entity';
 import { OrganizationsModule } from '../organizations/organizations.module';
+import { AuthSession } from './entities/auth-session.entity';
+import { WorkosModule } from '../../common/integrations/workos.module';
 
 /**
  * Auth Module
@@ -18,8 +20,14 @@ import { OrganizationsModule } from '../organizations/organizations.module';
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
-    TypeOrmModule.forFeature([Organization, AppUser, OrganizationMembership]),
+    TypeOrmModule.forFeature([
+      Organization,
+      AppUser,
+      OrganizationMembership,
+      AuthSession,
+    ]),
     OrganizationsModule,
+    WorkosModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -40,6 +48,6 @@ import { OrganizationsModule } from '../organizations/organizations.module';
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],
-  exports: [AuthService, JwtModule, PassportModule],
+  exports: [AuthService, JwtModule, PassportModule, TypeOrmModule],
 })
 export class AuthModule {}

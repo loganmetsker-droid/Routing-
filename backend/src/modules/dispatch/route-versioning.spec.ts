@@ -1,6 +1,10 @@
 import { ConfigService } from '@nestjs/config';
 import { DispatchService } from './dispatch.service';
 import { RouteStatus, RouteWorkflowStatus } from './entities/route.entity';
+import { DispatchEventsService } from './services/dispatch-events.service';
+import { DispatchOptimizerStateService } from './services/dispatch-optimizer-state.service';
+import { DispatchPresentationService } from './services/dispatch-presentation.service';
+import { RouteVersioningService } from './services/route-versioning.service';
 
 function createQueryBuilder() {
   return {
@@ -73,6 +77,22 @@ describe('DispatchService route versioning', () => {
       }),
     } as unknown as ConfigService;
 
+    const dispatchEvents = new DispatchEventsService(
+      dispatchEventRepository as any,
+      configService,
+    );
+    const routePresentation = new DispatchPresentationService();
+    const routeVersioning = new RouteVersioningService(
+      routeRepository as any,
+      routeVersionRepository as any,
+      dispatchEvents,
+      routePresentation,
+    );
+    const optimizerState = new DispatchOptimizerStateService(
+      dispatchEventRepository as any,
+      dispatchEvents,
+    );
+
     const service = new DispatchService(
       routeRepository as any,
       vehicleRepository as any,
@@ -85,6 +105,10 @@ describe('DispatchService route versioning', () => {
       configService,
       { emitRouteUpdated: jest.fn() } as any,
       { list: jest.fn(), create: jest.fn(), update: jest.fn() } as any,
+      dispatchEvents,
+      routePresentation,
+      routeVersioning,
+      optimizerState,
     );
 
     return {

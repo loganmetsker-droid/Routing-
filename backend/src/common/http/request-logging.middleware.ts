@@ -3,6 +3,23 @@ import { NextFunction, Response } from 'express';
 import { RequestWithContext } from './request-context.middleware';
 
 const logger = new Logger('HttpRequest');
+const SENSITIVE_KEYS = new Set([
+  'password',
+  'token',
+  'accessToken',
+  'authorization',
+  'customerPhone',
+  'customerEmail',
+  'phone',
+  'email',
+  'supportEmail',
+  'supportPhone',
+  'stripeSignature',
+  'paymentMethodId',
+  'cardNumber',
+  'cvv',
+  'secret',
+]);
 
 function sanitizePath(path: string) {
   return path.replace(
@@ -11,27 +28,38 @@ function sanitizePath(path: string) {
   );
 }
 
+function sanitizeValue(key: string, value: unknown): unknown {
+  if (SENSITIVE_KEYS.has(key)) {
+    return '[REDACTED]';
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitizeValue(key, item));
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  const next: Record<string, unknown> = {};
+  for (const [entryKey, entryValue] of Object.entries(
+    value as Record<string, unknown>,
+  )) {
+    next[entryKey] = sanitizeValue(entryKey, entryValue);
+  }
+  return next;
+}
+
 function sanitizeBody(body: unknown) {
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+  if (!body || typeof body !== 'object') {
     return undefined;
   }
 
-  const redacted = { ...(body as Record<string, unknown>) };
-  for (const key of [
-    'password',
-    'token',
-    'accessToken',
-    'authorization',
-    'customerPhone',
-    'customerEmail',
-    'phone',
-    'email',
-  ]) {
-    if (key in redacted) {
-      redacted[key] = '[REDACTED]';
-    }
+  if (Array.isArray(body)) {
+    return body.map((item) => sanitizeValue('body', item));
   }
-  return redacted;
+
+  return sanitizeValue('body', body);
 }
 
 export function requestLoggingMiddleware(

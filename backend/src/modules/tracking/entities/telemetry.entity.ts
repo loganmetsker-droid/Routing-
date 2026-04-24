@@ -8,6 +8,11 @@ import {
 } from 'typeorm';
 import { Vehicle } from '../../vehicles/entities/vehicle.entity';
 
+type TelemetryLocation = {
+  lat: number;
+  lng: number;
+};
+
 @Entity('telemetry')
 @Index(['vehicleId', 'timestamp'])
 @Index(['timestamp'])
@@ -25,7 +30,7 @@ export class Telemetry {
   @Column({
     type: 'jsonb',
   })
-  location: any; // Location stored as { lat: number, lng: number }
+  location: TelemetryLocation;
 
   @Column({
     type: 'decimal',
@@ -76,5 +81,5 @@ export class Telemetry {
   timestamp: Date;
 
   @Column({ type: 'jsonb', nullable: true, comment: 'Additional sensor data' })
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 }

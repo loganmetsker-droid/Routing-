@@ -7,32 +7,11 @@ import type {
 import type {
   DispatchTimelineEvent,
   OptimizerHealth,
+  RouteVersion,
   RerouteRequest,
-} from '../../../services/api';
+} from '../../../services/api.types';
 
-export type RouteVersionStatus =
-  | 'DRAFT'
-  | 'REVIEWED'
-  | 'APPROVED'
-  | 'PUBLISHED'
-  | 'SUPERSEDED';
-
-export type DispatchRouteVersion = {
-  id: string;
-  routeId: string;
-  versionNumber: number;
-  status: RouteVersionStatus;
-  snapshot: Record<string, unknown>;
-  createdByUserId?: string | null;
-  reviewedByUserId?: string | null;
-  approvedByUserId?: string | null;
-  publishedByUserId?: string | null;
-  createdAt: string;
-  updatedAt?: string;
-  reviewedAt?: string | null;
-  approvedAt?: string | null;
-  publishedAt?: string | null;
-};
+export type DispatchRouteVersion = RouteVersion;
 
 export type DispatchBoardData = {
   jobs: DispatchJob[];

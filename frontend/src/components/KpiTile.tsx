@@ -1,4 +1,5 @@
 import { Stack, Typography } from '@mui/material';
+import { trovanColors } from '../theme/designTokens';
 import { SurfacePanel } from './SurfacePanel';
 
 type KpiTileProps = {
@@ -10,21 +11,37 @@ type KpiTileProps = {
 
 export function KpiTile({ label, value, meta, tone = 'default' }: KpiTileProps) {
   const colorMap = {
-    default: 'text.secondary',
-    success: 'success.main',
-    warning: 'warning.main',
-    danger: 'error.main',
+    default: trovanColors.stone[600],
+    success: trovanColors.semantic.success,
+    warning: trovanColors.semantic.warning,
+    danger: trovanColors.semantic.danger,
   } as const;
 
   return (
-    <SurfacePanel sx={{ p: 2 }}>
-      <Stack spacing={1}>
-        <Typography variant="subtitle2" color="text.secondary">
+    <SurfacePanel variant="muted" padding={1.5} sx={{ minHeight: 96 }}>
+      <Stack spacing={0.45}>
+        <Typography
+          variant="subtitle2"
+          color="text.secondary"
+          sx={{ letterSpacing: '0.1em', fontSize: '0.72rem' }}
+        >
           {label}
         </Typography>
-        <Typography variant="h3">{value}</Typography>
+        <Typography
+          variant="h4"
+          sx={{
+            lineHeight: 1,
+            overflowWrap: 'normal',
+            fontWeight: 700,
+          }}
+        >
+          {value}
+        </Typography>
         {meta ? (
-          <Typography variant="body2" sx={{ color: colorMap[tone] }}>
+          <Typography
+            variant="caption"
+            sx={{ color: colorMap[tone], maxWidth: '100%', lineHeight: 1.35 }}
+          >
             {meta}
           </Typography>
         ) : null}

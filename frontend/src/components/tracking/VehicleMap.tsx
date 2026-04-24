@@ -205,6 +205,7 @@ export default function VehicleMap() {
 
       {/* Map */}
       <MapContainer
+        attributionControl={false}
         center={center}
         zoom={12}
         style={{ height: '100%', width: '100%' }}

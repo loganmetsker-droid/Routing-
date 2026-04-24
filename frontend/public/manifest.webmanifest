@@ -1,0 +1,17 @@
+{
+  "name": "Trovan Routing & Dispatch",
+  "short_name": "Trovan",
+  "description": "Premium routing, dispatch, driver execution, and customer tracking.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1F1A17",
+  "theme_color": "#1F1A17",
+  "icons": [
+    {
+      "src": "/trovan-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

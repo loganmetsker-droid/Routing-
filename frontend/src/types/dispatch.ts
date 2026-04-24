@@ -3,6 +3,11 @@ export interface DispatchJob {
   customerName: string;
   deliveryAddress?: string;
   pickupAddress?: string;
+  deliveryLocation?: { lat: number; lng: number };
+  pickupLocation?: { lat: number; lng: number };
+  timeWindowStart?: string;
+  timeWindowEnd?: string;
+  estimatedDuration?: number;
   status: string;
   priority?: string;
   assignedRouteId?: string | null;
@@ -39,12 +44,12 @@ export interface DispatchRoute {
   estimatedTimeRemaining?: number;
   eta?: string;
   path?: [number, number][];
-  routeData?: any;
+  routeData?: Record<string, unknown>;
   dataQuality?: 'live' | 'degraded' | 'simulated';
   optimizationStatus?: 'optimized' | 'degraded' | 'failed';
   planningWarnings?: string[];
   droppedJobIds?: string[];
-  plannerDiagnostics?: Record<string, any>;
+  plannerDiagnostics?: Record<string, unknown>;
   workflowStatus?: string;
   simulated?: boolean;
   rerouteState?: string | null;
@@ -58,6 +63,8 @@ export interface DispatchVehicle {
   make?: string;
   model?: string;
   licensePlate?: string;
+  vehicleType?: string;
+  currentLocation?: { lat: number; lng: number } | null;
   status: string;
   capacity?: number;
 }

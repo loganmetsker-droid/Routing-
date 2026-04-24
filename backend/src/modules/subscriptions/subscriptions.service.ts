@@ -14,6 +14,44 @@ import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 export class SubscriptionsService {
   private readonly logger = new Logger(SubscriptionsService.name);
   private stripe: Stripe;
+  private readonly planCatalog = [
+    {
+      plan: SubscriptionPlan.STARTER,
+      label: 'Starter',
+      monthlyPriceUsd: 149,
+      dispatcherSeats: 3,
+      features: [
+        'Dispatcher web workspace',
+        'Driver PWA',
+        'Public tracking links',
+        'Core analytics',
+      ],
+    },
+    {
+      plan: SubscriptionPlan.PROFESSIONAL,
+      label: 'Professional',
+      monthlyPriceUsd: 399,
+      dispatcherSeats: 15,
+      features: [
+        'Advanced analytics',
+        'Exception workflows',
+        'Route history and audit exports',
+        'Priority support',
+      ],
+    },
+    {
+      plan: SubscriptionPlan.ENTERPRISE,
+      label: 'Enterprise',
+      monthlyPriceUsd: 999,
+      dispatcherSeats: 999,
+      features: [
+        'SSO-ready deployment',
+        'Tenant branding controls',
+        'Audit and security posture visibility',
+        'Enterprise rollout support',
+      ],
+    },
+  ] as const;
 
   // Price IDs from Stripe Dashboard
   private readonly priceMap = {
@@ -40,6 +78,65 @@ export class SubscriptionsService {
       // Create a mock Stripe instance to prevent errors
       this.stripe = null as any;
     }
+  }
+
+  private isStripeConfigured() {
+    return Boolean(this.stripe);
+  }
+
+  getPlanCatalog() {
+    return {
+      stripeConfigured: this.isStripeConfigured(),
+      plans: this.planCatalog.map((plan) => ({
+        ...plan,
+        stripePriceConfigured: Boolean(this.priceMap[plan.plan]),
+      })),
+    };
+  }
+
+  async getBillingOverview({
+    userId,
+    email,
+    organizationId,
+  }: {
+    userId?: string;
+    email?: string;
+    organizationId?: string;
+  }) {
+    const subscriptions = userId
+      ? await this.getCustomerSubscriptions(userId)
+      : [];
+    const activeSubscription =
+      subscriptions.find((subscription) =>
+        [SubscriptionStatus.ACTIVE, SubscriptionStatus.TRIALING].includes(
+          subscription.status,
+        ),
+      ) || subscriptions[0] || null;
+
+    return {
+      generatedAt: new Date().toISOString(),
+      stripeConfigured: this.isStripeConfigured(),
+      organizationId: organizationId || null,
+      billingContactEmail: email || null,
+      activeSubscription,
+      subscriptions,
+      plans: this.planCatalog.map((plan) => ({
+        ...plan,
+        stripePriceConfigured: Boolean(this.priceMap[plan.plan]),
+      })),
+      controls: {
+        invoiceAutomationReady: this.isStripeConfigured(),
+        failedPaymentHandlingReady: this.isStripeConfigured(),
+        webhookConfigured: Boolean(
+          this.configService.get<string>('STRIPE_WEBHOOK_SECRET'),
+        ),
+      },
+      recommendations: this.isStripeConfigured()
+        ? []
+        : [
+            'Configure STRIPE_SECRET_KEY and plan price IDs before enabling paid self-serve billing.',
+          ],
+    };
   }
 
   /**

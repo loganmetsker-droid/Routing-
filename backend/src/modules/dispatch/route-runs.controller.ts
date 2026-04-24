@@ -1,9 +1,17 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 import { RouteRunsService } from './route-runs.service';
 
-type AuthenticatedRequest = { user?: { userId?: string; organizationId?: string; roles?: string[] } };
+type AuthenticatedRequest = {
+  user?: {
+    userId?: string;
+    organizationId?: string;
+    email?: string;
+    roles?: string[];
+  };
+};
 
 @ApiTags('dispatch', 'route-runs', 'exceptions')
 @Controller()
@@ -13,15 +21,33 @@ export class RouteRunsController {
 
   @Get('dispatch/board')
   @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'VIEWER')
-  board(@Req() req: AuthenticatedRequest) { return this.routeRuns.board(req.user?.organizationId); }
+  board(@Req() req: AuthenticatedRequest) { return this.routeRuns.board(req.user); }
 
   @Get('route-runs')
   @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'VIEWER', 'DRIVER')
-  list(@Req() req: AuthenticatedRequest) { return this.routeRuns.list(req.user?.organizationId); }
+  list(@Req() req: AuthenticatedRequest) { return this.routeRuns.list(req.user); }
 
   @Get('route-runs/:id')
   @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'VIEWER', 'DRIVER')
-  detail(@Req() req: AuthenticatedRequest, @Param('id') routeId: string) { return this.routeRuns.detail(routeId, req.user?.organizationId); }
+  detail(@Req() req: AuthenticatedRequest, @Param('id') routeId: string) { return this.routeRuns.detail(routeId, req.user); }
+
+  @Post('route-runs/:id/share-link')
+  @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'DRIVER')
+  shareLink(@Req() req: AuthenticatedRequest, @Param('id') routeId: string) {
+    return this.routeRuns.createPublicTrackingLink(routeId, req.user);
+  }
+
+  @Get('driver/manifest')
+  @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'DRIVER')
+  manifest(@Req() req: AuthenticatedRequest) {
+    return this.routeRuns.getDriverManifest(req.user);
+  }
+
+  @Public()
+  @Get('public/tracking/:token')
+  publicTracking(@Param('token') token: string) {
+    return this.routeRuns.getPublicTracking(token);
+  }
 
   @Post('route-runs/:id/dispatch')
   @Roles('OWNER', 'ADMIN', 'DISPATCHER')
@@ -76,6 +102,22 @@ export class RouteRunsController {
   @Get('exceptions')
   @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'VIEWER')
   exceptions(@Req() req: AuthenticatedRequest) { return this.routeRuns.listExceptions(req.user?.organizationId); }
+
+  @Post('exceptions')
+  @Roles('OWNER', 'ADMIN', 'DISPATCHER')
+  createException(
+    @Req() req: AuthenticatedRequest,
+    @Body()
+    body: {
+      routeId?: string;
+      routeRunStopId?: string;
+      code: string;
+      message: string;
+      details?: Record<string, unknown>;
+    },
+  ) {
+    return this.routeRuns.createException(body, req.user);
+  }
 
   @Patch('exceptions/:id')
   @Roles('OWNER', 'ADMIN', 'DISPATCHER')

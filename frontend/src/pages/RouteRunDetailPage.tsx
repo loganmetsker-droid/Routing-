@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import {
   Alert,
@@ -13,24 +13,27 @@ import {
   List,
   ListItem,
   ListItemText,
+  MenuItem,
   Stack,
   TextField,
   Typography,
 } from '@mui/material';
 import { PageHeader } from '../components/PageHeader';
+import { StatusPill } from '../components/StatusPill';
 import { SurfacePanel } from '../components/SurfacePanel';
 import LoadingState from '../components/ui/LoadingState';
 import {
-  addRouteRunStopNote,
-  addRouteRunStopProof,
-  completeRouteRun,
-  failRouteRunStop,
-  getRouteRunDetail,
-  markRouteRunStopArrived,
-  markRouteRunStopServiced,
-  rescheduleRouteRunStop,
+  useCreateExceptionMutation,
+  NotificationDeliveryRecord,
   RouteRunStopRecord,
-  startRouteRun,
+  type ProofArtifactRecord,
+  type StopEventRecord,
+  useRouteRunShareLinkMutation,
+  getRouteRunsErrorMessage,
+  useCompleteRouteRunMutation,
+  useRouteRunDetailQuery,
+  useRouteRunStopMutation,
+  useStartRouteRunMutation,
 } from '../features/dispatch/api/routeRunsApi';
 
 function statusColor(status: string): 'default' | 'success' | 'warning' | 'error' | 'info' {
@@ -42,34 +45,38 @@ function statusColor(status: string): 'default' | 'success' | 'warning' | 'error
   return 'default';
 }
 
+function deliverySummary(delivery: NotificationDeliveryRecord) {
+  const parts = [
+    delivery.channel,
+    delivery.recipient,
+    delivery.provider,
+    delivery.sentAt || delivery.createdAt || 'Pending timestamp',
+  ];
+  return parts.filter(Boolean).join(' • ');
+}
+
 export default function RouteRunDetailPage() {
   const { id = '' } = useParams();
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [detail, setDetail] = useState<any>(null);
   const [actionStop, setActionStop] = useState<RouteRunStopRecord | null>(null);
   const [actionType, setActionType] = useState<'note' | 'proof' | 'fail' | 'reschedule' | null>(null);
   const [inputValue, setInputValue] = useState('');
-
-  const loadDetail = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setDetail(await getRouteRunDetail(id));
-    } catch (err: any) {
-      setError(err?.message || 'Failed to load route run detail.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadDetail();
-  }, [id]);
+  const [exceptionDialogOpen, setExceptionDialogOpen] = useState(false);
+  const [exceptionCode, setExceptionCode] = useState('');
+  const [exceptionMessage, setExceptionMessage] = useState('');
+  const [exceptionStopId, setExceptionStopId] = useState('');
+  const routeRunDetailQuery = useRouteRunDetailQuery(id);
+  const startRouteMutation = useStartRouteRunMutation();
+  const completeRouteMutation = useCompleteRouteRunMutation();
+  const stopMutation = useRouteRunStopMutation();
+  const shareLinkMutation = useRouteRunShareLinkMutation();
+  const createExceptionMutation = useCreateExceptionMutation();
+  const detail = routeRunDetailQuery.data ?? null;
+  const loading = routeRunDetailQuery.isLoading;
 
   const eventsByStop = useMemo(() => {
     const events = detail?.stopEvents || [];
-    return events.reduce((acc: Record<string, any[]>, event: any) => {
+    return events.reduce<Record<string, StopEventRecord[]>>((acc, event) => {
       acc[event.routeRunStopId] = [...(acc[event.routeRunStopId] || []), event];
       return acc;
     }, {});
@@ -77,7 +84,7 @@ export default function RouteRunDetailPage() {
 
   const proofsByStop = useMemo(() => {
     const proofs = detail?.proofArtifacts || [];
-    return proofs.reduce((acc: Record<string, any[]>, proof: any) => {
+    return proofs.reduce<Record<string, ProofArtifactRecord[]>>((acc, proof) => {
       acc[proof.routeRunStopId] = [...(acc[proof.routeRunStopId] || []), proof];
       return acc;
     }, {});
@@ -86,11 +93,13 @@ export default function RouteRunDetailPage() {
   const runStopAction = async (stopId: string, action: 'arrived' | 'serviced') => {
     setError(null);
     try {
-      if (action === 'arrived') await markRouteRunStopArrived(stopId);
-      if (action === 'serviced') await markRouteRunStopServiced(stopId);
-      await loadDetail();
-    } catch (err: any) {
-      setError(err?.message || 'Stop update failed.');
+      await stopMutation.mutateAsync({
+        routeRunId: id,
+        stopId,
+        kind: action,
+      });
+    } catch (err: unknown) {
+      setError(getRouteRunsErrorMessage(err));
     }
   };
 
@@ -98,36 +107,65 @@ export default function RouteRunDetailPage() {
     if (!actionStop || !actionType) return;
     setError(null);
     try {
-      if (actionType === 'note') await addRouteRunStopNote(actionStop.id, inputValue);
-      if (actionType === 'proof') await addRouteRunStopProof(actionStop.id, { type: 'PHOTO', uri: inputValue, metadata: { source: 'dispatcher-ui' } });
-      if (actionType === 'fail') await failRouteRunStop(actionStop.id, inputValue);
-      if (actionType === 'reschedule') await rescheduleRouteRunStop(actionStop.id, inputValue);
+      await stopMutation.mutateAsync({
+        routeRunId: id,
+        stopId: actionStop.id,
+        kind: actionType,
+        value: inputValue,
+      });
       setActionStop(null);
       setActionType(null);
       setInputValue('');
-      await loadDetail();
-    } catch (err: any) {
-      setError(err?.message || 'Stop action failed.');
+    } catch (err: unknown) {
+      setError(getRouteRunsErrorMessage(err));
     }
   };
 
   const handleStartRoute = async () => {
     setError(null);
     try {
-      await startRouteRun(id);
-      await loadDetail();
-    } catch (err: any) {
-      setError(err?.message || 'Failed to start route run.');
+      await startRouteMutation.mutateAsync(id);
+    } catch (err: unknown) {
+      setError(getRouteRunsErrorMessage(err));
     }
   };
 
   const handleCompleteRoute = async () => {
     setError(null);
     try {
-      await completeRouteRun(id);
-      await loadDetail();
-    } catch (err: any) {
-      setError(err?.message || 'Failed to complete route run.');
+      await completeRouteMutation.mutateAsync(id);
+    } catch (err: unknown) {
+      setError(getRouteRunsErrorMessage(err));
+    }
+  };
+
+  const handleCopyTrackingLink = async () => {
+    setError(null);
+    try {
+      const link = await shareLinkMutation.mutateAsync(id);
+      await navigator.clipboard.writeText(link.url);
+      setError(`Tracking link copied: ${link.url}`);
+    } catch (err: unknown) {
+      setError(getRouteRunsErrorMessage(err));
+    }
+  };
+
+  const handleCreateException = async () => {
+    setError(null);
+    try {
+      await createExceptionMutation.mutateAsync({
+        routeId: id,
+        routeRunStopId: exceptionStopId || undefined,
+        code: exceptionCode.trim().toUpperCase(),
+        message: exceptionMessage.trim(),
+        details: { source: 'route-run-detail' },
+      });
+      setExceptionDialogOpen(false);
+      setExceptionCode('');
+      setExceptionMessage('');
+      setExceptionStopId('');
+    } catch (err: unknown) {
+      setError(getRouteRunsErrorMessage(err));
     }
   };
 
@@ -153,12 +191,14 @@ export default function RouteRunDetailPage() {
           <Stack direction="row" spacing={1}>
             <Button component={RouterLink} to="/dispatch" variant="outlined">Back to board</Button>
             <Button component={RouterLink} to="/exceptions" variant="outlined">Exceptions</Button>
+            <Button variant="outlined" onClick={() => setExceptionDialogOpen(true)}>New exception</Button>
+            <Button variant="outlined" onClick={() => void handleCopyTrackingLink()}>Copy tracking link</Button>
             <Button variant="outlined" onClick={() => void handleStartRoute()} data-testid="route-run-start-button">Start Route</Button>
             <Button variant="contained" onClick={() => void handleCompleteRoute()} data-testid="route-run-complete-button">Complete Route</Button>
           </Stack>
         }
       />
-      {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+      {error ? <Alert severity={error.startsWith('Tracking link copied:') ? 'success' : 'error'} sx={{ mb: 2 }}>{error}</Alert> : null}
       <Grid container spacing={2.5}>
         <Grid item xs={12} xl={4}>
           <Stack spacing={2.5}>
@@ -177,13 +217,47 @@ export default function RouteRunDetailPage() {
             <SurfacePanel>
               <Typography variant="h6" sx={{ mb: 1 }}>Exceptions</Typography>
               <List disablePadding>
-                {(detail.exceptions || []).map((item: any) => (
+                {(detail.exceptions || []).map((item) => (
                   <ListItem key={item.id} disableGutters sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
                     <ListItemText primary={item.code} secondary={item.message} />
-                    <Chip label={item.status} size="small" color={statusColor(item.status)} />
+                    <StatusPill label={item.status} tone={statusColor(item.status) === 'error' ? 'danger' : statusColor(item.status) === 'warning' ? 'warning' : statusColor(item.status) === 'success' ? 'success' : statusColor(item.status) === 'info' ? 'info' : 'default'} />
                   </ListItem>
                 ))}
                 {(detail.exceptions || []).length === 0 ? <Typography variant="body2" color="text.secondary">No exceptions on this route run.</Typography> : null}
+              </List>
+            </SurfacePanel>
+            <SurfacePanel>
+              <Typography variant="h6" sx={{ mb: 1 }}>
+                Customer Communications
+              </Typography>
+              <List disablePadding>
+                {(detail.notificationDeliveries || []).map((delivery) => (
+                  <ListItem
+                    key={delivery.id}
+                    disableGutters
+                    sx={{
+                      borderBottom: '1px solid',
+                      borderColor: 'divider',
+                      alignItems: 'flex-start',
+                    }}
+                  >
+                    <ListItemText
+                      primary={delivery.eventType.replace(/_/g, ' ')}
+                      secondary={`${deliverySummary(delivery)}\n${delivery.message}`}
+                      secondaryTypographyProps={{ sx: { whiteSpace: 'pre-line' } }}
+                    />
+                    <Chip
+                      label={delivery.status}
+                      size="small"
+                      color={statusColor(delivery.status)}
+                    />
+                  </ListItem>
+                ))}
+                {(detail.notificationDeliveries || []).length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    No customer notifications have been logged for this route run yet.
+                  </Typography>
+                ) : null}
               </List>
             </SurfacePanel>
           </Stack>
@@ -218,20 +292,20 @@ export default function RouteRunDetailPage() {
                       <Grid container spacing={1.5}>
                         <Grid item xs={12} md={6}>
                           <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Timeline</Typography>
-                          <List dense disablePadding data-testid={`route-run-stop-timeline-${index}`}>
-                            {(eventsByStop[stop.id] || []).map((event: any) => (
-                              <ListItem key={event.id} disableGutters>
-                                <ListItemText primary={event.eventType} secondary={JSON.stringify(event.payload || {})} />
+                          <List dense disablePadding>
+                            {(eventsByStop[stop.id] || []).map((event) => (
+                              <ListItem key={event.id} disableGutters sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
+                                <ListItemText primary={event.eventType} secondary={event.happenedAt || 'Timestamp pending'} />
                               </ListItem>
                             ))}
-                            {(eventsByStop[stop.id] || []).length === 0 ? <Typography variant="body2" color="text.secondary">No timeline events yet.</Typography> : null}
+                            {(eventsByStop[stop.id] || []).length === 0 ? <Typography variant="body2" color="text.secondary">No stop events recorded yet.</Typography> : null}
                           </List>
                         </Grid>
                         <Grid item xs={12} md={6}>
                           <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Proofs</Typography>
-                          <List dense disablePadding data-testid={`route-run-stop-proofs-${index}`}>
-                            {(proofsByStop[stop.id] || []).map((proof: any) => (
-                              <ListItem key={proof.id} disableGutters>
+                          <List dense disablePadding>
+                            {(proofsByStop[stop.id] || []).map((proof) => (
+                              <ListItem key={proof.id} disableGutters sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
                                 <ListItemText primary={proof.type} secondary={proof.uri} />
                               </ListItem>
                             ))}
@@ -248,24 +322,74 @@ export default function RouteRunDetailPage() {
         </Grid>
       </Grid>
 
-      <Dialog open={Boolean(actionStop && actionType)} onClose={() => { setActionStop(null); setActionType(null); setInputValue(''); }} fullWidth maxWidth="sm">
-        <DialogTitle>{actionType === 'proof' ? 'Add proof URL' : actionType === 'note' ? 'Add stop note' : actionType === 'fail' ? 'Fail stop' : 'Reschedule stop'}</DialogTitle>
+      <Dialog open={Boolean(actionStop && actionType)} onClose={() => { setActionStop(null); setActionType(null); }} fullWidth maxWidth="sm">
+        <DialogTitle>
+          {actionType === 'note' ? 'Add Stop Note' : null}
+          {actionType === 'proof' ? 'Attach Proof' : null}
+          {actionType === 'fail' ? 'Fail Stop' : null}
+          {actionType === 'reschedule' ? 'Reschedule Stop' : null}
+        </DialogTitle>
         <DialogContent>
           <TextField
-            autoFocus
-            margin="dense"
             fullWidth
-            label={actionType === 'proof' ? 'Proof URL' : 'Details'}
+            multiline
+            minRows={actionType === 'proof' ? 2 : 4}
+            label={actionType === 'proof' ? 'Proof URI' : 'Details'}
             value={inputValue}
             onChange={(event) => setInputValue(event.target.value)}
-            multiline
-            minRows={3}
-            inputProps={{ 'data-testid': 'route-run-action-input' }}
+            sx={{ mt: 1 }}
           />
         </DialogContent>
         <DialogActions>
           <Button onClick={() => { setActionStop(null); setActionType(null); setInputValue(''); }}>Cancel</Button>
-          <Button variant="contained" onClick={() => void submitModalAction()} disabled={!inputValue.trim()} data-testid="route-run-action-save">Save</Button>
+          <Button variant="contained" onClick={() => void submitModalAction()} disabled={!inputValue.trim()}>
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={exceptionDialogOpen} onClose={() => setExceptionDialogOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Create Exception</DialogTitle>
+        <DialogContent sx={{ display: 'grid', gap: 2, pt: 2 }}>
+          <TextField
+            select
+            label="Related stop"
+            value={exceptionStopId}
+            onChange={(event) => setExceptionStopId(event.target.value)}
+            fullWidth
+          >
+            <MenuItem value="">Route-level issue</MenuItem>
+            {(detail.stops || []).map((stop) => (
+              <MenuItem key={stop.id} value={stop.id}>
+                Stop {stop.stopSequence} • {stop.jobId.slice(0, 8)}
+              </MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            label="Code"
+            value={exceptionCode}
+            onChange={(event) => setExceptionCode(event.target.value)}
+            placeholder="DELAY"
+            fullWidth
+          />
+          <TextField
+            label="Message"
+            value={exceptionMessage}
+            onChange={(event) => setExceptionMessage(event.target.value)}
+            multiline
+            minRows={4}
+            fullWidth
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setExceptionDialogOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={() => void handleCreateException()}
+            disabled={!exceptionCode.trim() || !exceptionMessage.trim()}
+          >
+            Create exception
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

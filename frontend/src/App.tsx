@@ -1,22 +1,27 @@
-import { useEffect, useState } from 'react';
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Suspense, lazy, useEffect, useState } from 'react';
+import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import Layout from './components/Layout';
-import Dashboard from './pages/Dashboard';
-import DriversPage from './pages/DriversPage';
-import VehiclesPage from './pages/VehiclesPage';
-import CustomersPage from './pages/CustomersPage';
-import JobsPageEnhancedV2 from './pages/JobsPageEnhancedV2';
-import TrackingEnhanced from './pages/TrackingEnhanced';
-import DispatchBoardOpsPage from './pages/DispatchBoardOpsPage';
-import RoutingWorkspacePage from './pages/RoutingWorkspacePage';
-import AnalyticsPage from './pages/AnalyticsPage';
-import SettingsPage from './pages/SettingsPage';
-import RouteRunDetailPage from './pages/RouteRunDetailPage';
-import ExceptionsQueuePage from './pages/ExceptionsQueuePage';
-import LoginPage from './pages/LoginPage';
 import { clearAuthSession, isAuthenticated, validateSession } from './services/api';
 import ErrorBoundary from './components/ui/ErrorBoundary';
+
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const DriversPage = lazy(() => import('./pages/DriversPage'));
+const VehiclesPage = lazy(() => import('./pages/VehiclesPage'));
+const CustomersPage = lazy(() => import('./pages/CustomersPage'));
+const JobsPageEnhancedV2 = lazy(() => import('./pages/JobsPageEnhancedV2'));
+const TrackingEnhanced = lazy(() => import('./pages/TrackingEnhanced'));
+const DispatchBoardOpsPage = lazy(() => import('./pages/DispatchBoardOpsPage'));
+const RoutingWorkspacePage = lazy(() => import('./pages/RoutingWorkspacePage'));
+const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const RouteRunDetailPage = lazy(() => import('./pages/RouteRunDetailPage'));
+const ExceptionsQueuePage = lazy(() => import('./pages/ExceptionsQueuePage'));
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const AuthCallbackPage = lazy(() => import('./pages/AuthCallbackPage'));
+const DriverWorkspacePage = lazy(() => import('./pages/DriverWorkspacePage'));
+const DriverRouteRunPage = lazy(() => import('./pages/DriverRouteRunPage'));
+const PublicTrackingPage = lazy(() => import('./pages/PublicTrackingPage'));
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const location = useLocation();
@@ -83,39 +88,53 @@ function LoginRoute() {
   return <LoginPage />;
 }
 
-function App() {
+function DriverLayout() {
   return (
-    <Routes>
-      <Route path="/login" element={<LoginRoute />} />
-      <Route path="/" element={<ProtectedLayout />}>
-        <Route index element={<Dashboard />} />
-        <Route path="jobs" element={<JobsPageEnhancedV2 />} />
-        <Route path="routing" element={<RoutingWorkspacePage />} />
-        <Route path="dispatch" element={<DispatchBoardOpsPage />} />
-        <Route path="route-runs/:id" element={<RouteRunDetailPage />} />
-        <Route path="exceptions" element={<ExceptionsQueuePage />} />
-        <Route path="tracking" element={<TrackingEnhanced />} />
-        <Route path="drivers" element={<DriversPage />} />
-        <Route path="vehicles" element={<VehiclesPage />} />
-        <Route path="customers" element={<CustomersPage />} />
-        <Route path="analytics" element={<AnalyticsPage />} />
-        <Route path="settings" element={<SettingsPage />} />
-        <Route path="jobs-v1" element={<Navigate to="/jobs" replace />} />
-        <Route path="jobs-basic" element={<Navigate to="/jobs" replace />} />
-        <Route path="dispatch-workflow" element={<Navigate to="/dispatch" replace />} />
-        <Route path="dispatch-workflow-v1" element={<Navigate to="/dispatch" replace />} />
-        <Route path="dispatch-workflow-old" element={<Navigate to="/dispatch" replace />} />
-        <Route path="dispatch-v1" element={<Navigate to="/dispatch" replace />} />
-        <Route path="dispatches" element={<Navigate to="/dispatch" replace />} />
-        <Route path="routing-global" element={<Navigate to="/routing" replace />} />
-        <Route path="route-optimization" element={<Navigate to="/routing" replace />} />
-        <Route path="routes-consolidated" element={<Navigate to="/routing" replace />} />
-        <Route path="routes" element={<Navigate to="/routing" replace />} />
-        <Route path="route-planning" element={<Navigate to="/routing" replace />} />
-        <Route path="tracking-enhanced" element={<Navigate to="/tracking" replace />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Route>
-    </Routes>
+    <AuthGate>
+      <ErrorBoundary
+        title="Driver Workspace Failed To Render"
+        message="The driver workspace hit a rendering problem. Reload to recover and inspect the current runtime if it repeats."
+      >
+        <Outlet />
+      </ErrorBoundary>
+    </AuthGate>
+  );
+}
+
+function App() {
+  const routeFallback = (
+    <Box sx={{ minHeight: '50vh', display: 'grid', placeItems: 'center' }}>
+      <CircularProgress size={26} />
+    </Box>
+  );
+
+  return (
+    <Suspense fallback={routeFallback}>
+      <Routes>
+        <Route path="/login" element={<LoginRoute />} />
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        <Route path="/track/:token" element={<PublicTrackingPage />} />
+        <Route path="/driver" element={<DriverLayout />}>
+          <Route index element={<DriverWorkspacePage />} />
+          <Route path="route-runs/:id" element={<DriverRouteRunPage />} />
+        </Route>
+        <Route path="/" element={<ProtectedLayout />}>
+          <Route index element={<Dashboard />} />
+          <Route path="jobs" element={<JobsPageEnhancedV2 />} />
+          <Route path="routing" element={<RoutingWorkspacePage />} />
+          <Route path="dispatch" element={<DispatchBoardOpsPage />} />
+          <Route path="route-runs/:id" element={<RouteRunDetailPage />} />
+          <Route path="exceptions" element={<ExceptionsQueuePage />} />
+          <Route path="tracking" element={<TrackingEnhanced />} />
+          <Route path="drivers" element={<DriversPage />} />
+          <Route path="vehicles" element={<VehiclesPage />} />
+          <Route path="customers" element={<CustomersPage />} />
+          <Route path="analytics" element={<AnalyticsPage />} />
+          <Route path="settings" element={<SettingsPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
+      </Routes>
+    </Suspense>
   );
 }
 

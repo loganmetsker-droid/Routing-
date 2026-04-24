@@ -1,7 +1,22 @@
+import type { SvgIconComponent } from '@mui/icons-material';
+import {
+  DashboardOutlined,
+  Inventory2Outlined,
+  AltRouteOutlined,
+  LocalShippingOutlined,
+  WarningAmberOutlined,
+  MapOutlined,
+  BadgeOutlined,
+  AirportShuttleOutlined,
+  BusinessOutlined,
+  InsightsOutlined,
+  SettingsOutlined,
+} from '@mui/icons-material';
+
 export type NavItem = {
   label: string;
   to: string;
-  monogram: string;
+  icon: SvgIconComponent;
 };
 
 export type NavSection = {
@@ -11,29 +26,49 @@ export type NavSection = {
 
 export const navSections: NavSection[] = [
   {
-    label: 'Operations',
+    label: 'Overview',
     items: [
-      { label: 'Dashboard', to: '/', monogram: 'DB' },
-      { label: 'Jobs', to: '/jobs', monogram: 'JB' },
-      { label: 'Routing', to: '/routing', monogram: 'RT' },
-      { label: 'Dispatch', to: '/dispatch', monogram: 'DP' },
-      { label: 'Exceptions', to: '/exceptions', monogram: 'EX' },
-      { label: 'Tracking', to: '/tracking', monogram: 'TR' },
+      { label: 'Dashboard', to: '/', icon: DashboardOutlined },
     ],
   },
   {
-    label: 'Resources',
+    label: 'Planning',
     items: [
-      { label: 'Drivers', to: '/drivers', monogram: 'DR' },
-      { label: 'Vehicles', to: '/vehicles', monogram: 'VH' },
-      { label: 'Customers', to: '/customers', monogram: 'CU' },
+      { label: 'Jobs', to: '/jobs', icon: Inventory2Outlined },
+      { label: 'Routing', to: '/routing', icon: AltRouteOutlined },
     ],
   },
   {
-    label: 'System',
+    label: 'Live Dispatch',
     items: [
-      { label: 'Analytics', to: '/analytics', monogram: 'AN' },
-      { label: 'Settings', to: '/settings', monogram: 'ST' },
+      { label: 'Dispatch', to: '/dispatch', icon: LocalShippingOutlined },
+      { label: 'Exceptions', to: '/exceptions', icon: WarningAmberOutlined },
+      { label: 'Tracking', to: '/tracking', icon: MapOutlined },
+    ],
+  },
+  {
+    label: 'Fleet',
+    items: [
+      { label: 'Drivers', to: '/drivers', icon: BadgeOutlined },
+      { label: 'Vehicles', to: '/vehicles', icon: AirportShuttleOutlined },
+    ],
+  },
+  {
+    label: 'Customers',
+    items: [
+      { label: 'Customers', to: '/customers', icon: BusinessOutlined },
+    ],
+  },
+  {
+    label: 'Intelligence',
+    items: [
+      { label: 'Analytics', to: '/analytics', icon: InsightsOutlined },
+    ],
+  },
+  {
+    label: 'Admin',
+    items: [
+      { label: 'Settings', to: '/settings', icon: SettingsOutlined },
     ],
   },
 ];

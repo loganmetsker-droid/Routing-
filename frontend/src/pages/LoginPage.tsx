@@ -2,19 +2,20 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
+  Button,
   Card,
   CardContent,
   Divider,
-  TextField,
-  Button,
+  CircularProgress,
   Typography,
   Alert,
   Stack,
+  TextField,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import StatusPill from '../components/ui/StatusPill';
 import { moduleAccents } from '../theme/tokens';
-import { isAuthBypassed, login } from '../services/api';
+import { beginWorkosLogin, isAuthBypassed, login, useAuthConfigQuery } from '../services/api.session';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -23,6 +24,12 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const authBypassed = isAuthBypassed();
+  const authConfigQuery = useAuthConfigQuery();
+  const authConfig = authConfigQuery.data;
+  const providerReady =
+    authConfig?.preferredProvider === 'workos' &&
+    authConfig.enabled &&
+    authConfig.workos.clientIdConfigured;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,6 +42,17 @@ export default function LoginPage() {
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleWorkosLogin = async () => {
+    setError('');
+    try {
+      setLoading(true);
+      await beginWorkosLogin();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Unable to start WorkOS sign-in.');
       setLoading(false);
     }
   };
@@ -73,48 +91,86 @@ export default function LoginPage() {
             </Alert>
           )}
 
+          {authConfigQuery.isLoading ? (
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+              <CircularProgress size={16} />
+              <Typography variant="body2" color="text.secondary">
+                Checking sign-in configuration...
+              </Typography>
+            </Stack>
+          ) : null}
+
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>
               {error}
             </Alert>
           )}
 
-          <form onSubmit={handleSubmit} data-testid="login-form">
-            <TextField
-              fullWidth
-              label="Email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              margin="normal"
-              required
-              inputProps={{ 'data-testid': 'login-email' }}
-            />
-            <TextField
-              fullWidth
-              label="Password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              margin="normal"
-              required
-              inputProps={{ 'data-testid': 'login-password' }}
-            />
+          {providerReady ? (
             <Button
-              type="submit"
               variant="contained"
               fullWidth
               size="large"
               sx={{
-                mt: 3,
+                mb: authConfig?.localLoginAllowed ? 2 : 0,
                 bgcolor: (theme) => alpha(theme.palette.primary.main, 0.95),
               }}
               disabled={loading}
-              data-testid="login-submit"
+              onClick={handleWorkosLogin}
             >
-              {loading ? 'Logging in...' : authBypassed ? 'Continue in Preview Mode' : 'Sign In'}
+              {loading ? 'Redirecting...' : 'Continue with WorkOS'}
             </Button>
-          </form>
+          ) : null}
+
+          {authConfig?.workos.mfaManagedByProvider ? (
+            <Alert severity="success" sx={{ mb: authConfig?.localLoginAllowed ? 2 : 0 }}>
+              MFA and SSO policy are handled by WorkOS when provider sign-in is enabled.
+            </Alert>
+          ) : null}
+
+          {authBypassed || authConfig?.localLoginAllowed || !providerReady ? (
+            <form onSubmit={handleSubmit} data-testid="login-form">
+              <TextField
+                fullWidth
+                label="Email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                margin="normal"
+                required
+                inputProps={{ 'data-testid': 'login-email' }}
+              />
+              <TextField
+                fullWidth
+                label="Password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                margin="normal"
+                required
+                inputProps={{ 'data-testid': 'login-password' }}
+              />
+              <Button
+                type="submit"
+                variant="outlined"
+                fullWidth
+                size="large"
+                sx={{
+                  mt: 3,
+                }}
+                disabled={loading}
+                data-testid="login-submit"
+              >
+                {loading
+                  ? 'Logging in...'
+                  : authBypassed
+                    ? 'Continue in Preview Mode'
+                    : providerReady
+                      ? 'Use Local Admin Login'
+                      : 'Sign In'}
+              </Button>
+            </form>
+          ) : null}
         </CardContent>
       </Card>
     </Box>

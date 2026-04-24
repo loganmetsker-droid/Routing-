@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Box,
   Button,
@@ -21,48 +21,40 @@ import {
 import { PageHeader } from '../components/PageHeader';
 import { SurfacePanel } from '../components/SurfacePanel';
 import LoadingState from '../components/ui/LoadingState';
-import { getDrivers, getVehicles, createDriver, updateDriver } from '../services/api';
+import type { DriverRecord } from '../services/api.types';
+import {
+  useCreateDriverMutation,
+  useDriversQuery,
+  useUpdateDriverMutation,
+  useVehiclesQuery,
+} from '../services/fleetApi';
 
 type FilterKey = 'all' | 'available' | 'onRoute' | 'offShift' | 'issue';
 
+const emptyForm = {
+  firstName: '',
+  lastName: '',
+  email: '',
+  phone: '',
+  licenseNumber: '',
+  licenseType: 'CLASS_C',
+  assignedVehicleId: '',
+  notes: '',
+  status: 'ACTIVE',
+};
+
 export default function DriversPage() {
-  const [drivers, setDrivers] = useState<any[]>([]);
-  const [vehicles, setVehicles] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const driversQuery = useDriversQuery();
+  const vehiclesQuery = useVehiclesQuery();
+  const createDriverMutation = useCreateDriverMutation();
+  const updateDriverMutation = useUpdateDriverMutation();
+  const drivers = driversQuery.data ?? [];
+  const vehicles = vehiclesQuery.data ?? [];
+  const loading = driversQuery.isLoading || vehiclesQuery.isLoading;
   const [filter, setFilter] = useState<FilterKey>('all');
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingDriver, setEditingDriver] = useState<any | null>(null);
-  const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    phone: '',
-    licenseNumber: '',
-    licenseType: 'CLASS_C',
-    assignedVehicleId: '',
-    notes: '',
-    status: 'ACTIVE',
-  });
-
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      try {
-        const [driverData, vehicleData] = await Promise.all([getDrivers(), getVehicles()]);
-        if (!mounted) return;
-        setDrivers(Array.isArray(driverData) ? driverData : []);
-        setVehicles(Array.isArray(vehicleData) ? vehicleData : []);
-      } catch (error) {
-        console.error('Failed to load drivers', error);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-    void load();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  const [editingDriver, setEditingDriver] = useState<DriverRecord | null>(null);
+  const [formData, setFormData] = useState(emptyForm);
 
   const visibleDrivers = useMemo(() => {
     return drivers.filter((driver) => {
@@ -86,21 +78,11 @@ export default function DriversPage() {
 
   const openCreate = () => {
     setEditingDriver(null);
-    setFormData({
-      firstName: '',
-      lastName: '',
-      email: '',
-      phone: '',
-      licenseNumber: '',
-      licenseType: 'CLASS_C',
-      assignedVehicleId: '',
-      notes: '',
-      status: 'ACTIVE',
-    });
+    setFormData(emptyForm);
     setDialogOpen(true);
   };
 
-  const openEdit = (driver: any) => {
+  const openEdit = (driver: DriverRecord) => {
     setEditingDriver(driver);
     setFormData({
       firstName: driver.firstName || '',
@@ -119,13 +101,14 @@ export default function DriversPage() {
   const handleSubmit = async () => {
     try {
       if (editingDriver) {
-        await updateDriver(editingDriver.id, formData);
+        await updateDriverMutation.mutateAsync({
+          id: editingDriver.id,
+          updates: formData,
+        });
       } else {
-        await createDriver(formData);
+        await createDriverMutation.mutateAsync(formData);
       }
       setDialogOpen(false);
-      const driverData = await getDrivers();
-      setDrivers(Array.isArray(driverData) ? driverData : []);
     } catch (error) {
       console.error('Failed to save driver', error);
     }

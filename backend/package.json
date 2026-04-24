@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "NestJS Backend API for Routing & Dispatching",
   "scripts": {
-    "dev": "nest start --watch",
+    "dev": "node scripts/dev-server.mjs",
+    "dev:builder": "nest build --watch",
     "build": "nest build",
     "start": "node dist/backend/src/main.js",
     "start:prod": "node run-migration.js && node dist/backend/src/main.js",
@@ -19,7 +20,8 @@
     "seed-multi": "ts-node seed-multi.ts"
   },
   "dependencies": {
-    "@apollo/server": "^4.9.5",
+    "@workos-inc/node": "^7.52.1",
+    "@apollo/server": "^5.0.0",
     "@as-integrations/express5": "^1.1.2",
     "@nestjs/apollo": "^13.2.4",
     "@nestjs/axios": "^4.0.1",
@@ -73,7 +75,7 @@
     "@types/passport-jwt": "^4.0.0",
     "@types/passport-local": "^1.0.38",
     "@types/supertest": "^6.0.2",
-    "@vitest/coverage-v8": "^4.1.2",
+    "@vitest/coverage-v8": "4.1.2",
     "eslint": "10.1.0",
     "supertest": "^6.3.3",
     "ts-morph": "^27.0.2",

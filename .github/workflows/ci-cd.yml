@@ -1,84 +1,22 @@
-name: CI/CD Pipeline
+name: Trovan CI/CD
 
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main, develop]
-  pull_request:
-    branches: [main, develop]
+  workflow_dispatch:
 
 env:
-  DOCKER_REGISTRY: docker.io
-  DOCKER_ORG: ${{ secrets.DOCKER_USERNAME }}
   NODE_VERSION: '20'
 
 jobs:
-  # Lint Backend
-  lint-backend:
-    name: Lint Backend (ESLint + TSC)
+  build-and-test:
+    name: Build And Test
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./backend
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run ESLint
-        run: npm run lint || true
-
-      - name: Run TypeScript compiler check
-        run: npx tsc --noEmit
-
-  # Lint Frontend
-  lint-frontend:
-    name: Lint Frontend (ESLint + TSC)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./frontend
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run ESLint
-        run: npm run lint || true
-
-      - name: Run TypeScript compiler check
-        run: npx tsc --noEmit
-
-  # Test Backend
-  test-backend:
-    name: Test Backend (Jest)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./backend
-
     services:
       postgres:
-        image: timescale/timescaledb:latest-pg15
+        image: postgres:15
         env:
           POSTGRES_DB: routing_dispatch_test
           POSTGRES_USER: postgres
@@ -86,11 +24,10 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U postgres -d routing_dispatch_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-
       redis:
         image: redis:7-alpine
         ports:
@@ -102,236 +39,121 @@ jobs:
           --health-retries 5
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
+      - name: Build workspace
+        run: npm run build
+
       - name: Run tests
-        run: npm test || echo "No tests configured yet"
+        run: npm test
         env:
-          DATABASE_HOST: localhost
+          DATABASE_HOST: 127.0.0.1
           DATABASE_PORT: 5432
           DATABASE_NAME: routing_dispatch_test
           DATABASE_USER: postgres
           DATABASE_PASSWORD: postgres
-          REDIS_HOST: localhost
+          REDIS_HOST: 127.0.0.1
           REDIS_PORT: 6379
-          JWT_SECRET: test-secret
+          JWT_SECRET: ci-test-secret
+          AUTH_PROVIDER: local-config
+          ALLOW_LOCAL_AUTH: 'true'
+          AUTH_ADMIN_EMAIL: admin@example.com
+          AUTH_ADMIN_PASSWORD: ChangeMe123!
 
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
-        if: always()
-        with:
-          files: ./backend/coverage/coverage-final.json
-          flags: backend
-          name: backend-coverage
-        continue-on-error: true
-
-  # Test Frontend
-  test-frontend:
-    name: Test Frontend (Vitest)
+  migration-check:
+    name: Backend Migration Check
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./frontend
+    needs: build-and-test
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: routing_dispatch_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d routing_dispatch_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Run tests
-        run: npm test || echo "No tests configured yet"
+      - name: Run backend migrations
+        run: npm run migration:run --workspace=backend
+        env:
+          DATABASE_HOST: 127.0.0.1
+          DATABASE_PORT: 5432
+          DATABASE_NAME: routing_dispatch_test
+          DATABASE_USER: postgres
+          DATABASE_PASSWORD: postgres
+          JWT_SECRET: ci-test-secret
 
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
-        if: always()
-        with:
-          files: ./frontend/coverage/coverage-final.json
-          flags: frontend
-          name: frontend-coverage
-        continue-on-error: true
-
-  # Build Docker Images
-  build-images:
-    name: Build Docker Images
-    runs-on: ubuntu-latest
-    needs: [lint-backend, lint-frontend, test-backend, test-frontend]
-    if: github.event_name == 'push'
-
-    strategy:
-      matrix:
-        service: [backend, frontend]
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_ORG }}/routing-dispatch-${{ matrix.service }}
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: ./${{ matrix.service }}
-          file: ./${{ matrix.service }}/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            BUILD_TARGET=production
-
-  # Deploy to Staging
   deploy-staging:
-    name: Deploy to Staging Kubernetes
+    name: Deploy Staging
     runs-on: ubuntu-latest
-    needs: [build-images]
-    if: github.ref == 'refs/heads/develop'
-    environment:
-      name: staging
-      url: https://staging.routingdispatch.com
+    needs: migration-check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    environment: staging
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Trigger Vercel staging deploy
+        run: curl -fsSL -X POST "${{ secrets.VERCEL_STAGING_DEPLOY_HOOK_URL }}"
 
-      - name: Setup kubectl
-        uses: azure/setup-kubectl@v3
-        with:
-          version: 'v1.28.0'
+      - name: Trigger Render staging deploy
+        run: curl -fsSL -X POST "${{ secrets.RENDER_STAGING_DEPLOY_HOOK_URL }}"
 
-      - name: Configure kubectl
-        run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
+      - name: Wait for deploy hooks
+        run: sleep 45
 
-      - name: Update image tags
-        run: |
-          cd k8s/staging
-          sed -i "s|IMAGE_TAG|${{ github.sha }}|g" deployment.yml
+      - name: Smoke staging frontend
+        run: curl -fsSL "${{ secrets.STAGING_FRONTEND_URL }}"
 
-      - name: Deploy to Kubernetes
-        run: |
-          kubectl apply -f k8s/staging/ --namespace=routing-dispatch-staging
-          kubectl rollout status deployment/backend --namespace=routing-dispatch-staging
-          kubectl rollout status deployment/frontend --namespace=routing-dispatch-staging
+      - name: Smoke staging backend readiness
+        run: curl -fsSL "${{ secrets.STAGING_BACKEND_URL }}/health/readiness"
 
-      - name: Verify deployment
-        run: |
-          kubectl get pods --namespace=routing-dispatch-staging
-          kubectl get services --namespace=routing-dispatch-staging
-
-  # Deploy to Production
   deploy-production:
-    name: Deploy to Production Kubernetes
+    name: Promote Production
     runs-on: ubuntu-latest
-    needs: [build-images]
-    if: github.ref == 'refs/heads/main'
-    environment:
-      name: production
-      url: https://app.routingdispatch.com
+    needs: deploy-staging
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Trigger Vercel production deploy
+        run: curl -fsSL -X POST "${{ secrets.VERCEL_PRODUCTION_DEPLOY_HOOK_URL }}"
 
-      - name: Setup kubectl
-        uses: azure/setup-kubectl@v3
-        with:
-          version: 'v1.28.0'
+      - name: Trigger Render production deploy
+        run: curl -fsSL -X POST "${{ secrets.RENDER_PRODUCTION_DEPLOY_HOOK_URL }}"
 
-      - name: Configure kubectl
-        run: |
-          mkdir -p $HOME/.kube
-          echo "${{ secrets.KUBE_CONFIG_PRODUCTION }}" | base64 -d > $HOME/.kube/config
-          chmod 600 $HOME/.kube/config
+      - name: Wait for deploy hooks
+        run: sleep 45
 
-      - name: Update image tags
-        run: |
-          cd k8s/production
-          sed -i "s|IMAGE_TAG|${{ github.sha }}|g" deployment.yml
+      - name: Smoke production frontend
+        run: curl -fsSL "${{ secrets.PRODUCTION_FRONTEND_URL }}"
 
-      - name: Deploy to Kubernetes
-        run: |
-          kubectl apply -f k8s/production/ --namespace=routing-dispatch-prod
-          kubectl rollout status deployment/backend --namespace=routing-dispatch-prod --timeout=5m
-          kubectl rollout status deployment/frontend --namespace=routing-dispatch-prod --timeout=5m
-
-      - name: Verify deployment
-        run: |
-          kubectl get pods --namespace=routing-dispatch-prod
-          kubectl get services --namespace=routing-dispatch-prod
-
-      - name: Run smoke tests
-        run: |
-          echo "Running smoke tests against production..."
-          curl -f https://app.routingdispatch.com/health || exit 1
-
-      - name: Notify deployment success
-        uses: 8398a7/action-slack@v3
-        if: success()
-        with:
-          status: custom
-          custom_payload: |
-            {
-              text: "Production deployment successful! :rocket:",
-              attachments: [{
-                color: 'good',
-                text: `Commit: ${{ github.sha }}\nAuthor: ${{ github.actor }}`
-              }]
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-
-      - name: Notify deployment failure
-        uses: 8398a7/action-slack@v3
-        if: failure()
-        with:
-          status: custom
-          custom_payload: |
-            {
-              text: "Production deployment failed! :warning:",
-              attachments: [{
-                color: 'danger',
-                text: `Commit: ${{ github.sha }}\nAuthor: ${{ github.actor }}`
-              }]
-            }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      - name: Smoke production backend readiness
+        run: curl -fsSL "${{ secrets.PRODUCTION_BACKEND_URL }}/health/readiness"

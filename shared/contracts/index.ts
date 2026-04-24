@@ -73,6 +73,42 @@ export type JobStatus =
 
 export type JobPriority = 'low' | 'normal' | 'high' | 'urgent';
 
+export const optimizationObjectives = ['speed', 'distance', 'balanced'] as const;
+export type OptimizationObjective = (typeof optimizationObjectives)[number];
+
+export const normalizeOptimizationObjective = (
+  value?: string | null,
+): OptimizationObjective => {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase();
+
+  if (normalized === 'speed' || normalized === 'time') {
+    return 'speed';
+  }
+  if (
+    normalized === 'balanced' ||
+    normalized === 'balance' ||
+    normalized === 'sla'
+  ) {
+    return 'balanced';
+  }
+  return 'distance';
+};
+
+export const getOptimizationObjectiveLabel = (
+  objective?: string | null,
+): 'Speed' | 'Distance' | 'Balanced' => {
+  switch (normalizeOptimizationObjective(objective)) {
+    case 'speed':
+      return 'Speed';
+    case 'balanced':
+      return 'Balanced';
+    default:
+      return 'Distance';
+  }
+};
+
 export interface Stop {
   id?: string;
   jobId: string;
@@ -145,6 +181,21 @@ export interface Driver {
   updatedAt?: string;
 }
 
+export interface Customer {
+  id: string;
+  organizationId?: string | null;
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+  defaultAddress?: string | null;
+  defaultAddressStructured?: Record<string, unknown> | null;
+  businessName?: string | null;
+  notes?: string | null;
+  exceptions?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface Route {
   id: string;
   vehicleId: string;
@@ -171,6 +222,7 @@ export interface ManualRouteCreationRequest {
   vehicleId: string;
   driverId?: string | null;
   jobIds: string[];
+  objective?: OptimizationObjective;
   plannedStart?: string | null;
   notes?: string | null;
 }
@@ -178,6 +230,7 @@ export interface ManualRouteCreationRequest {
 export interface OptimizationRequest {
   vehicleIds: string[];
   jobIds: string[];
+  objective?: OptimizationObjective;
 }
 
 export interface AssignmentExplanation {
@@ -213,6 +266,84 @@ export interface OptimizationRun {
   metrics: Record<string, unknown>;
   result_summary?: Record<string, unknown> | null;
   artifacts?: Record<string, unknown> | null;
+}
+
+export type NotificationChannel = 'EMAIL' | 'SMS';
+export type NotificationDeliveryStatus =
+  | 'PENDING'
+  | 'SENT'
+  | 'FAILED'
+  | 'SKIPPED';
+
+export interface NotificationDeliveryRecord {
+  id: string;
+  organizationId?: string | null;
+  routeId?: string | null;
+  routeRunStopId?: string | null;
+  jobId?: string | null;
+  customerId?: string | null;
+  eventType: string;
+  channel: NotificationChannel;
+  recipient: string;
+  provider: string;
+  status: NotificationDeliveryStatus;
+  subject?: string | null;
+  message: string;
+  trackingUrl?: string | null;
+  providerMessageId?: string | null;
+  failureReason?: string | null;
+  metadata?: Record<string, unknown> | null;
+  sentAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ApiKeyRecord {
+  id: string;
+  organizationId: string;
+  name: string;
+  prefix: string;
+  scopes: string[];
+  lastUsedAt?: string | null;
+  revokedAt?: string | null;
+  createdByUserId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ApiKeyCreateResponse {
+  apiKey: ApiKeyRecord;
+  secret: string;
+}
+
+export interface WebhookEndpointRecord {
+  id: string;
+  organizationId: string;
+  name: string;
+  url: string;
+  subscribedEvents: string[];
+  status: 'ACTIVE' | 'PAUSED';
+  lastDeliveryAt?: string | null;
+  lastFailure?: string | null;
+  createdByUserId?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface WebhookDeliveryRecord {
+  id: string;
+  endpointId: string;
+  organizationId: string;
+  eventType: string;
+  status: 'PENDING' | 'DELIVERED' | 'FAILED' | 'SKIPPED';
+  requestId?: string | null;
+  attempts: number;
+  responseStatus?: number | null;
+  failureReason?: string | null;
+  payload: Record<string, unknown>;
+  deliveredAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export const isRecord = (value: unknown): value is Record<string, unknown> => {

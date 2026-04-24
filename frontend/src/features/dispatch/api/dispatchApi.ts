@@ -2,23 +2,27 @@ import type {
   DispatchTimelineEvent,
   OptimizerHealth,
   RerouteRequest,
-} from '../../../services/api';
+} from '../../../services/api.types';
 import {
   assignDriverToRoute,
-  createRouteVersionSnapshot,
   getDispatchOptimizerHealth,
-  getDispatchTimeline,
-  getDrivers,
-  getJobs,
   getRerouteHistory,
+  getDispatchTimeline,
   getRoutes,
+  startRoute,
+} from '../../../services/dispatchApi';
+import {
+  getDrivers,
   getVehicles,
+} from '../../../services/fleetApi';
+import { getJobs } from '../../../services/jobsApi';
+import {
+  approveRouteVersion,
+  createRouteVersionSnapshot as snapshotRouteVersionLive,
   listRouteVersions,
   publishRouteVersion,
   reviewRouteVersion,
-  approveRouteVersion,
-  startRoute,
-} from '../../../services/api';
+} from '../../../services/routeVersionsApi';
 import type {
   DispatchDriver,
   DispatchJob,
@@ -59,7 +63,7 @@ export function getRouteVersions(routeId: string): Promise<DispatchRouteVersion[
 }
 
 export function snapshotRoute(routeId: string): Promise<DispatchRouteVersion> {
-  return createRouteVersionSnapshot(routeId) as Promise<DispatchRouteVersion>;
+  return snapshotRouteVersionLive(routeId) as Promise<DispatchRouteVersion>;
 }
 
 export function markRouteReviewed(routeId: string, versionId: string): Promise<DispatchRouteVersion> {

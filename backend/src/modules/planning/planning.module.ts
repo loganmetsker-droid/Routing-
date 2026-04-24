@@ -1,3 +1,4 @@
+import { HttpModule } from '@nestjs/axios';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Route } from '../dispatch/entities/route.entity';
@@ -16,6 +17,7 @@ import { PlanningService } from './planning.service';
 
 @Module({
   imports: [
+    HttpModule,
     TypeOrmModule.forFeature([
       RoutePlan,
       RoutePlanGroup,

@@ -1,13 +1,63 @@
 services:
   - type: web
-    name: routing-dispatch-backend
+    name: trovan-backend
     runtime: node
     rootDir: backend
-    buildCommand: npm install --legacy-peer-deps && npm run build
+    plan: standard
+    autoDeploy: true
+    buildCommand: npm install && npm run build
     startCommand: npm run start:prod
-    healthCheckPath: /health
+    healthCheckPath: /health/readiness
     envVars:
       - key: NODE_ENV
         value: production
       - key: PORT
         value: 10000
+      - key: AUTH_PROVIDER
+        value: workos
+      - key: ALLOW_LOCAL_AUTH
+        value: false
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: WORKOS_CLIENT_ID
+        sync: false
+      - key: WORKOS_API_KEY
+        sync: false
+      - key: WORKOS_REDIRECT_URI
+        sync: false
+      - key: WORKOS_LOGOUT_REDIRECT_URI
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRICE_STARTER
+        sync: false
+      - key: STRIPE_PRICE_PROFESSIONAL
+        sync: false
+      - key: STRIPE_PRICE_ENTERPRISE
+        sync: false
+      - key: POSTMARK_SERVER_TOKEN
+        sync: false
+      - key: POSTMARK_FROM_EMAIL
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM_NUMBER
+        sync: false
+      - key: STORAGE_MODE
+        value: r2
+      - key: R2_BUCKET
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_ENDPOINT
+        sync: false

@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Vehicle } from '../vehicles/entities/vehicle.entity';
@@ -7,6 +8,10 @@ import { Job, JobStatus, JobPriority } from '../jobs/entities/job.entity';
 import { DispatchService } from './dispatch.service';
 import { DispatchGateway } from './dispatch.gateway';
 import { RuntimeStatusService } from '../../common/runtime/runtime-status.service';
+import {
+  normalizeOptimizationObjective,
+  type OptimizationObjective,
+} from '../../../../shared/contracts';
 
 @Injectable()
 export class DispatchWorker implements OnModuleInit {
@@ -17,6 +22,7 @@ export class DispatchWorker implements OnModuleInit {
     private readonly vehicleRepository: Repository<Vehicle>,
     @InjectRepository(Job)
     private readonly jobRepository: Repository<Job>,
+    private readonly configService: ConfigService,
     private readonly dispatchService: DispatchService,
     private readonly dispatchGateway: DispatchGateway,
     private readonly runtimeStatusService: RuntimeStatusService,
@@ -24,6 +30,16 @@ export class DispatchWorker implements OnModuleInit {
 
   onModuleInit() {
     this.runtimeStatusService.registerWorker();
+  }
+
+  private resolveOptimizationObjective(
+    objective?: string | null,
+  ): OptimizationObjective {
+    return normalizeOptimizationObjective(
+      objective ||
+        this.configService.get<string>('ROUTE_OPTIMIZATION_DEFAULT_OBJECTIVE') ||
+        'distance',
+    );
   }
 
   /**
@@ -40,6 +56,10 @@ export class DispatchWorker implements OnModuleInit {
     timeZone: 'UTC',
   })
   async handleAutoDispatch() {
+    return this.runAutoDispatch(this.resolveOptimizationObjective());
+  }
+
+  private async runAutoDispatch(objective: OptimizationObjective) {
     const startTime = Date.now();
     this.runtimeStatusService.markWorkerRunStarted();
     this.logger.log('🔄 [DISPATCH:START] Auto-dispatch worker initiated');
@@ -122,6 +142,7 @@ export class DispatchWorker implements OnModuleInit {
           const route = await this.dispatchService.create({
             vehicleId: vehicle.id,
             jobIds: vehicleJobs.map((j) => j.id),
+            objective,
           });
           this.logger.log(
             `[DISPATCH:STEP4] Route ${route.id.substring(0, 8)} created successfully`,
@@ -199,10 +220,24 @@ export class DispatchWorker implements OnModuleInit {
     failedVehicles?: any[];
     durationMs?: number;
     pendingJobCount?: number;
+  }>;
+  async manualDispatch(
+    objective?: string | null,
+  ): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+    routesCreated?: number;
+    routeIds?: string[];
+    failedVehicles?: any[];
+    durationMs?: number;
+    pendingJobCount?: number;
   }> {
     this.logger.log('🔧 [DISPATCH:MANUAL] Manual dispatch triggered via API');
     this.runtimeStatusService.touchWorkerHeartbeat();
-    const result = await this.handleAutoDispatch();
+    const result = await this.runAutoDispatch(
+      this.resolveOptimizationObjective(objective),
+    );
     return result || { success: true, message: 'Dispatch completed', routesCreated: 0 };
   }
 }

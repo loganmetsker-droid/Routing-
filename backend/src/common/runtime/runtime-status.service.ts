@@ -79,8 +79,18 @@ export class RuntimeStatusService {
     const schedulerEnabled = String(process.env.ENABLE_SCHEDULER || '0') === '1';
     const storageMode = process.env.STORAGE_MODE || 'local';
     const optimizationMode = process.env.OPTIMIZATION_MODE || (schedulerEnabled ? 'embedded' : 'manual');
-    const authMode = process.env.NODE_ENV === 'development' ? 'local-admin-jwt' : 'jwt';
+    const authMode =
+      process.env.AUTH_PROVIDER ||
+      (process.env.NODE_ENV === 'development' ? 'local-admin-jwt' : 'jwt');
     const workerMode = schedulerEnabled ? 'embedded' : 'disabled';
+    const storageConfigured =
+      storageMode === 'local' ||
+      Boolean(
+        process.env.R2_BUCKET &&
+          process.env.R2_ACCESS_KEY_ID &&
+          process.env.R2_SECRET_ACCESS_KEY &&
+          process.env.R2_ENDPOINT,
+      );
 
     return {
       startedAt: this.startedAt,
@@ -106,8 +116,42 @@ export class RuntimeStatusService {
       },
       storage: {
         mode: storageMode,
+        configured: storageConfigured,
       },
       database: this.getDatabaseSummary(),
+      integrations: {
+        workos: {
+          configured: Boolean(
+            process.env.WORKOS_CLIENT_ID &&
+              process.env.WORKOS_API_KEY &&
+              process.env.WORKOS_REDIRECT_URI,
+          ),
+        },
+        stripe: {
+          configured: Boolean(
+            process.env.STRIPE_SECRET_KEY &&
+              process.env.STRIPE_WEBHOOK_SECRET,
+          ),
+        },
+        postmark: {
+          configured: Boolean(
+            process.env.POSTMARK_SERVER_TOKEN &&
+              (process.env.POSTMARK_FROM_EMAIL ||
+                process.env.NOTIFICATION_FROM_EMAIL),
+          ),
+        },
+        twilio: {
+          configured: Boolean(
+            process.env.TWILIO_ACCOUNT_SID &&
+              process.env.TWILIO_AUTH_TOKEN &&
+              process.env.TWILIO_FROM_NUMBER,
+          ),
+        },
+        storage: {
+          configured: storageConfigured,
+          mode: storageMode,
+        },
+      },
     };
   }
 }

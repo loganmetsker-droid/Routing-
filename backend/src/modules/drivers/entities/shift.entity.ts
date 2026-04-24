@@ -11,6 +11,11 @@ import { ObjectType, Field, ID, Float, Int } from '@nestjs/graphql';
 import { Driver } from './driver.entity';
 import { Vehicle } from '../../vehicles/entities/vehicle.entity';
 
+type ShiftLocation = {
+  lat: number;
+  lng: number;
+};
+
 @Entity('shifts')
 @ObjectType()
 export class Shift {
@@ -73,14 +78,14 @@ export class Shift {
     type: 'jsonb',
     nullable: true,
   })
-  startLocation?: any;
+  startLocation?: ShiftLocation;
 
   @Column({
     name: 'end_location',
     type: 'jsonb',
     nullable: true,
   })
-  endLocation?: any;
+  endLocation?: ShiftLocation;
 
   // Break tracking
   @Column({ name: 'total_break_minutes', type: 'int', default: 0 })
@@ -88,7 +93,7 @@ export class Shift {
   totalBreakMinutes: number;
 
   @Column({ type: 'jsonb', default: '[]' })
-  breaks?: any;
+  breaks?: Array<Record<string, unknown>>;
 
   // Performance metrics
   @Column({
@@ -121,7 +126,7 @@ export class Shift {
   notes?: string;
 
   @Column({ type: 'jsonb', nullable: true })
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 
   // Timestamps
   @CreateDateColumn({ name: 'created_at' })

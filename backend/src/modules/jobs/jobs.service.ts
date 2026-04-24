@@ -21,11 +21,20 @@ import {
   JOB_ALLOWED_TRANSITIONS,
   normalizeLifecycleJobStatus,
 } from './jobs-workflow';
+import { PlatformService } from '../platform/platform.service';
 
 type Actor = {
   userId?: string;
   organizationId?: string;
 };
+
+type StructuredAddress = {
+  line1?: string;
+  line2?: string | null;
+  city?: string;
+  state?: string;
+  zip?: string;
+} | null | undefined;
 
 @Injectable()
 export class JobsService {
@@ -43,16 +52,12 @@ export class JobsService {
     @Optional()
     @InjectQueue('jobs')
     private readonly jobQueue?: Queue,
+    @Optional()
+    private readonly platformService?: PlatformService,
   ) {}
 
   private normalizeAddressString(
-    structured?: {
-      line1?: string;
-      line2?: string | null;
-      city?: string;
-      state?: string;
-      zip?: string;
-    } | null,
+    structured?: StructuredAddress,
   ): string | undefined {
     if (!structured || !structured.line1) {
       return undefined;
@@ -68,13 +73,7 @@ export class JobsService {
     return parts.join(', ');
   }
 
-  private normalizeStructuredAddress<T extends {
-    line1?: string;
-    line2?: string | null;
-    city?: string;
-    state?: string;
-    zip?: string;
-  } | null | undefined>(structured: T): T {
+  private normalizeStructuredAddress<T extends StructuredAddress>(structured: T): T {
     if (!structured) return structured;
     const normalized = {
       ...structured,
@@ -130,11 +129,8 @@ export class JobsService {
     const now = new Date();
     const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
 
-    // Support both new and legacy frontend payload shapes.
-    const rawStart =
-      createJobDto.timeWindowStart || createJobDto.timeWindow?.start || now.toISOString();
-    const rawEnd =
-      createJobDto.timeWindowEnd || createJobDto.timeWindow?.end || oneHourLater.toISOString();
+    const rawStart = createJobDto.timeWindowStart || now.toISOString();
+    const rawEnd = createJobDto.timeWindowEnd || oneHourLater.toISOString();
 
     const timeWindowStart = new Date(rawStart);
     const timeWindowEnd = new Date(rawEnd);
@@ -199,7 +195,7 @@ export class JobsService {
     const resolvedCustomerEmail = createJobDto.customerEmail || linkedCustomer?.email;
     const resolvedDeliveryAddress =
       createJobDto.deliveryAddress ||
-      this.normalizeAddressString(createJobDto.deliveryAddressStructured as any) ||
+      this.normalizeAddressString(createJobDto.deliveryAddressStructured) ||
       linkedCustomer?.defaultAddress;
 
     if (!resolvedCustomerName || !resolvedDeliveryAddress) {
@@ -213,10 +209,10 @@ export class JobsService {
       ...createJobDto,
       ...this.organizationWhere(actor),
       pickupAddressStructured: this.normalizeStructuredAddress(
-        createJobDto.pickupAddressStructured as any,
+        createJobDto.pickupAddressStructured,
       ),
       deliveryAddressStructured: this.normalizeStructuredAddress(
-        createJobDto.deliveryAddressStructured as any,
+        createJobDto.deliveryAddressStructured,
       ),
       customerName: resolvedCustomerName,
       customerPhone: resolvedCustomerPhone,
@@ -224,7 +220,7 @@ export class JobsService {
       deliveryAddress: resolvedDeliveryAddress,
       pickupAddress:
         createJobDto.pickupAddress ||
-        this.normalizeAddressString(createJobDto.pickupAddressStructured as any) ||
+        this.normalizeAddressString(createJobDto.pickupAddressStructured) ||
         '',
       timeWindowStart,
       timeWindowEnd,
@@ -236,6 +232,13 @@ export class JobsService {
 
     // Add to BullMQ queue for processing
     await this.addToQueue(savedJob);
+    if (savedJob.organizationId) {
+      await this.platformService?.dispatchWebhookEvent({
+        organizationId: savedJob.organizationId,
+        eventType: 'job.created',
+        payload: { job: savedJob },
+      });
+    }
 
     this.logger.log(`Created job ${savedJob.id} and added to queue`);
 
@@ -341,48 +344,23 @@ export class JobsService {
 
   async update(id: string, updateJobDto: UpdateJobDto, actor?: Actor): Promise<Job> {
     const job = await this.findOne(id, actor);
-
-    // Support legacy archive payloads from older UI screens.
-    const { archived, driverId, assignedVehicleId, stopSequence, ...safeUpdateDto } =
-      updateJobDto as UpdateJobDto & {
-        archived?: boolean;
-        driverId?: string;
-        assignedVehicleId?: string;
-        stopSequence?: number;
-      };
-
-    // Mark fields as intentionally unused legacy fields (ignored but accepted).
-    void driverId;
-    void assignedVehicleId;
-    void stopSequence;
-
-    if (archived === true) {
-      safeUpdateDto.status = JobStatus.ARCHIVED;
-      safeUpdateDto.archivedAt = safeUpdateDto.archivedAt || new Date().toISOString();
-    }
-
-    if (archived === false) {
-      safeUpdateDto.archivedAt = null as any;
-      if (!safeUpdateDto.status) {
-        safeUpdateDto.status = JobStatus.PENDING;
-      }
-    }
+    const safeUpdateDto: UpdateJobDto = { ...updateJobDto };
 
     if (safeUpdateDto.deliveryAddressStructured) {
       safeUpdateDto.deliveryAddressStructured = this.normalizeStructuredAddress(
-        safeUpdateDto.deliveryAddressStructured as any,
+        safeUpdateDto.deliveryAddressStructured,
       );
     }
 
     if (safeUpdateDto.pickupAddressStructured) {
       safeUpdateDto.pickupAddressStructured = this.normalizeStructuredAddress(
-        safeUpdateDto.pickupAddressStructured as any,
+        safeUpdateDto.pickupAddressStructured,
       );
     }
 
     if (safeUpdateDto.deliveryAddressStructured && !safeUpdateDto.deliveryAddress) {
       const normalized = this.normalizeAddressString(
-        safeUpdateDto.deliveryAddressStructured as any,
+        safeUpdateDto.deliveryAddressStructured,
       );
       if (normalized) {
         safeUpdateDto.deliveryAddress = normalized;
@@ -391,7 +369,7 @@ export class JobsService {
 
     if (safeUpdateDto.pickupAddressStructured && !safeUpdateDto.pickupAddress) {
       const normalized = this.normalizeAddressString(
-        safeUpdateDto.pickupAddressStructured as any,
+        safeUpdateDto.pickupAddressStructured,
       );
       if (normalized) {
         safeUpdateDto.pickupAddress = normalized;
@@ -481,8 +459,16 @@ export class JobsService {
     }
 
     Object.assign(job, safeUpdateDto);
+    const savedJob = await this.jobRepository.save(job);
+    if (savedJob.organizationId) {
+      await this.platformService?.dispatchWebhookEvent({
+        organizationId: savedJob.organizationId,
+        eventType: 'job.updated',
+        payload: { job: savedJob },
+      });
+    }
 
-    return this.jobRepository.save(job);
+    return savedJob;
   }
 
   async remove(id: string, actor?: Actor): Promise<void> {

@@ -12,6 +12,11 @@ import {
 import { ObjectType, Field, ID, Float, Int } from '@nestjs/graphql';
 import { Vehicle } from '../../vehicles/entities/vehicle.entity';
 
+type DriverLocation = {
+  lat: number;
+  lng: number;
+};
+
 @Entity('drivers')
 @ObjectType()
 export class Driver {
@@ -84,7 +89,7 @@ export class Driver {
     type: 'jsonb',
     nullable: true,
   })
-  currentLocation?: any; // Location stored as { lat: number, lng: number }
+  currentLocation?: DriverLocation;
 
   // Roles for permissions
   @Column({ type: 'jsonb', default: '["DRIVER"]' })
@@ -138,7 +143,7 @@ export class Driver {
 
   // Metadata
   @Column({ type: 'jsonb', nullable: true })
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 
   // Timestamps
   @CreateDateColumn({ name: 'created_at' })

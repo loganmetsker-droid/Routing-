@@ -45,6 +45,7 @@ export default function DispatchMap({ route }: DispatchMapProps) {
     <PageSection title="Map" subtitle="Only real route geometry is rendered">
       <Box sx={{ height: 320, overflow: 'hidden', borderRadius: 2 }}>
         <MapContainer
+          attributionControl={false}
           center={polyline[0]}
           zoom={11}
           style={{ height: '100%', width: '100%' }}
