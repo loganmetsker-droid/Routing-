@@ -1,5 +1,5 @@
 import { Box, Typography, type SxProps, type Theme } from '@mui/material';
-import { alpha } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
 import { trovanColors } from '../theme/designTokens';
 
 export type StatusPillTone =
@@ -16,44 +16,46 @@ type StatusPillProps = {
   sx?: SxProps<Theme>;
 };
 
-const toneStyles: Record<StatusPillTone, { color: string; border: string; background: string }> = {
-  default: {
-    color: trovanColors.stone[600],
-    border: alpha(trovanColors.stone[500], 0.12),
-    background: trovanColors.utility.panelMuted,
-  },
-  success: {
-    color: trovanColors.semantic.success,
-    border: alpha(trovanColors.semantic.success, 0.16),
-    background: alpha(trovanColors.semantic.success, 0.07),
-  },
-  warning: {
-    color: trovanColors.semantic.warning,
-    border: alpha(trovanColors.semantic.warning, 0.16),
-    background: alpha(trovanColors.semantic.warning, 0.07),
-  },
-  danger: {
-    color: trovanColors.semantic.danger,
-    border: alpha(trovanColors.semantic.danger, 0.15),
-    background: alpha(trovanColors.semantic.danger, 0.07),
-  },
-  info: {
-    color: trovanColors.semantic.info,
-    border: alpha(trovanColors.semantic.info, 0.15),
-    background: alpha(trovanColors.semantic.info, 0.07),
-  },
-  accent: {
-    color: trovanColors.copper[600],
-    border: alpha(trovanColors.copper[500], 0.16),
-    background: alpha(trovanColors.copper[500], 0.07),
-  },
-};
-
 export function StatusPill({
   label,
   tone = 'default',
   sx,
 }: StatusPillProps) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+  const baseText = isDark ? '#FFF8ED' : '#17110D';
+  const toneStyles: Record<StatusPillTone, { color: string; border: string; background: string }> = {
+    default: {
+      color: alpha(baseText, 0.78),
+      border: alpha(baseText, isDark ? 0.14 : 0.16),
+      background: alpha(baseText, isDark ? 0.045 : 0.055),
+    },
+    success: {
+      color: isDark ? '#9BC38F' : '#315F3B',
+      border: alpha(trovanColors.semantic.success, isDark ? 0.18 : 0.26),
+      background: alpha(trovanColors.semantic.success, isDark ? 0.065 : 0.095),
+    },
+    warning: {
+      color: isDark ? '#E2B36D' : '#7A4F18',
+      border: alpha(trovanColors.semantic.warning, isDark ? 0.18 : 0.26),
+      background: alpha(trovanColors.semantic.warning, isDark ? 0.065 : 0.1),
+    },
+    danger: {
+      color: isDark ? '#D98978' : '#814039',
+      border: alpha(trovanColors.semantic.danger, isDark ? 0.18 : 0.26),
+      background: alpha(trovanColors.semantic.danger, isDark ? 0.065 : 0.095),
+    },
+    info: {
+      color: isDark ? '#9FB1D8' : '#445E83',
+      border: alpha(trovanColors.semantic.info, isDark ? 0.18 : 0.25),
+      background: alpha(trovanColors.semantic.info, isDark ? 0.065 : 0.09),
+    },
+    accent: {
+      color: isDark ? trovanColors.copper[300] : trovanColors.copper[700],
+      border: alpha(trovanColors.copper[500], isDark ? 0.22 : 0.28),
+      background: alpha(trovanColors.copper[500], isDark ? 0.075 : 0.1),
+    },
+  };
   const style = toneStyles[tone];
   return (
     <Box
@@ -62,9 +64,9 @@ export function StatusPill({
           display: 'inline-flex',
           alignItems: 'center',
           gap: 0.5,
-          minHeight: 21,
-          px: 0.8,
-          borderRadius: 1,
+          minHeight: 20,
+          px: 0.75,
+          borderRadius: '5px',
           border: '1px solid',
           borderColor: style.border,
           bgcolor: style.background,
@@ -77,14 +79,14 @@ export function StatusPill({
         variant="caption"
         sx={{
           color: style.color,
-          fontWeight: 700,
+          fontWeight: 750,
           lineHeight: 1,
           letterSpacing: '0.04em',
           textTransform: 'uppercase',
           whiteSpace: 'nowrap',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
-          fontSize: '0.66rem',
+          fontSize: '0.64rem',
           fontFamily: 'inherit',
         }}
       >

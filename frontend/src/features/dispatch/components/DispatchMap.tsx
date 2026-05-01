@@ -10,6 +10,7 @@ import PageSection from '../../../components/ui/PageSection';
 import EmptyState from '../../../components/ui/EmptyState';
 import type { DispatchRoute } from '../../../types/dispatch';
 import { extractRoutePolyline } from '../utils/routeMap';
+import { MapFilmOverlay, trovanMapLayer } from '../../../components/maps/mapPresentation';
 import 'leaflet/dist/leaflet.css';
 
 type DispatchMapProps = {
@@ -43,7 +44,7 @@ export default function DispatchMap({ route }: DispatchMapProps) {
 
   return (
     <PageSection title="Map" subtitle="Only real route geometry is rendered">
-      <Box sx={{ height: 320, overflow: 'hidden', borderRadius: 2 }}>
+      <Box sx={{ height: 320, overflow: 'hidden', borderRadius: 2, position: 'relative' }} className="trovan-map">
         <MapContainer
           attributionControl={false}
           center={polyline[0]}
@@ -52,10 +53,10 @@ export default function DispatchMap({ route }: DispatchMapProps) {
           scrollWheelZoom
         >
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution={trovanMapLayer.attribution}
+            url={trovanMapLayer.url}
           />
-          <Polyline positions={polyline} pathOptions={{ color: '#0f766e', weight: 5 }} />
+          <Polyline positions={polyline} pathOptions={{ color: '#A96321', weight: 5 }} />
           {polyline.map((point, index) => (
             <Marker key={`${route.id}-${index}`} position={point}>
               <Popup>
@@ -64,6 +65,7 @@ export default function DispatchMap({ route }: DispatchMapProps) {
             </Marker>
           ))}
         </MapContainer>
+        <MapFilmOverlay />
       </Box>
     </PageSection>
   );

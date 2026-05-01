@@ -1,5 +1,5 @@
 import { Paper, type PaperProps } from '@mui/material';
-import { alpha } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
 import {
   trovanColors,
   trovanLayout,
@@ -27,98 +27,111 @@ export function SurfacePanel({
   padding,
   ...props
 }: SurfacePanelProps) {
-  const lightSurfaceText = {
-    color: trovanColors.stone[900],
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+  const panelText = isDark ? '#FFF8ED' : '#17110D';
+  const secondaryText = alpha(panelText, isDark ? 0.62 : 0.64);
+  const panelBorder = isDark ? 'rgba(255,246,233,0.14)' : 'rgba(32,24,18,0.13)';
+  const panelBorderStrong = isDark
+    ? 'rgba(255,246,233,0.23)'
+    : 'rgba(32,24,18,0.18)';
+  const panel = isDark ? '#211A16' : '#F8F7F3';
+  const muted = isDark ? '#2A221D' : '#ECE9E3';
+  const elevated = isDark ? '#2D241E' : '#FFFFFF';
+  const inverse = isDark ? '#120E0B' : trovanColors.black[950];
+
+  const consoleSurfaceText = {
+    color: panelText,
     '& .MuiTypography-root': {
       color: 'inherit',
     },
     '& .MuiTypography-colorTextSecondary, & .MuiListItemText-secondary': {
-      color: trovanColors.stone[600],
+      color: secondaryText,
     },
     '& .MuiInputLabel-root': {
-      color: trovanColors.stone[600],
+      color: secondaryText,
     },
     '& .MuiOutlinedInput-root': {
-      color: trovanColors.stone[900],
-      backgroundColor: alpha('#FFFDFC', 0.88),
+      color: panelText,
+      backgroundColor: isDark ? alpha('#120E0B', 0.36) : alpha('#FFFFFF', 0.58),
       '& fieldset': {
-        borderColor: trovanColors.utility.borderStrong,
+        borderColor: panelBorderStrong,
       },
       '&:hover fieldset': {
-        borderColor: trovanColors.copper[300],
+        borderColor: isDark ? trovanColors.copper[300] : trovanColors.copper[500],
       },
       '&.Mui-focused fieldset': {
         borderColor: trovanColors.copper[500],
       },
       '& .MuiSelect-icon': {
-        color: trovanColors.stone[500],
+        color: secondaryText,
       },
       '& input::placeholder': {
-        color: trovanColors.stone[500],
+        color: alpha(panelText, 0.54),
         opacity: 1,
       },
     },
     '& .MuiButton-text': {
-      color: trovanColors.stone[700],
+      color: alpha(panelText, 0.78),
     },
   } as const;
 
   const variantSx: Record<SurfacePanelVariant, Record<string, string>> = {
     default: {
-      bgcolor: trovanColors.utility.panel,
-      border: `1px solid ${trovanColors.utility.border}`,
+      bgcolor: panel,
+      border: `1px solid ${panelBorder}`,
       boxShadow: trovanShadows.soft,
-      color: trovanColors.stone[900],
+      color: panelText,
     },
     panel: {
-      bgcolor: trovanColors.utility.panel,
-      border: `1px solid ${trovanColors.utility.border}`,
+      bgcolor: panel,
+      border: `1px solid ${panelBorder}`,
       boxShadow: trovanShadows.soft,
-      color: trovanColors.stone[900],
+      color: panelText,
     },
     elevated: {
-      bgcolor: '#FFFFFF',
-      border: `1px solid ${trovanColors.utility.border}`,
+      bgcolor: elevated,
+      border: `1px solid ${panelBorder}`,
       boxShadow: trovanShadows.hover,
-      color: trovanColors.stone[900],
+      color: panelText,
     },
     muted: {
-      bgcolor: trovanColors.utility.panelMuted,
-      border: `1px solid ${trovanColors.utility.border}`,
+      bgcolor: muted,
+      border: `1px solid ${panelBorder}`,
       boxShadow: 'none',
-      color: trovanColors.stone[900],
+      color: panelText,
     },
     subtle: {
-      bgcolor: trovanColors.utility.panelMuted,
-      border: `1px solid ${trovanColors.utility.border}`,
+      bgcolor: muted,
+      border: `1px solid ${panelBorder}`,
       boxShadow: 'none',
-      color: trovanColors.stone[900],
+      color: panelText,
     },
     inverse: {
-      bgcolor: trovanColors.utility.panelInverse,
-      border: `1px solid ${trovanColors.utility.borderStrong}`,
+      bgcolor: inverse,
+      border: `1px solid ${panelBorderStrong}`,
       boxShadow: trovanShadows.soft,
-      color: trovanColors.stone[900],
+      color: '#FFF8ED',
     },
     command: {
-      bgcolor: '#FFFDFC',
-      border: `1px solid ${trovanColors.utility.borderStrong}`,
+      bgcolor: panel,
+      border: `1px solid ${panelBorderStrong}`,
       boxShadow: trovanShadows.soft,
-      color: trovanColors.stone[900],
+      color: panelText,
       backgroundImage: 'none',
     },
     canvas: {
-      bgcolor: trovanColors.utility.panel,
-      border: `1px solid ${trovanColors.utility.borderStrong}`,
+      bgcolor: panel,
+      border: `1px solid ${panelBorderStrong}`,
       boxShadow: trovanShadows.soft,
-      color: trovanColors.stone[900],
+      color: panelText,
       backgroundImage: 'none',
     },
     accent: {
-      bgcolor: '#FFFDFC',
+      bgcolor: panel,
       border: `1px solid ${alpha(trovanColors.copper[500], 0.28)}`,
       boxShadow: trovanShadows.soft,
-      color: trovanColors.stone[900],
+      color: panelText,
       backgroundImage: 'none',
     },
   };
@@ -131,7 +144,7 @@ export function SurfacePanel({
         borderRadius: `${trovanLayout.panelRadius}px`,
         backgroundImage: 'none',
         ...variantSx[variant],
-        ...lightSurfaceText,
+        ...consoleSurfaceText,
         ...props.sx,
       }}
     />

@@ -12,6 +12,7 @@
     "dev:backend": "npm run dev --workspace=backend",
     "dev:frontend": "npm run dev --workspace=frontend",
     "bootstrap:local": "node scripts/bootstrap-local.mjs",
+    "demo:preview": "node scripts/demo-preview-server.mjs",
     "build": "npm run build --workspaces",
     "test": "npm run test --workspaces",
     "test:e2e": "playwright test",

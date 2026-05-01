@@ -8,13 +8,14 @@ import {
 import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { Route } from './entities/route.entity';
+import { createCorsOriginValidator } from '../../common/http/cors-origin.util';
 
 /**
  * WebSocket Gateway for real-time dispatch updates
  */
 @WebSocketGateway({
   cors: {
-    origin: '*', // Configure appropriately for production
+    origin: createCorsOriginValidator(),
     credentials: true,
   },
   namespace: '/dispatch',

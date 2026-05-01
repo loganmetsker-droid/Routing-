@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Box, Grid, Stack, Typography } from '@mui/material';
+import { alpha, useTheme } from '@mui/material/styles';
 import { PageHeader } from '../components/PageHeader';
 import { StatusPill } from '../components/StatusPill';
 import { SurfacePanel } from '../components/SurfacePanel';
@@ -26,6 +27,8 @@ function BarRow({
   tone?: string;
   meta?: string;
 }) {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const ratio = max > 0 ? Math.max(8, Math.round((value / max) * 100)) : 0;
 
   return (
@@ -42,7 +45,7 @@ function BarRow({
         sx={{
           height: 8,
           borderRadius: 999,
-          bgcolor: trovanColors.utility.panelMuted,
+          bgcolor: isDark ? trovanColors.utility.panelMuted : alpha(trovanColors.black[900], 0.08),
           overflow: 'hidden',
         }}
       >

@@ -52,15 +52,16 @@ const baseTypography = {
 
 export function createTrovanTheme(mode: TrovanThemeMode = 'light') {
   const isDark = mode === 'dark';
-  const backgroundDefault = isDark ? '#0A1016' : '#F8F3EC';
-  const backgroundPaper = isDark ? '#111923' : '#FFFDFC';
-  const textPrimary = isDark ? '#F6F8FB' : trovanColors.stone[900];
-  const textSecondary = isDark ? 'rgba(230, 236, 244, 0.68)' : trovanColors.stone[600];
-  const divider = isDark ? 'rgba(255,255,255,0.09)' : trovanColors.utility.border;
-  const selectedTint = isDark
-    ? alpha(trovanColors.copper[500], 0.22)
-    : trovanColors.utility.selectedTint;
-  const mapBg = isDark ? '#0E1720' : trovanColors.utility.mapCanvas;
+  const backgroundDefault = isDark ? '#16110E' : '#E7E5E0';
+  const backgroundPaper = isDark ? trovanColors.utility.panel : '#F8F7F3';
+  const textPrimary = isDark ? '#FFF8ED' : '#17110D';
+  const textSecondary = isDark ? 'rgba(255, 248, 237, 0.66)' : 'rgba(23, 17, 13, 0.64)';
+  const divider = isDark ? trovanColors.utility.border : 'rgba(32, 24, 18, 0.13)';
+  const selectedTint = isDark ? trovanColors.utility.selectedTint : alpha(trovanColors.copper[500], 0.12);
+  const mapBg = trovanColors.utility.mapCanvas;
+  const bodyBackground = isDark
+    ? `radial-gradient(circle at top left, ${alpha(trovanColors.copper[500], 0.2)}, transparent 28%), linear-gradient(180deg, #16110E 0%, #211914 52%, #120E0B 100%)`
+    : `radial-gradient(circle at top left, ${alpha(trovanColors.copper[500], 0.12)}, transparent 30%), linear-gradient(180deg, #F3F2EF 0%, #E7E5E0 48%, #DAD6CF 100%)`;
 
   return createTheme({
     palette: {
@@ -105,12 +106,7 @@ export function createTrovanTheme(mode: TrovanThemeMode = 'light') {
             backgroundColor: backgroundDefault,
           },
           body: {
-            background: isDark
-              ? backgroundDefault
-              : `radial-gradient(circle at top left, ${alpha(
-                  '#FFF6EE',
-                  0.92,
-                )} 0%, ${alpha('#F8F3EC', 0)} 34%), linear-gradient(180deg, #FBF7F1 0%, #F6F0E8 100%)`,
+            background: bodyBackground,
             color: textPrimary,
           },
           '#root': {
@@ -133,13 +129,13 @@ export function createTrovanTheme(mode: TrovanThemeMode = 'light') {
             borderRadius: `${trovanLayout.innerRadius}px`,
           },
           '.trovan-map .leaflet-tile-pane': {
-            filter: 'saturate(0.72) brightness(1.03) contrast(0.9) sepia(0.12)',
+            filter: 'saturate(0.72) brightness(1.03) contrast(0.96) sepia(0.08)',
           },
           '.trovan-map .leaflet-overlay-pane path': {
-            filter: `drop-shadow(0 0 6px ${alpha(trovanColors.stone[900], 0.08)})`,
+            filter: `drop-shadow(0 2px 5px ${alpha(trovanColors.black[950], 0.18)})`,
           },
           '.leaflet-control-zoom': {
-            border: `1px solid ${alpha(trovanColors.stone[700], 0.12)} !important`,
+            border: `1px solid ${isDark ? trovanColors.utility.borderStrong : 'rgba(32,24,18,0.16)'} !important`,
             boxShadow: trovanShadows.soft,
             overflow: 'hidden',
             borderRadius: '10px',
@@ -147,7 +143,7 @@ export function createTrovanTheme(mode: TrovanThemeMode = 'light') {
           '.leaflet-control-zoom a': {
             color: textPrimary,
             background: alpha(backgroundPaper, 0.88),
-            borderBottom: `1px solid ${alpha(trovanColors.stone[700], 0.1)} !important`,
+            borderBottom: `1px solid ${trovanColors.utility.border} !important`,
             backdropFilter: 'blur(14px)',
           },
           '.leaflet-control-zoom a:last-of-type': {
@@ -157,8 +153,8 @@ export function createTrovanTheme(mode: TrovanThemeMode = 'light') {
             display: 'none !important',
           },
           '.leaflet-popup-content-wrapper': {
-            borderRadius: '16px',
-            border: `1px solid ${alpha(trovanColors.stone[700], 0.12)}`,
+            borderRadius: '12px',
+            border: `1px solid ${trovanColors.utility.borderStrong}`,
             boxShadow: trovanShadows.soft,
             backgroundColor: alpha(backgroundPaper, 0.9),
             color: textPrimary,
@@ -199,6 +195,7 @@ export function createTrovanTheme(mode: TrovanThemeMode = 'light') {
             borderRadius: trovanLayout.controlRadius,
             paddingInline: 12,
             boxShadow: 'none',
+            fontWeight: 750,
           },
           containedPrimary: {
             background: `linear-gradient(135deg, ${trovanColors.copper[500]}, ${trovanColors.copper[600]})`,
@@ -209,16 +206,16 @@ export function createTrovanTheme(mode: TrovanThemeMode = 'light') {
             },
           },
           outlined: {
-            borderColor: isDark ? 'rgba(255,255,255,0.14)' : trovanColors.utility.borderStrong,
+            borderColor: isDark ? trovanColors.utility.borderStrong : 'rgba(32,24,18,0.18)',
             color: textPrimary,
-            backgroundColor: isDark ? alpha('#FFFFFF', 0.02) : alpha('#FFFDFC', 0.78),
+            backgroundColor: isDark ? alpha('#FFF8ED', 0.035) : alpha('#FFFFFF', 0.42),
             '&:hover': {
-              borderColor: trovanColors.copper[300],
+              borderColor: isDark ? trovanColors.copper[300] : trovanColors.copper[500],
               backgroundColor: alpha(trovanColors.copper[500], 0.08),
             },
           },
           text: {
-            color: isDark ? alpha('#FFFFFF', 0.82) : trovanColors.stone[700],
+            color: isDark ? alpha('#FFF8ED', 0.82) : alpha(trovanColors.black[900], 0.78),
             '&:hover': {
               backgroundColor: alpha(trovanColors.copper[500], 0.08),
             },
@@ -228,12 +225,13 @@ export function createTrovanTheme(mode: TrovanThemeMode = 'light') {
       MuiChip: {
         styleOverrides: {
           root: {
-            borderRadius: 7,
-            height: 24,
+            borderRadius: 5,
+            height: 22,
             fontWeight: 700,
             maxWidth: '100%',
-            fontSize: '0.67rem',
+            fontSize: '0.64rem',
             letterSpacing: '0.04em',
+            textTransform: 'uppercase',
             '.MuiChip-label': {
               whiteSpace: 'nowrap',
               overflow: 'hidden',
@@ -242,7 +240,7 @@ export function createTrovanTheme(mode: TrovanThemeMode = 'light') {
             },
           },
           sizeSmall: {
-            height: 20,
+            height: 19,
             fontSize: '0.62rem',
             '.MuiChip-label': {
               paddingInline: 6,
@@ -258,12 +256,12 @@ export function createTrovanTheme(mode: TrovanThemeMode = 'light') {
         styleOverrides: {
           root: {
             minHeight: 40,
-            borderRadius: 7,
+            borderRadius: 6,
             marginBottom: 4,
             paddingInline: 12,
             '&.Mui-selected': {
               backgroundColor: selectedTint,
-              color: isDark ? '#FFFFFF' : trovanColors.copper[700],
+              color: isDark ? '#FFFFFF' : trovanColors.copper[800],
               border: `1px solid ${alpha(trovanColors.copper[300], 0.34)}`,
             },
             '&.Mui-selected:hover': {
@@ -277,7 +275,7 @@ export function createTrovanTheme(mode: TrovanThemeMode = 'light') {
           head: {
             color: textSecondary,
             fontWeight: 700,
-            backgroundColor: isDark ? alpha('#FFFFFF', 0.03) : alpha('#F7F1EA', 0.88),
+            backgroundColor: isDark ? alpha('#FFF8ED', 0.035) : alpha(trovanColors.black[900], 0.035),
             borderBottom: `1px solid ${divider}`,
           },
           body: {
@@ -311,4 +309,4 @@ export function createTrovanTheme(mode: TrovanThemeMode = 'light') {
   });
 }
 
-export const trovanTheme = createTrovanTheme('light');
+export const trovanTheme = createTrovanTheme('dark');

@@ -12,6 +12,8 @@ import {
   RequestWithContext,
 } from './common/http/request-context.middleware';
 import { requestLoggingMiddleware } from './common/http/request-logging.middleware';
+import { createCorsOriginValidator } from './common/http/cors-origin.util';
+import { isSwaggerEnabled } from './common/http/swagger-enabled.util';
 
 function preloadEnvFiles() {
   const candidates = [
@@ -104,9 +106,13 @@ function validateRuntimeConfig(logger: Logger) {
   }
   if (
     ['production', 'staging'].includes(process.env.NODE_ENV || '') &&
-    !process.env.CORS_ORIGINS
+    !(
+      process.env.CORS_ORIGINS ||
+      process.env.CORS_ORIGIN ||
+      process.env.FRONTEND_URL
+    )
   ) {
-    missing.push('CORS_ORIGINS');
+    missing.push('CORS_ORIGINS or CORS_ORIGIN or FRONTEND_URL');
   }
   if (!hasDatabaseConfig()) {
     missing.push(
@@ -123,6 +129,15 @@ function validateRuntimeConfig(logger: Logger) {
       throw new Error(message);
     }
     logger.warn(message);
+  }
+
+  if (
+    process.env.NODE_ENV === 'production' &&
+    !String(process.env.METRICS_TOKEN || '').trim()
+  ) {
+    logger.warn(
+      'METRICS_TOKEN is not set; /api/metrics is public unless protected upstream',
+    );
   }
 }
 
@@ -174,73 +189,68 @@ async function bootstrap() {
     }),
   );
 
-  const allowedOrigins = (process.env.CORS_ORIGINS || process.env.FRONTEND_URL || '')
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-
   app.enableCors({
-    origin(origin, callback) {
-      if (!origin) {
-        return callback(null, true);
-      }
-
-      if (allowedOrigins.length === 0 && process.env.NODE_ENV !== 'production') {
-        const localOrigins = new Set([
-          'http://localhost:5173',
-          'http://localhost:5184',
-          'http://127.0.0.1:5173',
-          'http://127.0.0.1:5184',
-          'http://localhost:3000',
-          'http://127.0.0.1:3000',
-        ]);
-        return callback(localOrigins.has(origin) ? null : new Error('Origin not allowed'), localOrigins.has(origin));
-      }
-
-      const allowed = allowedOrigins.includes(origin);
-      return callback(allowed ? null : new Error('Origin not allowed'), allowed);
-    },
+    origin: createCorsOriginValidator(),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Accept',
+      'x-api-key',
+      'x-request-id',
+    ],
+    exposedHeaders: ['x-request-id'],
   });
 
-  // Swagger/OpenAPI documentation
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('Routing & Dispatch SaaS API')
-    .setDescription(
-      'REST API for fleet management, route optimization, and real-time dispatching operations',
-    )
-    .setVersion('1.0.0')
-    .addTag('health', 'Health check endpoints')
-    .addTag('vehicles', 'Vehicle fleet management')
-    .addTag('drivers', 'Driver management')
-    .addTag('routes', 'Route planning and optimization')
-    .addTag('jobs', 'Job and delivery management')
-    .addTag('shifts', 'Driver shift management')
-    .addTag('telemetry', 'Real-time GPS tracking')
-    .addBearerAuth(
-      {
-        type: 'http',
-        scheme: 'bearer',
-        bearerFormat: 'JWT',
-        description: 'Enter your JWT token',
+  const swaggerEnabled = isSwaggerEnabled();
+  if (swaggerEnabled) {
+    // Swagger/OpenAPI documentation
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('Routing & Dispatch SaaS API')
+      .setDescription(
+        'REST API for fleet management, route optimization, and real-time dispatching operations',
+      )
+      .setVersion('1.0.0')
+      .addTag('health', 'Health check endpoints')
+      .addTag('vehicles', 'Vehicle fleet management')
+      .addTag('drivers', 'Driver management')
+      .addTag('routes', 'Route planning and optimization')
+      .addTag('jobs', 'Job and delivery management')
+      .addTag('shifts', 'Driver shift management')
+      .addTag('telemetry', 'Real-time GPS tracking')
+      .addBearerAuth(
+        {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'Enter your JWT token',
+        },
+        'JWT-auth',
+      )
+      .addApiKey(
+        {
+          type: 'apiKey',
+          in: 'header',
+          name: 'x-api-key',
+          description: 'Integration API key (header: x-api-key)',
+        },
+        'x-api-key',
+      )
+      .addServer('http://localhost:3000', 'Local Development')
+      .addServer('https://api.example.com', 'Production')
+      .build();
+
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
+    SwaggerModule.setup('api/docs', app, document, {
+      swaggerOptions: {
+        persistAuthorization: true,
+        tagsSorter: 'alpha',
+        operationsSorter: 'alpha',
       },
-      'JWT-auth',
-    )
-    .addServer('http://localhost:3000', 'Local Development')
-    .addServer('https://api.example.com', 'Production')
-    .build();
-
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
-  SwaggerModule.setup('api/docs', app, document, {
-    swaggerOptions: {
-      persistAuthorization: true,
-      tagsSorter: 'alpha',
-      operationsSorter: 'alpha',
-    },
-    customSiteTitle: 'Routing & Dispatch API Docs',
-  });
+      customSiteTitle: 'Routing & Dispatch API Docs',
+    });
+  }
 
   const port = process.env.PORT || 3000;
   const host = process.env.HOST || '0.0.0.0';
@@ -248,7 +258,11 @@ async function bootstrap() {
   await app.listen(port, host);
 
   logger.log(`🚀 Application running on: http://${host}:${port}`);
-  logger.log(`📚 API Documentation: http://${host}:${port}/api/docs`);
+  if (swaggerEnabled) {
+    logger.log(`📚 API Documentation: http://${host}:${port}/api/docs`);
+  } else {
+    logger.log('📚 API Documentation: disabled (SWAGGER_ENABLED=false)');
+  }
   logger.log(`🔮 GraphQL Playground: http://${host}:${port}/graphql`);
   logger.log(`❤️  Health Check: http://${host}:${port}/health`);
   logger.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);

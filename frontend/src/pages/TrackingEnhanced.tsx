@@ -153,7 +153,7 @@ export default function TrackingEnhanced() {
                     borderBottom: '1px solid',
                     borderColor: 'divider',
                     background:
-                      'linear-gradient(180deg, rgba(255,255,255,0.9), rgba(245,247,250,0.92))',
+                      'linear-gradient(180deg, rgba(21,18,16,0.96), rgba(30,26,23,0.92))',
                   }}
                 >
                   <Typography variant="h4">Live positioning</Typography>

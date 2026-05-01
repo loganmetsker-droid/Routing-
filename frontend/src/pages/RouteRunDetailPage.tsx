@@ -268,7 +268,7 @@ export default function RouteRunDetailPage() {
               <Typography variant="h5" sx={{ mb: 1.5 }}>Stops</Typography>
               <Stack spacing={2}>
                 {(detail.stops || []).map((stop: RouteRunStopRecord, index: number) => (
-                  <SurfacePanel key={stop.id} sx={{ bgcolor: 'rgba(255,248,242,1)' }} data-testid={`route-run-stop-card-${index}`}>
+                  <SurfacePanel key={stop.id} sx={{ bgcolor: 'rgba(30,26,23,1)' }} data-testid={`route-run-stop-card-${index}`}>
                     <Stack spacing={1.25}>
                       <Stack direction="row" justifyContent="space-between" alignItems="center">
                         <Box>

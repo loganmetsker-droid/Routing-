@@ -14,10 +14,11 @@ export const trovanMapLayer = {
 } as const;
 
 export const mapFloatingPanelSx: SxProps<Theme> = {
-  bgcolor: alpha('#FFFDFB', 0.82),
-  border: `1px solid ${alpha(trovanColors.stone[700], 0.12)}`,
+  bgcolor: alpha(trovanColors.utility.panel, 0.86),
+  border: `1px solid ${trovanColors.utility.borderStrong}`,
   boxShadow: trovanShadows.soft,
   backdropFilter: 'blur(18px)',
+  color: '#FFF8ED',
 };
 
 export function MapFilmOverlay() {
@@ -36,14 +37,14 @@ export function MapFilmOverlay() {
           position: 'absolute',
           inset: 0,
           background: [
-            `radial-gradient(circle at 18% 14%, ${alpha('#FFF9F3', 0.44)} 0%, ${alpha(
-              '#FFF9F3',
-              0.18,
-            )} 24%, transparent 44%)`,
-            `linear-gradient(180deg, ${alpha('#FFF7EF', 0.16)} 0%, ${alpha(
-              '#FFF7EF',
-              0.04,
-            )} 38%, ${alpha(trovanColors.stone[900], 0.04)} 100%)`,
+            `radial-gradient(circle at 18% 14%, ${alpha(trovanColors.copper[200], 0.16)} 0%, ${alpha(
+              trovanColors.copper[500],
+              0.05,
+            )} 28%, transparent 50%)`,
+            `linear-gradient(180deg, ${alpha(trovanColors.stone[0], 0.06)} 0%, transparent 46%, ${alpha(
+              trovanColors.black[950],
+              0.06,
+            )} 100%)`,
           ].join(','),
         }}
       />
@@ -52,11 +53,11 @@ export function MapFilmOverlay() {
           position: 'absolute',
           inset: 0,
           boxShadow: `inset 0 0 0 1px ${alpha(
-            trovanColors.stone[700],
-            0.12,
-          )}, inset 0 -90px 110px ${alpha('#FFF9F2', 0.12)}, inset 0 0 160px ${alpha(
-            trovanColors.stone[900],
-            0.06,
+            trovanColors.black[950],
+            0.1,
+          )}, inset 0 -80px 110px ${alpha(trovanColors.black[950], 0.1)}, inset 0 0 120px ${alpha(
+            trovanColors.copper[900],
+            0.05,
           )}`,
         }}
       />

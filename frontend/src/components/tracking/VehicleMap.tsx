@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import { trovanMapLayer } from '../maps/mapPresentation';
 import 'leaflet/dist/leaflet.css';
 import { getTrackingSocket } from '../../services/socket';
 
@@ -209,11 +210,11 @@ export default function VehicleMap() {
         center={center}
         zoom={12}
         style={{ height: '100%', width: '100%' }}
-        className="z-0"
+        className="trovan-map z-0"
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution={trovanMapLayer.attribution}
+          url={trovanMapLayer.url}
         />
 
         {/* Vehicle Markers */}

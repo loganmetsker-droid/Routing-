@@ -16,7 +16,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { alpha } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
 import MultiRouteMap from '../components/maps/MultiRouteMap';
 import { PageHeader } from '../components/PageHeader';
 import { StatusPill } from '../components/StatusPill';
@@ -114,6 +114,8 @@ function buildRouteMap(routeRun?: RouteRunRecord) {
 }
 
 export default function ExceptionsQueuePage() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<'ALL' | 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED'>('ALL');
   const [selectedExceptionId, setSelectedExceptionId] = useState<string | null>(null);
@@ -485,7 +487,7 @@ export default function ExceptionsQueuePage() {
                         px: 1,
                         py: 0.95,
                         borderRadius: 1,
-                        bgcolor: '#FFFFFF',
+                        bgcolor: isDark ? alpha(trovanColors.black[950], 0.28) : alpha('#FFFFFF', 0.52),
                         border: '1px solid',
                         borderColor: 'divider',
                       }}

@@ -104,6 +104,8 @@ interface MultiRouteMapProps {
   routes: RouteData[];
   height?: string;
   showLegend?: boolean;
+  selectedRouteId?: string | null;
+  onRouteSelect?: (routeId: string | null) => void;
 }
 
 function FitBounds({ routes }: { routes: RouteData[] }) {
@@ -138,9 +140,18 @@ export default function MultiRouteMap({
   routes,
   height = '600px',
   showLegend = true,
+  selectedRouteId,
+  onRouteSelect,
 }: MultiRouteMapProps) {
-  const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
+  const [internalSelectedRoute, setInternalSelectedRoute] = useState<string | null>(null);
+  const selectedRoute = selectedRouteId ?? internalSelectedRoute;
   const defaultCenter: [number, number] = [37.7749, -122.4194];
+
+  const selectRoute = (routeId: string) => {
+    const nextRouteId = selectedRoute === routeId ? null : routeId;
+    setInternalSelectedRoute(nextRouteId);
+    onRouteSelect?.(nextRouteId);
+  };
 
   const getMapCenter = (): [number, number] => {
     if (routes.length === 0) return defaultCenter;
@@ -202,18 +213,18 @@ export default function MultiRouteMap({
                   borderColor:
                     selectedRoute === route.id
                       ? alpha(route.color, 0.4)
-                      : alpha(trovanColors.stone[700], 0.08),
+                      : trovanColors.utility.border,
                   bgcolor:
                     selectedRoute === route.id
-                      ? alpha(route.color, 0.08)
-                      : alpha('#FFFDFC', 0.6),
+                      ? alpha(route.color, 0.14)
+                      : alpha(trovanColors.black[950], 0.26),
                   cursor: 'pointer',
                   transition: 'all 0.18s ease',
                   '&:hover': {
                     bgcolor: alpha(route.color, 0.06),
                   },
                 }}
-                onClick={() => setSelectedRoute(selectedRoute === route.id ? null : route.id)}
+                onClick={() => selectRoute(route.id)}
               >
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.45 }}>
                   <Box
@@ -352,8 +363,8 @@ export default function MultiRouteMap({
             px: 2.5,
             py: 1.8,
             borderRadius: 1.5,
-            bgcolor: alpha('#FFFDFC', 0.82),
-            border: `1px solid ${alpha(trovanColors.stone[700], 0.1)}`,
+            bgcolor: alpha(trovanColors.utility.panel, 0.86),
+            border: `1px solid ${trovanColors.utility.borderStrong}`,
             backdropFilter: 'blur(18px)',
           }}
         >

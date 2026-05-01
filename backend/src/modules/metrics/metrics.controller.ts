@@ -1,15 +1,17 @@
-import { Controller, Get, Header, Req } from '@nestjs/common';
+import { Controller, Get, Header, Req, UnauthorizedException } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { MetricsService } from './metrics.service';
 import { Public } from '../../common/decorators/public.decorator';
 import { ApiBearerAuth } from '@nestjs/swagger';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { isMetricsRequestAuthorized } from '../../common/http/metrics-auth.util';
 
 type AuthenticatedRequest = {
   user?: {
     organizationId?: string;
   };
+  headers?: Record<string, string | string[] | undefined>;
 };
 
 @ApiTags('Metrics')
@@ -44,7 +46,14 @@ fleet_ontime_delivery_rate_percent 94.5`,
       },
     },
   })
-  async getMetrics(): Promise<string> {
+  async getMetrics(@Req() req: AuthenticatedRequest): Promise<string> {
+    const { authorized, tokenRequired } = isMetricsRequestAuthorized(
+      req.headers ?? {},
+    );
+    if (!authorized && tokenRequired) {
+      throw new UnauthorizedException('Missing or invalid metrics token');
+    }
+
     return this.metricsService.getMetrics();
   }
 

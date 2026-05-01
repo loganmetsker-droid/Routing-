@@ -29,6 +29,11 @@ const bootstrapLocalDemoMode = () => {
 
 bootstrapLocalDemoMode();
 
+const isLocalPreviewHost = () => {
+  if (typeof window === 'undefined') return false;
+  return new Set(['localhost', '127.0.0.1', '[::1]']).has(window.location.hostname);
+};
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -38,7 +43,7 @@ const queryClient = new QueryClient({
   },
 });
 
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+if ('serviceWorker' in navigator && import.meta.env.PROD && !isLocalPreviewHost()) {
   window.addEventListener('load', () => {
     void navigator.serviceWorker.register('/sw.js').catch(() => undefined);
   });

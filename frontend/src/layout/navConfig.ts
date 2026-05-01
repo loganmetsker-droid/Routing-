@@ -1,22 +1,23 @@
-import type { SvgIconComponent } from '@mui/icons-material';
+import type { ComponentType } from 'react';
+import type { SvgIconProps } from '@mui/material';
 import {
-  DashboardOutlined,
-  Inventory2Outlined,
-  AltRouteOutlined,
-  LocalShippingOutlined,
-  WarningAmberOutlined,
-  MapOutlined,
-  BadgeOutlined,
-  AirportShuttleOutlined,
-  BusinessOutlined,
-  InsightsOutlined,
-  SettingsOutlined,
-} from '@mui/icons-material';
+  TrovanAnalyticsIcon,
+  TrovanCustomersIcon,
+  TrovanDashboardIcon,
+  TrovanDispatchIcon,
+  TrovanDriversIcon,
+  TrovanExceptionsIcon,
+  TrovanJobsIcon,
+  TrovanRoutingIcon,
+  TrovanSettingsIcon,
+  TrovanTrackingIcon,
+  TrovanVehiclesIcon,
+} from '../components/nav/TrovanNavIcons';
 
 export type NavItem = {
   label: string;
   to: string;
-  icon: SvgIconComponent;
+  icon: ComponentType<SvgIconProps>;
 };
 
 export type NavSection = {
@@ -28,47 +29,47 @@ export const navSections: NavSection[] = [
   {
     label: 'Overview',
     items: [
-      { label: 'Dashboard', to: '/', icon: DashboardOutlined },
+      { label: 'Dashboard', to: '/', icon: TrovanDashboardIcon },
     ],
   },
   {
     label: 'Planning',
     items: [
-      { label: 'Jobs', to: '/jobs', icon: Inventory2Outlined },
-      { label: 'Routing', to: '/routing', icon: AltRouteOutlined },
+      { label: 'Jobs', to: '/jobs', icon: TrovanJobsIcon },
+      { label: 'Routing', to: '/routing', icon: TrovanRoutingIcon },
     ],
   },
   {
     label: 'Live Dispatch',
     items: [
-      { label: 'Dispatch', to: '/dispatch', icon: LocalShippingOutlined },
-      { label: 'Exceptions', to: '/exceptions', icon: WarningAmberOutlined },
-      { label: 'Tracking', to: '/tracking', icon: MapOutlined },
+      { label: 'Dispatch', to: '/dispatch', icon: TrovanDispatchIcon },
+      { label: 'Exceptions', to: '/exceptions', icon: TrovanExceptionsIcon },
+      { label: 'Tracking', to: '/tracking', icon: TrovanTrackingIcon },
     ],
   },
   {
     label: 'Fleet',
     items: [
-      { label: 'Drivers', to: '/drivers', icon: BadgeOutlined },
-      { label: 'Vehicles', to: '/vehicles', icon: AirportShuttleOutlined },
+      { label: 'Drivers', to: '/drivers', icon: TrovanDriversIcon },
+      { label: 'Vehicles', to: '/vehicles', icon: TrovanVehiclesIcon },
     ],
   },
   {
     label: 'Customers',
     items: [
-      { label: 'Customers', to: '/customers', icon: BusinessOutlined },
+      { label: 'Customers', to: '/customers', icon: TrovanCustomersIcon },
     ],
   },
   {
     label: 'Intelligence',
     items: [
-      { label: 'Analytics', to: '/analytics', icon: InsightsOutlined },
+      { label: 'Analytics', to: '/analytics', icon: TrovanAnalyticsIcon },
     ],
   },
   {
     label: 'Admin',
     items: [
-      { label: 'Settings', to: '/settings', icon: SettingsOutlined },
+      { label: 'Settings', to: '/settings', icon: TrovanSettingsIcon },
     ],
   },
 ];

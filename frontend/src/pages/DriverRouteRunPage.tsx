@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Box, Button, Chip, Grid, Stack, TextField, Typography } from '@mui/material';
 import { Link as RouterLink, useParams } from 'react-router-dom';
 import { SurfacePanel } from '../components/SurfacePanel';
+import { TopoShellBackground } from '../components/TopoShellBackground';
 import LoadingState from '../components/ui/LoadingState';
 import {
   getRouteRunsErrorMessage,
@@ -43,7 +44,18 @@ export default function DriverRouteRunPage() {
   }
 
   return (
-    <Stack spacing={2.5}>
+    <Box
+      sx={{
+        minHeight: '100vh',
+        p: { xs: 1.5, md: 2.5 },
+        bgcolor: '#050403',
+        background: 'linear-gradient(180deg, #050403 0%, #0B0908 100%)',
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
+      <TopoShellBackground active tone="black" />
+      <Stack spacing={2.5} sx={{ position: 'relative', zIndex: 1 }}>
       <SurfacePanel sx={{ bgcolor: 'rgba(31, 26, 23, 0.96)', color: '#fff' }}>
         <Stack spacing={1.25}>
           <Typography variant="overline" sx={{ opacity: 0.72 }}>
@@ -157,6 +169,7 @@ export default function DriverRouteRunPage() {
           </Grid>
         ))}
       </Grid>
-    </Stack>
+      </Stack>
+    </Box>
   );
 }

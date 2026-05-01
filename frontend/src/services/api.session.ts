@@ -24,9 +24,10 @@ const isLocalPreviewHost = () =>
 
 const isLocalPreviewEnabled = () =>
   typeof window !== 'undefined' &&
-  import.meta.env.DEV &&
   isLocalPreviewHost() &&
-  AUTH_BYPASS;
+  (AUTH_BYPASS ||
+    Boolean((window as unknown as { __TROVAN_LOCAL_DEMO_PREVIEW__?: boolean })
+      .__TROVAN_LOCAL_DEMO_PREVIEW__));
 
 export type ApiRequestOptions = RequestInit & {
   skipAuth?: boolean;

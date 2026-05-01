@@ -3,6 +3,7 @@ import { Box, Button, Grid, Stack, Typography } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import { StatusPill, type StatusPillTone } from '../components/StatusPill';
 import { SurfacePanel } from '../components/SurfacePanel';
+import { TopoShellBackground } from '../components/TopoShellBackground';
 import LoadingState from '../components/ui/LoadingState';
 import { useDriverManifestQuery } from '../services/driverApi';
 import { trovanColors } from '../theme/designTokens';
@@ -30,11 +31,14 @@ export default function DriverWorkspacePage() {
         minHeight: '100vh',
         px: { xs: 1.5, md: 2.5 },
         py: { xs: 2, md: 3 },
-        bgcolor: '#EEF2F6',
-        background: 'linear-gradient(180deg, #F4F6F8 0%, #EEF2F6 100%)',
+        bgcolor: trovanColors.black[950],
+        background: `radial-gradient(circle at top left, ${trovanColors.copper[900]}44, transparent 26%), linear-gradient(180deg, ${trovanColors.black[950]} 0%, ${trovanColors.black[900]} 100%)`,
+        position: 'relative',
+        overflow: 'hidden',
       }}
     >
-      <Box sx={{ maxWidth: 1380, mx: 'auto' }}>
+      <TopoShellBackground active tone="black" />
+      <Box sx={{ maxWidth: 1380, mx: 'auto', position: 'relative', zIndex: 1 }}>
         <Stack spacing={2.5}>
           <SurfacePanel
             variant="command"

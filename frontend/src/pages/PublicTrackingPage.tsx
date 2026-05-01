@@ -4,8 +4,10 @@ import { alpha } from '@mui/material/styles';
 import { useParams } from 'react-router-dom';
 import { StatusPill, type StatusPillTone } from '../components/StatusPill';
 import { SurfacePanel } from '../components/SurfacePanel';
+import { TopoShellBackground } from '../components/TopoShellBackground';
 import LoadingState from '../components/ui/LoadingState';
 import { usePublicTrackingQuery } from '../services/publicTrackingApi';
+import { trovanColors } from '../theme/designTokens';
 
 function statusColor(status: string): StatusPillTone {
   const normalized = String(status || '').toLowerCase();
@@ -27,8 +29,9 @@ export default function PublicTrackingPage() {
 
   if (!tracking) {
     return (
-      <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', p: 3, bgcolor: '#EEF2F6' }}>
-        <SurfacePanel variant="command" sx={{ maxWidth: 720, width: '100%' }}>
+      <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', p: 3, bgcolor: trovanColors.black[950], position: 'relative', overflow: 'hidden' }}>
+        <TopoShellBackground active tone="black" />
+        <SurfacePanel variant="command" sx={{ maxWidth: 720, width: '100%', position: 'relative', zIndex: 1 }}>
           <Typography variant="h2">Tracking link unavailable</Typography>
           <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
             This tracking link could not be loaded. It may have expired or the route run is no longer available.
@@ -45,20 +48,23 @@ export default function PublicTrackingPage() {
     <Box
       sx={{
         minHeight: '100vh',
-        bgcolor: '#E9EEF3',
-        backgroundImage: `radial-gradient(circle at top right, ${alpha(accent, 0.12)}, transparent 24%), linear-gradient(180deg, #F4F6F8 0%, #E9EEF3 100%)`,
+        bgcolor: trovanColors.black[950],
+        backgroundImage: `radial-gradient(circle at top right, ${alpha(accent, 0.14)}, transparent 24%), linear-gradient(180deg, ${trovanColors.black[950]} 0%, ${trovanColors.black[900]} 100%)`,
         px: { xs: 1.5, md: 3 },
         py: { xs: 2, md: 4 },
+        position: 'relative',
+        overflow: 'hidden',
       }}
     >
-      <Box sx={{ maxWidth: 1280, mx: 'auto' }}>
+      <TopoShellBackground active tone="black" />
+      <Box sx={{ maxWidth: 1280, mx: 'auto', position: 'relative', zIndex: 1 }}>
         <Stack spacing={2.5}>
           <SurfacePanel
             variant="command"
             sx={{
               borderTop: `4px solid ${accent}`,
               background:
-                `radial-gradient(circle at top left, ${alpha(accent, 0.12)}, transparent 24%), linear-gradient(180deg, rgba(255,255,255,0.98), rgba(255,255,255,0.96))`,
+                `radial-gradient(circle at top left, ${alpha(accent, 0.16)}, transparent 24%), linear-gradient(180deg, ${alpha(trovanColors.utility.panel, 0.98)}, ${alpha(trovanColors.utility.panel, 0.94)})`,
             }}
           >
             <Stack spacing={2}>

@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Alert, Box, Card, CardContent, CircularProgress, Stack, Typography } from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import { TopoShellBackground } from '../components/TopoShellBackground';
 import { completeWorkosCallback } from '../services/api.session';
+import { trovanColors } from '../theme/designTokens';
 
 export default function AuthCallbackPage() {
   const [searchParams] = useSearchParams();
@@ -45,8 +48,19 @@ export default function AuthCallbackPage() {
   }, [navigate, searchParams]);
 
   return (
-    <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', p: 2.5 }}>
-      <Card sx={{ maxWidth: 440, width: '100%', borderRadius: 4 }}>
+    <Box
+      sx={{
+        minHeight: '100vh',
+        display: 'grid',
+        placeItems: 'center',
+        p: 2.5,
+        position: 'relative',
+        overflow: 'hidden',
+        bgcolor: trovanColors.black[950],
+      }}
+    >
+      <TopoShellBackground active tone="black" />
+      <Card sx={{ maxWidth: 440, width: '100%', borderRadius: 2, position: 'relative', zIndex: 1, bgcolor: alpha(trovanColors.utility.panel, 0.96), color: '#FFF8ED' }}>
         <CardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
           <Typography variant="h5">Completing secure sign-in</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>

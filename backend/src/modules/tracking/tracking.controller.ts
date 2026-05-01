@@ -14,6 +14,7 @@ import {
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { TrackingService } from './tracking.service';
+import { TelemetryIngestDto } from './dto/telemetry-ingest.dto';
 
 type AuthenticatedRequest = {
   user?: {
@@ -22,20 +23,6 @@ type AuthenticatedRequest = {
     role?: string;
     roles?: string[];
   };
-};
-
-type TelemetryIngestDto = {
-  vehicleId: string;
-  lat: number;
-  lng: number;
-  speed?: number;
-  heading?: number;
-  odometer?: number;
-  fuelLevel?: number;
-  engineTemp?: number;
-  timestamp?: string;
-  metadata?: Record<string, unknown>;
-  organizationId?: string;
 };
 
 @ApiTags('tracking')

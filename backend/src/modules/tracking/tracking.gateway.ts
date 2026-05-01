@@ -12,13 +12,14 @@ import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { Interval } from '@nestjs/schedule';
 import { TrackingService, VehicleLocation } from './tracking.service';
+import { createCorsOriginValidator } from '../../common/http/cors-origin.util';
 
 /**
  * WebSocket Gateway for real-time vehicle tracking
  */
 @WebSocketGateway({
   cors: {
-    origin: '*', // Configure appropriately for production
+    origin: createCorsOriginValidator(),
     credentials: true,
   },
   namespace: '/tracking',

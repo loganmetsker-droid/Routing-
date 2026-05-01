@@ -3,33 +3,44 @@ import { NextFunction, Response } from 'express';
 import { RequestWithContext } from './request-context.middleware';
 
 const logger = new Logger('HttpRequest');
-const SENSITIVE_KEYS = new Set([
+const SENSITIVE_KEY_FRAGMENTS = [
   'password',
   'token',
-  'accessToken',
   'authorization',
-  'customerPhone',
-  'customerEmail',
+  'apikey',
+  'api_key',
   'phone',
   'email',
-  'supportEmail',
-  'supportPhone',
-  'stripeSignature',
-  'paymentMethodId',
-  'cardNumber',
+  'signature',
+  'paymentmethod',
+  'payment_method',
+  'card',
   'cvv',
   'secret',
-]);
+  'stripe',
+];
 
-function sanitizePath(path: string) {
-  return path.replace(
+export function sanitizePath(path: string) {
+  const withoutQuery = path.split('?')[0]?.split('#')[0] ?? path;
+  return withoutQuery.replace(
     /([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})/gi,
     ':uuid',
   );
 }
 
-function sanitizeValue(key: string, value: unknown): unknown {
-  if (SENSITIVE_KEYS.has(key)) {
+function normalizeKey(key: string) {
+  return key.toLowerCase().replace(/[^a-z0-9_]/g, '');
+}
+
+export function isSensitiveKey(key: string) {
+  const normalized = normalizeKey(key);
+  return SENSITIVE_KEY_FRAGMENTS.some((fragment) =>
+    normalized.includes(fragment),
+  );
+}
+
+export function sanitizeValue(key: string, value: unknown): unknown {
+  if (isSensitiveKey(key)) {
     return '[REDACTED]';
   }
 
@@ -50,7 +61,7 @@ function sanitizeValue(key: string, value: unknown): unknown {
   return next;
 }
 
-function sanitizeBody(body: unknown) {
+export function sanitizeBody(body: unknown) {
   if (!body || typeof body !== 'object') {
     return undefined;
   }
@@ -60,6 +71,15 @@ function sanitizeBody(body: unknown) {
   }
 
   return sanitizeValue('body', body);
+}
+
+export function shouldLogRequestBody(env: NodeJS.ProcessEnv = process.env) {
+  const configured = env.LOG_REQUEST_BODIES?.trim().toLowerCase();
+  if (configured) {
+    return ['1', 'true', 'yes', 'on'].includes(configured);
+  }
+
+  return env.NODE_ENV !== 'production';
 }
 
 export function requestLoggingMiddleware(
@@ -83,7 +103,7 @@ export function requestLoggingMiddleware(
         durationMs: Number(durationMs.toFixed(2)),
         userId: user?.userId || null,
         remoteIp: req.ip,
-        body: sanitizeBody(req.body),
+        body: shouldLogRequestBody() ? sanitizeBody(req.body) : undefined,
       }),
     );
   });

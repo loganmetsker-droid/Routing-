@@ -2,6 +2,7 @@ import { Box, Divider, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { MapContainer, TileLayer, Polyline, Marker, Popup, Tooltip as LeafletTooltip } from 'react-leaflet';
 import StatusPill from '../ui/StatusPill';
+import { MapFilmOverlay, trovanMapLayer } from '../maps/mapPresentation';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { shellTokens } from '../../theme/tokens';
@@ -74,10 +75,10 @@ export default function MapPanel({
           boxShadow: 'inset 0 0 0 1px rgba(148,163,184,0.08)',
         }}
       >
-        <MapContainer attributionControl={false} center={mapCenter} zoom={mapZoom} style={{ height: '100%', width: '100%' }} scrollWheelZoom>
+        <MapContainer attributionControl={false} center={mapCenter} zoom={mapZoom} style={{ height: '100%', width: '100%' }} scrollWheelZoom className="trovan-map">
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution={trovanMapLayer.attribution}
+            url={trovanMapLayer.url}
           />
           {mapRoutes.map((route: any) => {
             if (!route.positions || route.positions.length === 0) return null;
@@ -108,6 +109,7 @@ export default function MapPanel({
             );
           })}
         </MapContainer>
+        <MapFilmOverlay />
       </Box>
     </Box>
   );

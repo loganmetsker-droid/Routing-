@@ -925,7 +925,7 @@ export default function JobsPageEnhancedV2() {
           </Stack>
           {importError ? <Alert severity="error">{importError}</Alert> : null}
           {importCandidates.length > 0 ? (
-            <SurfacePanel sx={{ bgcolor: 'rgba(255, 248, 242, 1)' }}>
+            <SurfacePanel sx={{ bgcolor: 'rgba(30, 26, 23, 1)' }}>
               <Typography variant="subtitle1" sx={{ mb: 1 }}>Preview</Typography>
               <Stack spacing={1}>
                 {importCandidates.slice(0, 5).map((candidate, index) => (

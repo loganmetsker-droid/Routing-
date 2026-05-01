@@ -1,4 +1,4 @@
-const CACHE_NAME = 'trovan-shell-v1';
+const CACHE_NAME = 'trovan-shell-v2';
 const APP_ASSETS = ['/', '/manifest.webmanifest', '/trovan-mark.svg'];
 
 self.addEventListener('install', (event) => {
@@ -26,23 +26,38 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  const requestUrl = new URL(event.request.url);
+  const isAppShell =
+    event.request.mode === 'navigate' ||
+    requestUrl.pathname.endsWith('.html') ||
+    requestUrl.pathname.startsWith('/assets/');
+
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) {
-        return cached;
-      }
+    fetch(event.request)
+      .then((response) => {
+        if (!response || response.status !== 200 || response.type !== 'basic') {
+          return response;
+        }
 
-      return fetch(event.request)
-        .then((response) => {
-          if (!response || response.status !== 200 || response.type !== 'basic') {
-            return response;
-          }
-
+        if (!isAppShell) {
           const next = response.clone();
           void caches.open(CACHE_NAME).then((cache) => cache.put(event.request, next));
-          return response;
-        })
-        .catch(() => caches.match('/'));
-    }),
+        }
+
+        return response;
+      })
+      .catch(() =>
+        caches.match(event.request).then((cached) => {
+          if (cached) {
+            return cached;
+          }
+
+          if (event.request.mode === 'navigate') {
+            return caches.match('/');
+          }
+
+          return Response.error();
+        }),
+      ),
   );
 });

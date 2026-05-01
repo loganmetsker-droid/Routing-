@@ -24,6 +24,7 @@ import {
 import { JobsService } from './jobs.service';
 import { Job, JobStatus, JobPriority } from './entities/job.entity';
 import { CreateJobDto } from './dto/create-job.dto';
+import { ImportJobsDto } from './dto/import-jobs.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
 
 type AuthenticatedRequest = {
@@ -57,9 +58,9 @@ export class JobsController {
   @ApiResponse({ status: 201, description: 'Jobs imported successfully' })
   async importJobs(
     @Req() req: AuthenticatedRequest,
-    @Body() body: { jobs: CreateJobDto[] },
+    @Body() body: ImportJobsDto,
   ): Promise<{ jobs: Job[]; count: number }> {
-    const jobs = await this.jobsService.importJobs(body.jobs || [], req.user);
+    const jobs = await this.jobsService.importJobs(body.jobs ?? [], req.user);
     return { jobs, count: jobs.length };
   }
 

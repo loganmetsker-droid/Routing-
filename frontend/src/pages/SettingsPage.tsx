@@ -26,7 +26,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { alpha } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
 import { PageHeader } from '../components/PageHeader';
 import { StatusPill, type StatusPillTone } from '../components/StatusPill';
 import { SurfacePanel } from '../components/SurfacePanel';
@@ -190,6 +190,15 @@ function SettingsSectionButton({
   onSelect: (id: SettingsSectionId) => void;
 }) {
   const Icon = section.icon;
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
+  const inactiveText = isDark ? alpha('#FFF8ED', 0.82) : alpha(trovanColors.black[900], 0.78);
+  const inactiveBg = isDark ? alpha(trovanColors.black[950], 0.22) : alpha('#FFFFFF', 0.52);
+  const inactiveHover = isDark ? trovanColors.utility.panelMuted : alpha(trovanColors.copper[100], 0.42);
+  const inactiveBorder = isDark ? trovanColors.utility.border : alpha(trovanColors.black[900], 0.13);
+  const inactiveBorderStrong = isDark
+    ? trovanColors.utility.borderStrong
+    : alpha(trovanColors.black[900], 0.18);
 
   return (
     <Button
@@ -207,18 +216,22 @@ function SettingsSectionButton({
         border: '1px solid',
         borderColor: active
           ? alpha(trovanColors.copper[500], 0.3)
-          : trovanColors.utility.border,
+          : inactiveBorder,
         bgcolor: active
           ? alpha(trovanColors.copper[500], 0.08)
-          : '#FFFFFF',
-        color: active ? trovanColors.copper[700] : trovanColors.stone[700],
+          : inactiveBg,
+        color: active
+          ? isDark
+            ? trovanColors.copper[300]
+            : trovanColors.copper[700]
+          : inactiveText,
         '&:hover': {
           bgcolor: active
             ? alpha(trovanColors.copper[500], 0.12)
-            : trovanColors.utility.panelMuted,
+            : inactiveHover,
           borderColor: active
             ? alpha(trovanColors.copper[500], 0.36)
-            : trovanColors.utility.borderStrong,
+            : inactiveBorderStrong,
         },
         '& .MuiButton-startIcon': {
           mt: 0.15,

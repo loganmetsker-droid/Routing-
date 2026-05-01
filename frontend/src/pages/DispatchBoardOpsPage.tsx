@@ -9,7 +9,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Grid,
   List,
   ListItem,
   ListItemButton,
@@ -17,11 +16,14 @@ import {
   MenuItem,
   Stack,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
+  useMediaQuery,
 } from '@mui/material';
-import { alpha } from '@mui/material/styles';
+import { alpha, useTheme } from '@mui/material/styles';
 import MultiRouteMap from '../components/maps/MultiRouteMap';
-import { PageHeader } from '../components/PageHeader';
+import { OpsCommandBar, RouteInspectorPanel } from '../components/ops';
 import { StatusPill } from '../components/StatusPill';
 import { SurfacePanel } from '../components/SurfacePanel';
 import LoadingState from '../components/ui/LoadingState';
@@ -67,12 +69,16 @@ const emptyExceptionForm: ExceptionFormState = {
 };
 
 export default function DispatchBoardOpsPage() {
+  const theme = useTheme();
+  const isDark = theme.palette.mode === 'dark';
   const [savingRouteId, setSavingRouteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedDriverByRoute, setSelectedDriverByRoute] = useState<Record<string, string>>({});
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [exceptionDialogOpen, setExceptionDialogOpen] = useState(false);
   const [exceptionForm, setExceptionForm] = useState<ExceptionFormState>(emptyExceptionForm);
+  const [mobilePanel, setMobilePanel] = useState<'map' | 'routes' | 'inspector'>('map');
+  const isDesktopWorkspace = useMediaQuery('(min-width:1200px)');
 
   const boardQuery = useDispatchBoardQuery();
   const routesQuery = useRoutesQuery();
@@ -294,344 +300,432 @@ export default function DispatchBoardOpsPage() {
     return <LoadingState label="Loading dispatch board..." minHeight="50vh" />;
   }
 
-  return (
-    <Box data-testid="dispatch-board-page">
-      <PageHeader
-        eyebrow="Live Dispatch"
-        title="Dispatch"
-        subtitle="Route lanes, live map, and a route inspector built for real execution changes."
-        actions={
-          <>
-            <Button variant="outlined" component={RouterLink} to="/exceptions">
-              Open queue
-            </Button>
-            <Button variant="contained" onClick={() => setExceptionDialogOpen(true)}>
-              New exception
-            </Button>
-          </>
-        }
-      />
+  const summaryMetrics = [
+    { label: 'Ready', value: boardSummary.ready, tone: 'accent' as const },
+    { label: 'In progress', value: boardSummary.inProgress, tone: 'info' as const },
+    { label: 'Completed', value: boardSummary.completed, tone: 'success' as const },
+    { label: 'Open exceptions', value: boardSummary.exceptions, tone: boardSummary.exceptions ? 'warning' as const : 'default' as const },
+  ];
 
-      {error ? <Alert severity="error" sx={{ mb: 1.5 }}>{error}</Alert> : null}
+  const commandBar = (
+    <OpsCommandBar
+      eyebrow="Live Dispatch"
+      title="Dispatch"
+      subtitle="Move from route lanes to live map context without burying the execution surface."
+      actions={
+        <>
+          <Button variant="outlined" component={RouterLink} to="/exceptions">
+            Open queue
+          </Button>
+          <Button variant="contained" onClick={() => setExceptionDialogOpen(true)}>
+            New exception
+          </Button>
+        </>
+      }
+      meta={
+        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+          {summaryMetrics.map((item) => (
+            <StatusPill
+              key={item.label}
+              label={`${item.label}: ${item.value}`}
+              tone={item.tone}
+            />
+          ))}
+        </Stack>
+      }
+    />
+  );
 
-      <Grid container spacing={1.5} sx={{ mb: 1.5 }}>
-        {[
-          { label: 'Ready', value: boardSummary.ready },
-          { label: 'In progress', value: boardSummary.inProgress },
-          { label: 'Completed', value: boardSummary.completed },
-          { label: 'Open exceptions', value: boardSummary.exceptions },
-        ].map((item) => (
-          <Grid item xs={12} sm={6} xl={3} key={item.label}>
-            <SurfacePanel variant="subtle" padding={1.5}>
-              <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase' }}>
-                {item.label}
-              </Typography>
-              <Typography variant="h4" sx={{ mt: 0.75 }}>
-                {item.value}
-              </Typography>
-            </SurfacePanel>
-          </Grid>
-        ))}
-      </Grid>
-
-      <Box
-        sx={{
-          display: 'grid',
-          gap: 1.5,
-          gridTemplateColumns: { xs: '1fr', xl: '360px minmax(0, 1fr) 360px' },
-          alignItems: 'start',
-        }}
-      >
-        <SurfacePanel variant="panel" padding={0}>
-          <Box sx={{ px: 2, py: 1.4, borderBottom: '1px solid', borderColor: 'divider' }}>
-            <Typography variant="h6">Route lanes</Typography>
-            <Typography variant="body2" color="text.secondary">
-              Reorder future work inside a route or drag it to another eligible lane.
-            </Typography>
-          </Box>
-          {orderedRouteLanes.length === 0 ? (
-            <Box sx={{ p: 2.5 }}>
-              <Typography variant="body2" color="text.secondary">
-                No published routes are available for dispatch.
-              </Typography>
-            </Box>
-          ) : (
-            <DragDropContext onDragEnd={(result) => void handleDragEnd(result)}>
-              <Stack spacing={1.15} sx={{ p: 1.5 }}>
-                {orderedRouteLanes.map((lane) => {
-                  const editable = isEditableRoute(String(lane.route.status));
-                  return (
-                    <Box
-                      key={lane.route.id}
-                      sx={{
-                        border: '1px solid',
-                        borderColor:
-                          lane.route.id === selectedLane?.route.id
-                            ? alpha('#B97129', 0.34)
-                            : 'divider',
-                        borderRadius: 1.5,
-                        overflow: 'hidden',
-                        bgcolor:
-                          lane.route.id === selectedLane?.route.id
-                            ? alpha('#B97129', 0.04)
-                            : 'background.paper',
-                      }}
-                    >
-                      <ListItemButton
-                        onClick={() => setSelectedRouteId(lane.route.id)}
-                        sx={{ py: 1.2, px: 1.4, borderBottom: '1px solid', borderColor: 'divider' }}
-                      >
-                        <ListItemText
-                          primary={`Route ${lane.route.id.slice(0, 8)}`}
-                          secondary={`${lane.stops.length} stops • ${vehicleNameById[lane.route.vehicleId || ''] || 'Vehicle pending'}`}
-                          primaryTypographyProps={{ fontWeight: 700 }}
-                        />
-                        <StatusPill
-                          label={String(lane.route.workflowStatus || lane.route.status).replace(/_/g, ' ')}
-                          tone={statusTone(String(lane.route.workflowStatus || lane.route.status))}
-                        />
-                      </ListItemButton>
-                      <Droppable droppableId={lane.route.id} isDropDisabled={!editable}>
-                        {(provided, snapshot) => (
-                          <Box
-                            ref={provided.innerRef}
-                            {...provided.droppableProps}
-                            sx={{
-                              p: 1.1,
-                              bgcolor: snapshot.isDraggingOver
-                                ? alpha('#B97129', 0.06)
-                                : 'transparent',
-                            }}
-                          >
-                            <Stack spacing={0.8}>
-                              {lane.stops.map((stop, index) => (
-                                <Draggable
-                                  key={stop.jobId}
-                                  draggableId={stop.jobId}
-                                  index={index}
-                                  isDragDisabled={!editable}
-                                >
-                                  {(dragProvided, dragSnapshot) => (
-                                    <Box
-                                      ref={dragProvided.innerRef}
-                                      {...dragProvided.draggableProps}
-                                      {...dragProvided.dragHandleProps}
-                                      sx={{
-                                        px: 1.05,
-                                        py: 0.95,
-                                        borderRadius: 1.25,
-                                        border: '1px solid',
-                                        borderColor: dragSnapshot.isDragging
-                                          ? alpha('#B97129', 0.38)
-                                          : 'divider',
-                                        bgcolor: dragSnapshot.isDragging
-                                          ? alpha('#B97129', 0.06)
-                                          : trovanRowColor(editable),
-                                      }}
-                                    >
-                                      <Stack spacing={0.35}>
-                                        <Stack direction="row" justifyContent="space-between" gap={1}>
-                                          <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                                            {stop.job?.customerName || stop.jobId}
-                                          </Typography>
-                                          <Typography variant="caption" color="text.secondary">
-                                            {stop.stopSequence}
-                                          </Typography>
-                                        </Stack>
-                                        <Typography variant="caption" color="text.secondary">
-                                          {stop.job?.deliveryAddress || 'Address pending'}
-                                        </Typography>
-                                      </Stack>
-                                    </Box>
-                                  )}
-                                </Draggable>
-                              ))}
-                              {lane.stops.length === 0 ? (
-                                <Typography variant="body2" color="text.secondary" sx={{ px: 0.4, py: 1 }}>
-                                  No future stops in this lane.
-                                </Typography>
-                              ) : null}
-                            </Stack>
-                            {provided.placeholder}
-                          </Box>
-                        )}
-                      </Droppable>
-                    </Box>
-                  );
-                })}
-              </Stack>
-            </DragDropContext>
-          )}
-        </SurfacePanel>
-
-        <SurfacePanel variant="canvas" padding={0} sx={{ overflow: 'hidden' }}>
-          <Stack
-            direction="row"
-            justifyContent="space-between"
-            alignItems="center"
-            sx={{ px: 2, py: 1.4, borderBottom: '1px solid', borderColor: 'divider' }}
-          >
-            <Box>
-              <Typography variant="h6">Live dispatch map</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Real route geometry stays visible while you rebalance future work.
-              </Typography>
-            </Box>
-            <StatusPill label={`${mapRoutes.length} routes`} tone="accent" />
-          </Stack>
-          <Box sx={{ height: 560 }}>
-            {mapRoutes.length ? (
-              <MultiRouteMap routes={mapRoutes} height="560px" />
-            ) : (
-              <Box sx={{ p: 3 }}>
-                <Typography variant="body2" color="text.secondary">
-                  Publish a route plan to populate the live dispatch map.
-                </Typography>
-              </Box>
-            )}
-          </Box>
-        </SurfacePanel>
-
-        <Stack spacing={1.5}>
-          <SurfacePanel variant="panel">
-            <Typography variant="h6" sx={{ mb: 1.1 }}>
-              Route inspector
-            </Typography>
-            {!selectedLane ? (
-              <Typography variant="body2" color="text.secondary">
-                Select a route lane to inspect assignment, status, and route pressure.
-              </Typography>
-            ) : (
-              <Stack spacing={1.15}>
-                <Stack direction="row" justifyContent="space-between" gap={1}>
-                  <Typography variant="h5">
-                    Route {selectedLane.route.id.slice(0, 8)}
-                  </Typography>
-                  <StatusPill
-                    label={String(selectedLane.route.workflowStatus || selectedLane.route.status).replace(/_/g, ' ')}
-                    tone={statusTone(String(selectedLane.route.workflowStatus || selectedLane.route.status))}
-                  />
-                </Stack>
-                <Typography variant="body2" color="text.secondary">
-                  {vehicleNameById[selectedLane.route.vehicleId || ''] || 'Vehicle pending'} •{' '}
-                  {driverNameById[selectedLane.route.driverId || ''] || 'Driver pending'}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {selectedLane.stops.length} stops • {selectedLane.exceptions.length} exceptions
-                </Typography>
-                <TextField
-                  select
-                  size="small"
-                  label="Assign driver"
-                  value={
-                    selectedDriverByRoute[selectedLane.route.id] ??
-                    selectedLane.route.driverId ??
-                    ''
-                  }
-                  onChange={(event) =>
-                    setSelectedDriverByRoute((current) => ({
-                      ...current,
-                      [selectedLane.route.id]: event.target.value,
-                    }))
-                  }
+  const lanesPanel = (
+    <SurfacePanel
+      variant="panel"
+      padding={0}
+      sx={{ overflow: 'hidden', height: { xl: '100%' }, display: 'flex', flexDirection: 'column' }}
+    >
+      <Box sx={{ px: 1.5, py: 1.15, borderBottom: '1px solid', borderColor: 'divider' }}>
+        <Typography variant="h6">Route lanes</Typography>
+        <Typography variant="body2" color="text.secondary">
+          Drag future work inside eligible lanes or move it to another planned route.
+        </Typography>
+      </Box>
+      {orderedRouteLanes.length === 0 ? (
+        <Box sx={{ p: 2.5 }}>
+          <Typography variant="body2" color="text.secondary">
+            No published routes are available for dispatch.
+          </Typography>
+        </Box>
+      ) : (
+        <DragDropContext onDragEnd={(result) => void handleDragEnd(result)}>
+          <Stack spacing={1} sx={{ p: 1.2, overflowY: 'auto', minHeight: 0 }}>
+            {orderedRouteLanes.map((lane) => {
+              const routeStatus = String(lane.route.workflowStatus || lane.route.status);
+              const editable = isEditableRoute(routeStatus);
+              const selected = lane.route.id === selectedLane?.route.id;
+              return (
+                <Box
+                  key={lane.route.id}
+                  sx={{
+                    border: '1px solid',
+                    borderColor: selected ? alpha('#B97129', 0.38) : 'divider',
+                    borderRadius: 1.2,
+                    overflow: 'hidden',
+                    bgcolor: selected ? alpha('#B97129', 0.04) : 'background.paper',
+                  }}
                 >
-                  <MenuItem value="">Unassigned</MenuItem>
-                  {drivers.map((driver) => (
-                    <MenuItem key={driver.id} value={driver.id}>
-                      {driverNameById[driver.id]}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <Stack direction={{ xs: 'column', md: 'row' }} spacing={1}>
-                  <Button
-                    variant="outlined"
-                    disabled={savingRouteId === selectedLane.route.id}
-                    onClick={() => void handleRouteAction(selectedLane.route.id, 'assign')}
-                  >
-                    Save assignment
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    disabled={savingRouteId === selectedLane.route.id}
-                    onClick={() => void handleRouteAction(selectedLane.route.id, 'dispatch')}
-                  >
-                    Dispatch
-                  </Button>
-                  <Button
-                    variant="contained"
-                    disabled={savingRouteId === selectedLane.route.id}
-                    onClick={() => void handleRouteAction(selectedLane.route.id, 'start')}
-                  >
-                    Start
-                  </Button>
-                </Stack>
-                <Button
-                  component={RouterLink}
-                  to={`/route-runs/${selectedLane.route.id}`}
-                  variant="text"
-                  sx={{ alignSelf: 'flex-start' }}
-                >
-                  Open route detail
-                </Button>
-              </Stack>
-            )}
-          </SurfacePanel>
-
-          <SurfacePanel variant="subtle">
-            <Typography variant="h6" sx={{ mb: 1.1 }}>
-              Future stops
-            </Typography>
-            {!selectedLane ? (
-              <Typography variant="body2" color="text.secondary">
-                Select a route to inspect its remaining work.
-              </Typography>
-            ) : (
-              <Stack spacing={0.85}>
-                {selectedLane.stops.map((stop) => (
-                  <Box
-                    key={stop.id}
+                  <ListItemButton
+                    onClick={() => setSelectedRouteId(lane.route.id)}
                     sx={{
-                      px: 1.1,
                       py: 0.95,
-                      borderRadius: 1.25,
-                      border: '1px solid',
+                      px: 1.15,
+                      borderBottom: '1px solid',
                       borderColor: 'divider',
-                      bgcolor: 'background.paper',
+                      borderLeft: selected ? '3px solid #B97129' : '3px solid transparent',
                     }}
                   >
-                    <Typography variant="body2" sx={{ fontWeight: 700 }}>
-                      {stop.stopSequence}. {stop.job?.customerName || stop.jobId}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {stop.job?.deliveryAddress || 'Address pending'}
-                    </Typography>
-                  </Box>
-                ))}
-              </Stack>
-            )}
-          </SurfacePanel>
+                    <ListItemText
+                      primary={`Route ${lane.route.id.slice(0, 8)}`}
+                      secondary={`${lane.stops.length} stops • ${
+                        vehicleNameById[lane.route.vehicleId || ''] || 'Vehicle pending'
+                      } • ${driverNameById[lane.route.driverId || ''] || 'Driver pending'}`}
+                      primaryTypographyProps={{ fontWeight: 800, noWrap: true }}
+                      secondaryTypographyProps={{ noWrap: true }}
+                    />
+                    <Stack spacing={0.45} alignItems="flex-end">
+                      <StatusPill
+                        label={routeStatus.replace(/_/g, ' ')}
+                        tone={statusTone(routeStatus)}
+                      />
+                      <StatusPill
+                        label={editable ? 'Editable' : 'Read only'}
+                        tone={editable ? 'accent' : 'default'}
+                      />
+                    </Stack>
+                  </ListItemButton>
+                  <Droppable droppableId={lane.route.id} isDropDisabled={!editable}>
+                    {(provided, snapshot) => (
+                      <Box
+                        ref={provided.innerRef}
+                        {...provided.droppableProps}
+                        sx={{
+                          p: 1,
+                          minHeight: 76,
+                          bgcolor: snapshot.isDraggingOver
+                            ? alpha('#B97129', 0.07)
+                            : 'transparent',
+                        }}
+                      >
+                        <Stack spacing={0.65}>
+                          {lane.stops.map((stop, index) => (
+                            <Draggable
+                              key={stop.jobId}
+                              draggableId={stop.jobId}
+                              index={index}
+                              isDragDisabled={!editable}
+                            >
+                              {(dragProvided, dragSnapshot) => (
+                                <Box
+                                  ref={dragProvided.innerRef}
+                                  {...dragProvided.draggableProps}
+                                  {...dragProvided.dragHandleProps}
+                                  sx={{
+                                    px: 0.95,
+                                    py: 0.7,
+                                    borderRadius: 1,
+                                    border: '1px solid',
+                                    borderColor: dragSnapshot.isDragging
+                                      ? alpha('#B97129', 0.42)
+                                      : 'divider',
+                                    bgcolor: dragSnapshot.isDragging
+                                      ? alpha('#B97129', 0.07)
+                                      : trovanRowColor(editable, isDark),
+                                    cursor: editable ? 'grab' : 'not-allowed',
+                                  }}
+                                >
+                                  <Stack spacing={0.25}>
+                                    <Stack direction="row" justifyContent="space-between" gap={1}>
+                                      <Typography variant="body2" noWrap sx={{ fontWeight: 750 }}>
+                                        {stop.job?.customerName || stop.jobId}
+                                      </Typography>
+                                      <Typography variant="caption" color="text.secondary">
+                                        {stop.stopSequence}
+                                      </Typography>
+                                    </Stack>
+                                    <Typography variant="caption" color="text.secondary" noWrap>
+                                      {stop.job?.deliveryAddress || 'Address pending'}
+                                    </Typography>
+                                  </Stack>
+                                </Box>
+                              )}
+                            </Draggable>
+                          ))}
+                          {lane.stops.length === 0 ? (
+                            <Typography variant="body2" color="text.secondary" sx={{ px: 0.4, py: 1 }}>
+                              No future stops in this lane.
+                            </Typography>
+                          ) : null}
+                        </Stack>
+                        {provided.placeholder}
+                      </Box>
+                    )}
+                  </Droppable>
+                </Box>
+              );
+            })}
+          </Stack>
+        </DragDropContext>
+      )}
+    </SurfacePanel>
+  );
 
-          <SurfacePanel variant="subtle">
-            <Typography variant="h6" sx={{ mb: 1.1 }}>
+  const mapPanel = (
+    <SurfacePanel
+      variant="canvas"
+      padding={0}
+      sx={{
+        overflow: 'hidden',
+        minHeight: isDesktopWorkspace ? 0 : { xs: 430, md: 540 },
+        height: isDesktopWorkspace ? '100%' : { xs: 430, md: 540 },
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <Stack
+        direction="row"
+        justifyContent="space-between"
+        alignItems="center"
+        sx={{ px: 1.6, py: 1.15, borderBottom: '1px solid', borderColor: 'divider' }}
+      >
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="h6">Live dispatch map</Typography>
+          <Typography variant="body2" color="text.secondary" noWrap>
+            Execution map stays in the first viewport while lanes update.
+          </Typography>
+        </Box>
+        <StatusPill
+          label={selectedLane ? `Route ${selectedLane.route.id.slice(0, 8)}` : `${mapRoutes.length} routes`}
+          tone={selectedLane ? 'accent' : 'default'}
+        />
+      </Stack>
+      <Box sx={{ flex: 1, minHeight: 0 }}>
+        {mapRoutes.length ? (
+          <MultiRouteMap
+            routes={mapRoutes}
+            height="100%"
+            selectedRouteId={selectedRouteId}
+            onRouteSelect={(routeId) => {
+              if (routeId) setSelectedRouteId(routeId);
+            }}
+          />
+        ) : (
+          <Box sx={{ p: 3 }}>
+            <Typography variant="body2" color="text.secondary">
+              Publish a route plan to populate the live dispatch map.
+            </Typography>
+          </Box>
+        )}
+      </Box>
+    </SurfacePanel>
+  );
+
+  const inspectorPanel = (
+    <RouteInspectorPanel
+      title={selectedLane ? `Route ${selectedLane.route.id.slice(0, 8)}` : 'Route inspector'}
+      subtitle={
+        selectedLane
+          ? `${vehicleNameById[selectedLane.route.vehicleId || ''] || 'Vehicle pending'} • ${
+              driverNameById[selectedLane.route.driverId || ''] || 'Driver pending'
+            }`
+          : 'Select a route lane or map route to inspect execution state.'
+      }
+      status={
+        selectedLane ? (
+          <StatusPill
+            label={String(selectedLane.route.workflowStatus || selectedLane.route.status).replace(/_/g, ' ')}
+            tone={statusTone(String(selectedLane.route.workflowStatus || selectedLane.route.status))}
+          />
+        ) : null
+      }
+      actions={
+        selectedLane ? (
+          <>
+            <Button
+              variant="outlined"
+              size="small"
+              disabled={savingRouteId === selectedLane.route.id}
+              onClick={() => void handleRouteAction(selectedLane.route.id, 'assign')}
+            >
+              Save driver
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              disabled={savingRouteId === selectedLane.route.id}
+              onClick={() => void handleRouteAction(selectedLane.route.id, 'dispatch')}
+            >
+              Dispatch
+            </Button>
+            <Button
+              variant="contained"
+              size="small"
+              disabled={savingRouteId === selectedLane.route.id}
+              onClick={() => void handleRouteAction(selectedLane.route.id, 'start')}
+            >
+              Start
+            </Button>
+          </>
+        ) : null
+      }
+      summary={
+        selectedLane ? (
+          <Stack spacing={0.75}>
+            <Typography variant="body2" color="text.secondary">
+              {selectedLane.stops.length} stops • {selectedLane.exceptions.length} exceptions
+            </Typography>
+            <TextField
+              select
+              size="small"
+              label="Assign driver"
+              value={
+                selectedDriverByRoute[selectedLane.route.id] ??
+                selectedLane.route.driverId ??
+                ''
+              }
+              onChange={(event) =>
+                setSelectedDriverByRoute((current) => ({
+                  ...current,
+                  [selectedLane.route.id]: event.target.value,
+                }))
+              }
+            >
+              <MenuItem value="">Unassigned</MenuItem>
+              {drivers.map((driver) => (
+                <MenuItem key={driver.id} value={driver.id}>
+                  {driverNameById[driver.id]}
+                </MenuItem>
+              ))}
+            </TextField>
+            <Stack direction="row" spacing={1}>
+              <Button
+                component={RouterLink}
+                to={`/route-runs/${selectedLane.route.id}`}
+                variant="text"
+                size="small"
+              >
+                Open detail
+              </Button>
+              <Button
+                variant="text"
+                size="small"
+                onClick={() => setExceptionDialogOpen(true)}
+              >
+                Create route exception
+              </Button>
+            </Stack>
+          </Stack>
+        ) : null
+      }
+    >
+      {!selectedLane ? (
+        <Typography variant="body2" color="text.secondary">
+          Select a route to inspect driver assignment, future stops, and pressure.
+        </Typography>
+      ) : (
+        <Stack spacing={1.15}>
+          <Box>
+            <Typography variant="h6" sx={{ mb: 0.75 }}>
+              Future stops
+            </Typography>
+            <Stack spacing={0.65}>
+              {selectedLane.stops.map((stop) => (
+                <Box
+                  key={stop.id}
+                  sx={{
+                    px: 1,
+                    py: 0.75,
+                    borderRadius: 1,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    bgcolor: 'background.paper',
+                  }}
+                >
+                  <Typography variant="body2" noWrap sx={{ fontWeight: 750 }}>
+                    {stop.stopSequence}. {stop.job?.customerName || stop.jobId}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" noWrap>
+                    {stop.job?.deliveryAddress || 'Address pending'}
+                  </Typography>
+                </Box>
+              ))}
+            </Stack>
+          </Box>
+
+          <Box>
+            <Typography variant="h6" sx={{ mb: 0.75 }}>
               Route pressure
             </Typography>
-            {!selectedLane || selectedLane.exceptions.length === 0 ? (
+            {selectedLane.exceptions.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
                 No active exceptions on the selected route.
               </Typography>
             ) : (
               <List disablePadding>
                 {selectedLane.exceptions.map((item) => (
-                  <ListItem key={item.id} disableGutters sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
+                  <ListItem
+                    key={item.id}
+                    disableGutters
+                    sx={{ borderBottom: '1px solid', borderColor: 'divider' }}
+                  >
                     <ListItemText primary={item.code} secondary={item.message} />
                     <StatusPill label={item.status} tone={statusTone(item.status)} />
                   </ListItem>
                 ))}
               </List>
             )}
-          </SurfacePanel>
+          </Box>
         </Stack>
-      </Box>
+      )}
+    </RouteInspectorPanel>
+  );
+
+  return (
+    <Box data-testid="dispatch-board-page" sx={{ display: 'grid', gap: 1.5 }}>
+      {commandBar}
+
+      {error ? <Alert severity="error" sx={{ mb: 1.5 }}>{error}</Alert> : null}
+
+      {isDesktopWorkspace ? (
+        <Box
+          sx={{
+            display: 'grid',
+            gap: 1.5,
+            gridTemplateColumns: '315px minmax(640px, 1fr) 320px',
+            alignItems: 'stretch',
+            height: 'calc(100vh - 176px)',
+            minHeight: 640,
+          }}
+        >
+          {lanesPanel}
+          {mapPanel}
+          {inspectorPanel}
+        </Box>
+      ) : (
+        <Box sx={{ display: 'grid', gap: 1.2 }}>
+          <ToggleButtonGroup
+            fullWidth
+            size="small"
+            exclusive
+            value={mobilePanel}
+            onChange={(_, value) => value && setMobilePanel(value)}
+          >
+            <ToggleButton value="map">Map</ToggleButton>
+            <ToggleButton value="routes">Routes</ToggleButton>
+            <ToggleButton value="inspector">Inspector</ToggleButton>
+          </ToggleButtonGroup>
+          {mobilePanel === 'map' ? mapPanel : null}
+          {mobilePanel === 'routes' ? lanesPanel : null}
+          {mobilePanel === 'inspector' ? inspectorPanel : null}
+        </Box>
+      )}
 
       <Dialog
         open={exceptionDialogOpen}
@@ -679,6 +773,7 @@ export default function DispatchBoardOpsPage() {
   );
 }
 
-function trovanRowColor(editable: boolean) {
-  return editable ? '#FFFFFF' : 'rgba(243, 245, 247, 1)';
+function trovanRowColor(editable: boolean, isDark: boolean) {
+  if (isDark) return editable ? 'rgba(21, 18, 16, 0.94)' : 'rgba(11, 9, 8, 0.68)';
+  return editable ? 'rgba(255, 253, 249, 0.78)' : 'rgba(239, 231, 220, 0.66)';
 }

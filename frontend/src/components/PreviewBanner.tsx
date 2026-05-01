@@ -21,7 +21,7 @@ export function PreviewBanner() {
         px: 0.85,
         py: 0.45,
         borderRadius: 1.1,
-        bgcolor: alpha('#FFFDFB', 0.84),
+        bgcolor: alpha(trovanColors.utility.panel, 0.84),
         border: `1px solid ${alpha(trovanColors.copper[500], 0.11)}`,
         width: 'fit-content',
       }}

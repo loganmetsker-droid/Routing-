@@ -232,6 +232,18 @@ export class DispatchWorker implements OnModuleInit {
     failedVehicles?: any[];
     durationMs?: number;
     pendingJobCount?: number;
+  }>;
+  async manualDispatch(
+    objective?: string | null,
+  ): Promise<{
+    success: boolean;
+    message?: string;
+    error?: string;
+    routesCreated?: number;
+    routeIds?: string[];
+    failedVehicles?: any[];
+    durationMs?: number;
+    pendingJobCount?: number;
   }> {
     this.logger.log('🔧 [DISPATCH:MANUAL] Manual dispatch triggered via API');
     this.runtimeStatusService.touchWorkerHeartbeat();

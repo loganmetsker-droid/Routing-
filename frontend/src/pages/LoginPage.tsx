@@ -15,6 +15,8 @@ import {
 import { alpha } from '@mui/material/styles';
 import StatusPill from '../components/ui/StatusPill';
 import { moduleAccents } from '../theme/tokens';
+import { TopoShellBackground } from '../components/TopoShellBackground';
+import { trovanColors } from '../theme/designTokens';
 import { beginWorkosLogin, isAuthBypassed, login, useAuthConfigQuery } from '../services/api.session';
 
 export default function LoginPage() {
@@ -64,12 +66,33 @@ export default function LoginPage() {
         display: 'grid',
         placeItems: 'center',
         p: 2.5,
+        position: 'relative',
+        overflow: 'hidden',
+        bgcolor: trovanColors.black[950],
+        background:
+          `radial-gradient(circle at 24% 12%, ${alpha(trovanColors.copper[500], 0.16)}, transparent 28%), linear-gradient(145deg, ${trovanColors.black[950]} 0%, ${trovanColors.black[800]} 48%, ${trovanColors.black[950]} 100%)`,
       }}
     >
-      <Card sx={{ maxWidth: 440, width: '100%', borderRadius: 4 }}>
+      <TopoShellBackground active tone="black" />
+      <Card
+        sx={{
+          maxWidth: 440,
+          width: '100%',
+          borderRadius: 2,
+          position: 'relative',
+          zIndex: 1,
+          bgcolor: alpha(trovanColors.utility.panel, 0.96),
+          borderColor: alpha(trovanColors.copper[500], 0.2),
+          color: '#FFF8ED',
+        }}
+      >
         <CardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
-          <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
-            Signal Ops
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ textTransform: 'uppercase', letterSpacing: '0.14em', fontWeight: 800 }}
+          >
+            Trovan Logistics
           </Typography>
           <Typography variant="h4" sx={{ mt: 0.75 }}>
             Welcome back
@@ -113,7 +136,6 @@ export default function LoginPage() {
               size="large"
               sx={{
                 mb: authConfig?.localLoginAllowed ? 2 : 0,
-                bgcolor: (theme) => alpha(theme.palette.primary.main, 0.95),
               }}
               disabled={loading}
               onClick={handleWorkosLogin}
