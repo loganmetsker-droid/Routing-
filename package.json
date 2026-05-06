@@ -23,18 +23,16 @@
     "docker:prod": "docker-compose -f infrastructure/docker/docker-compose.yml up",
     "k8s:deploy": "kubectl apply -f infrastructure/k8s/"
   },
-  "dependencies": {
-    "@as-integrations/express5": "^1.1.2"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@playwright/test": "^1.59.1",
     "concurrently": "^8.2.2",
     "typescript": "^5.3.3"
   },
   "overrides": {
-    "@nestjs/common": "11.1.17",
-    "@nestjs/core": "11.1.17",
-    "@nestjs/platform-express": "11.1.17"
+    "@nestjs/common": "11.1.19",
+    "@nestjs/core": "11.1.19",
+    "@nestjs/platform-express": "11.1.19"
   },
   "engines": {
     "node": ">=20.0.0",

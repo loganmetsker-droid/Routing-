@@ -3,6 +3,74 @@
 Date: 2026-04-27
 Scope: local security and reliability audit of `/Users/logan/Desktop/Routing`
 
+## Launch Readiness Pass: 2026-05-06
+
+### Summary Of Risks Found
+
+- The JavaScript dependency audit had high/moderate findings in the launch path; these are now cleared by same-major package upgrades.
+- Render backend config did not declare several production guardrails that the app already supports (`STRICT_ENV_VALIDATION`, `QUEUE_REQUIRED`, metrics token protection, explicit frontend/CORS origins, Swagger disabled by default, session enforcement, webhook response cap).
+- Frontend hosting is not declared in `render.yaml`; the backend deploy definition alone is not a complete production launch.
+- Routing-service tests are still unverified locally because the active Python environment lacks `pytest` and needs a compatible OR-Tools runtime.
+- The repo still ignores JavaScript lockfiles, so production deploy reproducibility needs an explicit lockfile/pinned-artifact decision.
+
+### Changes Made
+
+- Upgraded backend/frontend package ranges to clear the registry-backed npm audit:
+  - NestJS runtime/dev packages to `11.1.19` where applicable.
+  - Apollo/Nest GraphQL packages to current compatible `13.4.x` / `5.5.x` ranges.
+  - `axios` to `^1.16.0`.
+  - `typeorm` to `^0.3.28`.
+  - `@workos-inc/node` to `^9.2.0`.
+- Removed the unused root `@as-integrations/express5` dependency.
+- Added Render backend env guardrails for strict config, queue-required readiness, metrics protection, production Swagger disablement, frontend/CORS origin wiring, session enforcement, and webhook response body cap.
+- Added `docs/launch-readiness.md` and tightened deploy/config/security docs around launch gates.
+- Updated backend env examples with the production-relevant auth/CORS/metrics/docs toggles.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/.env.example`
+- `backend/package.json`
+- `docs/config-matrix.md`
+- `docs/launch-readiness.md`
+- `docs/runbooks/deploy.md`
+- `docs/security-baseline.md`
+- `frontend/package.json`
+- `package.json`
+- `render.yaml`
+
+### Checks And Commands Run
+
+- `PATH="/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/bin:$PATH" npm run test --workspace=backend`
+  - Passed: 34 test files, 117 tests.
+- `PATH="/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/bin:$PATH" npm run test --workspace=frontend -- --run`
+  - Passed: 6 test files, 8 tests.
+- `PATH="/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/bin:$PATH" npm run build --workspaces`
+  - Passed.
+- `PATH="/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/bin:$PATH" npm audit --workspaces --audit-level=moderate`
+  - Passed: found 0 vulnerabilities.
+- `PATH="/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/bin:$PATH" npm audit --workspaces --omit=dev --audit-level=moderate`
+  - Passed: found 0 vulnerabilities.
+- `PATH="/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/bin:$PATH" npm run check:backend-deps`
+  - Passed.
+- `python3 -m pytest routing-service/tests`
+  - Failed before tests: active Python has no `pytest` module installed.
+
+### Remaining Risks
+
+- Production/staging env values still need to be populated and smoke-tested.
+- Frontend hosting/deploy target is not declared in Render config.
+- Routing-service tests need a compatible Python/OR-Tools environment.
+- Public self-serve webhooks still need a DNS/IP allowlist decision if customer-configurable at launch.
+- Production dependency reproducibility needs a tracked lockfile or exact artifact strategy.
+
+### Recommended Next Actions
+
+1. Configure Render/staging env and frontend hosting, then run staging smoke.
+2. Verify routing-service with a Python 3.11/3.12 environment or container.
+3. Commit/push this launch-readiness set after review.
+4. Defer AI/chat endpoints until the launch gates are intentionally closed or deferred.
+
 ## Daily Pass: 2026-04-26
 
 ### Summary Of Risks Found

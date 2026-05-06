@@ -11,12 +11,28 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: STRICT_ENV_VALIDATION
+        value: "true"
       - key: PORT
-        value: 10000
+        value: "10000"
       - key: AUTH_PROVIDER
         value: workos
       - key: ALLOW_LOCAL_AUTH
-        value: false
+        value: "false"
+      - key: AUTH_SESSION_ENFORCEMENT
+        value: "true"
+      - key: SWAGGER_ENABLED
+        value: "false"
+      - key: QUEUE_REQUIRED
+        value: "true"
+      - key: FRONTEND_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: METRICS_TOKEN
+        sync: false
+      - key: WEBHOOK_MAX_RESPONSE_BODY_BYTES
+        value: "65536"
       - key: DATABASE_URL
         sync: false
       - key: REDIS_URL

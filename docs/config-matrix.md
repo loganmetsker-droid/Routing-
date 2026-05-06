@@ -10,6 +10,8 @@ This file is the canonical environment/config reference for local, dev, staging,
 | `STRICT_ENV_VALIDATION` | `false` by default | `true` | `true` | Fail fast on missing required config. |
 | `QUEUE_REQUIRED` | `false` unless validating Redis locally | `true` | `true` | If `true`, startup and health require queue visibility. |
 | `ENABLE_SCHEDULER` | `0` by default | `1` if embedded worker used | `1` if embedded worker used | Dedicated worker is intentionally deferred. |
+| `SWAGGER_ENABLED` | Optional | `false` unless explicitly needed | `false` unless explicitly needed | Production docs surface is opt-in. |
+| `METRICS_TOKEN` | Optional | Required unless protected upstream | Required unless protected upstream | Protects `/api/metrics`. |
 
 ## Backend Core
 
@@ -20,6 +22,7 @@ This file is the canonical environment/config reference for local, dev, staging,
 | `FRONTEND_URL` | Yes | Yes | CORS origin allowlist source. |
 | `JWT_SECRET` | Yes | Yes | JWT signing secret. Must not use local default outside local/dev. |
 | `JWT_EXPIRES_IN` | Yes | Yes | Session TTL. |
+| `AUTH_SESSION_ENFORCEMENT` | Optional | Yes | Keeps HTTP JWTs tied to non-revoked application sessions. |
 
 ## Database
 
@@ -48,6 +51,12 @@ Use one of the following:
 | `REDIS_PASSWORD` | Optional | Allowed | Allowed | |
 | `QUEUE_REQUIRED` | Optional | Required | Required | Health/startup enforces queue visibility when true. |
 | `OPTIMIZATION_MODE` | `embedded` | `embedded` or `service` | `embedded` or `service` | Current repo remains embedded-first. |
+
+## Webhooks
+
+| Variable | Local | Staging | Production | Notes |
+| --- | --- | --- | --- | --- |
+| `WEBHOOK_MAX_RESPONSE_BODY_BYTES` | Optional, defaults to `65536` | Recommended | Recommended | Caps persisted outbound webhook response bodies. |
 
 ## Frontend
 

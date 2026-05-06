@@ -36,16 +36,19 @@
 
 ## Environment expectations
 - `CORS_ORIGINS` must be explicitly configured in staging and production.
+- `METRICS_TOKEN` should be configured in staging and production unless `/api/metrics` is protected upstream.
+- `SWAGGER_ENABLED=false` is expected in production unless docs are explicitly published behind access controls.
 - `TYPEORM_SYNCHRONIZE=true` is allowed only in local/dev/test environments.
 - The legacy Express backend is disabled unless `LEGACY_SERVER_ENABLED=true`.
 - Routing service and backend should run with separate dev, staging, and prod configuration sets.
 - `AUTH_PROVIDER=workos` is expected in staging and production.
 - `ALLOW_LOCAL_AUTH=false` is expected in staging and production.
+- `AUTH_SESSION_ENFORCEMENT=true` is expected in staging and production.
 - Staging and production readiness should degrade or fail when WorkOS or storage are missing.
 
 ## Known gaps
 - Audit coverage exists for route lifecycle and assignment, but broader cross-module audit coverage is still incomplete.
 - Rate limiting is globally enabled, but endpoint-specific policy tuning still needs production calibration.
-- Dependency vulnerabilities remain in the workspace and need a dedicated upgrade pass.
+- Dependency audit is clean as of the 2026-05-06 launch-readiness pass, but the repo still needs an explicit production lockfile/pinning strategy before a public launch.
 - Backup/restore automation exists as scripts and runbooks, but restore drills still need scheduled execution evidence.
 - Provider provisioning still depends on real environment credentials for WorkOS, Stripe, Postmark, Twilio, and R2.
