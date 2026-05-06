@@ -25,7 +25,7 @@ class Vehicle(Base):
     current_odometer_km = Column(Numeric(10, 2))
     last_maintenance_date = Column(DateTime)
     next_maintenance_km = Column(Numeric(10, 2))
-    metadata = Column(JSON)
+    metadata_ = Column("metadata", JSON)
     created_at = Column(DateTime)
     updated_at = Column(DateTime)
     deleted_at = Column(DateTime)

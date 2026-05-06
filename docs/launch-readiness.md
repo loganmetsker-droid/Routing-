@@ -8,7 +8,7 @@ Verdict: **NO-GO for public paid SaaS launch**
 
 This pass moved the repo from local/demo hardening toward a real SaaS staging posture: reproducible npm installs, hosted frontend and routing-service declarations, stricter tenant scoping, DTO validation on dispatch/route-run mutations, webhook SSRF/DNS blocking, staging smoke tooling, and a Playwright launch audit that inventories and exercises primary UI controls.
 
-The local codebase is materially healthier, but public launch is still blocked because hosted staging has not been deployed and proven with real WorkOS, Redis, database, Stripe test mode, email/SMS sandbox, storage, authenticated Socket.IO, public API keys, and live routing-service verification.
+The local codebase is materially healthier, and the routing-service now passes Python 3.11 plus Docker optimizer proof locally. Public launch is still blocked because hosted staging has not been deployed and proven with real WorkOS, Redis, database, Stripe test mode, email/SMS sandbox, storage, authenticated Socket.IO, public API keys, and provider-backed staging smoke.
 
 ## Changes Closed In This Pass
 
@@ -16,6 +16,8 @@ The local codebase is materially healthier, but public launch is still blocked b
 - Expanded `render.yaml` to include `trovan-backend`, `trovan-routing-service`, and `trovan-frontend`; frontend is static-hosted with production Vite env placeholders and SPA rewrite/security headers, while backend receives the routing service host/port from the Render service graph.
 - Replaced the root Docker Compose OSRM placeholder with the project FastAPI routing-service on port `8000`, matching backend route optimization expectations.
 - Added a routing-service URL resolver so backend planning/dispatch code supports explicit `ROUTING_SERVICE_URL`, legacy provider URL, and Render internal host/port wiring.
+- Fixed routing-service startup under Docker by avoiding SQLAlchemy's reserved `metadata` declarative attribute name.
+- Raised OR-Tools disjunction penalties so feasible stops are not dropped in `balanced` mode simply because span cost is cheaper than assignment.
 - Scoped drivers, vehicles, and customers REST/GraphQL flows by actor organization, including vehicle assignment checks for drivers.
 - Scoped subscription reads/cancel/create paths by actor organization, added a migration to attach `organization_id` to subscriptions, and backfilled from default organization memberships when available.
 - Scoped public API tracking telemetry reads through the route organization instead of vehicle id alone.
@@ -59,21 +61,26 @@ Passed on 2026-05-06:
   - Passed; 4 Playwright launch audit tests in 2.6 minutes.
   - Evidence: `.tmp/launch-audit/playwright` and `.tmp/launch-audit/test-results`.
   - Known warnings: React Router v7 future-flag warnings and Vite/Rolldown deprecation warnings. No console errors or unexpected HTTP 4xx/5xx were accepted by the suite.
+- `.tmp/routing-service-py311/bin/python -m pytest routing-service/tests`
+  - Passed; 5 routing-service tests under Python 3.11.0.
+  - Added app-startup coverage so SQLAlchemy model import failures are caught before container deploy.
+- `/Applications/Docker.app/Contents/Resources/bin/docker build -t trovan-routing-service:launch routing-service`
+  - Passed; production routing-service image builds from `python:3.11-slim`.
+- `curl -fsS http://127.0.0.1:18080/health`
+  - Passed against the Dockerized routing-service.
+- `ROUTING_SERVICE_URL=http://127.0.0.1:18080 npm run smoke:optimizer`
+  - Passed against the Dockerized routing-service.
+  - Evidence: `objectiveUsed=balanced`, `orderedStops=["stop-a","stop-b"]`, `warnings=[]`, `totalDistanceM=5768`, `totalDurationS=2065`.
 
-Blocked locally:
+Still not certified locally:
 
-- `python3.11 -m pytest routing-service/tests`
-  - Blocked: `zsh:1: command not found: python3.11`.
-  - Current `python3` is Python 3.14.4, while the routing-service launch path requires a Python 3.11-compatible OR-Tools environment or container.
-- Routing-service container verification
-  - Blocked: `docker` is not installed in this shell.
 - Backend readiness endpoints `/health`, `/health/runtime`, and `/health/readiness`
   - Not certified against hosted staging because staging is not deployed/configured in this environment.
 
 ## Launch Blockers
 
 - Deploy hosted staging from the updated blueprint and populate real staging env: WorkOS, database, Redis, `ROUTING_SERVICE_URL`/internal host, `FRONTEND_URL`, `CORS_ORIGINS`, `METRICS_TOKEN`, Stripe test mode, webhook receiver, email/SMS sandbox, and object storage test bucket.
-- Verify Python 3.11 routing-service tests and live optimizer smoke outside the mock preview API.
+- Deploy the Python 3.11 routing-service to hosted staging and run the same live optimizer smoke against `STAGING_ROUTING_SERVICE_URL`.
 - Run hosted staging Playwright with real WorkOS test login and no preview env (`VITE_AUTH_BYPASS` and `VITE_MOCK_PREVIEW` absent).
 - Prove authenticated Socket.IO connect/revocation expectations and organization-scoped dispatch/tracking events against staging.
 - Prove public API key create/revoke plus `x-api-key` calls against staging, including cross-org denial.

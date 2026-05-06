@@ -85,7 +85,12 @@ def create_time_callback(manager, time_matrix, service_seconds):
 
 
 def disjunction_penalty(priority: int, objective: OptimizationObjective) -> int:
-    base = {1: 100_000, 2: 50_000, 3: 10_000, 4: 5_000}.get(priority, 10_000)
+    base = {
+        1: 100_000_000,
+        2: 50_000_000,
+        3: 10_000_000,
+        4: 5_000_000,
+    }.get(priority, 10_000_000)
     if objective != "balanced":
         return base
     if priority == 1:
