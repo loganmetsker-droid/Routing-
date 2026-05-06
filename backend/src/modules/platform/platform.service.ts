@@ -19,6 +19,9 @@ import { WebhookDelivery } from './entities/webhook-delivery.entity';
 import { CreateApiKeyDto } from './dto/create-api-key.dto';
 import { CreateWebhookEndpointDto } from './dto/create-webhook-endpoint.dto';
 import { UpdateWebhookEndpointDto } from './dto/update-webhook-endpoint.dto';
+import { checkOutboundWebhookUrl } from '../../common/http/outbound-webhook-url.util';
+import { createOutboundWebhookFetchInit } from '../../common/http/outbound-webhook-request.util';
+import { readResponseTextLimited } from '../../common/http/response-body.util';
 
 type WebhookEventInput = {
   organizationId: string;
@@ -39,6 +42,7 @@ const DEFAULT_API_SCOPES = [
 @Injectable()
 export class PlatformService {
   private readonly logger = new Logger(PlatformService.name);
+  private readonly webhookResponseBodySuffix = '\n...[truncated]';
 
   constructor(
     @InjectRepository(ApiKey)
@@ -49,6 +53,18 @@ export class PlatformService {
     private readonly webhookDeliveries: Repository<WebhookDelivery>,
     private readonly configService: ConfigService,
   ) {}
+
+  private getWebhookMaxResponseBodyBytes() {
+    const raw = this.configService.get<string>(
+      'WEBHOOK_MAX_RESPONSE_BODY_BYTES',
+      '',
+    );
+    const parsed = Number.parseInt(String(raw || ''), 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      return parsed;
+    }
+    return 64 * 1024;
+  }
 
   private hashSecret(value: string) {
     return createHash('sha256').update(value).digest('hex');
@@ -231,13 +247,18 @@ export class PlatformService {
     dto: CreateWebhookEndpointDto,
     createdByUserId?: string,
   ) {
+    const urlCheck = checkOutboundWebhookUrl(dto.url, process.env);
+    if (urlCheck.allowed === false) {
+      throw new BadRequestException(urlCheck.reason);
+    }
+
     const generatedSecret =
       dto.signingSecret?.trim() || randomBytes(24).toString('hex');
     const endpoint = await this.webhookEndpoints.save(
       this.webhookEndpoints.create({
         organizationId,
         name: dto.name.trim(),
-        url: dto.url.trim(),
+        url: urlCheck.normalizedUrl,
         signingSecret: generatedSecret,
         subscribedEvents: Array.from(
           new Set((dto.subscribedEvents || ['*']).map((event) => event.trim())),
@@ -273,7 +294,13 @@ export class PlatformService {
     }
 
     if (dto.name !== undefined) endpoint.name = dto.name.trim();
-    if (dto.url !== undefined) endpoint.url = dto.url.trim();
+    if (dto.url !== undefined) {
+      const urlCheck = checkOutboundWebhookUrl(dto.url, process.env);
+      if (urlCheck.allowed === false) {
+        throw new BadRequestException(urlCheck.reason);
+      }
+      endpoint.url = urlCheck.normalizedUrl;
+    }
     if (dto.subscribedEvents !== undefined) {
       endpoint.subscribedEvents = Array.from(
         new Set(dto.subscribedEvents.map((event) => event.trim()).filter(Boolean)),
@@ -360,33 +387,44 @@ export class PlatformService {
         try {
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 5000);
-          const response = await fetch(endpoint.url, {
-            method: 'POST',
-            headers: {
-              'content-type': 'application/json',
-              'user-agent': 'trovan-webhooks/1.0',
-              'x-trovan-event': input.eventType,
-              'x-trovan-signature': signature,
-              'x-trovan-timestamp': timestamp,
-              'x-request-id': input.requestId || delivery.id,
-            },
-            body,
-            signal: controller.signal,
-          });
-          clearTimeout(timeout);
+          try {
+            const response = await fetch(
+              endpoint.url,
+              createOutboundWebhookFetchInit(
+                {
+                  eventType: input.eventType,
+                  signature,
+                  timestamp,
+                  requestId: input.requestId || delivery.id,
+                },
+                body,
+                controller.signal,
+              ),
+            );
 
-          delivery.attempts = 1;
-          delivery.responseStatus = response.status;
-          delivery.responseBody = await response.text();
-          if (!response.ok) {
-            delivery.status = 'FAILED';
-            delivery.failureReason = `Webhook returned ${response.status}`;
-            endpoint.lastFailure = delivery.failureReason;
-          } else {
-            delivery.status = 'DELIVERED';
-            delivery.deliveredAt = new Date();
-            endpoint.lastDeliveryAt = delivery.deliveredAt;
-            endpoint.lastFailure = null;
+            const maxResponseBodyBytes = this.getWebhookMaxResponseBodyBytes();
+            const captured = await readResponseTextLimited(
+              response,
+              maxResponseBodyBytes,
+            );
+
+            delivery.attempts = 1;
+            delivery.responseStatus = response.status;
+            delivery.responseBody = captured.truncated
+              ? `${captured.text}${this.webhookResponseBodySuffix}`
+              : captured.text;
+            if (!response.ok) {
+              delivery.status = 'FAILED';
+              delivery.failureReason = `Webhook returned ${response.status}`;
+              endpoint.lastFailure = delivery.failureReason;
+            } else {
+              delivery.status = 'DELIVERED';
+              delivery.deliveredAt = new Date();
+              endpoint.lastDeliveryAt = delivery.deliveredAt;
+              endpoint.lastFailure = null;
+            }
+          } finally {
+            clearTimeout(timeout);
           }
           await this.webhookDeliveries.save(delivery);
           await this.webhookEndpoints.save(endpoint);
@@ -445,32 +483,47 @@ export class PlatformService {
       .digest('hex');
 
     try {
-      const response = await fetch(endpoint.url, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'user-agent': 'trovan-webhooks/1.0',
-          'x-trovan-event': delivery.eventType,
-          'x-trovan-signature': signature,
-          'x-trovan-timestamp': timestamp,
-          'x-request-id': delivery.requestId || delivery.id,
-        },
-        body,
-      });
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      try {
+        const response = await fetch(
+          endpoint.url,
+          createOutboundWebhookFetchInit(
+            {
+              eventType: delivery.eventType,
+              signature,
+              timestamp,
+              requestId: delivery.requestId || delivery.id,
+            },
+            body,
+            controller.signal,
+          ),
+        );
 
-      delivery.attempts = (delivery.attempts || 0) + 1;
-      delivery.responseStatus = response.status;
-      delivery.responseBody = await response.text();
-      if (!response.ok) {
-        delivery.status = 'FAILED';
-        delivery.failureReason = `Webhook returned ${response.status}`;
-        endpoint.lastFailure = delivery.failureReason;
-      } else {
-        delivery.status = 'DELIVERED';
-        delivery.deliveredAt = new Date();
-        delivery.failureReason = null;
-        endpoint.lastFailure = null;
-        endpoint.lastDeliveryAt = delivery.deliveredAt;
+        const maxResponseBodyBytes = this.getWebhookMaxResponseBodyBytes();
+        const captured = await readResponseTextLimited(
+          response,
+          maxResponseBodyBytes,
+        );
+
+        delivery.attempts = (delivery.attempts || 0) + 1;
+        delivery.responseStatus = response.status;
+        delivery.responseBody = captured.truncated
+          ? `${captured.text}${this.webhookResponseBodySuffix}`
+          : captured.text;
+        if (!response.ok) {
+          delivery.status = 'FAILED';
+          delivery.failureReason = `Webhook returned ${response.status}`;
+          endpoint.lastFailure = delivery.failureReason;
+        } else {
+          delivery.status = 'DELIVERED';
+          delivery.deliveredAt = new Date();
+          delivery.failureReason = null;
+          endpoint.lastFailure = null;
+          endpoint.lastDeliveryAt = delivery.deliveredAt;
+        }
+      } finally {
+        clearTimeout(timeout);
       }
     } catch (error) {
       delivery.attempts = (delivery.attempts || 0) + 1;

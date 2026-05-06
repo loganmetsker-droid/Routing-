@@ -12,6 +12,6 @@ export class UpdateRouteDto extends PartialType(CreateRouteDto) {
   })
   @IsOptional()
   @IsString()
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   status?: RouteStatus | 'ready_for_dispatch' | 'dispatched' | 'rerouting' | 'degraded';
 }

@@ -164,6 +164,7 @@ export class DispatchWorker implements OnModuleInit {
             vehicleId: vehicle.id,
             status: 'in_route',
             routeId: startedRoute.id,
+            organizationId: startedRoute.organizationId,
           });
           this.logger.log(`[DISPATCH:STEP6] WebSocket events emitted successfully`);
 

@@ -9,10 +9,16 @@ import {
   MessageBody,
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 import { Interval } from '@nestjs/schedule';
 import { TrackingService, VehicleLocation } from './tracking.service';
 import { createCorsOriginValidator } from '../../common/http/cors-origin.util';
+import {
+  authenticateSocket,
+  getSocketAuth,
+  socketOrganizationRoom,
+} from '../../common/websocket/socket-auth.util';
 
 /**
  * WebSocket Gateway for real-time vehicle tracking
@@ -31,9 +37,26 @@ export class TrackingGateway
   server: Server;
 
   private readonly logger = new Logger(TrackingGateway.name);
-  private connectedClients = new Set<string>();
+  private connectedClients = new Map<string, string>();
 
-  constructor(private readonly trackingService: TrackingService) {}
+  constructor(
+    private readonly trackingService: TrackingService,
+    private readonly jwtService: JwtService,
+  ) {}
+
+  private emitToOrganization(
+    organizationId: string,
+    event: string,
+    payload: Record<string, unknown>,
+    channel?: string,
+  ) {
+    const room = socketOrganizationRoom('tracking', organizationId, channel);
+    this.server.to(room).emit(event, { ...payload, organizationId });
+  }
+
+  private organizationIdsWithClients() {
+    return Array.from(new Set(this.connectedClients.values()));
+  }
 
   /**
    * Gateway initialization
@@ -46,17 +69,33 @@ export class TrackingGateway
    * Handle client connection
    */
   async handleConnection(client: Socket) {
-    this.logger.log(`Client connected: ${client.id}`);
-    this.connectedClients.add(client.id);
+    let organizationId: string;
+    try {
+      const auth = await authenticateSocket(this.jwtService, client);
+      client.data.auth = auth;
+      organizationId = auth.organizationId;
+      client.join(socketOrganizationRoom('tracking', organizationId));
+      this.connectedClients.set(client.id, organizationId);
+      this.logger.log(`Client connected: ${client.id} org=${organizationId}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Rejected tracking socket ${client.id}: ${message}`);
+      client.emit('error', { message: 'Unauthorized socket connection' });
+      client.disconnect(true);
+      return;
+    }
 
     try {
       // Send current vehicle locations immediately on connect
-      const locations = await this.trackingService.getLatestVehicleLocations();
+      const locations = await this.trackingService.getLatestVehicleLocations({
+        organizationId,
+      });
 
       client.emit('vehicle:locations', {
         vehicles: locations,
         timestamp: new Date().toISOString(),
         count: locations.length,
+        organizationId,
       });
 
       this.logger.log(
@@ -82,8 +121,16 @@ export class TrackingGateway
    */
   @SubscribeMessage('subscribe:locations')
   handleSubscribeLocations(@ConnectedSocket() client: Socket) {
-    this.logger.log(`Client ${client.id} subscribed to location updates`);
-    client.join('locations');
+    const auth = getSocketAuth(client);
+    if (!auth) {
+      return { event: 'error', data: { message: 'Unauthorized' } };
+    }
+    this.logger.log(
+      `Client ${client.id} subscribed to location updates org=${auth.organizationId}`,
+    );
+    client.join(
+      socketOrganizationRoom('tracking', auth.organizationId, 'locations'),
+    );
     return {
       event: 'subscribed',
       data: {
@@ -101,14 +148,19 @@ export class TrackingGateway
     @ConnectedSocket() client: Socket,
     @MessageBody() data: { vehicleId: string; hours?: number },
   ) {
+    const auth = getSocketAuth(client);
+    if (!auth) {
+      return { event: 'error', data: { message: 'Unauthorized' } };
+    }
     this.logger.log(
-      `Client ${client.id} requested history for vehicle ${data.vehicleId}`,
+      `Client ${client.id} requested history for vehicle ${data.vehicleId} org=${auth.organizationId}`,
     );
 
     try {
       const history = await this.trackingService.getVehicleLocationHistory(
         data.vehicleId,
         data.hours || 24,
+        auth.organizationId,
       );
 
       return {
@@ -149,24 +201,26 @@ export class TrackingGateway
         `Broadcasting vehicle locations to ${this.connectedClients.size} clients`,
       );
 
-      const locations = await this.trackingService.getLatestVehicleLocations();
-
-      // Broadcast to all clients in the 'locations' room
-      this.server.to('locations').emit('vehicle:locations', {
-        vehicles: locations,
-        timestamp: new Date().toISOString(),
-        count: locations.length,
-      });
-
-      // Also broadcast to all connected clients (even if not subscribed to room)
-      this.server.emit('vehicle:locations', {
-        vehicles: locations,
-        timestamp: new Date().toISOString(),
-        count: locations.length,
-      });
+      for (const organizationId of this.organizationIdsWithClients()) {
+        const locations = await this.trackingService.getLatestVehicleLocations({
+          organizationId,
+        });
+        const payload = {
+          vehicles: locations,
+          timestamp: new Date().toISOString(),
+          count: locations.length,
+        };
+        this.emitToOrganization(
+          organizationId,
+          'vehicle:locations',
+          payload,
+          'locations',
+        );
+        this.emitToOrganization(organizationId, 'vehicle:locations', payload);
+      }
 
       this.logger.debug(
-        `✅ Broadcast ${locations.length} vehicle locations`,
+        `Broadcast vehicle locations for ${this.organizationIdsWithClients().length} organizations`,
       );
     } catch (error) {
       this.logger.error(
@@ -188,7 +242,21 @@ export class TrackingGateway
    * Emit single vehicle location update
    */
   emitVehicleLocationUpdate(vehicleLocation: VehicleLocation) {
-    this.server.emit('vehicle:location-update', vehicleLocation);
+    const organizationId =
+      typeof (vehicleLocation as any).organizationId === 'string'
+        ? (vehicleLocation as any).organizationId
+        : null;
+    if (!organizationId) {
+      this.logger.warn(
+        `Skipping vehicle location broadcast for ${vehicleLocation.vehicleId}: missing organization scope`,
+      );
+      return;
+    }
+    this.emitToOrganization(
+      organizationId,
+      'vehicle:location-update',
+      vehicleLocation as any,
+    );
   }
 
   /**
@@ -196,11 +264,15 @@ export class TrackingGateway
    */
   @SubscribeMessage('get:statistics')
   async handleGetStatistics(@ConnectedSocket() client: Socket) {
+    const auth = getSocketAuth(client);
+    if (!auth) {
+      return { event: 'error', data: { message: 'Unauthorized' } };
+    }
     try {
-      const stats = await this.trackingService.getStatistics();
+      const stats = await this.trackingService.getStatistics(auth.organizationId);
       return {
         event: 'tracking:statistics',
-        data: stats,
+        data: { ...stats, organizationId: auth.organizationId },
       };
     } catch (error) {
       this.logger.error(`Error fetching statistics: ${error.message}`);
@@ -216,8 +288,16 @@ export class TrackingGateway
    * Called when routes are created, updated, or dispatched
    */
   broadcastRouteUpdate(route: any, eventType: 'created' | 'updated' | 'dispatched' | 'completed') {
+    const organizationId =
+      typeof route?.organizationId === 'string' ? route.organizationId : null;
+    if (!organizationId) {
+      this.logger.warn(
+        `Skipping route ${eventType} broadcast for ${route?.id || 'unknown'}: missing organization scope`,
+      );
+      return;
+    }
     this.logger.log(`Broadcasting route ${eventType}: ${route.id}`);
-    this.server.emit('route:update', {
+    this.emitToOrganization(organizationId, 'route:update', {
       type: eventType,
       route,
       timestamp: new Date().toISOString(),
@@ -239,9 +319,13 @@ export class TrackingGateway
       timestamp: string;
     },
   ) {
+    const auth = getSocketAuth(client);
+    if (!auth) {
+      return { event: 'error', data: { message: 'Unauthorized' } };
+    }
     try {
       this.logger.log(
-        `Received location update for vehicle ${data.vehicleId} from client ${client.id}`,
+        `Received location update for vehicle ${data.vehicleId} from client ${client.id} org=${auth.organizationId}`,
       );
 
       // Validate data
@@ -265,10 +349,10 @@ export class TrackingGateway
         speed: data.speed,
         heading: data.heading,
         timestamp: data.timestamp,
+        organizationId: auth.organizationId,
       });
 
-      // Broadcast to all connected clients (dispatchers, other drivers)
-      this.server.emit('vehicle:location-update', {
+      this.emitToOrganization(auth.organizationId, 'vehicle:location-update', {
         vehicleId: persisted.vehicleId,
         lat: data.lat,
         lng: data.lng,

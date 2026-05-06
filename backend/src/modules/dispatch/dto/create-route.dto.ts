@@ -34,7 +34,7 @@ export class CreateRouteDto {
   })
   @IsOptional()
   @IsString()
-  @Field({ nullable: true })
+  @Field(() => String, { nullable: true })
   objective?: OptimizationObjective | string;
 
   @ApiPropertyOptional({ description: 'Additional notes' })

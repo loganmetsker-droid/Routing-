@@ -6,9 +6,15 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 import { Route } from './entities/route.entity';
 import { createCorsOriginValidator } from '../../common/http/cors-origin.util';
+import {
+  authenticateSocket,
+  getSocketAuth,
+  socketOrganizationRoom,
+} from '../../common/websocket/socket-auth.util';
 
 /**
  * WebSocket Gateway for real-time dispatch updates
@@ -26,11 +32,45 @@ export class DispatchGateway {
 
   private readonly logger = new Logger(DispatchGateway.name);
 
+  constructor(private readonly jwtService: JwtService) {}
+
+  private emitToOrganization(
+    organizationId: string,
+    event: string,
+    payload: Record<string, unknown>,
+    channel?: string,
+  ) {
+    const room = socketOrganizationRoom('dispatch', organizationId, channel);
+    this.server.to(room).emit(event, { ...payload, organizationId });
+  }
+
+  private routeOrganizationId(route: Route, event: string) {
+    if (!route.organizationId) {
+      this.logger.warn(
+        `Skipping ${event} broadcast for route ${route.id}: missing organization scope`,
+      );
+      return null;
+    }
+    return route.organizationId;
+  }
+
   /**
    * Handle client connection
    */
-  handleConnection(client: Socket) {
-    this.logger.log(`Client connected: ${client.id}`);
+  async handleConnection(client: Socket) {
+    try {
+      const auth = await authenticateSocket(this.jwtService, client);
+      client.data.auth = auth;
+      client.join(socketOrganizationRoom('dispatch', auth.organizationId));
+      this.logger.log(
+        `Client connected: ${client.id} org=${auth.organizationId}`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Rejected dispatch socket ${client.id}: ${message}`);
+      client.emit('error', { message: 'Unauthorized socket connection' });
+      client.disconnect(true);
+    }
   }
 
   /**
@@ -45,9 +85,16 @@ export class DispatchGateway {
    */
   @SubscribeMessage('subscribe:routes')
   handleSubscribeRoutes(@ConnectedSocket() client: Socket) {
-    this.logger.log(`Client ${client.id} subscribed to route updates`);
-    client.join('routes');
-    return { event: 'subscribed', data: 'routes' };
+    const auth = getSocketAuth(client);
+    if (!auth) {
+      return { event: 'error', data: { message: 'Unauthorized' } };
+    }
+    const room = socketOrganizationRoom('dispatch', auth.organizationId, 'routes');
+    this.logger.log(
+      `Client ${client.id} subscribed to route updates org=${auth.organizationId}`,
+    );
+    client.join(room);
+    return { event: 'subscribed', data: { room: 'routes' } };
   }
 
   /**
@@ -55,17 +102,26 @@ export class DispatchGateway {
    */
   @SubscribeMessage('subscribe:vehicles')
   handleSubscribeVehicles(@ConnectedSocket() client: Socket) {
-    this.logger.log(`Client ${client.id} subscribed to vehicle updates`);
-    client.join('vehicles');
-    return { event: 'subscribed', data: 'vehicles' };
+    const auth = getSocketAuth(client);
+    if (!auth) {
+      return { event: 'error', data: { message: 'Unauthorized' } };
+    }
+    const room = socketOrganizationRoom('dispatch', auth.organizationId, 'vehicles');
+    this.logger.log(
+      `Client ${client.id} subscribed to vehicle updates org=${auth.organizationId}`,
+    );
+    client.join(room);
+    return { event: 'subscribed', data: { room: 'vehicles' } };
   }
 
   /**
    * Emit route created event
    */
   emitRouteCreated(route: Route) {
+    const organizationId = this.routeOrganizationId(route, 'route:created');
+    if (!organizationId) return;
     this.logger.log(`Emitting route created: ${route.id}`);
-    this.server.to('routes').emit('route:created', {
+    this.emitToOrganization(organizationId, 'route:created', {
       routeId: route.id,
       vehicleId: route.vehicleId,
       driverId: route.driverId,
@@ -78,10 +134,9 @@ export class DispatchGateway {
       color: route.color,
       eta: route.eta,
       createdAt: route.createdAt,
-    });
+    }, 'routes');
 
-    // Also emit to all clients (not just subscribers)
-    this.server.emit('route:update', {
+    this.emitToOrganization(organizationId, 'route:update', {
       type: 'created',
       route: {
         id: route.id,
@@ -104,15 +159,17 @@ export class DispatchGateway {
    * Emit route started event
    */
   emitRouteStarted(route: Route) {
+    const organizationId = this.routeOrganizationId(route, 'route:started');
+    if (!organizationId) return;
     this.logger.log(`Emitting route started: ${route.id}`);
-    this.server.to('routes').emit('route:started', {
+    this.emitToOrganization(organizationId, 'route:started', {
       routeId: route.id,
       vehicleId: route.vehicleId,
       status: route.status,
       actualStart: route.actualStart,
-    });
+    }, 'routes');
 
-    this.server.emit('route:update', {
+    this.emitToOrganization(organizationId, 'route:update', {
       type: 'started',
       route: {
         id: route.id,
@@ -136,15 +193,17 @@ export class DispatchGateway {
    * Emit route completed event
    */
   emitRouteCompleted(route: Route) {
+    const organizationId = this.routeOrganizationId(route, 'route:completed');
+    if (!organizationId) return;
     this.logger.log(`Emitting route completed: ${route.id}`);
-    this.server.to('routes').emit('route:completed', {
+    this.emitToOrganization(organizationId, 'route:completed', {
       routeId: route.id,
       vehicleId: route.vehicleId,
       status: route.status,
       completedAt: route.completedAt,
-    });
+    }, 'routes');
 
-    this.server.emit('route:update', {
+    this.emitToOrganization(organizationId, 'route:update', {
       type: 'completed',
       route: {
         id: route.id,
@@ -168,15 +227,17 @@ export class DispatchGateway {
    * Emit route cancelled event
    */
   emitRouteCancelled(route: Route) {
+    const organizationId = this.routeOrganizationId(route, 'route:cancelled');
+    if (!organizationId) return;
     this.logger.log(`Emitting route cancelled: ${route.id}`);
-    this.server.to('routes').emit('route:cancelled', {
+    this.emitToOrganization(organizationId, 'route:cancelled', {
       routeId: route.id,
       vehicleId: route.vehicleId,
       status: route.status,
       cancelledAt: route.updatedAt,
-    });
+    }, 'routes');
 
-    this.server.emit('route:update', {
+    this.emitToOrganization(organizationId, 'route:update', {
       type: 'cancelled',
       route: {
         id: route.id,
@@ -200,8 +261,10 @@ export class DispatchGateway {
    * Emit route updated event (for stop reordering, etc.)
    */
   emitRouteUpdated(route: Route) {
+    const organizationId = this.routeOrganizationId(route, 'route:updated');
+    if (!organizationId) return;
     this.logger.log(`Emitting route updated: ${route.id}`);
-    this.server.to('routes').emit('route:updated', {
+    this.emitToOrganization(organizationId, 'route:updated', {
       routeId: route.id,
       vehicleId: route.vehicleId,
       driverId: route.driverId,
@@ -214,10 +277,9 @@ export class DispatchGateway {
       color: route.color,
       eta: route.eta,
       updatedAt: route.updatedAt,
-    });
+    }, 'routes');
 
-    // Also emit to all clients
-    this.server.emit('route:update', {
+    this.emitToOrganization(organizationId, 'route:update', {
       type: 'updated',
       route: {
         id: route.id,
@@ -243,17 +305,35 @@ export class DispatchGateway {
     vehicleId: string;
     status: string;
     routeId?: string;
+    organizationId?: string | null;
   }) {
+    if (!update.organizationId) {
+      this.logger.warn(
+        `Skipping vehicle status broadcast for ${update.vehicleId}: missing organization scope`,
+      );
+      return;
+    }
     this.logger.log(`Emitting vehicle status update: ${update.vehicleId}`);
-    this.server.to('vehicles').emit('vehicle:status-update', update);
+    this.emitToOrganization(
+      update.organizationId,
+      'vehicle:status-update',
+      update,
+      'vehicles',
+    );
   }
 
   /**
    * Emit job assigned event
    */
-  emitJobAssigned(jobId: string, routeId: string) {
+  emitJobAssigned(jobId: string, routeId: string, organizationId?: string | null) {
+    if (!organizationId) {
+      this.logger.warn(
+        `Skipping job assigned broadcast for ${jobId}: missing organization scope`,
+      );
+      return;
+    }
     this.logger.log(`Emitting job assigned: ${jobId} to route ${routeId}`);
-    this.server.emit('job:assigned', {
+    this.emitToOrganization(organizationId, 'job:assigned', {
       jobId,
       routeId,
       timestamp: new Date(),
@@ -264,7 +344,15 @@ export class DispatchGateway {
    * Broadcast generic dispatch event
    */
   broadcastDispatchEvent(event: string, data: any) {
+    const organizationId =
+      typeof data?.organizationId === 'string' ? data.organizationId : null;
+    if (!organizationId) {
+      this.logger.warn(
+        `Skipping ${event} broadcast: missing organization scope`,
+      );
+      return;
+    }
     this.logger.log(`Broadcasting dispatch event: ${event}`);
-    this.server.emit(event, data);
+    this.emitToOrganization(organizationId, event, data);
   }
 }

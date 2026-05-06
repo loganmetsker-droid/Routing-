@@ -19,6 +19,7 @@ import {
 import { Public } from '../../common/decorators/public.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { LoginDto } from './dto/login.dto';
+import { WorkosCallbackDto } from './dto/workos-callback.dto';
 import { AuthService } from './auth.service';
 
 type RequestContext = {
@@ -94,8 +95,9 @@ export class AuthController {
 
   @Public()
   @Post('workos/callback')
+  @ApiBody({ type: WorkosCallbackDto })
   async workosCallback(
-    @Body() body: { code: string; invitationToken?: string },
+    @Body() body: WorkosCallbackDto,
     @Req() req: RequestContext,
   ) {
     return this.authService.loginWithWorkosCode(

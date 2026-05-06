@@ -2,6 +2,7 @@
  * Socket.IO client configuration for real-time tracking
  */
 import { io, Socket } from 'socket.io-client';
+import { getAuthToken } from './apiClient';
 
 const SOCKET_URL = (
   import.meta.env.VITE_WS_URL ||
@@ -17,6 +18,11 @@ const SOCKETS_ENABLED =
 
 let previewSocketsDisabledLogged = false;
 
+const buildSocketAuth = () => {
+  const token = getAuthToken();
+  return token ? { token: `Bearer ${token}` } : {};
+};
+
 // Tracking namespace socket
 let trackingSocket: Socket | null = null;
 
@@ -31,6 +37,7 @@ export const getTrackingSocket = (): Socket => {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: Infinity,
+      auth: buildSocketAuth,
     });
 
     if (SOCKETS_ENABLED) {
@@ -75,6 +82,7 @@ export const getDispatchSocket = (): Socket => {
     dispatchSocket = io(`${SOCKET_URL}/dispatch`, {
       autoConnect: SOCKETS_ENABLED,
       reconnection: SOCKETS_ENABLED,
+      auth: buildSocketAuth,
     });
 
     if (SOCKETS_ENABLED) {

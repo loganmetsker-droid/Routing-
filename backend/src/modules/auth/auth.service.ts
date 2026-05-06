@@ -6,6 +6,7 @@ import { Repository } from 'typeorm';
 import { WorkosService } from '../../common/integrations/workos.service';
 import { OrganizationsService } from '../organizations/organizations.service';
 import { AuthSession } from './entities/auth-session.entity';
+import { sanitizeSessionContext, SessionContext } from './session-context.util';
 
 type AuthUser = {
   id: string;
@@ -16,11 +17,6 @@ type AuthUser = {
   organizationId?: string;
   organizationSlug?: string;
   membershipId?: string;
-};
-
-type SessionContext = {
-  userAgent?: string | null;
-  ipAddress?: string | null;
 };
 
 function normalizeRoles(...values: Array<string | undefined | null>) {
@@ -67,6 +63,7 @@ export class AuthService {
     sessionContext?: SessionContext,
     providerSessionId?: string | null,
   ) {
+    const sanitizedContext = sanitizeSessionContext(sessionContext);
     const session = await this.authSessions.save(
       this.authSessions.create({
         userId: user.id,
@@ -75,8 +72,8 @@ export class AuthService {
         authProvider,
         providerSessionId: providerSessionId || null,
         roles: user.roles,
-        userAgent: sessionContext?.userAgent || null,
-        ipAddress: sessionContext?.ipAddress || null,
+        userAgent: sanitizedContext.userAgent,
+        ipAddress: sanitizedContext.ipAddress,
         lastSeenAt: new Date(),
       }),
     );

@@ -319,3 +319,241 @@ Note: the working tree already contained many unrelated frontend changes before 
 1. In production, set `METRICS_TOKEN` and configure Prometheus scraping headers, or restrict `/api/metrics` to an internal network/allowlist.
 2. Repair local Rollup/Rolldown native binding signing mismatch so Vitest/Vite can run and the added unit tests can be executed.
 3. Add authenticated Socket.IO handshake + organization scoping for gateway broadcasts (migration-sized; do as a separate dedicated pass).
+
+## Daily Pass: 2026-05-02
+
+### Summary Of Risks Found
+
+- Outbound webhook SSRF risk: webhook endpoints are user-configurable and the server will `fetch()` arbitrary URLs during delivery. Even with `https`-only validation, an attacker (or compromised admin account) could target internal/private IPs and potentially exfiltrate internal data (via delivery response capture) or hit internal services.
+
+### Changes Made
+
+- Added a best-effort outbound webhook URL allow/deny check for strict environments (non-`development`/`test`):
+  - Blocks `localhost`/`.localhost`, private IPv4 ranges, and private/loopback/link-local IPv6 when `NODE_ENV` is not `development`/`test`.
+  - Leaves behavior unchanged in `development`/`test` to keep local testing possible.
+  - Note: this does not protect against hostnames that resolve to private IPs (DNS rebinding / internal DNS); addressing that requires a dedicated allowlist/DNS-resolution hardening pass.
+- Added focused unit tests for the allow/deny logic (not executable locally due to the Vitest native binding issue).
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/common/http/outbound-webhook-url.util.ts`
+- `backend/src/common/http/outbound-webhook-url.util.spec.ts`
+- `backend/src/modules/platform/platform.service.ts`
+
+### Checks And Commands Run
+
+- `cd backend && ../node_modules/.bin/nest build`
+  - Passed.
+- `cd backend && ../node_modules/.bin/vitest run --config vitest.config.ts -- outbound-webhook-url.util`
+  - Failed at Vitest startup due native binding/code-signing failure in `@rolldown/binding-darwin-arm64` (Team ID mismatch).
+
+### Blockers
+
+- Vitest remains blocked on this Mac by native binding/code-signing failures (`@rolldown/binding-darwin-arm64`), so unit tests could not be executed in this environment.
+
+### Remaining Risks
+
+- Webhooks still represent a possible SSRF surface via DNS resolution (hostnames that resolve to private IPs), redirects, and internal domains; consider an explicit allowlist + DNS/IP enforcement at request time.
+- WebSocket auth + scoping: `/dispatch` and `/tracking` gateways still accept unauthenticated handshakes and broadcast unscoped events/locations.
+
+### Recommended Next Actions
+
+1. Decide on a webhook delivery allowlist strategy (per-org allowed domains, or global allowlist), and enforce DNS/IP resolution blocking at request time.
+2. Repair local Rollup/Rolldown native binding signing mismatch so Vitest/Vite can run and the added unit tests can be executed.
+
+## Daily Pass: 2026-05-06
+
+### Summary Of Risks Found
+
+- Webhook delivery response capture risk: webhook deliveries stored the full `response.text()` in `webhook_deliveries.response_body` with no size cap. A malicious/buggy webhook endpoint can return very large bodies, bloating database storage and increasing the blast radius of any SSRF misconfiguration by persisting internal service responses.
+- WebSocket tenant-boundary risk: `/dispatch` and `/tracking` accepted unauthenticated Socket.IO handshakes and broadcast route/location events globally instead of by `organizationId`.
+- Local test runner diagnosis: Vitest fails under the Codex.app hardened Node binary, but the local Node install at `/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/bin` can load Rolldown/Rollup native bindings and run the backend suite.
+
+### Changes Made
+
+- Limited webhook response-body capture to a bounded size:
+  - Added `readResponseTextLimited()` helper that reads webhook responses incrementally and truncates after `WEBHOOK_MAX_RESPONSE_BODY_BYTES` (default: 64 KiB).
+  - Updated `backend/src/modules/platform/platform.service.ts` to use the bounded reader for both delivery and replay paths and annotate truncated bodies with `...[truncated]`.
+- Kept webhook delivery timeouts active through bounded response-body reads so slow streaming bodies cannot bypass the existing 5-second abort window.
+- Added authenticated and organization-scoped Socket.IO boundaries:
+  - Added a shared socket JWT helper that accepts tokens from Socket.IO auth payloads, Authorization headers, or query token fallback.
+  - `/dispatch` and `/tracking` now reject unauthenticated sockets or JWTs without `organizationId`.
+  - Route, vehicle, tracking, driver-location, and generic gateway broadcasts now emit to organization-scoped rooms instead of global `server.emit(...)`.
+  - Frontend Socket.IO clients now send the stored bearer token during connection handshakes.
+- Fixed the current backend test failures:
+  - Added explicit GraphQL field metadata for union-typed dispatch DTO fields.
+  - Updated `PlanningService` specs for the newer constructor dependencies and coordinate requirements.
+  - Fixed IPv6 bracket normalization in outbound webhook URL checks.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/common/websocket/socket-auth.util.ts`
+- `backend/src/common/websocket/socket-auth.util.spec.ts`
+- `backend/src/common/http/response-body.util.ts`
+- `backend/src/common/http/response-body.util.spec.ts`
+- `backend/src/common/http/outbound-webhook-url.util.ts`
+- `backend/src/modules/platform/platform.service.ts`
+- `backend/.env.example`
+- `backend/.env.local.example`
+- `backend/src/modules/dispatch/dispatch.gateway.ts`
+- `backend/src/modules/dispatch/dispatch.worker.ts`
+- `backend/src/modules/dispatch/dto/create-route.dto.ts`
+- `backend/src/modules/dispatch/dto/update-route.dto.ts`
+- `backend/src/modules/planning/planning.service.spec.ts`
+- `backend/src/modules/tracking/tracking.gateway.ts`
+- `backend/src/modules/tracking/tracking.module.ts`
+- `frontend/src/services/socket.ts`
+
+### Checks And Commands Run
+
+- `cd backend && ../node_modules/.bin/nest build`
+  - Passed.
+- `export PATH='/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/bin':$PATH; cd backend && ../node_modules/.bin/vitest run --config vitest.config.ts`
+  - Passed: 34 test files, 117 tests.
+- `export PATH='/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/bin':$PATH; npm run build --workspace=frontend`
+  - Passed.
+
+### Blockers
+
+- The shell still resolves `node` to the Codex.app binary by default, and that binary still fails to load the Rolldown native binding. Use the local Node path above for Routing backend tests and frontend builds until PATH is made persistent.
+
+### Remaining Risks
+
+- Webhooks still represent a possible SSRF surface via DNS resolution (hostnames that resolve to private IPs), redirects, and internal domains; consider an explicit allowlist + DNS/IP enforcement at request time.
+- Socket.IO now requires JWT organization scope, but session revocation is still enforced by HTTP JWT strategy rather than by the lightweight socket helper; consider centralizing token/session validation if realtime sessions need immediate revocation semantics.
+
+### Recommended Next Actions
+
+1. Decide on a webhook delivery allowlist strategy (per-org allowed domains, or global allowlist), and enforce DNS/IP resolution blocking at request time.
+2. Keep using the local Node path for tests/builds or make it persistent in the developer shell.
+3. Start the scoped read-only assistant gateway only after this hardening set is reviewed/committed.
+
+## Daily Pass: 2026-05-05
+
+### Summary Of Risks Found
+
+- Auth session context hardening gap: auth session `userAgent` and `ipAddress` values were persisted without any length clamp or control-character stripping, allowing oversized or control-character-injected header values to bloat session storage and potentially pollute logs/UI surfaces that display session metadata.
+
+### Changes Made
+
+- Sanitized auth session context values before persisting sessions:
+  - Added `sanitizeSessionContext()` helper that trims, strips ASCII control characters, and clamps `userAgent` to 1024 chars and `ipAddress` to 128 chars.
+  - Updated `backend/src/modules/auth/auth.service.ts` to apply the sanitizer within `createApplicationSession()` so all login paths are covered.
+- Added focused unit tests for the sanitizer (not executable locally due to the Vitest native binding issue).
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/modules/auth/auth.service.ts`
+- `backend/src/modules/auth/session-context.util.ts`
+- `backend/src/modules/auth/session-context.util.spec.ts`
+
+### Checks And Commands Run
+
+- `cd backend && ../node_modules/.bin/nest build`
+  - Passed.
+- `cd backend && ../node_modules/.bin/vitest run --config vitest.config.ts -- session-context.util`
+  - Failed at Vitest startup due native binding/code-signing failure in `@rolldown/binding-darwin-arm64` (Team ID mismatch / `ERR_DLOPEN_FAILED`).
+
+### Blockers
+
+- Vitest remains blocked on this Mac by native binding/code-signing failures (`@rolldown/binding-darwin-arm64`), so focused unit tests could not be executed locally.
+
+### Remaining Risks
+
+- Webhooks still represent a possible SSRF surface via DNS resolution (hostnames that resolve to private IPs), redirects, and internal domains; consider an explicit allowlist + DNS/IP enforcement at request time.
+- WebSocket auth + scoping: `/dispatch` and `/tracking` gateways still accept unauthenticated handshakes and broadcast unscoped events/locations.
+
+### Recommended Next Actions
+
+1. Decide on a webhook delivery allowlist strategy (per-org allowed domains, or global allowlist), and enforce DNS/IP resolution blocking at request time.
+2. Repair local Rollup/Rolldown native binding signing mismatch so Vitest/Vite can run and the added unit tests can be executed.
+3. Add authenticated Socket.IO handshake + organization scoping for gateway broadcasts (migration-sized; do as a separate dedicated pass).
+
+## Daily Pass: 2026-05-04
+
+### Summary Of Risks Found
+
+- Auth callback validation gap: `POST /api/auth/workos/callback` used an inline `@Body()` type instead of a DTO, bypassing global `ValidationPipe` protections (`whitelist`, `forbidNonWhitelisted`) and allowing malformed payloads to reach the auth service layer.
+
+### Changes Made
+
+- Added DTO-based validation for `POST /api/auth/workos/callback`:
+  - New `WorkosCallbackDto` enforces `code` as a non-empty string and allows optional `invitationToken` and `state` (accepted for forward-compatibility, currently ignored).
+  - Updated `backend/src/modules/auth/auth.controller.ts` to use `WorkosCallbackDto` and document the body shape in Swagger.
+- Added focused DTO validation tests in `backend/src/modules/auth/dto/workos-callback.dto.spec.ts` (not executable locally due to the Vitest native binding issue).
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/modules/auth/auth.controller.ts`
+- `backend/src/modules/auth/dto/workos-callback.dto.ts`
+- `backend/src/modules/auth/dto/workos-callback.dto.spec.ts`
+
+### Checks And Commands Run
+
+- `cd backend && ../node_modules/.bin/nest build`
+  - Passed.
+- `cd backend && ../node_modules/.bin/vitest run --config vitest.config.ts -- workos-callback.dto`
+  - Failed at Vitest startup due native binding/code-signing failure in `@rolldown/binding-darwin-arm64` (Team ID mismatch / `ERR_DLOPEN_FAILED`).
+
+### Blockers
+
+- Vitest remains blocked on this Mac by native binding/code-signing failures (`@rolldown/binding-darwin-arm64`), so focused unit tests could not be executed locally.
+
+### Remaining Risks
+
+- Webhooks still represent an SSRF surface via DNS resolution (hostnames that resolve to private IPs) and internal domains; consider an explicit allowlist + DNS/IP enforcement at request time.
+- WebSocket auth + scoping: `/dispatch` and `/tracking` gateways still accept unauthenticated handshakes and broadcast unscoped events/locations.
+
+### Recommended Next Actions
+
+1. Repair local Rollup/Rolldown native binding signing mismatch so Vitest/Vite can run and the added unit tests can be executed.
+2. Add authenticated Socket.IO handshake + organization scoping for gateway broadcasts.
+3. Decide on a webhook delivery allowlist strategy (per-org allowed domains, or global allowlist), and enforce DNS/IP resolution blocking at request time.
+
+## Daily Pass: 2026-05-03
+
+### Summary Of Risks Found
+
+- Outbound webhook redirect SSRF risk: even with “safe” configured webhook URLs, Node’s `fetch()` follows redirects by default. A malicious endpoint can respond with a `30x` redirect to a private IP/localhost target, turning webhook delivery into an SSRF primitive.
+- Reliability risk: `replayWebhookDelivery()` did not enforce any timeout/abort behavior, allowing a replay to hang indefinitely on slow/unresponsive webhook endpoints.
+
+### Changes Made
+
+- Prevented webhook deliveries and replays from following redirects:
+  - `backend/src/modules/platform/platform.service.ts` now uses `redirect: 'manual'` so a `30x` response is treated as a failure instead of being followed.
+- Added a replay timeout:
+  - `backend/src/modules/platform/platform.service.ts` now applies a 5s `AbortController` timeout to `replayWebhookDelivery()`, matching the delivery path.
+- Centralized the webhook delivery `fetch()` init options in a small helper to keep the security behavior consistent:
+  - Added `backend/src/common/http/outbound-webhook-request.util.ts` + focused tests in `backend/src/common/http/outbound-webhook-request.util.spec.ts`.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/common/http/outbound-webhook-request.util.ts`
+- `backend/src/common/http/outbound-webhook-request.util.spec.ts`
+- `backend/src/modules/platform/platform.service.ts`
+
+### Checks And Commands Run
+
+- `/Applications/Codex.app/Contents/Resources/node '/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/lib/node_modules/npm/bin/npm-cli.js' run build --workspace=backend`
+  - Passed (`nest build`).
+- `/Applications/Codex.app/Contents/Resources/node '/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/lib/node_modules/npm/bin/npm-cli.js' run test --workspace=backend -- outbound-webhook-request.util`
+  - Failed at Vitest startup due native binding/code-signing failure in `@rolldown/binding-darwin-arm64` (Team ID mismatch / `ERR_DLOPEN_FAILED`).
+
+### Blockers
+
+- Vitest remains blocked on this Mac by native binding/code-signing failures (`@rolldown/binding-darwin-arm64`), so focused unit tests could not be executed locally.
+
+### Remaining Risks
+
+- Webhooks still represent an SSRF surface via DNS resolution (hostnames that resolve to private IPs) and internal domains; consider an explicit allowlist + DNS/IP enforcement at request time.
+- WebSocket auth + scoping: `/dispatch` and `/tracking` gateways still accept unauthenticated handshakes and broadcast unscoped events/locations.
+
+### Recommended Next Actions
+
+1. Decide on a webhook delivery allowlist strategy (per-org allowed domains, or global allowlist), and enforce DNS/IP resolution blocking at request time.
+2. Repair local Rollup/Rolldown native binding signing mismatch so Vitest/Vite can run and the added unit tests can be executed.
