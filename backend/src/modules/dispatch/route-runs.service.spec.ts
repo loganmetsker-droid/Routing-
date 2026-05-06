@@ -1,6 +1,16 @@
 import { RouteRunsService } from './route-runs.service';
 
 describe('RouteRunsService', () => {
+  function matchesWhere(item: Record<string, any>, where: Record<string, any>) {
+    return Object.entries(where).every(([key, val]) => {
+      if (Array.isArray((val as any)?._value)) return (val as any)._value.includes(item[key]);
+      if (val && typeof val === 'object' && !Array.isArray(val)) {
+        return matchesWhere(item[key] || {}, val as Record<string, any>);
+      }
+      return item[key] === val;
+    });
+  }
+
   function createRepo(initial: any[] = []) {
     let items = [...initial];
     return {
@@ -19,14 +29,13 @@ describe('RouteRunsService', () => {
         else items.push(value);
         return value;
       }),
-      findOne: jest.fn(async ({ where }: any) => items.find((item) => Object.entries(where).every(([key, val]) => item[key] === val)) || null),
+      findOne: jest.fn(async ({ where }: any) =>
+        items.find((item) => matchesWhere(item, where)) || null,
+      ),
       find: jest.fn(async ({ where, order }: any = {}) => {
         let out = [...items];
         if (where) {
-          out = out.filter((item) => Object.entries(where).every(([key, val]) => {
-            if (Array.isArray((val as any)?._value)) return (val as any)._value.includes(item[key]);
-            return item[key] === val;
-          }));
+          out = out.filter((item) => matchesWhere(item, where));
         }
         if (order) {
           const [key, dir] = Object.entries(order)[0] as [string, any];
@@ -220,6 +229,7 @@ describe('RouteRunsService', () => {
       {
         id: 'telemetry-1',
         vehicleId: 'vehicle-1',
+        vehicle: { organizationId: 'org-1' },
         location: { lat: 39.75, lng: -104.99 },
         speed: 17,
         heading: 92,

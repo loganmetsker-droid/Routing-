@@ -20,14 +20,30 @@
 
 ## Recovery Steps
 
-1. Re-run health checks.
-2. Re-run smoke tests.
-3. Keep traffic pinned to the known-good build.
+1. Re-run backend health checks:
+
+   ```sh
+   curl -fsS "$STAGING_BACKEND_URL/health"
+   curl -fsS "$STAGING_BACKEND_URL/health/runtime"
+   curl -fsS "$STAGING_BACKEND_URL/health/readiness"
+   ```
+
+2. Re-run the staging smoke gate:
+
+   ```sh
+   npm run smoke:staging
+   ROUTING_SERVICE_URL="$STAGING_ROUTING_SERVICE_URL" npm run smoke:optimizer
+   PLAYWRIGHT_SKIP_WEBSERVER=true npm run launch:audit
+   ```
+
+3. Keep traffic pinned to the known-good build until the smoke gate passes.
 
 ## Verification
 
 - health endpoints healthy
 - smoke suite passes
+- route optimization is live and not fallback
+- API key revoke and metrics-token checks still pass
 - audit writes still succeed
 
 ## Escalation Threshold

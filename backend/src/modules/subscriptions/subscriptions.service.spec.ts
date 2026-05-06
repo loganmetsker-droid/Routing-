@@ -39,6 +39,7 @@ describe('SubscriptionsService', () => {
       {
         id: 'sub-1',
         userId: 'user-1',
+        organizationId: 'org-1',
         stripeCustomerId: 'cus_123',
         stripeSubscriptionId: 'sub_123',
         plan: SubscriptionPlan.PROFESSIONAL,
@@ -69,5 +70,49 @@ describe('SubscriptionsService', () => {
     expect(overview.stripeConfigured).toBe(false);
     expect(overview.activeSubscription?.id).toBe('sub-1');
     expect(overview.recommendations[0]).toContain('Configure STRIPE_SECRET_KEY');
+  });
+
+  it('keeps subscription reads scoped to the actor organization', async () => {
+    const repo = createRepo([
+      {
+        id: 'sub-org-1',
+        userId: 'user-1',
+        organizationId: 'org-1',
+        stripeCustomerId: 'cus_123',
+        stripeSubscriptionId: 'stripe_sub_123',
+        plan: SubscriptionPlan.PROFESSIONAL,
+        status: SubscriptionStatus.ACTIVE,
+        currentPeriodStart: new Date('2026-04-01T00:00:00.000Z'),
+        currentPeriodEnd: new Date('2026-05-01T00:00:00.000Z'),
+        cancelAtPeriodEnd: false,
+      },
+      {
+        id: 'sub-org-2',
+        userId: 'user-1',
+        organizationId: 'org-2',
+        stripeCustomerId: 'cus_456',
+        stripeSubscriptionId: 'stripe_sub_456',
+        plan: SubscriptionPlan.STARTER,
+        status: SubscriptionStatus.ACTIVE,
+        currentPeriodStart: new Date('2026-04-01T00:00:00.000Z'),
+        currentPeriodEnd: new Date('2026-05-01T00:00:00.000Z'),
+        cancelAtPeriodEnd: false,
+      },
+    ]);
+    const config = {
+      get: () => undefined,
+    } as unknown as ConfigService;
+    const service = new SubscriptionsService(repo, config);
+
+    const subscriptions = await service.getCustomerSubscriptions('user-1', 'org-1');
+    const visibleSubscription = await service.getSubscription('sub-org-1', 'org-1');
+
+    expect(subscriptions.map((subscription) => subscription.id)).toEqual([
+      'sub-org-1',
+    ]);
+    expect(visibleSubscription.id).toBe('sub-org-1');
+    await expect(service.getSubscription('sub-org-2', 'org-1')).rejects.toThrow(
+      'Subscription sub-org-2 not found',
+    );
   });
 });

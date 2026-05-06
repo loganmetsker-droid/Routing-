@@ -170,8 +170,12 @@ export class PublicApiController {
     });
     const latestTelemetry = routeRun.vehicleId
       ? await this.telemetry.findOne({
-          where: { vehicleId: routeRun.vehicleId },
+          where: {
+            vehicleId: routeRun.vehicleId,
+            vehicle: { organizationId: req.apiKey.organizationId },
+          },
           order: { timestamp: 'DESC' },
+          relations: { vehicle: true },
         })
       : null;
     return {

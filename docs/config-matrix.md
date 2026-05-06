@@ -23,6 +23,9 @@ This file is the canonical environment/config reference for local, dev, staging,
 | `JWT_SECRET` | Yes | Yes | JWT signing secret. Must not use local default outside local/dev. |
 | `JWT_EXPIRES_IN` | Yes | Yes | Session TTL. |
 | `AUTH_SESSION_ENFORCEMENT` | Optional | Yes | Keeps HTTP JWTs tied to non-revoked application sessions. |
+| `ROUTING_SERVICE_URL` | Optional | Yes, unless `ROUTING_SERVICE_HOSTPORT` is provided | Full optimizer service URL, for example `https://optimizer.example.com`. |
+| `ROUTING_SERVICE_HOSTPORT` | Optional | Render Blueprint managed | Internal Render host and port for the optimizer service. Backend converts this to `http://host:port` when `ROUTING_SERVICE_URL` is unset. |
+| `ROUTING_SERVICE_SCHEME` | Optional | Optional | Defaults to `http` for private service traffic. |
 
 ## Database
 
@@ -57,6 +60,9 @@ Use one of the following:
 | Variable | Local | Staging | Production | Notes |
 | --- | --- | --- | --- | --- |
 | `WEBHOOK_MAX_RESPONSE_BODY_BYTES` | Optional, defaults to `65536` | Recommended | Recommended | Caps persisted outbound webhook response bodies. |
+| `WEBHOOK_ALLOWED_HOSTS` | Optional | Recommended if self-serve webhooks launch | Recommended if self-serve webhooks launch | Comma-separated exact hosts or wildcard hosts like `*.customer-hooks.example`. When set in strict envs, all webhook targets must match. |
+
+Strict staging/production webhook validation blocks localhost, raw private IP targets, and DNS names that resolve to private network ranges before save and again before delivery/replay.
 
 ## Frontend
 
@@ -64,6 +70,8 @@ Use one of the following:
 | --- | --- | --- | --- | --- |
 | `VITE_REST_API_URL` | Yes | Yes | Yes | Backend API base URL. |
 | `VITE_API_URL` | Optional alias | Optional alias | Optional alias | |
+| `VITE_WS_URL` | Optional | Yes when sockets are enabled | Yes when sockets are enabled | Socket.IO base URL. |
+| `VITE_ENABLE_SOCKETS` | Optional | `true` | `true` | Can be set `false` only for local/mock preview. |
 | `VITE_AUTH_BYPASS` | Allowed only for preview/local | Forbidden | Forbidden | Local-only shortcut. |
 | `VITE_MOCK_PREVIEW` | Allowed only for preview/local | Forbidden | Forbidden | Local-only shortcut. |
 

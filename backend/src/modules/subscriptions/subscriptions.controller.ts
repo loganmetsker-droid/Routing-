@@ -19,6 +19,10 @@ import { Request } from 'express';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 
+type AuthenticatedBillingRequest = Request & {
+  user?: { userId?: string; email?: string; organizationId?: string };
+};
+
 @ApiTags('subscriptions')
 @Controller('subscriptions')
 export class SubscriptionsController {
@@ -43,8 +47,15 @@ export class SubscriptionsController {
   @Roles('OWNER', 'ADMIN')
   @ApiOperation({ summary: 'Create a new subscription' })
   @ApiResponse({ status: 201, description: 'Subscription created successfully' })
-  async createSubscription(@Body() dto: CreateSubscriptionDto) {
-    return this.subscriptionsService.createSubscription(dto);
+  async createSubscription(
+    @Body() dto: CreateSubscriptionDto,
+    @Req() req: AuthenticatedBillingRequest,
+  ) {
+    return this.subscriptionsService.createSubscription(dto, {
+      userId: req.user?.userId,
+      email: req.user?.email,
+      organizationId: req.user?.organizationId,
+    });
   }
 
   @Get('plans')
@@ -59,12 +70,7 @@ export class SubscriptionsController {
   @Roles('OWNER', 'ADMIN')
   @ApiOperation({ summary: 'Get billing overview for the authenticated workspace' })
   @ApiResponse({ status: 200, description: 'Billing overview and current subscriptions' })
-  async getOverview(
-    @Req()
-    req: Request & {
-      user?: { userId?: string; email?: string; organizationId?: string };
-    },
-  ) {
+  async getOverview(@Req() req: AuthenticatedBillingRequest) {
     return this.subscriptionsService.getBillingOverview({
       userId: req.user?.userId,
       email: req.user?.email,
@@ -76,24 +82,39 @@ export class SubscriptionsController {
   @Roles('OWNER', 'ADMIN')
   @ApiOperation({ summary: 'Get all subscriptions for a customer' })
   @ApiResponse({ status: 200, description: 'List of subscriptions' })
-  async getCustomerSubscriptions(@Param('userId') userId: string) {
-    return this.subscriptionsService.getCustomerSubscriptions(userId);
+  async getCustomerSubscriptions(
+    @Param('userId') userId: string,
+    @Req() req: AuthenticatedBillingRequest,
+  ) {
+    return this.subscriptionsService.getCustomerSubscriptions(
+      userId,
+      req.user?.organizationId,
+    );
   }
 
   @Get(':id')
   @Roles('OWNER', 'ADMIN')
   @ApiOperation({ summary: 'Get subscription by ID' })
   @ApiResponse({ status: 200, description: 'Subscription details' })
-  async getSubscription(@Param('id') id: string) {
-    return this.subscriptionsService.getSubscription(id);
+  async getSubscription(
+    @Param('id') id: string,
+    @Req() req: AuthenticatedBillingRequest,
+  ) {
+    return this.subscriptionsService.getSubscription(id, req.user?.organizationId);
   }
 
   @Post(':id/cancel')
   @Roles('OWNER', 'ADMIN')
   @ApiOperation({ summary: 'Cancel a subscription' })
   @ApiResponse({ status: 200, description: 'Subscription canceled' })
-  async cancelSubscription(@Param('id') id: string) {
-    return this.subscriptionsService.cancelSubscription(id);
+  async cancelSubscription(
+    @Param('id') id: string,
+    @Req() req: AuthenticatedBillingRequest,
+  ) {
+    return this.subscriptionsService.cancelSubscription(
+      id,
+      req.user?.organizationId,
+    );
   }
 
   @Post('webhook')

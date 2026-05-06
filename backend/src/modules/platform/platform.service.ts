@@ -19,7 +19,10 @@ import { WebhookDelivery } from './entities/webhook-delivery.entity';
 import { CreateApiKeyDto } from './dto/create-api-key.dto';
 import { CreateWebhookEndpointDto } from './dto/create-webhook-endpoint.dto';
 import { UpdateWebhookEndpointDto } from './dto/update-webhook-endpoint.dto';
-import { checkOutboundWebhookUrl } from '../../common/http/outbound-webhook-url.util';
+import {
+  checkOutboundWebhookResolvedUrl,
+  checkOutboundWebhookUrl,
+} from '../../common/http/outbound-webhook-url.util';
 import { createOutboundWebhookFetchInit } from '../../common/http/outbound-webhook-request.util';
 import { readResponseTextLimited } from '../../common/http/response-body.util';
 
@@ -64,6 +67,14 @@ export class PlatformService {
       return parsed;
     }
     return 64 * 1024;
+  }
+
+  private async ensureWebhookTargetAllowed(url: string) {
+    const urlCheck = await checkOutboundWebhookResolvedUrl(url, process.env);
+    if (urlCheck.allowed === false) {
+      throw new BadRequestException(urlCheck.reason);
+    }
+    return urlCheck.normalizedUrl;
   }
 
   private hashSecret(value: string) {
@@ -251,6 +262,9 @@ export class PlatformService {
     if (urlCheck.allowed === false) {
       throw new BadRequestException(urlCheck.reason);
     }
+    const normalizedUrl = await this.ensureWebhookTargetAllowed(
+      urlCheck.normalizedUrl,
+    );
 
     const generatedSecret =
       dto.signingSecret?.trim() || randomBytes(24).toString('hex');
@@ -258,7 +272,7 @@ export class PlatformService {
       this.webhookEndpoints.create({
         organizationId,
         name: dto.name.trim(),
-        url: urlCheck.normalizedUrl,
+        url: normalizedUrl,
         signingSecret: generatedSecret,
         subscribedEvents: Array.from(
           new Set((dto.subscribedEvents || ['*']).map((event) => event.trim())),
@@ -299,7 +313,9 @@ export class PlatformService {
       if (urlCheck.allowed === false) {
         throw new BadRequestException(urlCheck.reason);
       }
-      endpoint.url = urlCheck.normalizedUrl;
+      endpoint.url = await this.ensureWebhookTargetAllowed(
+        urlCheck.normalizedUrl,
+      );
     }
     if (dto.subscribedEvents !== undefined) {
       endpoint.subscribedEvents = Array.from(
@@ -385,11 +401,12 @@ export class PlatformService {
           .digest('hex');
 
         try {
+          const normalizedUrl = await this.ensureWebhookTargetAllowed(endpoint.url);
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 5000);
           try {
             const response = await fetch(
-              endpoint.url,
+              normalizedUrl,
               createOutboundWebhookFetchInit(
                 {
                   eventType: input.eventType,
@@ -483,11 +500,12 @@ export class PlatformService {
       .digest('hex');
 
     try {
+      const normalizedUrl = await this.ensureWebhookTargetAllowed(endpoint.url);
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 5000);
       try {
         const response = await fetch(
-          endpoint.url,
+          normalizedUrl,
           createOutboundWebhookFetchInit(
             {
               eventType: delivery.eventType,

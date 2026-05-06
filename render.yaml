@@ -2,11 +2,10 @@ services:
   - type: web
     name: trovan-backend
     runtime: node
-    rootDir: backend
     plan: standard
-    autoDeploy: true
-    buildCommand: npm install && npm run build
-    startCommand: npm run start:prod
+    autoDeployTrigger: commit
+    buildCommand: npm ci && npm run build --workspace=backend
+    startCommand: npm run start:prod --workspace=backend
     healthCheckPath: /health/readiness
     envVars:
       - key: NODE_ENV
@@ -25,6 +24,11 @@ services:
         value: "false"
       - key: QUEUE_REQUIRED
         value: "true"
+      - key: ROUTING_SERVICE_HOSTPORT
+        fromService:
+          name: trovan-routing-service
+          type: web
+          property: hostport
       - key: FRONTEND_URL
         sync: false
       - key: CORS_ORIGINS
@@ -77,3 +81,50 @@ services:
         sync: false
       - key: R2_ENDPOINT
         sync: false
+
+  - type: web
+    name: trovan-routing-service
+    runtime: docker
+    rootDir: routing-service
+    plan: standard
+    autoDeployTrigger: commit
+    healthCheckPath: /health
+    envVars:
+      - key: LOG_LEVEL
+        value: INFO
+      - key: CORS_ORIGINS
+        sync: false
+
+  - type: web
+    name: trovan-frontend
+    runtime: static
+    plan: standard
+    autoDeployTrigger: commit
+    buildCommand: npm ci && npm run build --workspace=frontend
+    staticPublishPath: frontend/dist
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: Permissions-Policy
+        value: camera=(), microphone=(), geolocation=()
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_REST_API_URL
+        sync: false
+      - key: VITE_API_URL
+        sync: false
+      - key: VITE_WS_URL
+        sync: false
+      - key: VITE_ENABLE_SOCKETS
+        value: "true"

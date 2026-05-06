@@ -54,6 +54,20 @@ const sanitizeJob = (job: unknown): JobRecord => {
 export const createJob = async (
   job: Omit<JobRecord, 'id'>,
 ): Promise<{ job: JobRecord }> => {
+  if (isPreview()) {
+    const jobInput = job as Partial<JobRecord>;
+    const nextJob = sanitizeJob({
+      id: `job-preview-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      ...jobInput,
+      status: jobInput.status || 'pending',
+      priority: jobInput.priority || 'normal',
+      assignedRouteId: null,
+      createdAt: new Date().toISOString(),
+    });
+    previewState.jobs.unshift(nextJob as unknown as (typeof previewState.jobs)[number]);
+    return { job: nextJob };
+  }
+
   const response = await apiFetch('/api/jobs', {
     method: 'POST',
     body: JSON.stringify(job),
@@ -82,6 +96,22 @@ export const updateJobStatus = async (
   status: string,
   assignedRouteId?: string,
 ): Promise<{ job: JobRecord }> => {
+  if (isPreview()) {
+    const index = previewState.jobs.findIndex((job) => job.id === id);
+    const nextJob = sanitizeJob({
+      ...(index >= 0 ? previewState.jobs[index] : { id }),
+      status,
+      assignedRouteId,
+      updatedAt: new Date().toISOString(),
+    });
+    if (index >= 0) {
+      previewState.jobs[index] = nextJob as unknown as (typeof previewState.jobs)[number];
+    } else {
+      previewState.jobs.unshift(nextJob as unknown as (typeof previewState.jobs)[number]);
+    }
+    return { job: nextJob };
+  }
+
   const response = await apiFetch(`/api/jobs/${id}`, {
     method: 'PATCH',
     body: JSON.stringify({ status, assignedRouteId }),
@@ -93,6 +123,21 @@ export const updateJob = async (
   id: string,
   updates: Partial<JobRecord>,
 ): Promise<{ job: JobRecord }> => {
+  if (isPreview()) {
+    const index = previewState.jobs.findIndex((job) => job.id === id);
+    const nextJob = sanitizeJob({
+      ...(index >= 0 ? previewState.jobs[index] : { id }),
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    });
+    if (index >= 0) {
+      previewState.jobs[index] = nextJob as unknown as (typeof previewState.jobs)[number];
+    } else {
+      previewState.jobs.unshift(nextJob as unknown as (typeof previewState.jobs)[number]);
+    }
+    return { job: nextJob };
+  }
+
   const response = await apiFetch(`/api/jobs/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(updates),

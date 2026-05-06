@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -9,6 +14,12 @@ import {
   SubscriptionPlan,
 } from './entities/subscription.entity';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
+
+type BillingActor = {
+  userId?: string;
+  email?: string;
+  organizationId?: string;
+};
 
 @Injectable()
 export class SubscriptionsService {
@@ -84,6 +95,13 @@ export class SubscriptionsService {
     return Boolean(this.stripe);
   }
 
+  private requireOrganizationId(organizationId?: string): string {
+    if (!organizationId) {
+      throw new BadRequestException('Billing operations require an organization context');
+    }
+    return organizationId;
+  }
+
   getPlanCatalog() {
     return {
       stripeConfigured: this.isStripeConfigured(),
@@ -104,7 +122,7 @@ export class SubscriptionsService {
     organizationId?: string;
   }) {
     const subscriptions = userId
-      ? await this.getCustomerSubscriptions(userId)
+      ? await this.getCustomerSubscriptions(userId, organizationId)
       : [];
     const activeSubscription =
       subscriptions.find((subscription) =>
@@ -144,17 +162,22 @@ export class SubscriptionsService {
    */
   async createSubscription(
     dto: CreateSubscriptionDto,
+    actor: BillingActor = {},
   ): Promise<{ subscription: Subscription; clientSecret: string }> {
     if (!this.stripe) {
       throw new Error('Stripe is not configured. Please set STRIPE_SECRET_KEY in environment variables.');
     }
 
-    this.logger.log(`Creating subscription for user ${dto.userId}`);
+    const organizationId = this.requireOrganizationId(actor.organizationId);
+    const userId = actor.userId || dto.userId;
+    const email = actor.email || dto.email;
+
+    this.logger.log(`Creating subscription for user ${userId}`);
 
     // Check if customer already exists
     let customer: Stripe.Customer;
     const existingSubscription = await this.subscriptionRepository.findOne({
-      where: { userId: dto.userId },
+      where: { userId, organizationId },
     });
 
     if (existingSubscription) {
@@ -164,8 +187,8 @@ export class SubscriptionsService {
     } else {
       // Create Stripe customer
       customer = await this.stripe.customers.create({
-        email: dto.email,
-        metadata: { userId: dto.userId },
+        email,
+        metadata: { userId, organizationId },
       });
     }
 
@@ -188,6 +211,7 @@ export class SubscriptionsService {
       payment_behavior: 'default_incomplete',
       payment_settings: { save_default_payment_method: 'on_subscription' },
       expand: ['latest_invoice.payment_intent'],
+      metadata: { userId, organizationId },
     });
 
     const invoice = stripeSubscription.latest_invoice as Stripe.Invoice;
@@ -195,7 +219,8 @@ export class SubscriptionsService {
 
     // Save subscription to database
     const subscription = this.subscriptionRepository.create({
-      userId: dto.userId,
+      userId,
+      organizationId,
       stripeCustomerId: customer.id,
       stripeSubscriptionId: stripeSubscription.id,
       plan: dto.plan,
@@ -216,9 +241,13 @@ export class SubscriptionsService {
   /**
    * Get customer subscriptions
    */
-  async getCustomerSubscriptions(userId: string): Promise<Subscription[]> {
+  async getCustomerSubscriptions(
+    userId: string,
+    organizationId?: string,
+  ): Promise<Subscription[]> {
+    const scopedOrganizationId = this.requireOrganizationId(organizationId);
     return this.subscriptionRepository.find({
-      where: { userId },
+      where: { userId, organizationId: scopedOrganizationId },
       order: { createdAt: 'DESC' },
     });
   }
@@ -226,9 +255,10 @@ export class SubscriptionsService {
   /**
    * Get subscription by ID
    */
-  async getSubscription(id: string): Promise<Subscription> {
+  async getSubscription(id: string, organizationId?: string): Promise<Subscription> {
+    const scopedOrganizationId = this.requireOrganizationId(organizationId);
     const subscription = await this.subscriptionRepository.findOne({
-      where: { id },
+      where: { id, organizationId: scopedOrganizationId },
     });
 
     if (!subscription) {
@@ -241,12 +271,15 @@ export class SubscriptionsService {
   /**
    * Cancel subscription
    */
-  async cancelSubscription(id: string): Promise<Subscription> {
+  async cancelSubscription(
+    id: string,
+    organizationId?: string,
+  ): Promise<Subscription> {
     if (!this.stripe) {
       throw new Error('Stripe is not configured. Please set STRIPE_SECRET_KEY in environment variables.');
     }
 
-    const subscription = await this.getSubscription(id);
+    const subscription = await this.getSubscription(id, organizationId);
 
     // Cancel at period end in Stripe
     await this.stripe.subscriptions.update(subscription.stripeSubscriptionId, {

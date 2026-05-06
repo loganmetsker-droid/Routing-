@@ -4,8 +4,7 @@ import {
   PrimaryGeneratedColumn,
   CreateDateColumn,
   UpdateDateColumn,
-  ManyToOne,
-  JoinColumn,
+  Index,
 } from 'typeorm';
 import { ObjectType, Field, ID, registerEnumType } from '@nestjs/graphql';
 
@@ -30,6 +29,8 @@ registerEnumType(SubscriptionPlan, { name: 'SubscriptionPlan' });
 
 @ObjectType()
 @Entity('subscriptions')
+@Index(['organizationId', 'userId'])
+@Index(['organizationId', 'stripeSubscriptionId'])
 export class Subscription {
   @Field(() => ID)
   @PrimaryGeneratedColumn('uuid')
@@ -38,6 +39,10 @@ export class Subscription {
   @Field()
   @Column({ name: 'user_id' })
   userId: string;
+
+  @Field({ nullable: true })
+  @Column({ name: 'organization_id', type: 'uuid', nullable: true })
+  organizationId?: string | null;
 
   @Field()
   @Column({ name: 'stripe_customer_id' })

@@ -33,6 +33,7 @@ import { RoutePlanStop } from './entities/route-plan-stop.entity';
 import { GenerateRoutePlanDto } from './dto/generate-route-plan.dto';
 import { UpdateRoutePlanGroupDto } from './dto/update-route-plan-group.dto';
 import { UpdateRoutePlanStopDto } from './dto/update-route-plan-stop.dto';
+import { resolveRoutingServiceUrl } from '../../common/routing/routing-service-url.util';
 
 type Actor = {
   userId?: string;
@@ -135,10 +136,7 @@ export class PlanningService {
     private readonly configService: ConfigService,
     private readonly audit: AuditService,
   ) {
-    this.routingServiceUrl =
-      this.configService.get<string>('ROUTING_SERVICE_URL') ||
-      this.configService.get<string>('ROUTING_PROVIDER_URL') ||
-      'http://localhost:8000';
+    this.routingServiceUrl = resolveRoutingServiceUrl(this.configService);
   }
 
   private requireOrganizationId(actor?: Actor) {

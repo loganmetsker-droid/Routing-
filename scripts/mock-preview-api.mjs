@@ -223,21 +223,26 @@ const routes = [
 
 const sseClients = new Set();
 
+function corsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': process.env.MOCK_CORS_ORIGIN || '*',
+    'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Allow-Methods': 'GET,POST,PATCH,PUT,DELETE,OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
+  };
+}
+
 function json(res, status, payload) {
   res.writeHead(status, {
     'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET,POST,PATCH,PUT,DELETE,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
+    ...corsHeaders(),
   });
   res.end(JSON.stringify(payload));
 }
 
 function noContent(res) {
   res.writeHead(204, {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET,POST,PATCH,PUT,DELETE,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, Accept',
+    ...corsHeaders(),
   });
   res.end();
 }
@@ -305,6 +310,16 @@ function refreshRoute(route) {
     -94.5786 + index * 0.01,
   ]);
   route.currentLocation = route.path[0] || [39.0997, -94.5786];
+  route.data_quality = 'live';
+  route.optimization_status = 'optimized';
+  route.is_fallback = false;
+  route.routeData = {
+    ...(route.routeData || {}),
+    data_quality: 'live',
+    optimization_status: 'optimized',
+    is_fallback: false,
+    objective_used: route.objective || 'balanced',
+  };
   return route;
 }
 
@@ -368,11 +383,13 @@ readyRoute.totalStops = 1;
 readyRoute.optimizedStops = buildOptimizedStops(readyRoute.jobIds);
 
 const optimizerHealth = {
-  status: 'degraded',
+  status: 'healthy',
   source: 'mock-preview',
   details: 'Mock planner is active for UI preview',
   updatedAt: new Date().toISOString(),
-  fallbackActive: true,
+  fallbackActive: false,
+  consecutiveFailures: 0,
+  circuitOpen: false,
 };
 
 const rerouteRequests = [];
@@ -488,7 +505,7 @@ const server = createServer(async (req, res) => {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       Connection: 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
+      ...corsHeaders(),
     });
     res.write(`data: ${JSON.stringify({ type: 'connected', at: new Date().toISOString() })}\n\n`);
     sseClients.add(res);

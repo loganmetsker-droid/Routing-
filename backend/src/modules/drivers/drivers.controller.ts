@@ -11,6 +11,7 @@ import {
   ParseUUIDPipe,
   HttpCode,
   HttpStatus,
+  Req,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -26,6 +27,12 @@ import { Shift } from './entities/shift.entity';
 import { CreateDriverDto } from './dto/create-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
 
+type AuthenticatedRequest = {
+  user?: {
+    organizationId?: string;
+  };
+};
+
 @ApiTags('drivers')
 @Controller('drivers')
 @ApiBearerAuth()
@@ -37,8 +44,11 @@ export class DriversController {
   @ApiResponse({ status: 201, description: 'Driver created successfully', type: Driver })
   @ApiResponse({ status: 400, description: 'Invalid input data' })
   @ApiResponse({ status: 409, description: 'Email, license number, or employee ID already exists' })
-  async create(@Body() createDriverDto: CreateDriverDto): Promise<{ driver: Driver }> {
-    const driver = await this.driversService.create(createDriverDto);
+  async create(
+    @Req() req: AuthenticatedRequest,
+    @Body() createDriverDto: CreateDriverDto,
+  ): Promise<{ driver: Driver }> {
+    const driver = await this.driversService.create(createDriverDto, req.user);
     return { driver };
   }
 
@@ -48,18 +58,21 @@ export class DriversController {
   @ApiQuery({ name: 'employmentStatus', required: false, enum: ['active', 'on_leave', 'suspended', 'terminated'] })
   @ApiResponse({ status: 200, description: 'List of drivers', type: [Driver] })
   async findAll(
+    @Req() req: AuthenticatedRequest,
     @Query('status') status?: string,
     @Query('employmentStatus') employmentStatus?: string,
   ): Promise<{ drivers: Driver[] }> {
     if (status) {
-      return this.driversService.findByStatus(status).then((drivers) => ({ drivers }));
+      return this.driversService
+        .findByStatus(status, req.user)
+        .then((drivers) => ({ drivers }));
     }
     if (employmentStatus) {
       return this.driversService
-        .findByEmploymentStatus(employmentStatus)
+        .findByEmploymentStatus(employmentStatus, req.user)
         .then((drivers) => ({ drivers }));
     }
-    return this.driversService.findAll().then((drivers) => ({ drivers }));
+    return this.driversService.findAll(req.user).then((drivers) => ({ drivers }));
   }
 
   @Get('statistics')
@@ -82,16 +95,19 @@ export class DriversController {
       },
     },
   })
-  getStatistics() {
-    return this.driversService.getStatistics();
+  getStatistics(@Req() req: AuthenticatedRequest) {
+    return this.driversService.getStatistics(req.user);
   }
 
   @Get('licenses/expiring')
   @ApiOperation({ summary: 'Get drivers with expiring licenses' })
   @ApiQuery({ name: 'days', required: false, type: Number, description: 'Days until expiry (default: 30)' })
   @ApiResponse({ status: 200, description: 'Drivers with expiring licenses', type: [Driver] })
-  findWithExpiringLicenses(@Query('days') days?: number): Promise<Driver[]> {
-    return this.driversService.findWithExpiringLicenses(days);
+  findWithExpiringLicenses(
+    @Req() req: AuthenticatedRequest,
+    @Query('days') days?: number,
+  ): Promise<Driver[]> {
+    return this.driversService.findWithExpiringLicenses(days, req.user);
   }
 
   @Get(':id')
@@ -99,8 +115,11 @@ export class DriversController {
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Driver found', type: Driver })
   @ApiResponse({ status: 404, description: 'Driver not found' })
-  async findOne(@Param('id', ParseUUIDPipe) id: string): Promise<{ driver: Driver }> {
-    const driver = await this.driversService.findOne(id);
+  async findOne(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ driver: Driver }> {
+    const driver = await this.driversService.findOne(id, req.user);
     return { driver };
   }
 
@@ -111,13 +130,14 @@ export class DriversController {
   @ApiResponse({ status: 200, description: 'List of driver shifts', type: [Shift] })
   @ApiResponse({ status: 404, description: 'Driver not found' })
   async getDriverShifts(
+    @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
     @Query('limit') limit?: number,
   ): Promise<Shift[]> {
     if (limit) {
-      return this.driversService.getRecentShifts(id, limit);
+      return this.driversService.getRecentShifts(id, limit, req.user);
     }
-    return this.driversService.getDriverShifts(id);
+    return this.driversService.getDriverShifts(id, req.user);
   }
 
   @Get(':id/shifts/current')
@@ -125,8 +145,11 @@ export class DriversController {
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Current shift', type: Shift })
   @ApiResponse({ status: 404, description: 'No active shift found' })
-  getCurrentShift(@Param('id', ParseUUIDPipe) id: string): Promise<Shift | null> {
-    return this.driversService.getCurrentShift(id);
+  getCurrentShift(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<Shift | null> {
+    return this.driversService.getCurrentShift(id, req.user);
   }
 
   @Put(':id')
@@ -136,10 +159,13 @@ export class DriversController {
   @ApiResponse({ status: 404, description: 'Driver not found' })
   @ApiResponse({ status: 409, description: 'Email, license number, or employee ID already exists' })
   update(
+    @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateDriverDto: UpdateDriverDto,
   ): Promise<{ driver: Driver }> {
-    return this.driversService.update(id, updateDriverDto).then((driver) => ({ driver }));
+    return this.driversService
+      .update(id, updateDriverDto, req.user)
+      .then((driver) => ({ driver }));
   }
 
   @Patch(':id')
@@ -149,10 +175,13 @@ export class DriversController {
   @ApiResponse({ status: 404, description: 'Driver not found' })
   @ApiResponse({ status: 409, description: 'Email, license number, or employee ID already exists' })
   patch(
+    @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateDriverDto: UpdateDriverDto,
   ): Promise<{ driver: Driver }> {
-    return this.driversService.update(id, updateDriverDto).then((driver) => ({ driver }));
+    return this.driversService
+      .update(id, updateDriverDto, req.user)
+      .then((driver) => ({ driver }));
   }
 
   @Delete(':id')
@@ -161,7 +190,10 @@ export class DriversController {
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 204, description: 'Driver deleted successfully' })
   @ApiResponse({ status: 404, description: 'Driver not found' })
-  remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    return this.driversService.remove(id);
+  remove(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
+    return this.driversService.remove(id, req.user);
   }
 }

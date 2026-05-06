@@ -78,7 +78,7 @@ services:
       STRIPE_PRICE_ENTERPRISE: ${STRIPE_PRICE_ENTERPRISE:-price_placeholder}
 
       # Routing Service
-      ROUTING_SERVICE_URL: http://routing-service:8080
+      ROUTING_SERVICE_URL: http://routing-service:8000
 
       # CORS
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5173}
@@ -104,27 +104,25 @@ services:
     restart: unless-stopped
     command: npm run dev
 
-  # Routing Microservice (OSRM or custom routing engine)
+  # Routing optimization microservice (FastAPI + OR-Tools)
   routing-service:
-    image: osrm/osrm-backend:latest
+    build:
+      context: ./routing-service
+      dockerfile: Dockerfile
     container_name: routing-dispatch-routing-service
     environment:
-      OSRM_MODE: ${OSRM_MODE:-routed}
-      OSRM_PORT: 8080
-      OSRM_THREADS: ${OSRM_THREADS:-4}
+      LOG_LEVEL: ${ROUTING_SERVICE_LOG_LEVEL:-INFO}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000}
     ports:
-      - "${ROUTING_SERVICE_PORT:-8080}:5000"
-    volumes:
-      - ./osrm-data:/data
+      - "${ROUTING_SERVICE_PORT:-8000}:8000"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health', timeout=5).raise_for_status()"]
       interval: 30s
       timeout: 10s
       retries: 3
     networks:
       - routing-network
     restart: unless-stopped
-    command: osrm-routed --algorithm mld /data/map.osrm
 
   # React Frontend
   frontend:

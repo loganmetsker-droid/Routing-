@@ -72,7 +72,7 @@ const normalizeCustomer = (value: unknown): CustomerRecord => {
   };
 };
 
-const previewCustomers = (): CustomerRecord[] => [
+const previewCustomerSeed = (): CustomerRecord[] => [
   {
     id: 'customer-sunrise',
     name: 'Sunrise Retail',
@@ -105,9 +105,11 @@ const previewCustomers = (): CustomerRecord[] => [
   },
 ];
 
+let previewCustomerStore = previewCustomerSeed();
+
 export const getCustomers = async (): Promise<CustomerRecord[]> => {
   if (isPreview()) {
-    return previewCustomers();
+    return previewCustomerStore.map((customer) => ({ ...customer }));
   }
   const response = await apiFetch('/api/customers');
   const data = await response.json();
@@ -119,6 +121,15 @@ export const getCustomers = async (): Promise<CustomerRecord[]> => {
 export const createCustomer = async (
   customer: CustomerFormInput,
 ): Promise<CustomerRecord> => {
+  if (isPreview()) {
+    const nextCustomer = normalizeCustomer({
+      id: `customer-preview-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      ...customer,
+    });
+    previewCustomerStore = [nextCustomer, ...previewCustomerStore];
+    return nextCustomer;
+  }
+
   const response = await apiFetch('/api/customers', {
     method: 'POST',
     body: JSON.stringify(customer),
@@ -131,6 +142,21 @@ export const updateCustomer = async (
   id: string,
   updates: Partial<CustomerFormInput>,
 ): Promise<CustomerRecord> => {
+  if (isPreview()) {
+    const existing = previewCustomerStore.find((customer) => customer.id === id);
+    const nextCustomer = normalizeCustomer({
+      ...(existing || { id }),
+      ...updates,
+    });
+    previewCustomerStore = previewCustomerStore.map((customer) =>
+      customer.id === id ? nextCustomer : customer,
+    );
+    if (!existing) {
+      previewCustomerStore = [nextCustomer, ...previewCustomerStore];
+    }
+    return nextCustomer;
+  }
+
   const response = await apiFetch(`/api/customers/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(updates),
@@ -140,6 +166,11 @@ export const updateCustomer = async (
 };
 
 export const deleteCustomer = async (id: string): Promise<void> => {
+  if (isPreview()) {
+    previewCustomerStore = previewCustomerStore.filter((customer) => customer.id !== id);
+    return;
+  }
+
   await apiFetch(`/api/customers/${id}`, { method: 'DELETE' });
 };
 

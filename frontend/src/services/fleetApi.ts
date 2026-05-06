@@ -8,6 +8,20 @@ import { queryKeys } from './queryKeys';
 
 const getMetadata = (value: unknown) => (isRecord(value) ? value : {});
 
+const normalizeVehicleStatus = (status: unknown) => {
+  const value = String(status || '').toLowerCase();
+  if (['in_route', 'in-route', 'in route', 'in_use', 'on_route'].includes(value)) {
+    return 'IN_ROUTE';
+  }
+  if (value === 'maintenance') {
+    return 'MAINTENANCE';
+  }
+  if (['off_duty', 'off-duty', 'off duty', 'inactive'].includes(value)) {
+    return 'OFF_DUTY';
+  }
+  return 'AVAILABLE';
+};
+
 const buildPreviewVehicle = (vehicle: Partial<VehicleRecord>): VehicleRecord => {
   const metadata = getMetadata(vehicle.metadata);
   return sanitizeVehicle({
@@ -19,7 +33,7 @@ const buildPreviewVehicle = (vehicle: Partial<VehicleRecord>): VehicleRecord => 
     vin: vehicle.vin || null,
     vehicleType: vehicle.vehicleType || vehicle.type || 'box_truck',
     fuelType: vehicle.fuelType || 'diesel',
-    status: vehicle.status || 'available',
+    status: normalizeVehicleStatus(vehicle.status),
     capacityWeightKg:
       typeof vehicle.capacityWeightKg === 'number'
         ? vehicle.capacityWeightKg
@@ -39,6 +53,30 @@ const buildPreviewVehicle = (vehicle: Partial<VehicleRecord>): VehicleRecord => 
           ? vehicle.maxRouteMinutes
           : metadata.maxRouteMinutes,
     },
+  });
+};
+
+const normalizeDriverStatus = (status: unknown) => {
+  const value = String(status || '').toLowerCase();
+  if (['inactive', 'off_duty', 'off-duty', 'off duty'].includes(value)) {
+    return 'OFF_DUTY';
+  }
+  return 'ACTIVE';
+};
+
+const buildPreviewDriver = (driver: Partial<DriverRecord>): DriverRecord => {
+  const metadata = getMetadata(driver.metadata);
+  return sanitizeDriver({
+    id: driver.id || `driver-preview-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    firstName: driver.firstName || '',
+    lastName: driver.lastName || '',
+    email: driver.email || '',
+    phone: driver.phone || '',
+    licenseNumber: driver.licenseNumber || '',
+    licenseType: driver.licenseType || 'CLASS_C',
+    assignedVehicleId: driver.assignedVehicleId || '',
+    notes: driver.notes || (typeof metadata.notes === 'string' ? metadata.notes : ''),
+    status: normalizeDriverStatus(driver.status),
   });
 };
 
@@ -83,7 +121,7 @@ const sanitizeVehicle = (vehicle: unknown): VehicleRecord => {
         : typeof metadata.maxRouteMinutes === 'string' || typeof metadata.maxRouteMinutes === 'number'
           ? metadata.maxRouteMinutes
           : null,
-    status: typeof value.status === 'string' ? value.status : 'unknown',
+    status: normalizeVehicleStatus(value.status),
   };
 };
 
@@ -116,7 +154,7 @@ const sanitizeDriver = (driver: unknown): DriverRecord => {
         : typeof metadata.notes === 'string'
           ? metadata.notes
           : null,
-    status: typeof value.status === 'string' ? value.status : 'UNKNOWN',
+    status: normalizeDriverStatus(value.status),
   };
 };
 
@@ -169,6 +207,12 @@ export const deleteVehicle = async (id: string): Promise<void> => {
 export const createDriver = async (
   driver: Partial<DriverRecord>,
 ): Promise<{ driver: DriverRecord }> => {
+  if (isPreview()) {
+    const nextDriver = buildPreviewDriver(driver);
+    previewState.drivers.unshift(nextDriver as unknown as (typeof previewState.drivers)[number]);
+    return { driver: nextDriver };
+  }
+
   const response = await apiFetch('/api/drivers', {
     method: 'POST',
     body: JSON.stringify(driver),
@@ -180,6 +224,19 @@ export const updateDriver = async (
   id: string,
   updates: Partial<DriverRecord>,
 ): Promise<{ driver: DriverRecord }> => {
+  if (isPreview()) {
+    const index = previewState.drivers.findIndex((driver) => driver.id === id);
+    if (index >= 0) {
+      const nextDriver = buildPreviewDriver({
+        ...(previewState.drivers[index] as unknown as DriverRecord),
+        ...updates,
+        id,
+      });
+      previewState.drivers[index] = nextDriver as unknown as (typeof previewState.drivers)[number];
+      return { driver: nextDriver };
+    }
+  }
+
   const response = await apiFetch(`/api/drivers/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(updates),
@@ -188,6 +245,11 @@ export const updateDriver = async (
 };
 
 export const deleteDriver = async (id: string): Promise<void> => {
+  if (isPreview()) {
+    previewState.drivers = previewState.drivers.filter((driver) => driver.id !== id);
+    return;
+  }
+
   await apiFetch(`/api/drivers/${id}`, { method: 'DELETE' });
 };
 

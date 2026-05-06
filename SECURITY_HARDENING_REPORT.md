@@ -7,69 +7,97 @@ Scope: local security and reliability audit of `/Users/logan/Desktop/Routing`
 
 ### Summary Of Risks Found
 
-- The JavaScript dependency audit had high/moderate findings in the launch path; these are now cleared by same-major package upgrades.
-- Render backend config did not declare several production guardrails that the app already supports (`STRICT_ENV_VALIDATION`, `QUEUE_REQUIRED`, metrics token protection, explicit frontend/CORS origins, Swagger disabled by default, session enforcement, webhook response cap).
-- Frontend hosting is not declared in `render.yaml`; the backend deploy definition alone is not a complete production launch.
-- Routing-service tests are still unverified locally because the active Python environment lacks `pytest` and needs a compatible OR-Tools runtime.
-- The repo still ignores JavaScript lockfiles, so production deploy reproducibility needs an explicit lockfile/pinned-artifact decision.
+- The prior deploy shape was backend-only and not launch-grade for a paid SaaS product.
+- Root Docker Compose pointed route optimization at OSRM while backend dispatch/planning expects the FastAPI routing-service `/optimize` API.
+- Production dependency reproducibility was weak because `package-lock.json` was ignored.
+- Drivers, vehicles, and customers needed a hard organization-scope pass across REST and GraphQL surfaces.
+- Dispatch and route-run mutation endpoints still used inline `@Body()` object shapes instead of DTOs.
+- Customer-configurable outbound webhooks needed DNS/private-IP blocking before public self-serve use.
+- Local browser QA was screenshot-heavy and wrote to tracked-ish artifact paths instead of an isolated launch evidence folder.
+- Hosted staging, WorkOS, Stripe, Redis, storage, metrics, and live routing-service smoke are still not certified.
 
 ### Changes Made
 
-- Upgraded backend/frontend package ranges to clear the registry-backed npm audit:
-  - NestJS runtime/dev packages to `11.1.19` where applicable.
-  - Apollo/Nest GraphQL packages to current compatible `13.4.x` / `5.5.x` ranges.
-  - `axios` to `^1.16.0`.
-  - `typeorm` to `^0.3.28`.
-  - `@workos-inc/node` to `^9.2.0`.
-- Removed the unused root `@as-integrations/express5` dependency.
-- Added Render backend env guardrails for strict config, queue-required readiness, metrics protection, production Swagger disablement, frontend/CORS origin wiring, session enforcement, and webhook response body cap.
-- Added `docs/launch-readiness.md` and tightened deploy/config/security docs around launch gates.
-- Updated backend env examples with the production-relevant auth/CORS/metrics/docs toggles.
+- Stopped ignoring `package-lock.json` and switched Render backend/frontend builds to `npm ci`.
+- Added Render services for backend, frontend, and the FastAPI routing-service, including frontend security headers and SPA rewrite.
+- Updated Compose to run the project routing-service on port `8000` instead of the OSRM placeholder.
+- Added backend routing-service URL resolution for explicit env, legacy provider URL, and Render internal host/port wiring.
+- Scoped drivers, vehicles, and customers by actor organization in controllers, resolvers, and services; driver vehicle assignment now verifies organization ownership.
+- Migrated dispatch and route-run action bodies to DTO classes.
+- Added webhook allowlist/DNS/private-IP validation and wired it into create/update/dispatch/replay flows.
+- Added launch Playwright audit coverage for primary routes, desktop/mobile render evidence, visible-control accounting, core SaaS forms, and preview route optimization status.
+- Replaced tracked `.artifacts` launch evidence with untracked `.tmp/launch-audit/*` outputs.
+- Updated `docs/launch-readiness.md` with the current no-go launch verdict and evidence.
 
 ### Files Changed By This Pass
 
+- `.gitignore`
 - `SECURITY_HARDENING_REPORT.md`
-- `backend/.env.example`
-- `backend/package.json`
+- `backend/src/common/http/outbound-webhook-url.util.ts`
+- `backend/src/common/routing/routing-service-url.util.ts`
+- `backend/src/modules/customers/*`
+- `backend/src/modules/dispatch/*`
+- `backend/src/modules/drivers/*`
+- `backend/src/modules/planning/planning.service.ts`
+- `backend/src/modules/platform/platform.service.ts`
+- `backend/src/modules/vehicles/*`
+- `docker-compose.yml`
 - `docs/config-matrix.md`
 - `docs/launch-readiness.md`
-- `docs/runbooks/deploy.md`
-- `docs/security-baseline.md`
-- `frontend/package.json`
+- `e2e/launch-audit.spec.ts`
+- `e2e/ui-audit.spec.ts`
+- `frontend/src/services/customersApi.ts`
+- `frontend/src/services/fleetApi.ts`
+- `frontend/src/services/jobsApi.ts`
+- `package-lock.json`
 - `package.json`
+- `playwright.config.ts`
 - `render.yaml`
+- `routing-service/Dockerfile`
+- `scripts/mock-preview-api.mjs`
+- `scripts/optimizer-smoke.mjs`
+- `scripts/playwright-preview-server.mjs`
 
 ### Checks And Commands Run
 
-- `PATH="/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/bin:$PATH" npm run test --workspace=backend`
-  - Passed: 34 test files, 117 tests.
-- `PATH="/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/bin:$PATH" npm run test --workspace=frontend -- --run`
-  - Passed: 6 test files, 8 tests.
+- `PATH="/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/bin:$PATH" npm ci`
+  - Passed: 953 packages audited, 0 vulnerabilities.
 - `PATH="/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/bin:$PATH" npm run build --workspaces`
   - Passed.
+- `PATH="/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/bin:$PATH" npm run test --workspace=backend`
+  - Passed: 34 test files, 121 tests.
+- `PATH="/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/bin:$PATH" npm run test --workspace=frontend -- --run`
+  - Passed: 6 test files, 8 tests.
 - `PATH="/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/bin:$PATH" npm audit --workspaces --audit-level=moderate`
   - Passed: found 0 vulnerabilities.
 - `PATH="/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/bin:$PATH" npm audit --workspaces --omit=dev --audit-level=moderate`
   - Passed: found 0 vulnerabilities.
 - `PATH="/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/bin:$PATH" npm run check:backend-deps`
   - Passed.
-- `python3 -m pytest routing-service/tests`
-  - Failed before tests: active Python has no `pytest` module installed.
+- `PATH="/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/bin:$PATH" PLAYWRIGHT_BASE_URL="http://127.0.0.1:5201" PLAYWRIGHT_FRONTEND_PORT="5201" PLAYWRIGHT_MOCK_API_PORT="3201" LAUNCH_AUDIT_API_URL="http://127.0.0.1:3201" LAUNCH_AUDIT_DIR=".tmp/launch-audit/playwright" PLAYWRIGHT_OUTPUT_DIR=".tmp/launch-audit/test-results" npm run launch:audit`
+  - Passed: 4 tests in 5.7 minutes.
+- `python3.11 -m pytest routing-service/tests`
+  - Blocked before tests: `zsh:1: command not found: python3.11`.
+- `docker --version`
+  - Blocked: `zsh:1: command not found: docker`.
 
 ### Remaining Risks
 
-- Production/staging env values still need to be populated and smoke-tested.
-- Frontend hosting/deploy target is not declared in Render config.
-- Routing-service tests need a compatible Python/OR-Tools environment.
-- Public self-serve webhooks still need a DNS/IP allowlist decision if customer-configurable at launch.
-- Production dependency reproducibility needs a tracked lockfile or exact artifact strategy.
+- Hosted staging is not yet deployed or certified.
+- Real WorkOS login/logout/session/revocation was not tested in hosted staging.
+- Real routing-service Python 3.11 tests and live optimizer smoke remain blocked locally.
+- Stripe test checkout/webhook, email/SMS sandbox, and storage test bucket flows are not certified.
+- `/health`, `/health/runtime`, `/health/readiness`, `/api/metrics`, strict CORS rejection, and authenticated Socket.IO org scoping still need hosted staging probes.
+- Billing/subscription and public API detail reads still deserve a final tenant-isolation probe against seeded cross-org data.
+- Backup/restore, migration, rollback, provider-failure, and incident runbooks remain launch gates.
 
 ### Recommended Next Actions
 
-1. Configure Render/staging env and frontend hosting, then run staging smoke.
-2. Verify routing-service with a Python 3.11/3.12 environment or container.
-3. Commit/push this launch-readiness set after review.
-4. Defer AI/chat endpoints until the launch gates are intentionally closed or deferred.
+1. Deploy hosted staging from the updated Render blueprint and populate all staging provider sandboxes.
+2. Run routing-service tests in Python 3.11 or in the routing-service container.
+3. Run the launch Playwright suite against hosted staging with real WorkOS and no preview env.
+4. Run security probes for tenant isolation, metrics token enforcement, CORS rejection, webhook SSRF rejection, API key revoke, and Socket.IO org scoping.
+5. Keep public launch blocked until the hosted staging evidence is green.
 
 ## Daily Pass: 2026-04-26
 

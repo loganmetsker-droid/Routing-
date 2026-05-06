@@ -272,14 +272,18 @@ export class RouteRunsService {
     );
   }
 
-  private getLatestTelemetryForVehicle(vehicleId?: string | null) {
-    if (!this.telemetry || !vehicleId) {
+  private getLatestTelemetryForVehicle(
+    vehicleId?: string | null,
+    organizationId?: string | null,
+  ) {
+    if (!this.telemetry || !vehicleId || !organizationId) {
       return Promise.resolve(null);
     }
 
     return this.telemetry.findOne({
-      where: { vehicleId },
+      where: { vehicleId, vehicle: { organizationId } },
       order: { timestamp: 'DESC' },
+      relations: { vehicle: true },
     });
   }
 
@@ -767,7 +771,10 @@ export class RouteRunsService {
           where: route.vehicleId ? { id: route.vehicleId } : { id: '' },
         })
       : null;
-    const telemetry = await this.getLatestTelemetryForVehicle(route.vehicleId);
+    const telemetry = await this.getLatestTelemetryForVehicle(
+      route.vehicleId,
+      route.organizationId,
+    );
     const organization =
       route.organizationId && this.organizations
         ? await this.organizations.findOne({
@@ -892,7 +899,10 @@ export class RouteRunsService {
               where: route.vehicleId ? { id: route.vehicleId } : { id: '' },
             })
           : null;
-        const telemetry = await this.getLatestTelemetryForVehicle(route.vehicleId);
+        const telemetry = await this.getLatestTelemetryForVehicle(
+          route.vehicleId,
+          route.organizationId,
+        );
 
         return {
           routeRun: route,

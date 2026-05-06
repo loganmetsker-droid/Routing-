@@ -2,7 +2,9 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { test } from '@playwright/test';
 
-const screenshotRoot = path.join(process.cwd(), '.artifacts', 'ui-audit', 'playwright');
+const screenshotRoot =
+  process.env.UI_AUDIT_DIR ||
+  path.join(process.cwd(), '.tmp', 'launch-audit', 'ui-audit');
 
 const routes = [
   { slug: 'dashboard', path: '/dashboard' },

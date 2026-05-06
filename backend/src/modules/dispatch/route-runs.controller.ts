@@ -3,6 +3,14 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { RouteRunsService } from './route-runs.service';
+import {
+  CreateDispatchExceptionDto,
+  ReassignRouteRunDto,
+  StopNoteDto,
+  StopProofDto,
+  StopReasonDto,
+  UpdateDispatchExceptionDto,
+} from './dto/route-run-actions.dto';
 
 type AuthenticatedRequest = {
   user?: {
@@ -63,7 +71,11 @@ export class RouteRunsController {
 
   @Post('route-runs/:id/reassign')
   @Roles('OWNER', 'ADMIN', 'DISPATCHER')
-  reassign(@Req() req: AuthenticatedRequest, @Param('id') routeId: string, @Body() body: { driverId?: string; vehicleId?: string; reason?: string }) {
+  reassign(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') routeId: string,
+    @Body() body: ReassignRouteRunDto,
+  ) {
     return this.routeRuns.reassign(routeId, body, req.user);
   }
 
@@ -85,19 +97,19 @@ export class RouteRunsController {
 
   @Post('route-run-stops/:id/failed')
   @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'DRIVER')
-  failed(@Req() req: AuthenticatedRequest, @Param('id') stopId: string, @Body() body: { reason: string }) { return this.routeRuns.failStop(stopId, body.reason, req.user); }
+  failed(@Req() req: AuthenticatedRequest, @Param('id') stopId: string, @Body() body: StopReasonDto) { return this.routeRuns.failStop(stopId, body.reason, req.user); }
 
   @Post('route-run-stops/:id/reschedule')
   @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'DRIVER')
-  reschedule(@Req() req: AuthenticatedRequest, @Param('id') stopId: string, @Body() body: { reason: string }) { return this.routeRuns.rescheduleStop(stopId, body.reason, req.user); }
+  reschedule(@Req() req: AuthenticatedRequest, @Param('id') stopId: string, @Body() body: StopReasonDto) { return this.routeRuns.rescheduleStop(stopId, body.reason, req.user); }
 
   @Post('route-run-stops/:id/proof')
   @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'DRIVER')
-  proof(@Req() req: AuthenticatedRequest, @Param('id') stopId: string, @Body() body: { type: string; uri: string; metadata?: Record<string, unknown> }) { return this.routeRuns.addProof(stopId, body, req.user); }
+  proof(@Req() req: AuthenticatedRequest, @Param('id') stopId: string, @Body() body: StopProofDto) { return this.routeRuns.addProof(stopId, body, req.user); }
 
   @Post('route-run-stops/:id/note')
   @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'DRIVER')
-  note(@Req() req: AuthenticatedRequest, @Param('id') stopId: string, @Body() body: { note: string }) { return this.routeRuns.addNote(stopId, body.note, req.user); }
+  note(@Req() req: AuthenticatedRequest, @Param('id') stopId: string, @Body() body: StopNoteDto) { return this.routeRuns.addNote(stopId, body.note, req.user); }
 
   @Get('exceptions')
   @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'VIEWER')
@@ -107,21 +119,18 @@ export class RouteRunsController {
   @Roles('OWNER', 'ADMIN', 'DISPATCHER')
   createException(
     @Req() req: AuthenticatedRequest,
-    @Body()
-    body: {
-      routeId?: string;
-      routeRunStopId?: string;
-      code: string;
-      message: string;
-      details?: Record<string, unknown>;
-    },
+    @Body() body: CreateDispatchExceptionDto,
   ) {
     return this.routeRuns.createException(body, req.user);
   }
 
   @Patch('exceptions/:id')
   @Roles('OWNER', 'ADMIN', 'DISPATCHER')
-  updateException(@Req() req: AuthenticatedRequest, @Param('id') exceptionId: string, @Body() body: { status?: 'ACKNOWLEDGED' | 'RESOLVED' }) {
+  updateException(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') exceptionId: string,
+    @Body() body: UpdateDispatchExceptionDto,
+  ) {
     return this.routeRuns.resolveException(exceptionId, req.user, body.status || 'RESOLVED');
   }
 }

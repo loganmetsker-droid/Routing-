@@ -3,12 +3,17 @@ import {
   NotFoundException,
   ConflictException,
   Logger,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { FindOptionsWhere, Repository } from 'typeorm';
 import { Vehicle } from './entities/vehicle.entity';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
+
+type Actor = {
+  organizationId?: string;
+};
 
 @Injectable()
 export class VehiclesService {
@@ -19,17 +24,35 @@ export class VehiclesService {
     private readonly vehicleRepository: Repository<Vehicle>,
   ) {}
 
+  private requireOrganizationId(actor?: Actor) {
+    if (!actor?.organizationId) {
+      throw new ForbiddenException('Organization scope required');
+    }
+    return actor.organizationId;
+  }
+
+  private scopedWhere(
+    actor: Actor | undefined,
+    where: FindOptionsWhere<Vehicle> = {},
+  ): FindOptionsWhere<Vehicle> {
+    return {
+      ...where,
+      organizationId: this.requireOrganizationId(actor),
+    };
+  }
+
   /**
    * Create a new vehicle
    */
-  async create(createVehicleDto: CreateVehicleDto): Promise<Vehicle> {
+  async create(createVehicleDto: CreateVehicleDto, actor?: Actor): Promise<Vehicle> {
+    const organizationId = this.requireOrganizationId(actor);
     this.logger.log(
       `Creating new vehicle: ${createVehicleDto.make} ${createVehicleDto.model}`,
     );
 
     // Check if license plate already exists
     const existing = await this.vehicleRepository.findOne({
-      where: { licensePlate: createVehicleDto.licensePlate },
+      where: { licensePlate: createVehicleDto.licensePlate, organizationId },
     });
 
     if (existing) {
@@ -40,6 +63,7 @@ export class VehiclesService {
 
     const vehicle = this.vehicleRepository.create({
       ...createVehicleDto,
+      organizationId,
       vehicleType: this.normalizeType(createVehicleDto.vehicleType),
       fuelType: this.normalizeType(createVehicleDto.fuelType),
       capacityWeightKg:
@@ -53,9 +77,10 @@ export class VehiclesService {
   /**
    * Find all vehicles
    */
-  async findAll(): Promise<Vehicle[]> {
+  async findAll(actor?: Actor): Promise<Vehicle[]> {
     this.logger.log('Fetching all vehicles');
     return this.vehicleRepository.find({
+      where: this.scopedWhere(actor),
       order: { createdAt: 'DESC' },
     });
   }
@@ -63,11 +88,11 @@ export class VehiclesService {
   /**
    * Find one vehicle by ID
    */
-  async findOne(id: string): Promise<Vehicle> {
+  async findOne(id: string, actor?: Actor): Promise<Vehicle> {
     this.logger.log(`Fetching vehicle with ID: ${id}`);
 
     const vehicle = await this.vehicleRepository.findOne({
-      where: { id },
+      where: this.scopedWhere(actor, { id }),
     });
 
     if (!vehicle) {
@@ -80,10 +105,10 @@ export class VehiclesService {
   /**
    * Find vehicles by status
    */
-  async findByStatus(status: string): Promise<Vehicle[]> {
+  async findByStatus(status: string, actor?: Actor): Promise<Vehicle[]> {
     this.logger.log(`Fetching vehicles with status: ${status}`);
     return this.vehicleRepository.find({
-      where: { status: this.normalizeStatus(status) },
+      where: this.scopedWhere(actor, { status: this.normalizeStatus(status) }),
       order: { createdAt: 'DESC' },
     });
   }
@@ -94,10 +119,12 @@ export class VehiclesService {
   async update(
     id: string,
     updateVehicleDto: UpdateVehicleDto,
+    actor?: Actor,
   ): Promise<Vehicle> {
+    const organizationId = this.requireOrganizationId(actor);
     this.logger.log(`Updating vehicle with ID: ${id}`);
 
-    const vehicle = await this.findOne(id);
+    const vehicle = await this.findOne(id, actor);
 
     // Check license plate uniqueness if being updated
     if (
@@ -105,10 +132,10 @@ export class VehiclesService {
       updateVehicleDto.licensePlate !== vehicle.licensePlate
     ) {
       const existing = await this.vehicleRepository.findOne({
-        where: { licensePlate: updateVehicleDto.licensePlate },
+        where: { licensePlate: updateVehicleDto.licensePlate, organizationId },
       });
 
-      if (existing) {
+      if (existing && existing.id !== id) {
         throw new ConflictException(
           `Vehicle with license plate ${updateVehicleDto.licensePlate} already exists`,
         );
@@ -138,27 +165,28 @@ export class VehiclesService {
   /**
    * Soft delete a vehicle
    */
-  async remove(id: string): Promise<void> {
+  async remove(id: string, actor?: Actor): Promise<void> {
     this.logger.log(`Soft deleting vehicle with ID: ${id}`);
 
-    const vehicle = await this.findOne(id);
+    const vehicle = await this.findOne(id, actor);
     await this.vehicleRepository.softRemove(vehicle);
   }
 
   /**
    * Get vehicle statistics
    */
-  async getStatistics(): Promise<{
+  async getStatistics(actor?: Actor): Promise<{
     total: number;
     available: number;
     inUse: number;
     maintenance: number;
   }> {
+    const organizationId = this.requireOrganizationId(actor);
     const [total, available, inUse, maintenance] = await Promise.all([
-      this.vehicleRepository.count(),
-      this.vehicleRepository.count({ where: { status: 'available' } }),
-      this.vehicleRepository.count({ where: { status: 'in_use' } }),
-      this.vehicleRepository.count({ where: { status: 'maintenance' } }),
+      this.vehicleRepository.count({ where: { organizationId } }),
+      this.vehicleRepository.count({ where: { status: 'available', organizationId } }),
+      this.vehicleRepository.count({ where: { status: 'in_use', organizationId } }),
+      this.vehicleRepository.count({ where: { status: 'maintenance', organizationId } }),
     ]);
 
     return {
@@ -169,15 +197,19 @@ export class VehiclesService {
     };
   }
 
-  findByType(vehicleType: string) {
-    return this.vehicleRepository.find({ where: { vehicleType } });
+  findByType(vehicleType: string, actor?: Actor) {
+    return this.vehicleRepository.find({
+      where: this.scopedWhere(actor, { vehicleType }),
+    });
   }
 
-  async findNeedingMaintenance() {
+  async findNeedingMaintenance(actor?: Actor) {
+    const organizationId = this.requireOrganizationId(actor);
     // Find vehicles that need maintenance based on odometer readings
     return this.vehicleRepository
       .createQueryBuilder('vehicle')
-      .where('vehicle.next_maintenance_km IS NOT NULL')
+      .where('vehicle.organization_id = :organizationId', { organizationId })
+      .andWhere('vehicle.next_maintenance_km IS NOT NULL')
       .andWhere('vehicle.current_odometer_km >= vehicle.next_maintenance_km')
       .getMany();
   }

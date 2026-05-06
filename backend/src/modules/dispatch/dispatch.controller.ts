@@ -32,6 +32,11 @@ import { CreateRouteDto } from './dto/create-route.dto';
 import { CreateGlobalRouteDto } from './dto/create-global-route.dto';
 import { ManualDispatchDto } from './dto/manual-dispatch.dto';
 import { UpdateRouteDto } from './dto/update-route.dto';
+import {
+  AssignDriverDto,
+  MoveStopDto,
+  ReorderStopsDto,
+} from './dto/dispatch-actions.dto';
 import { OptimizerEvent, OptimizerHealth } from './dto/routing-service.dto';
 import {
   ApplyRerouteDto,
@@ -276,26 +281,20 @@ export class DispatchController {
   @ApiOperation({ summary: 'Assign a driver to a route' })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        driverId: {
-          type: 'string',
-          format: 'uuid',
-          description: 'ID of the driver to assign',
-        },
-      },
-      required: ['driverId'],
-    },
+    type: AssignDriverDto,
   })
   @ApiResponse({ status: 200, description: 'Driver assigned to route', type: Route })
   @ApiResponse({ status: 404, description: 'Route or driver not found' })
   async assignDriver(
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) routeId: string,
-    @Body('driverId', ParseUUIDPipe) driverId: string,
+    @Body() dto: AssignDriverDto,
   ): Promise<DispatchRouteResponse> {
-    const route = await this.dispatchService.assignDriver(routeId, driverId, req.user);
+    const route = await this.dispatchService.assignDriver(
+      routeId,
+      dto.driverId,
+      req.user,
+    );
     this.auditService.record({
       actorId: req.user?.userId || 'unknown',
       actorType: 'user',
@@ -303,7 +302,7 @@ export class DispatchController {
       entityId: routeId,
       action: DomainEvents.dispatch.assignmentCreated,
       source: 'user',
-      newValue: { routeId, driverId },
+      newValue: { routeId, driverId: dto.driverId },
     });
     return this.presentRouteResponse(route);
   }
@@ -361,17 +360,7 @@ export class DispatchController {
   })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        newJobOrder: {
-          type: 'array',
-          items: { type: 'string', format: 'uuid' },
-          description: 'Array of job IDs in new order',
-        },
-      },
-      required: ['newJobOrder'],
-    },
+    type: ReorderStopsDto,
   })
   @ApiResponse({ status: 200, description: 'Route stops reordered', type: Route })
   @ApiResponse({ status: 400, description: 'Invalid job order' })
@@ -380,10 +369,10 @@ export class DispatchController {
   reorderStops(
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body('newJobOrder') newJobOrder: string[],
+    @Body() dto: ReorderStopsDto,
   ): Promise<DispatchRouteResponse> {
     return this.dispatchService
-      .reorderStops(id, newJobOrder, req.user)
+      .reorderStops(id, dto.newJobOrder, req.user)
       .then((route) => this.presentRouteResponse(route));
   }
 
@@ -394,21 +383,12 @@ export class DispatchController {
   })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        jobId: { type: 'string', format: 'uuid' },
-        targetRouteId: { type: 'string', format: 'uuid' },
-        targetSequence: { type: 'number' },
-      },
-      required: ['jobId', 'targetRouteId'],
-    },
+    type: MoveStopDto,
   })
   async moveStop(
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body()
-    body: { jobId: string; targetRouteId: string; targetSequence?: number },
+    @Body() body: MoveStopDto,
   ) {
     const result = await this.dispatchService.moveStopToRoute(id, body, req.user);
     this.auditService.record({

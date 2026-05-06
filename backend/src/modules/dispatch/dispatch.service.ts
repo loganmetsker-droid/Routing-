@@ -80,6 +80,7 @@ import { DispatchOptimizerStateService } from './services/dispatch-optimizer-sta
 import { DispatchPresentationService } from './services/dispatch-presentation.service';
 import { OptimizationJobLifecycleService } from './services/optimization-job-lifecycle.service';
 import { RouteVersioningService } from './services/route-versioning.service';
+import { resolveRoutingServiceUrl } from '../../common/routing/routing-service-url.util';
 
 @Injectable()
 export class DispatchService {
@@ -122,10 +123,7 @@ export class DispatchService {
     @InjectRepository(RouteRunStop)
     private readonly routeRunStopRepository?: Repository<RouteRunStop>,
   ) {
-    this.routingServiceUrl =
-      this.configService.get<string>('ROUTING_SERVICE_URL') ||
-      this.configService.get<string>('ROUTING_PROVIDER_URL') ||
-      'http://localhost:8000';
+    this.routingServiceUrl = resolveRoutingServiceUrl(this.configService);
   }
 
   private async ensureOrganizationScope(

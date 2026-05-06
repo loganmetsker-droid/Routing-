@@ -10,6 +10,8 @@ import {
   HttpCode,
   HttpStatus,
   Query,
+  Req,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -23,6 +25,12 @@ import { VehiclesService } from './vehicles.service';
 import { CreateVehicleDto } from './dto/create-vehicle.dto';
 import { UpdateVehicleDto } from './dto/update-vehicle.dto';
 import { Vehicle } from './entities/vehicle.entity';
+
+type AuthenticatedRequest = {
+  user?: {
+    organizationId?: string;
+  };
+};
 
 @ApiTags('vehicles')
 @ApiBearerAuth('JWT-auth')
@@ -41,8 +49,11 @@ export class VehiclesController {
     status: 409,
     description: 'Vehicle with this license plate already exists',
   })
-  async create(@Body() createVehicleDto: CreateVehicleDto): Promise<{ vehicle: Vehicle }> {
-    const vehicle = await this.vehiclesService.create(createVehicleDto);
+  async create(
+    @Req() req: AuthenticatedRequest,
+    @Body() createVehicleDto: CreateVehicleDto,
+  ): Promise<{ vehicle: Vehicle }> {
+    const vehicle = await this.vehiclesService.create(createVehicleDto, req.user);
     return { vehicle };
   }
 
@@ -58,11 +69,16 @@ export class VehiclesController {
     description: 'Return all vehicles',
     type: [Vehicle],
   })
-  async findAll(@Query('status') status?: string): Promise<{ vehicles: Vehicle[] }> {
+  async findAll(
+    @Req() req: AuthenticatedRequest,
+    @Query('status') status?: string,
+  ): Promise<{ vehicles: Vehicle[] }> {
     if (status) {
-      return this.vehiclesService.findByStatus(status).then((vehicles) => ({ vehicles }));
+      return this.vehiclesService
+        .findByStatus(status, req.user)
+        .then((vehicles) => ({ vehicles }));
     }
-    return this.vehiclesService.findAll().then((vehicles) => ({ vehicles }));
+    return this.vehiclesService.findAll(req.user).then((vehicles) => ({ vehicles }));
   }
 
   @Get('statistics')
@@ -80,8 +96,8 @@ export class VehiclesController {
       },
     },
   })
-  async getStatistics() {
-    return this.vehiclesService.getStatistics();
+  async getStatistics(@Req() req: AuthenticatedRequest) {
+    return this.vehiclesService.getStatistics(req.user);
   }
 
   @Get(':id')
@@ -93,8 +109,11 @@ export class VehiclesController {
     type: Vehicle,
   })
   @ApiResponse({ status: 404, description: 'Vehicle not found' })
-  async findOne(@Param('id') id: string): Promise<{ vehicle: Vehicle }> {
-    const vehicle = await this.vehiclesService.findOne(id);
+  async findOne(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<{ vehicle: Vehicle }> {
+    const vehicle = await this.vehiclesService.findOne(id, req.user);
     return { vehicle };
   }
 
@@ -112,10 +131,11 @@ export class VehiclesController {
     description: 'Vehicle with this license plate already exists',
   })
   async update(
-    @Param('id') id: string,
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() updateVehicleDto: UpdateVehicleDto,
   ): Promise<{ vehicle: Vehicle }> {
-    const vehicle = await this.vehiclesService.update(id, updateVehicleDto);
+    const vehicle = await this.vehiclesService.update(id, updateVehicleDto, req.user);
     return { vehicle };
   }
 
@@ -133,10 +153,11 @@ export class VehiclesController {
     description: 'Vehicle with this license plate already exists',
   })
   async patch(
-    @Param('id') id: string,
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() updateVehicleDto: UpdateVehicleDto,
   ): Promise<{ vehicle: Vehicle }> {
-    const vehicle = await this.vehiclesService.update(id, updateVehicleDto);
+    const vehicle = await this.vehiclesService.update(id, updateVehicleDto, req.user);
     return { vehicle };
   }
 
@@ -149,7 +170,10 @@ export class VehiclesController {
     description: 'The vehicle has been successfully deleted',
   })
   @ApiResponse({ status: 404, description: 'Vehicle not found' })
-  async remove(@Param('id') id: string): Promise<void> {
-    return this.vehiclesService.remove(id);
+  async remove(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<void> {
+    return this.vehiclesService.remove(id, req.user);
   }
 }

@@ -4,18 +4,27 @@
 
 - External routing/optimization/storage provider health degrades.
 - Requests time out or fail repeatedly.
+- Stripe, WorkOS, Postmark, Twilio, Redis, R2, or webhook receiver probes fail in staging or production smoke.
 
 ## First Checks
 
 1. Provider status page or synthetic check.
 2. Internal error/timeout rate.
-3. Whether manual fallback path is available.
+3. Targeted provider smoke:
+
+   ```sh
+   npm run smoke:staging
+   ROUTING_SERVICE_URL="$STAGING_ROUTING_SERVICE_URL" npm run smoke:optimizer
+   ```
+
+4. Whether manual fallback path is available.
 
 ## Immediate Triage
 
 1. Enter degraded mode.
 2. Avoid blocking manual dispatch operations.
 3. Disable or annotate provider-dependent features if needed.
+4. Hide billing, invitation, notification, or webhook self-serve UI if the provider-backed flow cannot complete safely.
 
 ## Recovery Steps
 
@@ -28,6 +37,7 @@
 - dependency check passes
 - queue/job throughput normalizes
 - operator UI no longer reports degraded status
+- provider-specific smoke check passes before re-enabling the self-serve surface
 
 ## Escalation Threshold
 
