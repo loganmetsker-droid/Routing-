@@ -13,7 +13,8 @@ The local codebase is materially healthier, and the routing-service now passes P
 ## Changes Closed In This Pass
 
 - Added `package-lock.json` to source control readiness by removing the lockfile ignore and switching Render build commands to `npm ci`.
-- Expanded `render.yaml` to include `trovan-backend`, `trovan-routing-service`, and `trovan-frontend`; frontend is static-hosted with production Vite env placeholders and SPA rewrite/security headers, while backend receives the routing service host/port from the Render service graph.
+- Expanded `render.yaml` to include `trovan-backend`, `trovan-routing-service`, `trovan-frontend`, `trovan-postgres`, and `trovan-redis`; frontend is static-hosted with production Vite env placeholders and SPA rewrite/security headers, while backend receives database, Redis, routing-service, and generated JWT values from the Render service graph.
+- Added `docs/staging-setup.md` and `npm run launch:env-status` so hosted staging setup has a single env checklist before provider-backed smoke.
 - Replaced the root Docker Compose OSRM placeholder with the project FastAPI routing-service on port `8000`, matching backend route optimization expectations.
 - Added a routing-service URL resolver so backend planning/dispatch code supports explicit `ROUTING_SERVICE_URL`, legacy provider URL, and Render internal host/port wiring.
 - Fixed routing-service startup under Docker by avoiding SQLAlchemy's reserved `metadata` declarative attribute name.
@@ -76,10 +77,12 @@ Still not certified locally:
 
 - Backend readiness endpoints `/health`, `/health/runtime`, and `/health/readiness`
   - Not certified against hosted staging because staging is not deployed/configured in this environment.
+- `npm run launch:env-status`
+  - Runs locally and redacts values, but currently reports missing Render API access, hosted staging URLs/auth, WorkOS test login, Stripe test secrets, webhook receiver, Postmark/Twilio sandbox values, and R2 test bucket credentials.
 
 ## Launch Blockers
 
-- Deploy hosted staging from the updated blueprint and populate real staging env: WorkOS, database, Redis, `ROUTING_SERVICE_URL`/internal host, `FRONTEND_URL`, `CORS_ORIGINS`, `METRICS_TOKEN`, Stripe test mode, webhook receiver, email/SMS sandbox, and object storage test bucket.
+- Deploy hosted staging from the updated blueprint and populate real staging env: WorkOS, `FRONTEND_URL`, `CORS_ORIGINS`, `METRICS_TOKEN`, Stripe test mode, webhook receiver, email/SMS sandbox, and object storage test bucket. The blueprint now provisions Postgres, Redis, routing-service host/port, and generated JWT wiring.
 - Deploy the Python 3.11 routing-service to hosted staging and run the same live optimizer smoke against `STAGING_ROUTING_SERVICE_URL`.
 - Run hosted staging Playwright with real WorkOS test login and no preview env (`VITE_AUTH_BYPASS` and `VITE_MOCK_PREVIEW` absent).
 - Prove authenticated Socket.IO connect/revocation expectations and organization-scoped dispatch/tracking events against staging.
