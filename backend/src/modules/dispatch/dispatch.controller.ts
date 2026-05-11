@@ -308,7 +308,7 @@ export class DispatchController {
   }
 
   @Patch('routes/:id/start')
-  @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'DRIVER')
+  @Roles('OWNER', 'ADMIN', 'DISPATCHER')
   @ApiOperation({ summary: 'Start a route (sets vehicle to in_route)' })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Route started', type: Route })
@@ -323,7 +323,7 @@ export class DispatchController {
   }
 
   @Patch('routes/:id/complete')
-  @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'DRIVER')
+  @Roles('OWNER', 'ADMIN', 'DISPATCHER')
   @ApiOperation({ summary: 'Complete a route' })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Route completed', type: Route })
@@ -455,6 +455,7 @@ export class DispatchController {
   @ApiQuery({ name: 'packId', required: false, type: String })
   @ApiResponse({ status: 200, description: 'Dispatch timeline events' })
   async getDispatchTimeline(
+    @Req() req: AuthenticatedRequest,
     @Query('routeId') routeId?: string,
     @Query('limit') limit?: string,
     @Query('reasonCode') reasonCode?: string,
@@ -466,19 +467,24 @@ export class DispatchController {
   ): Promise<DispatchTimelineResponse> {
     const parsedLimit = limit ? Number(limit) : 100;
     return {
-      events: await this.dispatchService.getDispatchTimeline(routeId, parsedLimit, {
-        reasonCode,
-        action,
-        actor,
-        source: this.parseTimelineSource(source),
-        before,
-        packId,
-      }),
+      events: await this.dispatchService.getDispatchTimeline(
+        routeId,
+        parsedLimit,
+        {
+          reasonCode,
+          action,
+          actor,
+          source: this.parseTimelineSource(source),
+          before,
+          packId,
+        },
+        req.user,
+      ),
     };
   }
 
   @Post('routes/:id/reroute/request')
-  @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'DRIVER')
+  @Roles('OWNER', 'ADMIN', 'DISPATCHER')
   @ApiOperation({ summary: 'Request a reroute for a route (exception-driven)' })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 201, description: 'Reroute request created' })

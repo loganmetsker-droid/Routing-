@@ -40,9 +40,12 @@ export class RouteVersioningService {
     };
   }
 
-  async getNextRouteVersionNumber(routeId: string) {
+  async getNextRouteVersionNumber(routeId: string, organizationId?: string | null) {
     const latest = await this.routeVersionRepository.findOne({
-      where: { routeId },
+      where: {
+        routeId,
+        ...(organizationId ? { organizationId } : {}),
+      } as any,
       order: { versionNumber: 'DESC' },
     });
     return (latest?.versionNumber || 0) + 1;
@@ -53,7 +56,10 @@ export class RouteVersioningService {
     actor?: DispatchActorContext,
   ) {
     const existingVersion = await this.routeVersionRepository.findOne({
-      where: { routeId: route.id },
+      where: {
+        routeId: route.id,
+        ...(route.organizationId ? { organizationId: route.organizationId } : {}),
+      } as any,
       order: { versionNumber: 'DESC' },
     });
 
@@ -63,6 +69,7 @@ export class RouteVersioningService {
 
     const version = this.routeVersionRepository.create({
       routeId: route.id,
+      organizationId: route.organizationId || null,
       versionNumber: 1,
       status: 'PUBLISHED',
       snapshot: this.routePresentation.buildRouteVersionSnapshot(route),
@@ -84,7 +91,10 @@ export class RouteVersioningService {
     actor?: DispatchActorContext,
   ): Promise<RouteVersion> {
     const existingVersion = await this.routeVersionRepository.findOne({
-      where: { routeId: route.id },
+      where: {
+        routeId: route.id,
+        ...(route.organizationId ? { organizationId: route.organizationId } : {}),
+      } as any,
       order: { versionNumber: 'DESC' },
     });
 
@@ -105,6 +115,7 @@ export class RouteVersioningService {
     const backfilled = await this.seedPublishedRouteVersion(route, actor);
     await this.dispatchEvents.log({
       routeId: route.id,
+      organizationId: route.organizationId || null,
       aggregateType: 'ROUTE_VERSION',
       aggregateId: backfilled.id,
       eventType: 'ROUTE_VERSION_BACKFILLED',
@@ -115,6 +126,7 @@ export class RouteVersioningService {
       actorUserId: this.getActorUserId(actor),
       payload: {
         routeId: route.id,
+        organizationId: route.organizationId || null,
         versionId: backfilled.id,
         versionNumber: backfilled.versionNumber,
       },
@@ -139,7 +151,11 @@ export class RouteVersioningService {
 
     const draftVersion = this.routeVersionRepository.create({
       routeId: route.id,
-      versionNumber: await this.getNextRouteVersionNumber(route.id),
+      organizationId: route.organizationId || null,
+      versionNumber: await this.getNextRouteVersionNumber(
+        route.id,
+        route.organizationId,
+      ),
       status: 'DRAFT',
       snapshot: this.routePresentation.buildRouteVersionSnapshot(route),
       createdByUserId: this.getActorUserId(actor),
@@ -156,6 +172,7 @@ export class RouteVersioningService {
     };
     await this.dispatchEvents.log({
       routeId: route.id,
+      organizationId: route.organizationId || null,
       aggregateType: 'ROUTE_VERSION',
       aggregateId: savedDraft.id,
       eventType: 'ROUTE_DRAFT_FORKED_FROM_PUBLISHED',

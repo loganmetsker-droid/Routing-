@@ -7,7 +7,10 @@ import {
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { InjectRepository } from '@nestjs/typeorm';
 import { Server, Socket } from 'socket.io';
+import { Repository } from 'typeorm';
+import { AuthSession } from '../auth/entities/auth-session.entity';
 import { Route } from './entities/route.entity';
 import { createCorsOriginValidator } from '../../common/http/cors-origin.util';
 import {
@@ -32,7 +35,11 @@ export class DispatchGateway {
 
   private readonly logger = new Logger(DispatchGateway.name);
 
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    @InjectRepository(AuthSession)
+    private readonly authSessions: Repository<AuthSession>,
+  ) {}
 
   private emitToOrganization(
     organizationId: string,
@@ -59,7 +66,11 @@ export class DispatchGateway {
    */
   async handleConnection(client: Socket) {
     try {
-      const auth = await authenticateSocket(this.jwtService, client);
+      const auth = await authenticateSocket(
+        this.jwtService,
+        client,
+        this.authSessions,
+      );
       client.data.auth = auth;
       client.join(socketOrganizationRoom('dispatch', auth.organizationId));
       this.logger.log(

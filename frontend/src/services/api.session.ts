@@ -17,17 +17,21 @@ const AUTH_BYPASS =
   import.meta.env.VITE_AUTH_BYPASS === 'true' ||
   import.meta.env.VITE_MOCK_PREVIEW === 'true';
 const AUTH_BYPASS_TOKEN = 'preview-auth-bypass';
+const AUTH_PREVIEW_USER_KEY = 'trovan-preview-auth-user';
+const PREVIEW_DRIVER_EMAIL = 'anna.quinn@trovan.local';
 
 const isLocalPreviewHost = () =>
   typeof window !== 'undefined' &&
   new Set(['localhost', '127.0.0.1', '[::1]']).has(window.location.hostname);
 
+const hasLocalDemoPreviewBootstrap = () =>
+  typeof window !== 'undefined' &&
+  Boolean((window as unknown as { __TROVAN_LOCAL_DEMO_PREVIEW__?: boolean })
+    .__TROVAN_LOCAL_DEMO_PREVIEW__);
+
 const isLocalPreviewEnabled = () =>
   typeof window !== 'undefined' &&
-  isLocalPreviewHost() &&
-  (AUTH_BYPASS ||
-    Boolean((window as unknown as { __TROVAN_LOCAL_DEMO_PREVIEW__?: boolean })
-      .__TROVAN_LOCAL_DEMO_PREVIEW__));
+  (hasLocalDemoPreviewBootstrap() || (isLocalPreviewHost() && AUTH_BYPASS));
 
 export type ApiRequestOptions = RequestInit & {
   skipAuth?: boolean;
@@ -53,6 +57,94 @@ export type LoginResponse = {
 };
 
 const getAuthToken = (): string | null => getStoredAuthToken();
+
+export function isDriverOnlyAuthUser(
+  user?: Pick<AuthUser, 'role' | 'roles'> | null,
+) {
+  const roles = (user?.roles?.length ? user.roles : [user?.role || ''])
+    .map((role) => String(role).trim().toUpperCase())
+    .filter(Boolean);
+  return (
+    roles.includes('DRIVER') &&
+    !roles.some((role) =>
+      ['OWNER', 'ADMIN', 'DISPATCHER', 'VIEWER'].includes(role),
+    )
+  );
+}
+
+const shouldUseDriverPreviewUser = (email?: string | null) => {
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  if (normalizedEmail.includes('driver')) return true;
+  if (normalizedEmail === PREVIEW_DRIVER_EMAIL) return true;
+  return (
+    typeof window !== 'undefined' && window.location.pathname.startsWith('/driver')
+  );
+};
+
+const makePreviewUser = (email?: string | null): AuthUser => {
+  if (shouldUseDriverPreviewUser(email)) {
+    return {
+      id: 'preview-driver-user',
+      email: PREVIEW_DRIVER_EMAIL,
+      role: 'driver',
+      roles: ['DRIVER'],
+      authProvider: 'local-config',
+      organizationId: 'preview-org',
+      sessionId: 'preview-session',
+    };
+  }
+
+  return {
+    id: 'preview-user',
+    email: email || 'preview@trovan.local',
+    role: 'dispatcher',
+    roles: ['DISPATCHER'],
+    authProvider: 'local-config',
+    organizationId: 'preview-org',
+    sessionId: 'preview-session',
+  };
+};
+
+const persistPreviewUser = (user: AuthUser) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(AUTH_PREVIEW_USER_KEY, JSON.stringify(user));
+};
+
+const readPreviewUser = (): AuthUser | null => {
+  if (typeof window === 'undefined') return null;
+  const raw = window.localStorage.getItem(AUTH_PREVIEW_USER_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<AuthUser>;
+    if (typeof parsed.email !== 'string') return null;
+    return {
+      id: typeof parsed.id === 'string' ? parsed.id : 'preview-user',
+      email: parsed.email,
+      role: typeof parsed.role === 'string' ? parsed.role : 'dispatcher',
+      roles: Array.isArray(parsed.roles)
+        ? parsed.roles.filter((role): role is string => typeof role === 'string')
+        : undefined,
+      authProvider:
+        typeof parsed.authProvider === 'string'
+          ? parsed.authProvider
+          : 'local-config',
+      organizationId:
+        typeof parsed.organizationId === 'string'
+          ? parsed.organizationId
+          : 'preview-org',
+      organizationSlug:
+        typeof parsed.organizationSlug === 'string'
+          ? parsed.organizationSlug
+          : undefined,
+      membershipId:
+        typeof parsed.membershipId === 'string' ? parsed.membershipId : undefined,
+      sessionId:
+        typeof parsed.sessionId === 'string' ? parsed.sessionId : 'preview-session',
+    };
+  } catch {
+    return null;
+  }
+};
 
 const normalizeAuthConfig = (value: unknown): AuthConfigurationRecord => {
   const record = isRecord(value) ? value : {};
@@ -117,6 +209,9 @@ export const setAuthToken = (token: string | null) => {
 
 export const clearAuthSession = () => {
   clearStoredAuthToken();
+  if (typeof window !== 'undefined') {
+    window.localStorage.removeItem(AUTH_PREVIEW_USER_KEY);
+  }
 };
 
 export const isAuthenticated = () =>
@@ -200,20 +295,15 @@ export const login = async (
   password: string,
 ): Promise<LoginResponse> => {
   if (isAuthBypassed()) {
+    const user = makePreviewUser(email);
     const response = {
       accessToken: AUTH_BYPASS_TOKEN,
       expiresIn: 'preview-session',
       sessionId: 'preview-session',
-      user: {
-        id: 'preview-user',
-        email: email || 'preview@trovan.local',
-        role: 'dispatcher',
-        roles: ['DISPATCHER'],
-        authProvider: 'local-config',
-        organizationId: 'preview-org',
-      },
+      user,
     };
     setAuthToken(response.accessToken);
+    persistPreviewUser(user);
     return response;
   }
 
@@ -250,15 +340,7 @@ export const completeWorkosCallback = async (
 export const getSession = async (): Promise<{ user: AuthUser }> => {
   if (isAuthBypassed()) {
     return {
-      user: {
-        id: 'preview-user',
-        email: 'preview@trovan.local',
-        role: 'dispatcher',
-        roles: ['DISPATCHER'],
-        authProvider: 'local-config',
-        organizationId: 'preview-org',
-        sessionId: 'preview-session',
-      },
+      user: readPreviewUser() ?? makePreviewUser(),
     };
   }
 

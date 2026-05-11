@@ -80,7 +80,10 @@ import { DispatchOptimizerStateService } from './services/dispatch-optimizer-sta
 import { DispatchPresentationService } from './services/dispatch-presentation.service';
 import { OptimizationJobLifecycleService } from './services/optimization-job-lifecycle.service';
 import { RouteVersioningService } from './services/route-versioning.service';
-import { resolveRoutingServiceUrl } from '../../common/routing/routing-service-url.util';
+import {
+  resolveRoutingServiceUrl,
+  routingServiceAuthHeaders,
+} from '../../common/routing/routing-service-url.util';
 
 @Injectable()
 export class DispatchService {
@@ -192,6 +195,7 @@ export class DispatchService {
   }
 
   private async logDispatchEvent(event: {
+    organizationId?: string | null;
     routeId?: string | null;
     source: 'optimizer' | 'reroute' | 'workflow' | 'system';
     level?: 'info' | 'warning' | 'error';
@@ -207,7 +211,15 @@ export class DispatchService {
     actor?: string | null;
     packId?: string | null;
   }) {
-    await this.dispatchEvents.log(event);
+    let organizationId = event.organizationId;
+    if (!organizationId && event.routeId) {
+      const route = await this.routeRepository.findOne({
+        where: { id: event.routeId },
+        select: ['id', 'organizationId'] as any,
+      });
+      organizationId = route?.organizationId || null;
+    }
+    await this.dispatchEvents.log({ ...event, organizationId });
   }
 
   private getActorLabel(actor?: DispatchActorContext | null) {
@@ -230,8 +242,11 @@ export class DispatchService {
     return this.routeVersioning.buildRouteVersionMetadata(version, extras);
   }
 
-  private async getNextRouteVersionNumber(routeId: string) {
-    return this.routeVersioning.getNextRouteVersionNumber(routeId);
+  private async getNextRouteVersionNumber(
+    routeId: string,
+    organizationId?: string | null,
+  ) {
+    return this.routeVersioning.getNextRouteVersionNumber(routeId, organizationId);
   }
 
   private async seedPublishedRouteVersion(
@@ -291,8 +306,20 @@ export class DispatchService {
       before?: string;
       packId?: string;
     } = {},
+    actor?: DispatchActorContext,
   ): Promise<DispatchEvent[]> {
-    return this.dispatchEvents.getTimeline(routeId, limit, filters);
+    if (!actor?.organizationId) {
+      throw new ForbiddenException('Organization scope required');
+    }
+    if (routeId) {
+      await this.findOne(routeId, actor);
+    }
+    return this.dispatchEvents.getTimeline(
+      actor.organizationId,
+      routeId,
+      limit,
+      filters,
+    );
   }
 
   presentRoute(route: Route): PresentedRoute {
@@ -722,6 +749,7 @@ export class DispatchService {
     const response: any = await firstValueFrom(
       this.httpService.post<OptimizeResponse>(requestUrl, request, {
         timeout: 60_000,
+        headers: routingServiceAuthHeaders(this.configService),
       }) as any,
     );
 
@@ -1041,12 +1069,15 @@ export class DispatchService {
       await this.seedPublishedRouteVersion(savedRoute, actor);
       savedRoutes.push(savedRoute);
 
-      await this.jobRepository
-        .createQueryBuilder()
-        .update()
-        .set({ status: JobStatus.ASSIGNED, assignedRouteId: savedRoute.id })
-        .where('id IN (:...ids)', { ids: optimizedJobIds })
-        .execute();
+    await this.jobRepository
+      .createQueryBuilder()
+      .update()
+      .set({ status: JobStatus.ASSIGNED, assignedRouteId: savedRoute.id })
+      .where('id IN (:...ids)', { ids: optimizedJobIds })
+      .andWhere('organization_id = :organizationId', {
+        organizationId: savedRoute.organizationId,
+      })
+      .execute();
 
       this.dispatchGateway.emitRouteCreated(savedRoute);
       await this.logDispatchEvent({
@@ -1250,6 +1281,9 @@ export class DispatchService {
       .update()
       .set({ status: JobStatus.ASSIGNED, assignedRouteId: savedRoute.id })
       .where('id IN (:...ids)', { ids: savedRoute.jobIds })
+      .andWhere('organization_id = :organizationId', {
+        organizationId: savedRoute.organizationId,
+      })
       .execute();
 
     // Step 8: Broadcast via WebSocket
@@ -1340,7 +1374,11 @@ export class DispatchService {
     await this.ensureRouteVersionBackfill(route, actor);
     const version = this.routeVersionRepository.create({
       routeId,
-      versionNumber: await this.getNextRouteVersionNumber(routeId),
+      organizationId: route.organizationId || null,
+      versionNumber: await this.getNextRouteVersionNumber(
+        routeId,
+        route.organizationId,
+      ),
       status: 'DRAFT',
       snapshot: this.buildRouteVersionSnapshot(route),
       createdByUserId: this.getActorUserId(actor),
@@ -1372,7 +1410,11 @@ export class DispatchService {
   ): Promise<RouteVersion> {
     await this.findOne(routeId, actor);
     const version = await this.routeVersionRepository.findOne({
-      where: { id: versionId, routeId },
+      where: {
+        id: versionId,
+        routeId,
+        ...(actor?.organizationId ? { organizationId: actor.organizationId } : {}),
+      } as any,
     });
 
     if (!version) {
@@ -1413,7 +1455,11 @@ export class DispatchService {
   ): Promise<RouteVersion> {
     await this.findOne(routeId, actor);
     const version = await this.routeVersionRepository.findOne({
-      where: { id: versionId, routeId },
+      where: {
+        id: versionId,
+        routeId,
+        ...(actor?.organizationId ? { organizationId: actor.organizationId } : {}),
+      } as any,
     });
 
     if (!version) {
@@ -1460,7 +1506,11 @@ export class DispatchService {
     }
 
     const version = await this.routeVersionRepository.findOne({
-      where: { id: versionId, routeId },
+      where: {
+        id: versionId,
+        routeId,
+        ...(actor?.organizationId ? { organizationId: actor.organizationId } : {}),
+      } as any,
     });
     if (!version) {
       throw new NotFoundException(`Route version ${versionId} not found`);
@@ -1472,7 +1522,11 @@ export class DispatchService {
     }
 
     await this.routeVersionRepository.update(
-      { routeId, status: 'PUBLISHED' },
+      {
+        routeId,
+        status: 'PUBLISHED',
+        ...(actor?.organizationId ? { organizationId: actor.organizationId } : {}),
+      } as any,
       { status: 'SUPERSEDED' },
     );
 
@@ -1597,7 +1651,10 @@ export class DispatchService {
     }
 
     const driver = await this.driverRepository.findOne({
-      where: { id: driverId },
+      where: {
+        id: driverId,
+        ...(route.organizationId ? { organizationId: route.organizationId } : {}),
+      } as any,
     });
 
     if (!driver) {
@@ -1611,20 +1668,33 @@ export class DispatchService {
     }
     this.syncPersistedWorkflowStatus(route);
 
-    await this.driverRepository.update(driverId, {
-      status: 'on_route',
-      currentVehicleId: route.vehicleId,
-    });
+    await this.driverRepository.update(
+      {
+        id: driverId,
+        ...(route.organizationId ? { organizationId: route.organizationId } : {}),
+      } as any,
+      {
+        status: 'on_route',
+        currentVehicleId: route.vehicleId,
+      },
+    );
 
-    await this.vehicleRepository.update(route.vehicleId, {
-      status: 'in_route',
-    });
+    await this.vehicleRepository.update(
+      {
+        id: route.vehicleId,
+        ...(route.organizationId ? { organizationId: route.organizationId } : {}),
+      } as any,
+      { status: 'in_route' },
+    );
 
     await this.jobRepository
       .createQueryBuilder()
       .update()
       .set({ status: JobStatus.ASSIGNED, assignedRouteId: route.id })
       .where('id IN (:...ids)', { ids: route.jobIds })
+      .andWhere('organization_id = :organizationId', {
+        organizationId: route.organizationId,
+      })
       .execute();
 
     const updatedRoute = await this.routeRepository.save(route);
@@ -1673,9 +1743,13 @@ export class DispatchService {
 
     // Step 2: Update vehicle status to "in_route"
     this.logger.log(`[ROUTE:START:STEP2] Updating vehicle ${route.vehicleId.substring(0, 8)} status to "in_route"...`);
-    await this.vehicleRepository.update(route.vehicleId, {
-      status: 'in_route',
-    });
+    await this.vehicleRepository.update(
+      {
+        id: route.vehicleId,
+        ...(route.organizationId ? { organizationId: route.organizationId } : {}),
+      } as any,
+      { status: 'in_route' },
+    );
 
     // Step 3: Update job statuses to "in_progress"
     this.logger.log(`[ROUTE:START:STEP3] Updating ${route.jobIds.length} jobs to "in_progress" status...`);
@@ -1684,6 +1758,9 @@ export class DispatchService {
       .update()
       .set({ status: JobStatus.IN_PROGRESS, assignedRouteId: route.id })
       .where('id IN (:...ids)', { ids: route.jobIds })
+      .andWhere('organization_id = :organizationId', {
+        organizationId: route.organizationId,
+      })
       .execute();
     this.logger.log(`[ROUTE:START:STEP3] Updated ${updateResult.affected} jobs`);
 
@@ -1730,9 +1807,13 @@ export class DispatchService {
     this.syncPersistedWorkflowStatus(route);
 
     // Update vehicle status back to "available"
-    await this.vehicleRepository.update(route.vehicleId, {
-      status: 'available',
-    });
+    await this.vehicleRepository.update(
+      {
+        id: route.vehicleId,
+        ...(route.organizationId ? { organizationId: route.organizationId } : {}),
+      } as any,
+      { status: 'available' },
+    );
 
     // Mark route jobs completed
     await this.jobRepository
@@ -1743,6 +1824,9 @@ export class DispatchService {
         completedAt: new Date(),
       })
       .where('id IN (:...ids)', { ids: route.jobIds })
+      .andWhere('organization_id = :organizationId', {
+        organizationId: route.organizationId,
+      })
       .execute();
 
     const completedRoute = await this.routeRepository.save(route);
@@ -1777,9 +1861,13 @@ export class DispatchService {
 
     // Reset vehicle status if in route
     if (wasInProgress) {
-      await this.vehicleRepository.update(route.vehicleId, {
-        status: 'available',
-      });
+      await this.vehicleRepository.update(
+        {
+          id: route.vehicleId,
+          ...(route.organizationId ? { organizationId: route.organizationId } : {}),
+        } as any,
+        { status: 'available' },
+      );
     }
 
     // Reset job statuses back to pending
@@ -1788,6 +1876,9 @@ export class DispatchService {
       .update()
       .set({ status: JobStatus.PENDING, assignedRouteId: null })
       .where('id IN (:...ids)', { ids: route.jobIds })
+      .andWhere('organization_id = :organizationId', {
+        organizationId: route.organizationId,
+      })
       .execute();
 
     const cancelledRoute = await this.routeRepository.save(route);
@@ -2100,6 +2191,9 @@ export class DispatchService {
       .update(Job)
       .set({ assignedRouteId: updatedTargetRoute.id })
       .where('id = :id', { id: payload.jobId })
+      .andWhere('organization_id = :organizationId', {
+        organizationId: updatedTargetRoute.organizationId,
+      })
       .execute();
 
     this.dispatchGateway.emitRouteUpdated(updatedSourceRoute);
@@ -2141,9 +2235,17 @@ export class DispatchService {
     };
   }
 
-  private async findRerouteRequest(routeId: string, requestId: string): Promise<RerouteRequest> {
+  private async findRerouteRequest(
+    routeId: string,
+    requestId: string,
+    organizationId?: string | null,
+  ): Promise<RerouteRequest> {
     const request = await this.rerouteRequestRepository.findOne({
-      where: { id: requestId, routeId },
+      where: {
+        id: requestId,
+        routeId,
+        ...(organizationId ? { organizationId } : {}),
+      } as any,
     });
     if (!request) {
       throw new NotFoundException(`Reroute request ${requestId} not found for route ${routeId}`);
@@ -2273,7 +2375,10 @@ export class DispatchService {
 
     if (payload.childVehicleId) {
       const childVehicle = await this.vehicleRepository.findOne({
-        where: { id: payload.childVehicleId },
+        where: {
+          id: payload.childVehicleId,
+          ...(route.organizationId ? { organizationId: route.organizationId } : {}),
+        } as any,
       });
       if (!childVehicle) {
         throw new BadRequestException(`split_route childVehicleId not found: ${payload.childVehicleId}`);
@@ -2282,7 +2387,10 @@ export class DispatchService {
 
     if (payload.childDriverId) {
       const childDriver = await this.driverRepository.findOne({
-        where: { id: payload.childDriverId },
+        where: {
+          id: payload.childDriverId,
+          ...(route.organizationId ? { organizationId: route.organizationId } : {}),
+        } as any,
       });
       if (!childDriver) {
         throw new BadRequestException(`split_route childDriverId not found: ${payload.childDriverId}`);
@@ -2290,6 +2398,7 @@ export class DispatchService {
     }
 
     const childRoute = this.routeRepository.create({
+      organizationId: route.organizationId || undefined,
       vehicleId: payload.childVehicleId || route.vehicleId,
       driverId:
         typeof payload.childDriverId === 'string'
@@ -2334,6 +2443,9 @@ export class DispatchService {
       .update()
       .set({ assignedRouteId: savedChildRoute.id, status: JobStatus.ASSIGNED })
       .where('id IN (:...ids)', { ids: childJobIds })
+      .andWhere('organization_id = :organizationId', {
+        organizationId: route.organizationId,
+      })
       .execute();
 
     const childJobs = await this.jobRepository.findByIds(childJobIds);
@@ -2370,7 +2482,11 @@ export class DispatchService {
     validateRerouteActionPayload(dto.action as RerouteAction, dto.requestPayload, route);
 
     const existingOpen = await this.rerouteRequestRepository.findOne({
-      where: { routeId, status: 'requested' },
+      where: {
+        routeId,
+        status: 'requested',
+        ...(route.organizationId ? { organizationId: route.organizationId } : {}),
+      } as any,
       order: { createdAt: 'DESC' },
     });
 
@@ -2399,6 +2515,7 @@ export class DispatchService {
     );
     const rerouteRequest = this.rerouteRequestRepository.create({
       routeId,
+      organizationId: route.organizationId || null,
       exceptionCategory: dto.exceptionCategory as RerouteExceptionCategory,
       action: dto.action as RerouteAction,
       status: 'requested',
@@ -2484,7 +2601,11 @@ export class DispatchService {
     actor?: DispatchActorContext,
   ): Promise<RerouteRequest> {
     const route = await this.findOne(routeId, actor);
-    const request = await this.findRerouteRequest(routeId, requestId);
+    const request = await this.findRerouteRequest(
+      routeId,
+      requestId,
+      route.organizationId,
+    );
 
     if (!canTransitionRerouteRequest(request.status, 'approved')) {
       throw new BadRequestException(
@@ -2534,7 +2655,11 @@ export class DispatchService {
     actor?: DispatchActorContext,
   ): Promise<RerouteRequest> {
     const route = await this.findOne(routeId, actor);
-    const request = await this.findRerouteRequest(routeId, requestId);
+    const request = await this.findRerouteRequest(
+      routeId,
+      requestId,
+      route.organizationId,
+    );
 
     if (!canTransitionRerouteRequest(request.status, 'rejected')) {
       throw new BadRequestException(
@@ -2584,7 +2709,11 @@ export class DispatchService {
     actor?: DispatchActorContext,
   ): Promise<RerouteRequest> {
     const route = await this.findOne(routeId, actor);
-    const request = await this.findRerouteRequest(routeId, requestId);
+    const request = await this.findRerouteRequest(
+      routeId,
+      requestId,
+      route.organizationId,
+    );
 
     if (
       !canTransitionRerouteRequest(request.status, 'applied')
@@ -2687,6 +2816,9 @@ export class DispatchService {
         .update()
         .set({ status: JobStatus.PENDING, assignedRouteId: null })
         .where('id = :id', { id: effectivePayload.jobId })
+        .andWhere('organization_id = :organizationId', {
+          organizationId: route.organizationId,
+        })
         .execute();
     } else if (request.action === 'hold_stop' && typeof effectivePayload.jobId === 'string') {
       const heldJobId = effectivePayload.jobId;
@@ -2695,6 +2827,15 @@ export class DispatchService {
       request.action === 'reassign_driver' &&
       typeof effectivePayload.driverId === 'string'
     ) {
+      const driver = await this.driverRepository.findOne({
+        where: {
+          id: effectivePayload.driverId,
+          ...(route.organizationId ? { organizationId: route.organizationId } : {}),
+        } as any,
+      });
+      if (!driver) {
+        throw new BadRequestException(`Driver not found: ${effectivePayload.driverId}`);
+      }
       route.driverId = effectivePayload.driverId;
     } else if (
       request.action === 'reassign_stop_to_route' &&
@@ -2702,7 +2843,10 @@ export class DispatchService {
     ) {
       const targetRouteId = effectivePayload.targetRouteId;
       const targetRoute = await this.routeRepository.findOne({
-        where: { id: targetRouteId },
+        where: {
+          id: targetRouteId,
+          ...(route.organizationId ? { organizationId: route.organizationId } : {}),
+        } as any,
       });
       if (!targetRoute) {
         throw new BadRequestException(`Target route not found: ${targetRouteId}`);
@@ -2740,6 +2884,9 @@ export class DispatchService {
         .update()
         .set({ status: JobStatus.ASSIGNED, assignedRouteId: targetRoute.id })
         .where('id = :id', { id: effectivePayload.jobId })
+        .andWhere('organization_id = :organizationId', {
+          organizationId: route.organizationId,
+        })
         .execute();
 
       this.dispatchGateway.emitRouteUpdated(targetRoute);

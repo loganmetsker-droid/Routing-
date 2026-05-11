@@ -245,6 +245,33 @@ export const getTrackingStatistics = async (): Promise<TrackingStatistics | null
   };
 };
 
+export const sendDriverTelemetry = async (payload: {
+  vehicleId: string;
+  lat: number;
+  lng: number;
+  speed?: number | null;
+  heading?: number | null;
+  timestamp?: string;
+  metadata?: Record<string, unknown>;
+}) => {
+  if (isPreview()) {
+    return { accepted: true };
+  }
+  const response = await apiFetch('/api/tracking/ingest', {
+    method: 'POST',
+    body: JSON.stringify({
+      vehicleId: payload.vehicleId,
+      lat: payload.lat,
+      lng: payload.lng,
+      speed: payload.speed ?? undefined,
+      heading: payload.heading ?? undefined,
+      timestamp: payload.timestamp || nowIso(),
+      metadata: payload.metadata || { source: 'driver-pwa' },
+    }),
+  });
+  return response.json();
+};
+
 export const getTrackingReadiness = async (): Promise<TrackingReadiness | null> => {
   if (isPreview()) {
     const snapshot = buildPreviewTrackingSnapshot();

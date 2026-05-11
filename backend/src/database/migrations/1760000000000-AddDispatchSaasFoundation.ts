@@ -55,6 +55,67 @@ export class AddDispatchSaasFoundation1760000000000 implements MigrationInterfac
       );
     `);
 
+    await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS customers (
+        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        organization_id uuid NULL REFERENCES organizations(id) ON DELETE SET NULL,
+        name varchar(200) NOT NULL,
+        phone varchar(20) NULL,
+        email varchar(100) NULL,
+        default_address text NULL,
+        default_address_structured jsonb NULL,
+        business_name text NULL,
+        notes text NULL,
+        exceptions text NULL,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        deleted_at timestamptz NULL
+      );
+    `);
+
+    await queryRunner.query(`
+      CREATE TABLE IF NOT EXISTS jobs (
+        id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+        organization_id uuid NULL REFERENCES organizations(id) ON DELETE SET NULL,
+        customer_name varchar(200) NOT NULL,
+        customer_phone varchar(20) NULL,
+        customer_email varchar(100) NULL,
+        pickup_address varchar(500) NOT NULL,
+        delivery_address varchar(500) NOT NULL,
+        pickup_address_structured jsonb NULL,
+        delivery_address_structured jsonb NULL,
+        pickup_location jsonb NULL,
+        delivery_location jsonb NULL,
+        time_window_start timestamptz NOT NULL,
+        time_window_end timestamptz NOT NULL,
+        weight decimal(10,2) NULL,
+        volume decimal(10,2) NULL,
+        quantity int NULL,
+        priority varchar(24) NOT NULL DEFAULT 'normal',
+        status varchar(32) NOT NULL DEFAULT 'pending',
+        estimated_duration decimal(10,2) NULL,
+        actual_duration decimal(10,2) NULL,
+        notes text NULL,
+        special_instructions text NULL,
+        assigned_route_id uuid NULL,
+        start_date timestamptz NULL,
+        end_date timestamptz NULL,
+        billing_status varchar(32) NOT NULL DEFAULT 'unpaid',
+        billing_amount decimal(10,2) NULL,
+        billing_notes text NULL,
+        invoice_ref varchar(100) NULL,
+        customer_id uuid NULL REFERENCES customers(id) ON DELETE SET NULL,
+        completed_at timestamptz NULL,
+        archived_at timestamptz NULL,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        deleted_at timestamptz NULL
+      );
+    `);
+
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_jobs_status_priority ON jobs(status, priority);`);
+    await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_jobs_time_window ON jobs(time_window_start, time_window_end);`);
+
     for (const tableName of ['customers', 'drivers', 'vehicles', 'jobs', 'routes']) {
       await queryRunner.query(`ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS organization_id uuid NULL;`);
       await queryRunner.query(`CREATE INDEX IF NOT EXISTS idx_${tableName}_organization_id ON ${tableName}(organization_id);`);

@@ -13,6 +13,7 @@ import {
   SubscriptionStatus,
   SubscriptionPlan,
 } from './entities/subscription.entity';
+import { StripeWebhookEvent } from './entities/stripe-webhook-event.entity';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 
 type BillingActor = {
@@ -74,6 +75,8 @@ export class SubscriptionsService {
   constructor(
     @InjectRepository(Subscription)
     private readonly subscriptionRepository: Repository<Subscription>,
+    @InjectRepository(StripeWebhookEvent)
+    private readonly stripeWebhookEvents: Repository<StripeWebhookEvent>,
     private readonly configService: ConfigService,
   ) {
     const stripeSecretKey = this.configService.get<string>('STRIPE_SECRET_KEY');
@@ -299,31 +302,64 @@ export class SubscriptionsService {
       return;
     }
 
+    if (event.id) {
+      const existing = await this.stripeWebhookEvents.findOne({
+        where: { stripeEventId: event.id },
+      });
+      if (existing?.processedAt) {
+        this.logger.log(`Ignoring duplicate Stripe webhook event ${event.type}`);
+        return;
+      }
+    }
+
     this.logger.log(`Processing webhook event: ${event.type}`);
 
-    switch (event.type) {
-      case 'invoice.payment_succeeded':
-        await this.handlePaymentSucceeded(event.data.object as Stripe.Invoice);
-        break;
+    const webhookRecord = event.id
+      ? this.stripeWebhookEvents.create({
+          stripeEventId: event.id,
+          eventType: event.type,
+          livemode: Boolean(event.livemode),
+          processedAt: null,
+        })
+      : null;
 
-      case 'invoice.payment_failed':
-        await this.handlePaymentFailed(event.data.object as Stripe.Invoice);
-        break;
+    try {
+      switch (event.type) {
+        case 'invoice.payment_succeeded':
+          await this.handlePaymentSucceeded(event.data.object as Stripe.Invoice);
+          break;
 
-      case 'customer.subscription.updated':
-        await this.handleSubscriptionUpdated(
-          event.data.object as Stripe.Subscription,
-        );
-        break;
+        case 'invoice.payment_failed':
+          await this.handlePaymentFailed(event.data.object as Stripe.Invoice);
+          break;
 
-      case 'customer.subscription.deleted':
-        await this.handleSubscriptionDeleted(
-          event.data.object as Stripe.Subscription,
-        );
-        break;
+        case 'customer.subscription.updated':
+          await this.handleSubscriptionUpdated(
+            event.data.object as Stripe.Subscription,
+          );
+          break;
 
-      default:
-        this.logger.debug(`Unhandled event type: ${event.type}`);
+        case 'customer.subscription.deleted':
+          await this.handleSubscriptionDeleted(
+            event.data.object as Stripe.Subscription,
+          );
+          break;
+
+        default:
+          this.logger.debug(`Unhandled event type: ${event.type}`);
+      }
+
+      if (webhookRecord) {
+        webhookRecord.processedAt = new Date();
+        await this.stripeWebhookEvents.save(webhookRecord);
+      }
+    } catch (error) {
+      if (webhookRecord) {
+        webhookRecord.errorMessage =
+          error instanceof Error ? error.message.slice(0, 500) : 'unknown error';
+        await this.stripeWebhookEvents.save(webhookRecord);
+      }
+      throw error;
     }
   }
 

@@ -11,7 +11,7 @@ import { join } from 'path';
 
 // Configuration
 import { databaseConfig } from './config/database.config';
-import { graphqlConfig } from './config/graphql.config';
+import { graphqlConfig, isGraphqlEnabled } from './config/graphql.config';
 
 // Guards
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -70,13 +70,18 @@ import { WorkosModule } from './common/integrations/workos.module';
       useFactory: databaseConfig,
     }),
 
-    // GraphQL - Apollo Server
-    GraphQLModule.forRootAsync<ApolloDriverConfig>({
-      driver: ApolloDriver,
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: graphqlConfig,
-    }),
+    // GraphQL is disabled by default outside development/test until resolver RBAC
+    // matches the REST API authorization surface.
+    ...(isGraphqlEnabled()
+      ? [
+          GraphQLModule.forRootAsync<ApolloDriverConfig>({
+            driver: ApolloDriver,
+            imports: [ConfigModule],
+            inject: [ConfigService],
+            useFactory: graphqlConfig,
+          }),
+        ]
+      : []),
 
     // BullMQ - Job Queue Management (optional)
     ...(process.env.REDIS_URL || process.env.REDIS_HOST

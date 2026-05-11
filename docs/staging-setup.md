@@ -39,6 +39,7 @@ Render will still require these values because they must not be committed:
 - `FRONTEND_URL`
 - `CORS_ORIGINS`
 - `METRICS_TOKEN`
+- `ROUTING_SERVICE_INTERNAL_TOKEN` (same value on backend and routing-service)
 - `WORKOS_CLIENT_ID`
 - `WORKOS_API_KEY`
 - `WORKOS_REDIRECT_URI`

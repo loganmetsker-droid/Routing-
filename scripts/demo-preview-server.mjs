@@ -2,8 +2,9 @@
 import { createServer } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, relative, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const rootDir = resolve(new URL('..', import.meta.url).pathname);
+const rootDir = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const distDir = resolve(rootDir, 'frontend/dist');
 const indexPath = join(distDir, 'index.html');
 
@@ -37,13 +38,18 @@ const previewBootstrap = String.raw`
 <script id="trovan-demo-preview-bootstrap">
   (function () {
     try {
-      var localHosts = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
-      if (!localHosts.has(window.location.hostname)) {
-        return;
-      }
       if (!window.localStorage.getItem('authToken')) {
         window.localStorage.setItem('authToken', 'preview-auth-bypass');
       }
+      window.localStorage.setItem('trovan-preview-auth-user', JSON.stringify({
+        id: 'preview-driver-user',
+        email: 'anna.quinn@trovan.local',
+        role: 'driver',
+        roles: ['DRIVER'],
+        authProvider: 'local-config',
+        organizationId: 'preview-org',
+        sessionId: 'preview-session'
+      }));
       window.__TROVAN_LOCAL_DEMO_PREVIEW__ = true;
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations()
@@ -478,10 +484,10 @@ async function handleLocalApi(req, res, url) {
 
 function previewUser() {
   return {
-    id: 'preview-user',
-    email: 'preview@trovan.local',
-    role: 'dispatcher',
-    roles: ['DISPATCHER'],
+    id: 'preview-driver-user',
+    email: 'anna.quinn@trovan.local',
+    role: 'driver',
+    roles: ['DRIVER'],
     authProvider: 'local-config',
     organizationId: 'preview-org',
     sessionId: 'preview-session',

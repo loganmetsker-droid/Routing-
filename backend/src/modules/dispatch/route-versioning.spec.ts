@@ -48,6 +48,7 @@ describe('DispatchService route versioning', () => {
         update: jest.fn().mockReturnThis(),
         set: jest.fn().mockReturnThis(),
         where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
         execute: jest.fn().mockResolvedValue({ affected: 2 }),
       }),
     };

@@ -17,7 +17,13 @@ import StatusPill from '../components/ui/StatusPill';
 import { moduleAccents } from '../theme/tokens';
 import { TopoShellBackground } from '../components/TopoShellBackground';
 import { trovanColors } from '../theme/designTokens';
-import { beginWorkosLogin, isAuthBypassed, login, useAuthConfigQuery } from '../services/api.session';
+import {
+  beginWorkosLogin,
+  isAuthBypassed,
+  isDriverOnlyAuthUser,
+  login,
+  useAuthConfigQuery,
+} from '../services/api.session';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -39,10 +45,23 @@ export default function LoginPage() {
 
     try {
       setLoading(true);
-      await login(email, password);
-      navigate('/');
+      const session = await login(email, password);
+      navigate(isDriverOnlyAuthUser(session.user) ? '/driver' : '/');
     } catch (err: any) {
       setError(err.message || 'Login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePreviewLogin = async () => {
+    setError('');
+    try {
+      setLoading(true);
+      await login('driver-demo@trovan.local', 'preview');
+      navigate('/driver');
+    } catch (err: any) {
+      setError(err.message || 'Unable to open demo');
     } finally {
       setLoading(false);
     }
@@ -150,7 +169,21 @@ export default function LoginPage() {
             </Alert>
           ) : null}
 
-          {authBypassed || authConfig?.localLoginAllowed || !providerReady ? (
+          {authBypassed ? (
+            <Button
+              variant="contained"
+              fullWidth
+              size="large"
+              sx={{ mt: 1 }}
+              disabled={loading}
+              onClick={handlePreviewLogin}
+              data-testid="login-demo"
+            >
+              {loading ? 'Opening demo...' : 'Open Driver Demo'}
+            </Button>
+          ) : null}
+
+          {!authBypassed && (authConfig?.localLoginAllowed || !providerReady) ? (
             <form onSubmit={handleSubmit} data-testid="login-form">
               <TextField
                 fullWidth
@@ -185,9 +218,7 @@ export default function LoginPage() {
               >
                 {loading
                   ? 'Logging in...'
-                  : authBypassed
-                    ? 'Continue in Preview Mode'
-                    : providerReady
+                  : providerReady
                       ? 'Use Local Admin Login'
                       : 'Sign In'}
               </Button>

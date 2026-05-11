@@ -31,9 +31,14 @@ const topoPulse = keyframes`
 type TopoShellBackgroundProps = {
   active?: boolean;
   tone?: 'canvas' | 'black';
+  quiet?: boolean;
 };
 
-export function TopoShellBackground({ active = true, tone = 'canvas' }: TopoShellBackgroundProps) {
+export function TopoShellBackground({
+  active = true,
+  tone = 'canvas',
+  quiet = false,
+}: TopoShellBackgroundProps) {
   if (!active) return null;
   const dark = tone === 'black';
   const warmPaperInk = alpha(trovanColors.copper[900], 0.12);
@@ -56,7 +61,7 @@ export function TopoShellBackground({ active = true, tone = 'canvas' }: TopoShel
           willChange: 'transform, opacity',
         },
         '&::before': {
-          opacity: dark ? 0.64 : 0.78,
+          opacity: quiet ? (dark ? 0.36 : 0.48) : dark ? 0.64 : 0.78,
           backgroundImage: [
             `radial-gradient(ellipse at 20% 12%, ${dark ? alpha(trovanColors.copper[500], 0.2) : trovanTopoTokens.glow}, transparent 34%)`,
             `radial-gradient(ellipse at 84% 4%, ${dark ? alpha('#FFF4E4', 0.05) : alpha(trovanColors.copper[800], 0.06)}, transparent 30%)`,
@@ -68,7 +73,7 @@ export function TopoShellBackground({ active = true, tone = 'canvas' }: TopoShel
           animation: `${topoDrift} 16s ease-in-out infinite`,
         },
         '&::after': {
-          opacity: dark ? 0.38 : 0.48,
+          opacity: quiet ? (dark ? 0.16 : 0.24) : dark ? 0.38 : 0.48,
           backgroundImage: [
             `linear-gradient(90deg, ${dark ? alpha('#FFF4E4', 0.045) : trovanTopoTokens.grid} 1px, transparent 1px)`,
             `linear-gradient(0deg, ${dark ? alpha('#FFF4E4', 0.04) : warmPaperCopper} 1px, transparent 1px)`,

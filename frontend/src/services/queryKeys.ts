@@ -33,6 +33,7 @@ export const queryKeys = {
   dispatchBoard: ['dispatch-board'] as const,
   routeRuns: ['route-runs'] as const,
   routeRunDetail: (routeRunId: string) => ['route-run-detail', routeRunId] as const,
+  routeRunMessages: (routeRunId: string) => ['route-run-messages', routeRunId] as const,
   routeRunStopTimeline: (stopId: string) => ['route-run-stop-timeline', stopId] as const,
   routeRunStopProofs: (stopId: string) => ['route-run-stop-proofs', stopId] as const,
   exceptions: ['exceptions'] as const,

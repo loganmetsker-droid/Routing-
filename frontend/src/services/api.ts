@@ -1,8 +1,10 @@
 export {
   clearAuthSession,
+  getSession,
   logout,
   isAuthBypassed,
   isAuthenticated,
+  isDriverOnlyAuthUser,
   login,
   setAuthToken,
   validateSession,

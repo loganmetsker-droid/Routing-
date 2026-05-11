@@ -295,6 +295,9 @@ describe('RouteRunsService', () => {
         longitude: -104.99,
       }),
     );
+    expect(JSON.stringify(publicTracking)).not.toContain('ABC-123');
+    expect(JSON.stringify(publicTracking)).not.toContain('driver@example.com');
+    expect(JSON.stringify(publicTracking)).not.toContain('Internal');
     expect(manifest.routes).toHaveLength(1);
     expect(manifest.routes[0].routeRun.id).toBe('route-1');
     await expect(
@@ -305,5 +308,314 @@ describe('RouteRunsService', () => {
         roles: ['DRIVER'],
       }),
     ).rejects.toThrow('Route run not found: route-2');
+  });
+
+  it('supports route-run messages with role read receipts and driver route isolation', async () => {
+    const routes = createRepo([
+      {
+        id: 'route-1',
+        organizationId: 'org-1',
+        driverId: 'driver-1',
+        status: 'in_progress',
+        workflowStatus: 'in_progress',
+      },
+      {
+        id: 'route-2',
+        organizationId: 'org-1',
+        driverId: 'driver-2',
+        status: 'in_progress',
+        workflowStatus: 'in_progress',
+      },
+    ]);
+    const routeRunStops = createRepo([
+      {
+        id: 'stop-1',
+        organizationId: 'org-1',
+        routeId: 'route-1',
+        jobId: 'job-1',
+        jobStopId: 'job-stop-1',
+        status: 'ARRIVED',
+        stopSequence: 1,
+      },
+    ]);
+    const assignments = createRepo();
+    const events = createRepo();
+    const exceptions = createRepo();
+    const proofs = createRepo();
+    const messages = createRepo();
+    const drivers = createRepo([
+      {
+        id: 'driver-1',
+        organizationId: 'org-1',
+        email: 'driver@example.com',
+        firstName: 'Ava',
+        lastName: 'Stone',
+        phone: '555-0100',
+      },
+    ]);
+    const service = new RouteRunsService(
+      routes,
+      routeRunStops,
+      assignments,
+      events,
+      exceptions,
+      proofs,
+      audit,
+      drivers,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      messages,
+    );
+
+    const dispatcherActor = {
+      userId: 'dispatcher-1',
+      organizationId: 'org-1',
+      roles: ['DISPATCHER'],
+    };
+    const driverActor = {
+      userId: 'driver-user-1',
+      email: 'driver@example.com',
+      organizationId: 'org-1',
+      roles: ['DRIVER'],
+    };
+
+    const sent = await service.createRouteMessage(
+      'route-1',
+      { body: 'Call me after the dock clears.', routeRunStopId: 'stop-1' },
+      dispatcherActor,
+    );
+    expect(sent.message.senderRole).toBe('DISPATCH');
+    expect(sent.message.readByDispatchAt).toBeTruthy();
+
+    const driverUnread = await service.listRouteMessages('route-1', driverActor);
+    expect(driverUnread.unreadCount).toBe(1);
+
+    const driverRead = await service.markRouteMessagesRead('route-1', driverActor);
+    expect(driverRead.unreadCount).toBe(0);
+    expect(driverRead.messages[0].readByDriverAt).toBeTruthy();
+
+    await service.createRouteMessage(
+      'route-1',
+      { body: 'Copy, heading there now.' },
+      driverActor,
+    );
+    const dispatcherUnread = await service.listRouteMessages('route-1', dispatcherActor);
+    expect(dispatcherUnread.unreadCount).toBe(1);
+
+    await expect(service.listRouteMessages('route-2', driverActor)).rejects.toThrow(
+      'Route run not found: route-2',
+    );
+  });
+
+  it('requires signature proof before departing a proof-required stop', async () => {
+    const routes = createRepo([
+      {
+        id: 'route-1',
+        organizationId: 'org-1',
+        driverId: 'driver-1',
+        status: 'in_progress',
+        workflowStatus: 'in_progress',
+      },
+    ]);
+    const routeRunStops = createRepo([
+      {
+        id: 'stop-1',
+        organizationId: 'org-1',
+        routeId: 'route-1',
+        jobId: 'job-1',
+        jobStopId: 'job-stop-1',
+        status: 'ARRIVED',
+        stopSequence: 1,
+        proofRequired: true,
+      },
+    ]);
+    const assignments = createRepo();
+    const events = createRepo();
+    const exceptions = createRepo();
+    const proofs = createRepo();
+    const service = new RouteRunsService(
+      routes,
+      routeRunStops,
+      assignments,
+      events,
+      exceptions,
+      proofs,
+      audit,
+    );
+    const actor = { userId: 'dispatcher-1', organizationId: 'org-1', roles: ['DISPATCHER'] };
+
+    await expect(service.markServiced('stop-1', actor)).rejects.toThrow(
+      'Signature proof is required before departing this stop',
+    );
+
+    const signature = await service.addProof(
+      'stop-1',
+      {
+        type: 'SIGNATURE',
+        uri: 'inline-signature',
+        metadata: {
+          signerName: 'Jordan Receiver',
+          capturedAt: '2026-05-06T18:15:00.000Z',
+          strokes: [[{ x: 0.1, y: 0.2 }]],
+        },
+      },
+      actor,
+    );
+    expect(signature.proof.type).toBe('SIGNATURE');
+    expect(signature.proof.uri).toBe('inline-signature');
+
+    const departed = await service.markServiced('stop-1', actor);
+    expect(departed.stop.status).toBe('SERVICED');
+  });
+
+  it('rejects invalid public tracking tokens with a BadRequestException', async () => {
+    const jwtService = {
+      verifyAsync: jest.fn(async () => {
+        throw new Error('bad token');
+      }),
+    } as any;
+    const service = new RouteRunsService(
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      audit,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      jwtService,
+    );
+
+    await expect(service.getPublicTracking('not-a-jwt')).rejects.toThrow(
+      'Invalid tracking token',
+    );
+  });
+
+  it('does not expose vehicles from other organizations on public tracking payloads', async () => {
+    const routes = createRepo([
+      {
+        id: 'route-1',
+        organizationId: 'org-1',
+        vehicleId: 'vehicle-1',
+      },
+    ]);
+    const vehicles = createRepo([
+      {
+        id: 'vehicle-1',
+        organizationId: 'org-2',
+        make: 'Ford',
+        model: 'Transit',
+        licensePlate: 'ABC-123',
+        status: 'in_use',
+      },
+    ]);
+    const jwtService = {
+      verifyAsync: jest.fn(async () => ({
+        kind: 'public-tracking',
+        routeId: 'route-1',
+        organizationId: 'org-1',
+        exp: Math.floor(new Date('2026-05-08T18:15:00.000Z').getTime() / 1000),
+      })),
+    } as any;
+
+    const service = new RouteRunsService(
+      routes,
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      audit,
+      undefined,
+      vehicles,
+      undefined,
+      undefined,
+      jwtService,
+    );
+
+    const tracking = await service.getPublicTracking('signed-token');
+    expect(tracking.vehicle).toBeNull();
+  });
+
+  it('returns only minimized customer-safe fields for public tracking', async () => {
+    const routes = createRepo([
+      {
+        id: 'route-12345678',
+        organizationId: 'org-1',
+        vehicleId: 'vehicle-1',
+        status: 'in_progress',
+        workflowStatus: 'IN_PROGRESS',
+        jobCount: 1,
+        routeData: { internalNote: 'do not leak' },
+      },
+    ]);
+    const routeRunStops = createRepo([
+      {
+        id: 'stop-private-id',
+        organizationId: 'org-1',
+        routeId: 'route-12345678',
+        jobId: 'job-private-id',
+        jobStopId: 'job-stop-private-id',
+        stopSequence: 1,
+        status: 'DISPATCHED',
+        notes: 'gate code 1234',
+      },
+    ]);
+    const vehicles = createRepo([
+      {
+        id: 'vehicle-1',
+        organizationId: 'org-1',
+        make: 'Ford',
+        model: 'Transit',
+        licensePlate: 'SECRET-PLATE',
+        status: 'in_use',
+      },
+    ]);
+    const jwtService = {
+      verifyAsync: jest.fn(async () => ({
+        kind: 'public-tracking',
+        routeId: 'route-12345678',
+        organizationId: 'org-1',
+        exp: Math.floor(new Date('2026-05-08T18:15:00.000Z').getTime() / 1000),
+      })),
+    } as any;
+
+    const service = new RouteRunsService(
+      routes,
+      routeRunStops,
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      audit,
+      undefined,
+      vehicles,
+      undefined,
+      undefined,
+      jwtService,
+    );
+
+    const tracking = await service.getPublicTracking('signed-token');
+    const serialized = JSON.stringify(tracking);
+
+    expect(tracking.routeRun.id).toBe('public-route');
+    expect(tracking.stops[0]).toEqual(
+      expect.objectContaining({
+        id: 'public-stop-1',
+        stopSequence: 1,
+        status: 'DISPATCHED',
+      }),
+    );
+    expect(serialized).not.toContain('SECRET-PLATE');
+    expect(serialized).not.toContain('gate code');
+    expect(serialized).not.toContain('job-private-id');
+    expect(serialized).not.toContain('internalNote');
   });
 });

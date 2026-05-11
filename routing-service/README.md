@@ -52,6 +52,9 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # Install dependencies
 pip install -r requirements.txt
 
+# Install test dependencies
+pip install -r requirements-dev.txt
+
 # Set environment variables
 export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/routing_dispatch
 
@@ -272,13 +275,14 @@ routing-service/
 │   └── solver.py        # OR-Tools VRP solver
 ├── Dockerfile
 ├── requirements.txt
+├── requirements-dev.txt
 ├── .env.example
 └── README.md
 ```
 
 ### Running Tests
 ```bash
-# TODO: Add pytest tests
+pip install -r requirements-dev.txt
 pytest tests/
 ```
 

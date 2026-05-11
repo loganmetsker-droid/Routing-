@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -8,6 +9,15 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Telemetry } from './entities/telemetry.entity';
 import { Vehicle } from '../vehicles/entities/vehicle.entity';
+import { Driver } from '../drivers/entities/driver.entity';
+
+export type TrackingActorContext = {
+  userId?: string;
+  email?: string;
+  organizationId?: string;
+  role?: string;
+  roles?: string[];
+};
 
 export interface VehicleLocation {
   vehicleId: string;
@@ -73,6 +83,8 @@ export class TrackingService {
     private readonly telemetryRepository: Repository<Telemetry>,
     @InjectRepository(Vehicle)
     private readonly vehicleRepository: Repository<Vehicle>,
+    @InjectRepository(Driver)
+    private readonly driverRepository: Repository<Driver>,
   ) {}
 
   private mapLocationRow(row: any): VehicleLocation {
@@ -115,6 +127,43 @@ export class TrackingService {
     }
 
     return vehicle;
+  }
+
+  private actorRoles(actor?: TrackingActorContext) {
+    const roles = Array.isArray(actor?.roles) ? actor?.roles : actor?.role ? [actor.role] : [];
+    return roles.map((role) => String(role).trim().toUpperCase());
+  }
+
+  private async assertTelemetryIngestAllowed(
+    vehicle: Vehicle,
+    actor?: TrackingActorContext,
+  ) {
+    const roles = this.actorRoles(actor);
+    const isDriver = roles.includes('DRIVER');
+    const operatorOverrideAllowed =
+      String(process.env.ALLOW_OPERATOR_LOCATION_INGEST || 'false') === 'true';
+    const isOperator = roles.some((role) =>
+      ['OWNER', 'ADMIN', 'DISPATCHER'].includes(role),
+    );
+
+    if (isOperator && operatorOverrideAllowed) {
+      return;
+    }
+
+    if (!isDriver || !actor?.email || !actor.organizationId) {
+      throw new ForbiddenException('Driver assignment is required to ingest location');
+    }
+
+    const driver = await this.driverRepository.findOne({
+      where: {
+        email: actor.email,
+        organizationId: actor.organizationId,
+      },
+    });
+
+    if (!driver || driver.currentVehicleId !== vehicle.id) {
+      throw new ForbiddenException('Driver is not assigned to this vehicle');
+    }
   }
 
   /**
@@ -292,7 +341,7 @@ export class TrackingService {
     };
   }
 
-  async ingestTelemetry(input: TelemetryIngestInput) {
+  async ingestTelemetry(input: TelemetryIngestInput, actor?: TrackingActorContext) {
     if (!input.vehicleId) {
       throw new BadRequestException('vehicleId is required');
     }
@@ -307,6 +356,7 @@ export class TrackingService {
       input.vehicleId,
       input.organizationId,
     );
+    await this.assertTelemetryIngestAllowed(vehicle, actor);
     const timestamp = input.timestamp ? new Date(input.timestamp) : new Date();
 
     if (Number.isNaN(timestamp.getTime())) {

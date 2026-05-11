@@ -6,7 +6,8 @@ const auditRoot =
   process.env.LAUNCH_AUDIT_DIR ||
   path.join(process.cwd(), '.tmp', 'launch-audit', 'playwright');
 const apiBaseUrl =
-  process.env.LAUNCH_AUDIT_API_URL || 'http://127.0.0.1:3001';
+  process.env.LAUNCH_AUDIT_API_URL ||
+  `http://127.0.0.1:${process.env.PLAYWRIGHT_MOCK_API_PORT || '3001'}`;
 const strictOptimizer = process.env.LAUNCH_AUDIT_STRICT_OPTIMIZER === 'true';
 const authToken =
   process.env.LAUNCH_AUDIT_AUTH_TOKEN || process.env.STAGING_AUTH_TOKEN || '';

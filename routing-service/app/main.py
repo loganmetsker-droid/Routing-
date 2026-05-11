@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import logging
 import os
+from hmac import compare_digest
 from datetime import datetime
 from typing import Dict, List
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from geoalchemy2.shape import to_shape
 from sqlalchemy.orm import Session
 
@@ -26,6 +28,63 @@ app = FastAPI(
     version="2.0.0",
 )
 
+INTERNAL_AUTH_HEADER = "x-routing-service-token"
+HOSTED_ENVIRONMENTS = {"staging", "production", "prod"}
+
+
+def is_hosted_environment() -> bool:
+    return (os.getenv("ROUTING_SERVICE_ENV") or os.getenv("NODE_ENV") or os.getenv("ENV") or "").lower() in HOSTED_ENVIRONMENTS
+
+
+def get_internal_token() -> str:
+    return os.getenv("ROUTING_SERVICE_INTERNAL_TOKEN", "").strip()
+
+
+def validate_security_config() -> None:
+    if is_hosted_environment() and not get_internal_token():
+        raise RuntimeError(
+            "ROUTING_SERVICE_INTERNAL_TOKEN is required in hosted routing-service environments"
+        )
+
+
+async def require_internal_auth(
+    authorization: str | None = Header(default=None),
+    x_routing_service_token: str | None = Header(default=None),
+) -> None:
+    expected = get_internal_token()
+    if not expected:
+        if is_hosted_environment():
+            raise HTTPException(status_code=503, detail="routing service auth is not configured")
+        return
+
+    presented = (x_routing_service_token or "").strip()
+    if not presented and authorization:
+        auth = authorization.strip()
+        if auth.lower().startswith("bearer "):
+            presented = auth[7:].strip()
+
+    if not presented or not compare_digest(presented, expected):
+        logger.warning("Rejected unauthorized routing-service optimizer request")
+        raise HTTPException(status_code=401, detail="routing service authentication required")
+
+
+@app.on_event("startup")
+async def startup_security_check() -> None:
+    validate_security_config()
+
+
+@app.middleware("http")
+async def enforce_optimizer_body_limit(request: Request, call_next):
+    if request.method == "POST" and request.url.path in {"/optimize", "/route", "/route/global"}:
+        max_bytes = int(os.getenv("ROUTING_SERVICE_MAX_BODY_BYTES", "1048576"))
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > max_bytes:
+            return JSONResponse(
+                status_code=413,
+                content={"detail": "routing service request body is too large"},
+            )
+    return await call_next(request)
+
 
 def get_allowed_origins() -> List[str]:
     configured = os.getenv("CORS_ORIGINS", "")
@@ -39,7 +98,7 @@ app.add_middleware(
     allow_origins=get_allowed_origins(),
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID", INTERNAL_AUTH_HEADER],
 )
 
 
@@ -60,7 +119,7 @@ async def health_check():
     }
 
 
-@app.post("/optimize", response_model=OptimizeResponse)
+@app.post("/optimize", response_model=OptimizeResponse, dependencies=[Depends(require_internal_auth)])
 async def optimize(request: OptimizeRequest):
     logger.info(
         "Optimizing %s stops across %s vehicles using %s objective",
@@ -143,7 +202,7 @@ def _map_legacy_route(route, jobs_by_id: Dict[str, Job]):
     return ordered
 
 
-@app.post("/route")
+@app.post("/route", dependencies=[Depends(require_internal_auth)])
 async def optimize_route(request: Dict[str, List[str] | str], db: Session = Depends(get_db)):
     vehicle_id = str(request.get("vehicle_id", ""))
     job_ids = [str(job_id) for job_id in request.get("job_ids", [])]
@@ -206,7 +265,7 @@ async def optimize_route(request: Dict[str, List[str] | str], db: Session = Depe
     }
 
 
-@app.post("/route/global")
+@app.post("/route/global", dependencies=[Depends(require_internal_auth)])
 async def optimize_global_route(
     request: Dict[str, List[str]],
     db: Session = Depends(get_db),

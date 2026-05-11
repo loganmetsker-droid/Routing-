@@ -1,12 +1,32 @@
 {
-  "name": "Trovan Routing & Dispatch",
-  "short_name": "Trovan",
-  "description": "Premium routing, dispatch, driver execution, and customer tracking.",
-  "start_url": "/",
+  "name": "Trovan Driver",
+  "short_name": "Driver",
+  "description": "Driver stop execution, proof capture, and dispatch messaging.",
+  "start_url": "/driver",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#1F1A17",
   "theme_color": "#1F1A17",
+  "shortcuts": [
+    {
+      "name": "Driver Manifest",
+      "short_name": "Driver",
+      "url": "/driver"
+    }
+  ],
   "icons": [
+    {
+      "src": "/trovan-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/trovan-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
     {
       "src": "/trovan-mark.svg",
       "sizes": "any",

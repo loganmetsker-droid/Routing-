@@ -1,11 +1,14 @@
 import type { JwtService } from '@nestjs/jwt';
 import { UnauthorizedException } from '@nestjs/common';
 import type { Socket } from 'socket.io';
+import type { Repository } from 'typeorm';
+import type { AuthSession } from '../../modules/auth/entities/auth-session.entity';
 import type { JwtPayload } from '../../modules/auth/strategies/jwt.strategy';
 
 export type SocketAuthContext = {
   token: string;
   userId: string;
+  sessionId?: string;
   email?: string;
   organizationId: string;
   roles: string[];
@@ -40,13 +43,19 @@ export function extractSocketBearerToken(client: Pick<Socket, 'handshake'>) {
 export async function authenticateSocket(
   jwtService: JwtService,
   client: Pick<Socket, 'handshake'>,
+  authSessions?: Pick<Repository<AuthSession>, 'findOne' | 'save'>,
 ): Promise<SocketAuthContext> {
   const token = extractSocketBearerToken(client);
   if (!token) {
     throw new UnauthorizedException('Socket authentication token is required');
   }
 
-  const payload = await jwtService.verifyAsync<JwtPayload>(token);
+  let payload: JwtPayload;
+  try {
+    payload = await jwtService.verifyAsync<JwtPayload>(token);
+  } catch {
+    throw new UnauthorizedException('Invalid socket authentication token');
+  }
   const userId = typeof payload.sub === 'string' ? payload.sub.trim() : '';
   const organizationId =
     typeof payload.organizationId === 'string'
@@ -59,9 +68,31 @@ export async function authenticateSocket(
     );
   }
 
+  const sessionId = typeof payload.sid === 'string' ? payload.sid.trim() : '';
+  if (authSessions) {
+    if (!sessionId) {
+      throw new UnauthorizedException('Socket authentication session is required');
+    }
+
+    const session = await authSessions.findOne({
+      where: { id: sessionId, userId },
+    });
+    if (
+      !session ||
+      session.revokedAt ||
+      (session.organizationId && session.organizationId !== organizationId)
+    ) {
+      throw new UnauthorizedException('Socket authentication session has expired');
+    }
+
+    session.lastSeenAt = new Date();
+    await authSessions.save(session);
+  }
+
   return {
     token,
     userId,
+    sessionId: sessionId || undefined,
     email: typeof payload.email === 'string' ? payload.email : undefined,
     organizationId,
     roles: Array.isArray(payload.roles)

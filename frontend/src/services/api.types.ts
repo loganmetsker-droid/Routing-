@@ -529,6 +529,37 @@ export type DriverManifestStopRecord = {
   actualArrival?: string | null;
   actualDeparture?: string | null;
   notes?: string | null;
+  presentation?: {
+    customerName?: string | null;
+    customerPhone?: string | null;
+    customerEmail?: string | null;
+    address?: string | null;
+    location?: { latitude: number; longitude: number } | null;
+    instructions?: string | null;
+    timeWindowStart?: string | null;
+    timeWindowEnd?: string | null;
+  };
+  proofRequirements?: {
+    signature: 'required' | 'optional' | 'not_required';
+    bol: 'required' | 'optional' | 'not_required';
+    documents: 'required' | 'optional' | 'not_required';
+  };
+  proofStatus?: {
+    proofRequired: boolean;
+    proofCaptured: boolean;
+    signatureCaptured: boolean;
+    bolCaptured?: boolean;
+    documentsCaptured?: boolean;
+    bolSkipped?: boolean;
+    documentsSkipped?: boolean;
+    requiredProofComplete?: boolean;
+    proofCount: number;
+    capturedCount?: number;
+    skippedCount?: number;
+    signatureProofId?: string | null;
+    bolProofIds?: string[];
+    documentProofIds?: string[];
+  };
 };
 
 export type DriverManifestRouteRecord = {
@@ -543,6 +574,7 @@ export type DriverManifestRouteRecord = {
     vehicleId?: string | null;
   };
   stops: DriverManifestStopRecord[];
+  nextStop?: DriverManifestStopRecord | null;
   vehicle?: {
     id: string;
     make: string;
@@ -562,6 +594,10 @@ export type DriverManifestRouteRecord = {
     completedStops: number;
     remainingStops: number;
     nextStopId?: string | null;
+  };
+  messageSummary?: {
+    unreadCount: number;
+    lastMessageAt?: string | null;
   };
 };
 

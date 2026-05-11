@@ -7,18 +7,23 @@ export class AddRouteVisualizationFields1735000000000
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Add polyline field for route geometry
+    await queryRunner.query(`ALTER TABLE "routes" ADD "polyline" jsonb`);
     await queryRunner.query(
-      `ALTER TABLE "routes" ADD "polyline" jsonb COMMENT 'Route polyline geometry (GeoJSON or encoded polyline)'`,
+      `COMMENT ON COLUMN "routes"."polyline" IS 'Route polyline geometry (GeoJSON or encoded polyline)'`,
     );
 
     // Add color field for route visualization
+    await queryRunner.query(`ALTER TABLE "routes" ADD "color" varchar(7)`);
     await queryRunner.query(
-      `ALTER TABLE "routes" ADD "color" varchar(7) COMMENT 'Hex color for route visualization (e.g., #FF5733)'`,
+      `COMMENT ON COLUMN "routes"."color" IS 'Hex color for route visualization (e.g., #FF5733)'`,
     );
 
     // Add eta field for estimated time of arrival
     await queryRunner.query(
-      `ALTER TABLE "routes" ADD "eta" timestamp with time zone COMMENT 'Estimated time of arrival at final destination'`,
+      `ALTER TABLE "routes" ADD "eta" timestamp with time zone`,
+    );
+    await queryRunner.query(
+      `COMMENT ON COLUMN "routes"."eta" IS 'Estimated time of arrival at final destination'`,
     );
   }
 

@@ -458,6 +458,237 @@ Note: the working tree already contained many unrelated frontend changes before 
 1. Decide on a webhook delivery allowlist strategy (per-org allowed domains, or global allowlist), and enforce DNS/IP resolution blocking at request time.
 2. Repair local Rollup/Rolldown native binding signing mismatch so Vitest/Vite can run and the added unit tests can be executed.
 
+## Daily Pass: 2026-05-11
+
+### Summary Of Risks Found
+
+- Routing-service base URL configuration (`ROUTING_SERVICE_URL` / legacy `ROUTING_PROVIDER_URL` / `ROUTING_SERVICE_HOSTPORT`) was accepted without validation. Misconfiguration could allow non-http(s) schemes, embedded credentials, control characters, or query/hash fragments that leak into logs and make routing-service calls unpredictable.
+
+### Changes Made
+
+- Hardened routing-service URL resolution:
+  - Validates that configured URLs are absolute `http(s)` URLs.
+  - Rejects control characters and URLs with embedded credentials.
+  - Strips `?query` and `#hash` fragments before persisting/using the base URL.
+  - Enforces `ROUTING_SERVICE_SCHEME` to `http` or `https` when using `ROUTING_SERVICE_HOSTPORT`.
+- Added focused unit tests covering the validation behavior.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/common/routing/routing-service-url.util.ts`
+- `backend/src/common/routing/routing-service-url.util.spec.ts`
+
+### Checks And Commands Run
+
+- `cd backend && ../node_modules/.bin/nest build`
+  - Passed.
+- `cd backend && npx --no-install tsc -p tsconfig.json --noEmit`
+  - Failed: backend `tsc` includes spec files missing runner globals/types (`describe`/`it`/`expect`) and some Jest-era `jest` references; needs a deliberate TS + test-runner config cleanup pass.
+- `npm run test --workspace=backend -- routing-service-url.util`
+  - Passed (7 tests).
+- `npm run test --workspace=backend`
+  - Failed: `listen EPERM: operation not permitted` (sandboxed environment disallows binding listening sockets; `supertest` integration specs cannot run here).
+- `npm audit --workspaces --audit-level=moderate`
+  - Failed: `getaddrinfo ENOTFOUND registry.npmjs.org` + cannot write logs to `/Users/logan/.npm/_logs`.
+- `python3 -m pytest routing-service/tests`
+  - Blocked: `No module named pytest`.
+
+### Blockers
+
+- This sandbox disallows opening listening sockets (`listen EPERM`), preventing `supertest`-based backend integration tests from running locally here.
+- `npm audit` is blocked by DNS failures and local permissions writing npm logs.
+
+### Remaining Risks
+
+- Backend still logs full optimizer payloads at debug level (`[ROUTING:REQUEST] Payload: ...`) which includes location data; ensure debug logging is disabled in production and consider structured redaction if debug logs are ever enabled.
+
+### Recommended Next Actions
+
+1. If you need to run the `dispatch.integration.spec.ts` tests locally, use an environment that allows binding loopback ports (or refactor integration tests away from `supertest` socket binding).
+2. Re-run `npm audit` in an environment with registry access and writable npm logs; apply smallest same-major upgrades.
+
+## Daily Pass: 2026-05-10
+
+### Summary Of Risks Found
+
+- Response header injection risk: proof artifact downloads set `Content-Disposition` using a stored filename value. If an attacker-controlled upload filename contains control characters (e.g. CR/LF), this can enable response splitting / header injection in some environments.
+- Content sniffing risk: proof downloads did not explicitly set `X-Content-Type-Options: nosniff`, increasing the odds of unexpected browser content interpretation if a content type is misclassified upstream.
+
+### Changes Made
+
+- Hardened proof artifact download headers:
+  - Added `sanitizeContentDispositionFilename()` + `buildInlineContentDisposition()` helper in `backend/src/common/http/content-disposition.util.ts`.
+  - `backend/src/modules/dispatch/route-runs.controller.ts` now uses the helper when setting `Content-Disposition` for proof downloads.
+  - Proof downloads now set `X-Content-Type-Options: nosniff`.
+- Added focused unit tests for the filename/header builder (not executable locally due to the Vitest native binding issue):
+  - `backend/src/common/http/content-disposition.util.spec.ts`.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/common/http/content-disposition.util.ts`
+- `backend/src/common/http/content-disposition.util.spec.ts`
+- `backend/src/modules/dispatch/route-runs.controller.ts`
+
+### Checks And Commands Run
+
+- `cd backend && ../node_modules/.bin/nest build`
+  - Passed.
+- `cd backend && ../node_modules/.bin/vitest run --config vitest.config.ts src/common/http/content-disposition.util.spec.ts`
+  - Failed at Vitest startup due native binding/code-signing failure in `@rolldown/binding-darwin-arm64` (Team ID mismatch / `ERR_DLOPEN_FAILED`).
+- `/Applications/Codex.app/Contents/Resources/node '/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/lib/node_modules/npm/bin/npm-cli.js' audit --workspaces --audit-level=moderate`
+  - Failed: DNS failure to `registry.npmjs.org` (`getaddrinfo ENOTFOUND`) and could not write logs to `/Users/logan/.npm/_logs`.
+
+### Blockers
+
+- Vitest remains blocked on this Mac by Rolldown native binding/code-signing failures (`@rolldown/binding-darwin-arm64`), so the added unit test could not be executed locally.
+- `npm audit` is blocked by DNS failures to `registry.npmjs.org` and permissions errors writing logs to `/Users/logan/.npm/_logs`, so workspace vulnerabilities could not be re-evaluated in this pass.
+
+### Remaining Risks
+
+- Proof downloads are served with `Content-Disposition: inline`. If untrusted HTML is ever uploaded/served from the same origin, this can enable script execution in the browser. Consider forcing `attachment` or enforcing a strict allowlist of safe content types for inline display (migration-sized; coordinate with frontend UX).
+- WebSocket auth + scoping: `/dispatch` and `/tracking` gateways still accept unauthenticated handshakes and broadcast unscoped events/locations.
+
+### Recommended Next Actions
+
+1. Repair the Rolldown native binding/code-signing mismatch so Vitest can run again (then re-run the added unit tests).
+2. Decide whether proof artifacts should be inline-viewable or forced-download before shipping.
+3. Add authenticated Socket.IO handshake + organization scoping for gateway broadcasts.
+
+## Daily Pass: 2026-05-09
+
+### Summary Of Risks Found
+
+- Local proof artifact storage path traversal risk: `ProofStorageService.localPathForKey()` used a string prefix check (`startsWith(root)`), which can be bypassed by paths like `/proof2/...` when `root` is `/proof`. If an attacker can influence stored proof URIs/keys (or if the DB is compromised), this could allow reading/writing files outside the intended proof storage directory.
+
+### Changes Made
+
+- Hardened local proof storage path validation:
+  - `backend/src/modules/dispatch/services/proof-storage.service.ts` now uses `path.relative(root, filePath)` to ensure resolved paths stay within the configured local storage root.
+- Added focused unit tests:
+  - `backend/src/modules/dispatch/services/proof-storage.service.spec.ts` asserts that `../` escapes are rejected and in-root keys are accepted.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/modules/dispatch/services/proof-storage.service.ts`
+- `backend/src/modules/dispatch/services/proof-storage.service.spec.ts`
+
+### Checks And Commands Run
+
+- `/Applications/Codex.app/Contents/Resources/node '/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/lib/node_modules/npm/bin/npm-cli.js' run build --workspace=backend`
+  - Passed (`nest build`).
+- `/Applications/Codex.app/Contents/Resources/node '/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/lib/node_modules/npm/bin/npm-cli.js' run test --workspace=backend -- proof-storage.service`
+  - Failed at Vitest startup due native binding/code-signing failure in `@rolldown/binding-darwin-arm64` (Team ID mismatch / `ERR_DLOPEN_FAILED`).
+
+### Blockers
+
+- Vitest remains blocked on this Mac by Rolldown native binding/code-signing failures (`@rolldown/binding-darwin-arm64`), so the added unit test could not be executed locally.
+
+### Remaining Risks
+
+- Proof downloads are served with `Content-Disposition: inline`. If untrusted HTML is ever uploaded/served from the same origin, this can enable script execution in the browser. Consider forcing `attachment` or enforcing a strict allowlist of safe content types for inline display (migration-sized; coordinate with frontend UX).
+
+### Recommended Next Actions
+
+1. Repair the Rolldown native binding/code-signing mismatch so Vitest can run again (then re-run the added proof-storage tests).
+2. Decide whether proof artifacts should be inline-viewable or forced-download before shipping.
+
+## Daily Pass: 2026-05-08
+
+### Summary Of Risks Found
+
+- Tenant-boundary hardening: `getPublicTracking()` and `getDriverManifest()` resolved vehicles by `id` only. If data integrity is ever compromised (or a bug writes a cross-org `vehicleId`), the tracking surface could leak vehicle details across organizations.
+
+### Changes Made
+
+- Scoped vehicle lookup to the route’s organization when possible:
+  - `backend/src/modules/dispatch/route-runs.service.ts` now resolves vehicles with `{ id, organizationId }` first.
+  - Backwards-compatible fallback: if the vehicle record has no `organizationId` set, the service will still return it for the route. If the vehicle has a conflicting `organizationId`, it is treated as unavailable (returns `null`).
+- Added a focused regression test:
+  - `backend/src/modules/dispatch/route-runs.service.spec.ts` now asserts that public tracking does not expose vehicles with a mismatched `organizationId`.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/modules/dispatch/route-runs.service.ts`
+- `backend/src/modules/dispatch/route-runs.service.spec.ts`
+
+### Checks And Commands Run
+
+- `cd backend && ../node_modules/.bin/nest build`
+  - Passed.
+- `cd backend && ../node_modules/.bin/vitest run src/modules/dispatch/route-runs.service.spec.ts`
+  - Failed at Vitest startup due native binding/code-signing failure in `@rolldown/binding-darwin-arm64` (Team ID mismatch / `ERR_DLOPEN_FAILED`).
+
+### Blockers
+
+- Vitest remains blocked on this Mac by Rolldown native binding/code-signing failures (`@rolldown/binding-darwin-arm64`), so the added unit test could not be executed locally.
+
+### Remaining Risks
+
+- Webhooks still represent a possible SSRF surface via DNS resolution (hostnames that resolve to private IPs), redirects, and internal domains; consider an explicit allowlist + DNS/IP enforcement at request time.
+- WebSocket auth + scoping: `/dispatch` and `/tracking` gateways still accept unauthenticated handshakes and broadcast unscoped events/locations.
+
+### Recommended Next Actions
+
+1. Repair the Rolldown native binding/code-signing mismatch so Vitest can run again (then re-run the added test).
+2. Add authenticated Socket.IO handshake + organization scoping for gateway broadcasts.
+
+## Daily Pass: 2026-05-07
+
+### Summary Of Risks Found
+
+- JWT verification failure handling gaps: Socket.IO auth verification and public tracking token verification did not normalize invalid/expired tokens into 401/400 responses, risking inconsistent 500s and noisy error telemetry.
+- Input normalization gap for route-run messages: `RouteRunMessageDto` validated length but did not trim or reject whitespace-only bodies, creating mismatched behavior between request validation and service-side trimming.
+
+### Changes Made
+
+- Normalized Socket.IO JWT verification failures into `UnauthorizedException`:
+  - `backend/src/common/websocket/socket-auth.util.ts` now catches `verifyAsync()` failures and throws `Invalid socket authentication token`.
+  - Updated tests in `backend/src/common/websocket/socket-auth.util.spec.ts`.
+- Normalized public tracking token verification failures into `BadRequestException`:
+  - `backend/src/modules/dispatch/route-runs.service.ts` now catches `verifyAsync()` failures in `getPublicTracking()` and returns `Invalid tracking token`.
+  - Added a regression test in `backend/src/modules/dispatch/route-runs.service.spec.ts`.
+- Tightened route-run message DTO normalization:
+  - `backend/src/modules/dispatch/dto/route-run-actions.dto.ts` trims `body` and rejects whitespace-only messages.
+  - Added focused tests in `backend/src/modules/dispatch/dto/route-run-actions.dto.spec.ts`.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/common/websocket/socket-auth.util.ts`
+- `backend/src/common/websocket/socket-auth.util.spec.ts`
+- `backend/src/modules/dispatch/dto/route-run-actions.dto.ts`
+- `backend/src/modules/dispatch/dto/route-run-actions.dto.spec.ts`
+- `backend/src/modules/dispatch/route-runs.service.ts`
+- `backend/src/modules/dispatch/route-runs.service.spec.ts`
+
+### Checks And Commands Run
+
+- `/Applications/Codex.app/Contents/Resources/node '/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/lib/node_modules/npm/bin/npm-cli.js' run build --workspace=backend`
+  - Passed (`nest build`).
+- `'/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/bin/node' '/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/lib/node_modules/npm/bin/npm-cli.js' run test --workspace=backend -- socket-auth.util route-run-actions.dto route-runs.service`
+  - Failed at Vitest startup due native binding/code-signing failure in `@rolldown/binding-darwin-arm64` (Team ID mismatch / `ERR_DLOPEN_FAILED`).
+- `/Applications/Codex.app/Contents/Resources/node '/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/lib/node_modules/npm/bin/npm-cli.js' audit --workspaces --omit=dev --audit-level=high`
+  - Blocked: DNS failure to `registry.npmjs.org` (`getaddrinfo ENOTFOUND`) + npm could not write logs to `/Users/logan/.npm/_logs`.
+
+### Blockers
+
+- Vitest remains blocked on this Mac by Rolldown native binding/code-signing failures (`@rolldown/binding-darwin-arm64`), so the added unit tests could not be executed locally.
+- `npm audit` is blocked by DNS resolution failure to `registry.npmjs.org` in this environment, and npm cannot write log files to `/Users/logan/.npm/_logs`.
+
+### Remaining Risks
+
+- Webhooks still represent a possible SSRF surface via DNS resolution (hostnames that resolve to private IPs) and internal domains; consider an explicit allowlist + DNS/IP enforcement at request time.
+- Continue verifying organization scoping boundaries for new route-run messaging surfaces (messages are tenant-scoped by `organizationId`, but a full end-to-end review should confirm no cross-org read/write paths exist).
+
+### Recommended Next Actions
+
+1. Repair the Rolldown native binding/code-signing mismatch so Vitest can run again (then re-run the added tests).
+2. Restore network/DNS to `registry.npmjs.org` (or run audits from a networked environment) so dependency vulnerability checks can be refreshed.
+
 ## Daily Pass: 2026-05-06
 
 ### Summary Of Risks Found

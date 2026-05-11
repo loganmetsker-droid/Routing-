@@ -9,6 +9,7 @@ import type { RouteRunStop } from './entities/route-run-stop.entity';
 import type { DispatchException } from './entities/dispatch-exception.entity';
 import type { StopEvent } from './entities/stop-event.entity';
 import type { ProofArtifact } from './entities/proof-artifact.entity';
+import type { RouteRunMessage } from './entities/route-run-message.entity';
 import type { Vehicle } from '../vehicles/entities/vehicle.entity';
 import type { NotificationDelivery } from '../notifications/entities/notification-delivery.entity';
 
@@ -20,6 +21,7 @@ export type DispatchActorContext = {
 };
 
 export type DispatchEventInput = {
+  organizationId?: string | null;
   routeId?: string | null;
   source: 'optimizer' | 'reroute' | 'workflow' | 'system';
   level?: 'info' | 'warning' | 'error';
@@ -115,14 +117,60 @@ export type RouteRunsListResponse = {
   routeRuns: Route[];
 };
 
+export type RouteRunStopPresentation = {
+  customerName?: string | null;
+  customerPhone?: string | null;
+  customerEmail?: string | null;
+  address?: string | null;
+  location?: { latitude: number; longitude: number } | null;
+  instructions?: string | null;
+  timeWindowStart?: string | null;
+  timeWindowEnd?: string | null;
+};
+
+export type RouteRunStopProofStatus = {
+  proofRequired: boolean;
+  proofCaptured: boolean;
+  signatureCaptured: boolean;
+  bolCaptured: boolean;
+  documentsCaptured: boolean;
+  bolSkipped: boolean;
+  documentsSkipped: boolean;
+  requiredProofComplete: boolean;
+  proofCount: number;
+  capturedCount: number;
+  skippedCount: number;
+  signatureProofId?: string | null;
+  bolProofIds?: string[];
+  documentProofIds?: string[];
+};
+
+export type RouteRunStopProofRequirements = {
+  signature: 'required' | 'optional' | 'not_required';
+  bol: 'required' | 'optional' | 'not_required';
+  documents: 'required' | 'optional' | 'not_required';
+};
+
+export type PresentedRouteRunStop = RouteRunStop & {
+  presentation?: RouteRunStopPresentation;
+  proofRequirements?: RouteRunStopProofRequirements;
+  proofStatus?: RouteRunStopProofStatus;
+};
+
+export type RouteRunMessageSummary = {
+  unreadCount: number;
+  lastMessageAt?: string | null;
+};
+
 export type RouteRunsDetailResponse = {
   ok: true;
   routeRun: Route;
-  stops: RouteRunStop[];
+  stops: PresentedRouteRunStop[];
   exceptions: DispatchException[];
   stopEvents: StopEvent[];
   proofArtifacts: ProofArtifact[];
   notificationDeliveries: NotificationDelivery[];
+  messages?: RouteRunMessage[];
 };
 
 export type RouteRunsExceptionsResponse = {
@@ -140,6 +188,12 @@ export type RouteRunStopProofsResponse = {
   ok: true;
   stop: RouteRunStop;
   proofs: ProofArtifact[];
+};
+
+export type RouteRunMessagesResponse = {
+  ok: true;
+  messages: RouteRunMessage[];
+  unreadCount: number;
 };
 
 export type RouteRunShareLinkResponse = {
@@ -162,7 +216,8 @@ export type DriverManifestResponse = {
   };
   routes: Array<{
     routeRun: Route;
-    stops: RouteRunStop[];
+    stops: PresentedRouteRunStop[];
+    nextStop?: PresentedRouteRunStop | null;
     vehicle?: Pick<Vehicle, 'id' | 'make' | 'model' | 'licensePlate' | 'status'> | null;
     latestTelemetry?: {
       latitude: number;
@@ -177,6 +232,7 @@ export type DriverManifestResponse = {
       remainingStops: number;
       nextStopId?: string | null;
     };
+    messageSummary?: RouteRunMessageSummary;
   }>;
 };
 
@@ -196,9 +252,32 @@ export type PublicTrackingResponse = {
       trackingSubtitle?: string;
     };
   };
-  routeRun: Route;
-  stops: RouteRunStop[];
-  vehicle?: Pick<Vehicle, 'id' | 'make' | 'model' | 'licensePlate' | 'status'> | null;
+  routeRun: {
+    id: string;
+    status: string;
+    workflowStatus?: string | null;
+    plannedStart?: string | null;
+    actualStart?: string | null;
+    completedAt?: string | null;
+    eta?: string | null;
+    jobCount?: number | null;
+    vehicleId?: string | null;
+  };
+  stops: Array<{
+    id: string;
+    stopSequence: number;
+    status: string;
+    plannedArrival?: string | null;
+    actualArrival?: string | null;
+    actualDeparture?: string | null;
+  }>;
+  vehicle?: {
+    id: string;
+    make: string;
+    model: string;
+    licensePlate: string;
+    status?: string | null;
+  } | null;
   latestTelemetry?: {
     latitude: number;
     longitude: number;

@@ -11,9 +11,12 @@ import { RouteAssignment } from './entities/route-assignment.entity';
 import { StopEvent } from './entities/stop-event.entity';
 import { DispatchException } from './entities/dispatch-exception.entity';
 import { ProofArtifact } from './entities/proof-artifact.entity';
+import { RouteRunMessage } from './entities/route-run-message.entity';
+import { AuthSession } from '../auth/entities/auth-session.entity';
 import { Vehicle } from '../vehicles/entities/vehicle.entity';
 import { Driver } from '../drivers/entities/driver.entity';
 import { Job } from '../jobs/entities/job.entity';
+import { JobStop } from '../jobs/entities/job-stop.entity';
 import { Telemetry } from '../tracking/entities/telemetry.entity';
 import { Organization } from '../organizations/entities/organization.entity';
 import { DispatchService } from './dispatch.service';
@@ -28,6 +31,7 @@ import { DispatchOptimizerStateService } from './services/dispatch-optimizer-sta
 import { DispatchPresentationService } from './services/dispatch-presentation.service';
 import { OptimizationJobLifecycleService } from './services/optimization-job-lifecycle.service';
 import { RouteVersioningService } from './services/route-versioning.service';
+import { ProofStorageService } from './services/proof-storage.service';
 import { RouteRunsService } from './route-runs.service';
 import { AuthModule } from '../auth/auth.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -44,6 +48,7 @@ const scheduleImports = process.env.ENABLE_SCHEDULER === '1' ? [ScheduleModule.f
       Route,
       Vehicle,
       Job,
+      JobStop,
       Driver,
       Telemetry,
       Organization,
@@ -55,6 +60,8 @@ const scheduleImports = process.env.ENABLE_SCHEDULER === '1' ? [ScheduleModule.f
       StopEvent,
       DispatchException,
       ProofArtifact,
+      RouteRunMessage,
+      AuthSession,
     ]),
     HttpModule.register({
       timeout: 30000, // 30 second timeout for routing-service calls
@@ -73,6 +80,7 @@ const scheduleImports = process.env.ENABLE_SCHEDULER === '1' ? [ScheduleModule.f
     DispatchOptimizerStateService,
     DispatchPresentationService,
     OptimizationJobLifecycleService,
+    ProofStorageService,
     RouteVersioningService,
     RouteRunsService,
   ],

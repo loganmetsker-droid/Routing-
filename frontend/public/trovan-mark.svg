@@ -1,7 +1,19 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="512" height="512" rx="132" fill="#1F1A17"/>
-  <path d="M112 156H400V212H284V388H228V212H112V156Z" fill="#F7F2EC"/>
-  <path d="M317 156H400L292 356H236L317 156Z" fill="#C87441"/>
-  <circle cx="352" cy="356" r="44" fill="#C87441"/>
-  <circle cx="352" cy="356" r="16" fill="#1F1A17"/>
+  <defs>
+    <linearGradient id="copper" x1="138" y1="118" x2="376" y2="398" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F0B06A"/>
+      <stop offset="0.48" stop-color="#C87441"/>
+      <stop offset="1" stop-color="#7B3F25"/>
+    </linearGradient>
+    <linearGradient id="bg" x1="72" y1="48" x2="430" y2="464" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#241C17"/>
+      <stop offset="1" stop-color="#070605"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect x="16" y="16" width="480" height="480" rx="98" stroke="#8C4B2A" stroke-opacity="0.55" stroke-width="10"/>
+  <path d="M126 138H386C398.15 138 408 147.85 408 160V196C408 208.15 398.15 218 386 218H300V382C300 394.15 290.15 404 278 404H234C221.85 404 212 394.15 212 382V218H126C113.85 218 104 208.15 104 196V160C104 147.85 113.85 138 126 138Z" fill="url(#copper)"/>
+  <path d="M332 138H408L306 332H254L332 138Z" fill="#F0B06A" fill-opacity="0.36"/>
+  <circle cx="354" cy="360" r="48" fill="#C87441"/>
+  <circle cx="354" cy="360" r="18" fill="#070605"/>
 </svg>

@@ -26,10 +26,14 @@ import {
   useCreateExceptionMutation,
   NotificationDeliveryRecord,
   RouteRunStopRecord,
+  type RouteRunMessageRecord,
   type ProofArtifactRecord,
   type StopEventRecord,
+  useCreateRouteRunMessageMutation,
   useRouteRunShareLinkMutation,
+  useRouteRunMessagesQuery,
   getRouteRunsErrorMessage,
+  fetchProofArtifactBlob,
   useCompleteRouteRunMutation,
   useRouteRunDetailQuery,
   useRouteRunStopMutation,
@@ -55,6 +59,73 @@ function deliverySummary(delivery: NotificationDeliveryRecord) {
   return parts.filter(Boolean).join(' • ');
 }
 
+function formatWhen(value?: string | null) {
+  if (!value) return 'Pending timestamp';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function signatureSummary(proof: ProofArtifactRecord) {
+  const metadata = proof.metadata || {};
+  const signerName = typeof metadata.signerName === 'string' ? metadata.signerName : 'Signer pending';
+  const capturedAt = typeof metadata.capturedAt === 'string' ? metadata.capturedAt : proof.createdAt;
+  return `${signerName} • ${formatWhen(capturedAt)}`;
+}
+
+function SignatureProofPreview({ proof }: { proof: ProofArtifactRecord }) {
+  const strokes = Array.isArray(proof.metadata?.strokes)
+    ? (proof.metadata?.strokes as Array<Array<{ x?: number; y?: number }>>)
+    : [];
+
+  if (!strokes.length) {
+    return (
+      <Typography variant="caption" color="text.secondary">
+        Signature strokes unavailable.
+      </Typography>
+    );
+  }
+
+  return (
+    <Box
+      component="svg"
+      viewBox="0 0 1 1"
+      preserveAspectRatio="none"
+      sx={{
+        width: '100%',
+        height: 96,
+        mt: 0.75,
+        borderRadius: 1,
+        border: '1px solid',
+        borderColor: 'divider',
+        bgcolor: 'rgba(255,255,255,0.04)',
+      }}
+    >
+      {strokes.map((stroke, index) => {
+        const points = stroke
+          .map((point) => `${Number(point.x || 0)},${Number(point.y || 0)}`)
+          .join(' ');
+        return (
+          <polyline
+            key={`${proof.id}-${index}`}
+            points={points}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="0.012"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        );
+      })}
+    </Box>
+  );
+}
+
 export default function RouteRunDetailPage() {
   const { id = '' } = useParams();
   const [error, setError] = useState<string | null>(null);
@@ -65,14 +136,19 @@ export default function RouteRunDetailPage() {
   const [exceptionCode, setExceptionCode] = useState('');
   const [exceptionMessage, setExceptionMessage] = useState('');
   const [exceptionStopId, setExceptionStopId] = useState('');
+  const [routeMessageDraft, setRouteMessageDraft] = useState('');
   const routeRunDetailQuery = useRouteRunDetailQuery(id);
+  const routeMessagesQuery = useRouteRunMessagesQuery(id);
   const startRouteMutation = useStartRouteRunMutation();
   const completeRouteMutation = useCompleteRouteRunMutation();
   const stopMutation = useRouteRunStopMutation();
   const shareLinkMutation = useRouteRunShareLinkMutation();
   const createExceptionMutation = useCreateExceptionMutation();
+  const createMessageMutation = useCreateRouteRunMessageMutation();
   const detail = routeRunDetailQuery.data ?? null;
   const loading = routeRunDetailQuery.isLoading;
+  const routeMessages: RouteRunMessageRecord[] =
+    routeMessagesQuery.data?.messages || detail?.messages || [];
 
   const eventsByStop = useMemo(() => {
     const events = detail?.stopEvents || [];
@@ -169,6 +245,40 @@ export default function RouteRunDetailPage() {
     }
   };
 
+  const handleSendRouteMessage = async () => {
+    if (!routeMessageDraft.trim()) return;
+    setError(null);
+    try {
+      await createMessageMutation.mutateAsync({
+        routeRunId: id,
+        payload: {
+          body: routeMessageDraft.trim(),
+          routeRunStopId: null,
+        },
+      });
+      setRouteMessageDraft('');
+    } catch (err: unknown) {
+      setError(getRouteRunsErrorMessage(err));
+    }
+  };
+
+  const openProofFile = async (proof: ProofArtifactRecord) => {
+    setError(null);
+    try {
+      const { blob, filename } = await fetchProofArtifactBlob(proof.id);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.target = '_blank';
+      anchor.rel = 'noreferrer';
+      anchor.download = filename;
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (err: unknown) {
+      setError(getRouteRunsErrorMessage(err));
+    }
+  };
+
   if (loading) {
     return <LoadingState label="Loading route run detail..." minHeight="50vh" />;
   }
@@ -260,6 +370,74 @@ export default function RouteRunDetailPage() {
                 ) : null}
               </List>
             </SurfacePanel>
+            <SurfacePanel>
+              <Typography variant="h6" sx={{ mb: 1 }}>
+                Driver Messages
+              </Typography>
+              <List disablePadding>
+                {routeMessages.map((message) => (
+                  <ListItem
+                    key={message.id}
+                    disableGutters
+                    sx={{
+                      borderBottom: '1px solid',
+                      borderColor: 'divider',
+                      alignItems: 'flex-start',
+                    }}
+                  >
+                    <ListItemText
+                      primary={
+                        String(message.senderRole).toUpperCase() === 'DRIVER'
+                          ? 'Driver'
+                          : 'Dispatch'
+                      }
+                      secondary={`${formatWhen(message.createdAt)}\n${message.body}`}
+                      secondaryTypographyProps={{ sx: { whiteSpace: 'pre-line' } }}
+                    />
+                    <Chip
+                      label={
+                        String(message.senderRole).toUpperCase() === 'DRIVER'
+                          ? message.readByDispatchAt
+                            ? 'read'
+                            : 'new'
+                          : message.readByDriverAt
+                            ? 'read'
+                            : 'sent'
+                      }
+                      size="small"
+                      color={
+                        String(message.senderRole).toUpperCase() === 'DRIVER' &&
+                        !message.readByDispatchAt
+                          ? 'warning'
+                          : 'default'
+                      }
+                    />
+                  </ListItem>
+                ))}
+                {routeMessages.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    No driver-dispatch messages have been sent for this route yet.
+                  </Typography>
+                ) : null}
+              </List>
+              <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ mt: 1.5 }}>
+                <TextField
+                  label="Message driver"
+                  value={routeMessageDraft}
+                  onChange={(event) => setRouteMessageDraft(event.target.value)}
+                  fullWidth
+                  multiline
+                  maxRows={3}
+                />
+                <Button
+                  variant="contained"
+                  onClick={() => void handleSendRouteMessage()}
+                  disabled={!routeMessageDraft.trim() || createMessageMutation.isPending}
+                >
+                  Send
+                </Button>
+              </Stack>
+            </SurfacePanel>
           </Stack>
         </Grid>
         <Grid item xs={12} xl={8}>
@@ -305,8 +483,42 @@ export default function RouteRunDetailPage() {
                           <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Proofs</Typography>
                           <List dense disablePadding>
                             {(proofsByStop[stop.id] || []).map((proof) => (
-                              <ListItem key={proof.id} disableGutters sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
-                                <ListItemText primary={proof.type} secondary={proof.uri} />
+                              <ListItem
+                                key={proof.id}
+                                disableGutters
+                                sx={{
+                                  borderBottom: '1px solid',
+                                  borderColor: 'divider',
+                                  alignItems: 'stretch',
+                                  flexDirection: 'column',
+                                }}
+                              >
+                                <ListItemText
+                                  primary={proof.type}
+                                  secondary={
+                                    String(proof.type).toUpperCase() === 'SIGNATURE'
+                                      ? signatureSummary(proof)
+                                      : typeof proof.metadata?.originalName === 'string'
+                                        ? `${proof.metadata.originalName} • ${formatWhen(
+                                            typeof proof.metadata.capturedAt === 'string'
+                                              ? proof.metadata.capturedAt
+                                              : proof.createdAt,
+                                          )}`
+                                        : proof.uri
+                                  }
+                                />
+                                {String(proof.type).toUpperCase() === 'SIGNATURE' ? (
+                                  <SignatureProofPreview proof={proof} />
+                                ) : proof.uri !== 'proof-decision' ? (
+                                  <Button
+                                    variant="outlined"
+                                    size="small"
+                                    onClick={() => void openProofFile(proof)}
+                                    sx={{ alignSelf: 'flex-start', mt: 0.5 }}
+                                  >
+                                    Download proof
+                                  </Button>
+                                ) : null}
                               </ListItem>
                             ))}
                             {(proofsByStop[stop.id] || []).length === 0 ? <Typography variant="body2" color="text.secondary">No proofs captured yet.</Typography> : null}

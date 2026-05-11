@@ -20,6 +20,7 @@
     "launch:audit": "playwright test e2e/launch-audit.spec.ts --project=chromium",
     "smoke:local": "node scripts/local-smoke.mjs",
     "smoke:optimizer": "node scripts/optimizer-smoke.mjs",
+    "staging:smoke": "node scripts/staging-smoke.mjs",
     "smoke:staging": "node scripts/staging-smoke.mjs",
     "launch:env-status": "node scripts/launch-env-status.mjs",
     "check:backend-deps": "npm ls --workspace=backend @nestjs/common @nestjs/core @nestjs/platform-express @nestjs/typeorm typeorm",

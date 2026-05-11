@@ -344,14 +344,47 @@ async function probeRoutingService(routingServiceUrl) {
   }
 
   const routingUrl = normalizeUrl(routingServiceUrl);
+  const routingToken =
+    env('STAGING_ROUTING_SERVICE_INTERNAL_TOKEN') ||
+    env('ROUTING_SERVICE_INTERNAL_TOKEN');
+  if (!routingToken) {
+    record('routing-service:internal-token-configured', partialMode ? 'skip' : 'fail', {
+      reason:
+        'STAGING_ROUTING_SERVICE_INTERNAL_TOKEN or ROUTING_SERVICE_INTERNAL_TOKEN is required',
+    });
+  } else {
+    record('routing-service:internal-token-configured', 'pass', {
+      value: redact(routingToken),
+    });
+  }
+
   await expectStatus('routing-service:/health', `${routingUrl}/health`, 200);
+  await expectStatus(
+    'routing-service:/optimize-rejects-anonymous',
+    `${routingUrl}/optimize`,
+    [401, 403],
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        plan_date: new Date().toISOString(),
+        vehicles: [],
+        stops: [],
+      }),
+    },
+  );
+  if (!routingToken) return;
+
   const optimize = await expectStatus(
-    'routing-service:/optimize',
+    'routing-service:/optimize-authenticated',
     `${routingUrl}/optimize`,
     200,
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-routing-service-token': routingToken,
+      },
       body: JSON.stringify({
         plan_date: new Date().toISOString(),
         objective: 'balanced',
@@ -419,6 +452,7 @@ function probeProviderEnv() {
     'WORKOS_TEST_EMAIL',
     'WORKOS_TEST_PASSWORD',
     'METRICS_TOKEN',
+    'ROUTING_SERVICE_INTERNAL_TOKEN',
     'STRIPE_SECRET_KEY',
     'STRIPE_WEBHOOK_SECRET',
     'STAGING_WEBHOOK_RECEIVER_URL',
@@ -432,6 +466,11 @@ function writeArtifacts(payload) {
   mkdirSync(artifactDir, { recursive: true });
   writeFileSync(
     path.join(artifactDir, 'staging-smoke-results.json'),
+    JSON.stringify(payload, null, 2),
+    'utf8',
+  );
+  writeFileSync(
+    path.join(artifactDir, 'staging-smoke-result.json'),
     JSON.stringify(payload, null, 2),
     'utf8',
   );

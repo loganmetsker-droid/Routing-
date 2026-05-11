@@ -89,7 +89,7 @@ Still not certified locally:
 - Prove public API key create/revoke plus `x-api-key` calls against staging, including cross-org denial.
 - Prove webhook create/deliver/replay/rotate behavior against staging, including signature verification, response body cap, allowlist/private-IP rejection, and no redirect/private-IP SSRF path.
 - Prove Stripe test checkout and webhook flow if billing is included in launch.
-- Run `npm run smoke:staging` with real `STAGING_FRONTEND_URL`, `STAGING_BACKEND_URL`, `STAGING_ROUTING_SERVICE_URL`, `STAGING_AUTH_TOKEN`, `METRICS_TOKEN`, WorkOS, Stripe, webhook receiver, Postmark, Twilio, and R2 sandbox env.
+- Run `npm run staging:smoke` with real `STAGING_FRONTEND_URL`, `STAGING_BACKEND_URL`, `STAGING_ROUTING_SERVICE_URL`, `STAGING_AUTH_TOKEN`, `METRICS_TOKEN`, `ROUTING_SERVICE_INTERNAL_TOKEN`, WorkOS, Stripe, webhook receiver, Postmark, Twilio, and R2 sandbox env. Public launch remains NO-GO until this command exits 0 and writes sanitized `.tmp/launch-audit/staging-smoke/staging-smoke-result.json`.
 - Verify `/api/metrics` rejects unauthenticated requests when `METRICS_TOKEN` is set.
 - Verify production/staging disables Swagger unless explicitly enabled, uses strict CORS, hides validation internals, and avoids logging secrets/request bodies.
 - Finish backup/restore, migration, rollback, provider-failure, and incident runbooks before charging real customers.

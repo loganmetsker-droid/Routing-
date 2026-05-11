@@ -15,6 +15,35 @@ import { queryKeys } from './queryKeys';
 
 const normalizeStop = (value: unknown) => {
   const record = isRecord(value) ? value : {};
+  const presentation = isRecord(record.presentation) ? record.presentation : {};
+  const location = isRecord(presentation.location) ? presentation.location : null;
+  const proofRequirements = isRecord(record.proofRequirements)
+    ? record.proofRequirements
+    : {};
+  const proofStatus = isRecord(record.proofStatus) ? record.proofStatus : {};
+  const proofRequired = Boolean(proofStatus.proofRequired ?? record.proofRequired);
+  const normalizedProofRequirements = {
+    signature:
+      proofRequirements.signature === 'required' ||
+      proofRequirements.signature === 'optional' ||
+      proofRequirements.signature === 'not_required'
+        ? proofRequirements.signature
+        : proofRequired
+          ? 'required'
+          : 'not_required',
+    bol:
+      proofRequirements.bol === 'required' ||
+      proofRequirements.bol === 'optional' ||
+      proofRequirements.bol === 'not_required'
+        ? proofRequirements.bol
+        : 'optional',
+    documents:
+      proofRequirements.documents === 'required' ||
+      proofRequirements.documents === 'optional' ||
+      proofRequirements.documents === 'not_required'
+        ? proofRequirements.documents
+        : 'optional',
+  } as const;
   return {
     id:
       typeof record.id === 'string'
@@ -30,6 +59,69 @@ const normalizeStop = (value: unknown) => {
     actualDeparture:
       typeof record.actualDeparture === 'string' ? record.actualDeparture : null,
     notes: typeof record.notes === 'string' ? record.notes : null,
+    presentation: {
+      customerName:
+        typeof presentation.customerName === 'string'
+          ? presentation.customerName
+          : null,
+      customerPhone:
+        typeof presentation.customerPhone === 'string'
+          ? presentation.customerPhone
+          : null,
+      customerEmail:
+        typeof presentation.customerEmail === 'string'
+          ? presentation.customerEmail
+          : null,
+      address:
+        typeof presentation.address === 'string'
+          ? presentation.address
+          : null,
+      location: location
+        ? {
+            latitude: Number(location.latitude || 0),
+            longitude: Number(location.longitude || 0),
+          }
+        : null,
+      instructions:
+        typeof presentation.instructions === 'string'
+          ? presentation.instructions
+          : null,
+      timeWindowStart:
+        typeof presentation.timeWindowStart === 'string'
+          ? presentation.timeWindowStart
+          : null,
+      timeWindowEnd:
+        typeof presentation.timeWindowEnd === 'string'
+          ? presentation.timeWindowEnd
+          : null,
+    },
+    proofRequirements: normalizedProofRequirements,
+    proofStatus: {
+      proofRequired,
+      proofCaptured: Boolean(proofStatus.proofCaptured),
+      signatureCaptured: Boolean(proofStatus.signatureCaptured),
+      bolCaptured: Boolean(proofStatus.bolCaptured),
+      documentsCaptured: Boolean(proofStatus.documentsCaptured),
+      bolSkipped: Boolean(proofStatus.bolSkipped),
+      documentsSkipped: Boolean(proofStatus.documentsSkipped),
+      requiredProofComplete: Boolean(
+        proofStatus.requiredProofComplete ??
+          (!proofRequired || proofStatus.signatureCaptured),
+      ),
+      proofCount: Number(proofStatus.proofCount || 0),
+      capturedCount: Number(proofStatus.capturedCount ?? proofStatus.proofCount ?? 0),
+      skippedCount: Number(proofStatus.skippedCount || 0),
+      signatureProofId:
+        typeof proofStatus.signatureProofId === 'string'
+          ? proofStatus.signatureProofId
+          : null,
+      bolProofIds: Array.isArray(proofStatus.bolProofIds)
+        ? proofStatus.bolProofIds.filter((item): item is string => typeof item === 'string')
+        : [],
+      documentProofIds: Array.isArray(proofStatus.documentProofIds)
+        ? proofStatus.documentProofIds.filter((item): item is string => typeof item === 'string')
+        : [],
+    },
   };
 };
 
@@ -41,6 +133,12 @@ const normalizeManifestRoute = (value: unknown): DriverManifestRouteRecord => {
   const latestTelemetry = isRecord(record.latestTelemetry)
     ? record.latestTelemetry
     : null;
+  const messageSummary = isRecord(record.messageSummary)
+    ? record.messageSummary
+    : {};
+  const normalizedStops = Array.isArray(record.stops)
+    ? record.stops.map(normalizeStop)
+    : [];
 
   return {
     routeRun: {
@@ -68,7 +166,15 @@ const normalizeManifestRoute = (value: unknown): DriverManifestRouteRecord => {
       vehicleId:
         typeof routeRun.vehicleId === 'string' ? routeRun.vehicleId : null,
     },
-    stops: Array.isArray(record.stops) ? record.stops.map(normalizeStop) : [],
+    stops: normalizedStops,
+    nextStop: isRecord(record.nextStop)
+      ? normalizeStop(record.nextStop)
+      : normalizedStops.find(
+          (stop) =>
+            !['SERVICED', 'FAILED', 'SKIPPED'].includes(
+              String(stop.status).toUpperCase(),
+            ),
+        ) || null,
     vehicle: vehicle
       ? {
           id: typeof vehicle.id === 'string' ? vehicle.id : 'vehicle-unknown',
@@ -116,6 +222,13 @@ const normalizeManifestRoute = (value: unknown): DriverManifestRouteRecord => {
       nextStopId:
         typeof progress.nextStopId === 'string' ? progress.nextStopId : null,
     },
+    messageSummary: {
+      unreadCount: Number(messageSummary.unreadCount || 0),
+      lastMessageAt:
+        typeof messageSummary.lastMessageAt === 'string'
+          ? messageSummary.lastMessageAt
+          : null,
+    },
   };
 };
 
@@ -155,19 +268,68 @@ const buildPreviewManifest = async (): Promise<DriverManifestRecord> => {
       const vehicle = previewState.vehicles.find(
         (candidate) => candidate.id === route.vehicleId,
       );
-      const stops = (route.optimizedStops || []).map((_stop, index) => ({
-        id: `${route.id}-stop-${index + 1}`,
-        stopSequence: index + 1,
-        status:
-          index === 0 && route.status === 'in_progress' ? 'ARRIVED' : 'PENDING',
-        plannedArrival: null,
-        actualArrival:
-          index === 0 && route.status === 'in_progress'
-            ? new Date().toISOString()
-            : null,
-        actualDeparture: null,
-        notes: null,
-      }));
+      const routeStatus = String(route.status || '').toLowerCase();
+      const routeCompleted = routeStatus === 'completed';
+      const stops = (route.optimizedStops || []).map((_stop, index) => {
+        const job = previewState.jobs.find((item) => item.id === route.jobIds[index]);
+        const signatureRequirement =
+          (index === route.jobIds.length - 1 ? 'required' : 'not_required') as
+            | 'required'
+            | 'not_required';
+        return {
+          id: `${route.id}-stop-${index + 1}`,
+          stopSequence: index + 1,
+          status:
+            routeCompleted
+              ? 'SERVICED'
+              : index === 0 && routeStatus === 'in_progress'
+                ? 'ARRIVED'
+                : 'PENDING',
+          plannedArrival: null,
+          actualArrival:
+            routeCompleted
+              ? route.dispatchedAt || route.completedAt || route.createdAt || new Date().toISOString()
+              : index === 0 && routeStatus === 'in_progress'
+              ? new Date().toISOString()
+              : null,
+          actualDeparture: routeCompleted ? route.completedAt || new Date().toISOString() : null,
+          notes: null,
+          presentation: {
+            customerName: job?.customerName || `Preview customer ${index + 1}`,
+            customerPhone: null,
+            customerEmail: null,
+            address: _stop.address || job?.deliveryAddress || 'Address pending',
+            location: _stop.location || null,
+            instructions: index === 0 ? 'Use the loading dock entrance.' : null,
+            timeWindowStart: null,
+            timeWindowEnd: null,
+          },
+          proofRequirements: {
+            signature: signatureRequirement,
+            bol: 'optional' as const,
+            documents: 'optional' as const,
+          },
+          proofStatus: {
+            proofRequired: index === route.jobIds.length - 1,
+            proofCaptured: false,
+            signatureCaptured: false,
+            bolCaptured: false,
+            documentsCaptured: false,
+            bolSkipped: false,
+            documentsSkipped: false,
+            requiredProofComplete: index !== route.jobIds.length - 1,
+            proofCount: 0,
+            capturedCount: 0,
+            skippedCount: 0,
+            signatureProofId: null,
+            bolProofIds: [],
+            documentProofIds: [],
+          },
+        };
+      });
+      const completedStops = stops.filter((stop) =>
+        ['SERVICED', 'FAILED', 'SKIPPED'].includes(String(stop.status).toUpperCase()),
+      ).length;
 
       return {
         routeRun: {
@@ -181,6 +343,13 @@ const buildPreviewManifest = async (): Promise<DriverManifestRecord> => {
           vehicleId: route.vehicleId || null,
         },
         stops,
+        nextStop:
+          stops.find(
+            (stop) =>
+              !['SERVICED', 'FAILED', 'SKIPPED'].includes(
+                String(stop.status).toUpperCase(),
+              ),
+          ) || null,
         vehicle: vehicle
           ? {
               id: vehicle.id,
@@ -201,9 +370,19 @@ const buildPreviewManifest = async (): Promise<DriverManifestRecord> => {
           : null,
         progress: {
           totalStops: stops.length,
-          completedStops: 0,
-          remainingStops: stops.length,
-          nextStopId: stops[0]?.id || null,
+          completedStops,
+          remainingStops: Math.max(stops.length - completedStops, 0),
+          nextStopId:
+            stops.find(
+              (stop) =>
+                !['SERVICED', 'FAILED', 'SKIPPED'].includes(
+                  String(stop.status).toUpperCase(),
+                ),
+            )?.id || null,
+        },
+        messageSummary: {
+          unreadCount: route.status === 'in_progress' ? 1 : 0,
+          lastMessageAt: route.status === 'in_progress' ? new Date().toISOString() : null,
         },
       };
     }),

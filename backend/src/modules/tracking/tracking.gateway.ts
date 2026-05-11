@@ -10,8 +10,11 @@ import {
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { InjectRepository } from '@nestjs/typeorm';
 import { Server, Socket } from 'socket.io';
 import { Interval } from '@nestjs/schedule';
+import { Repository } from 'typeorm';
+import { AuthSession } from '../auth/entities/auth-session.entity';
 import { TrackingService, VehicleLocation } from './tracking.service';
 import { createCorsOriginValidator } from '../../common/http/cors-origin.util';
 import {
@@ -42,6 +45,8 @@ export class TrackingGateway
   constructor(
     private readonly trackingService: TrackingService,
     private readonly jwtService: JwtService,
+    @InjectRepository(AuthSession)
+    private readonly authSessions: Repository<AuthSession>,
   ) {}
 
   private emitToOrganization(
@@ -71,7 +76,11 @@ export class TrackingGateway
   async handleConnection(client: Socket) {
     let organizationId: string;
     try {
-      const auth = await authenticateSocket(this.jwtService, client);
+      const auth = await authenticateSocket(
+        this.jwtService,
+        client,
+        this.authSessions,
+      );
       client.data.auth = auth;
       organizationId = auth.organizationId;
       client.join(socketOrganizationRoom('tracking', organizationId));
@@ -350,7 +359,7 @@ export class TrackingGateway
         heading: data.heading,
         timestamp: data.timestamp,
         organizationId: auth.organizationId,
-      });
+      }, auth);
 
       this.emitToOrganization(auth.organizationId, 'vehicle:location-update', {
         vehicleId: persisted.vehicleId,

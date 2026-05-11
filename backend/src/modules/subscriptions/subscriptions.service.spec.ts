@@ -34,6 +34,10 @@ describe('SubscriptionsService', () => {
     } as any;
   }
 
+  function createService(subscriptionRepo: any, config: ConfigService, webhookRepo = createRepo()) {
+    return new SubscriptionsService(subscriptionRepo, webhookRepo, config);
+  }
+
   it('reports billing readiness truthfully when Stripe is not configured', async () => {
     const repo = createRepo([
       {
@@ -57,7 +61,7 @@ describe('SubscriptionsService', () => {
       },
     } as ConfigService;
 
-    const service = new SubscriptionsService(repo, config);
+    const service = createService(repo, config);
     const plans = service.getPlanCatalog();
     const overview = await service.getBillingOverview({
       userId: 'user-1',
@@ -102,7 +106,7 @@ describe('SubscriptionsService', () => {
     const config = {
       get: () => undefined,
     } as unknown as ConfigService;
-    const service = new SubscriptionsService(repo, config);
+    const service = createService(repo, config);
 
     const subscriptions = await service.getCustomerSubscriptions('user-1', 'org-1');
     const visibleSubscription = await service.getSubscription('sub-org-1', 'org-1');
@@ -114,5 +118,43 @@ describe('SubscriptionsService', () => {
     await expect(service.getSubscription('sub-org-2', 'org-1')).rejects.toThrow(
       'Subscription sub-org-2 not found',
     );
+  });
+
+  it('records processed Stripe webhook IDs and ignores duplicates', async () => {
+    const subscriptionRepo = createRepo([
+      {
+        id: 'sub-1',
+        organizationId: 'org-1',
+        stripeSubscriptionId: 'stripe_sub_123',
+        status: SubscriptionStatus.PAST_DUE,
+      },
+    ]);
+    const webhookRepo = createRepo();
+    const config = {
+      get: (key: string) => (key === 'STRIPE_SECRET_KEY' ? 'sk_test_configured' : undefined),
+    } as ConfigService;
+    const service = createService(subscriptionRepo, config, webhookRepo);
+
+    await service.handleWebhookEvent({
+      id: 'evt_123',
+      type: 'invoice.payment_succeeded',
+      livemode: false,
+      data: { object: { subscription: 'stripe_sub_123' } },
+    } as any);
+    await service.handleWebhookEvent({
+      id: 'evt_123',
+      type: 'invoice.payment_succeeded',
+      livemode: false,
+      data: { object: { subscription: 'stripe_sub_123' } },
+    } as any);
+
+    const subscription = await subscriptionRepo.findOne({
+      where: { stripeSubscriptionId: 'stripe_sub_123' },
+    });
+    const webhookEvents = await webhookRepo.find();
+
+    expect(subscription.status).toBe(SubscriptionStatus.ACTIVE);
+    expect(webhookEvents).toHaveLength(1);
+    expect(webhookEvents[0].processedAt).toBeInstanceOf(Date);
   });
 });

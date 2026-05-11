@@ -35,6 +35,8 @@ services:
           name: trovan-routing-service
           type: web
           property: hostport
+      - key: ROUTING_SERVICE_INTERNAL_TOKEN
+        sync: false
       - key: FRONTEND_URL
         sync: false
       - key: CORS_ORIGINS
@@ -103,6 +105,12 @@ services:
     envVars:
       - key: LOG_LEVEL
         value: INFO
+      - key: ROUTING_SERVICE_ENV
+        value: production
+      - key: ROUTING_SERVICE_INTERNAL_TOKEN
+        sync: false
+      - key: ROUTING_SERVICE_MAX_BODY_BYTES
+        value: "1048576"
       - key: CORS_ORIGINS
         sync: false
 

@@ -1,0 +1,36 @@
+name: TrovanDriver
+options:
+  bundleIdPrefix: com.trovan.routing
+  deploymentTarget:
+    iOS: "17.0"
+settings:
+  base:
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "5.0"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+targets:
+  TrovanDriver:
+    type: application
+    platform: iOS
+    sources:
+      - path: TrovanDriver
+    resources:
+      - path: TrovanDriver/Assets.xcassets
+    info:
+      path: TrovanDriver/Info.plist
+      properties:
+        CFBundleDisplayName: Trovan Driver
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoadsInWebContent: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.trovan.routing.driver
+        PRODUCT_NAME: Trovan Driver
+        INFOPLIST_FILE: TrovanDriver/Info.plist

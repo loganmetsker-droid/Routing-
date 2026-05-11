@@ -2,7 +2,14 @@ import { Suspense, lazy, useEffect, useState } from 'react';
 import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import Layout from './components/Layout';
-import { clearAuthSession, isAuthenticated, validateSession } from './services/api';
+import {
+  clearAuthSession,
+  getSession,
+  isDriverOnlyAuthUser,
+  isAuthBypassed,
+  isAuthenticated,
+  validateSession,
+} from './services/api';
 import ErrorBoundary from './components/ui/ErrorBoundary';
 
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -23,14 +30,22 @@ const DriverWorkspacePage = lazy(() => import('./pages/DriverWorkspacePage'));
 const DriverRouteRunPage = lazy(() => import('./pages/DriverRouteRunPage'));
 const PublicTrackingPage = lazy(() => import('./pages/PublicTrackingPage'));
 
-function AuthGate({ children }: { children: React.ReactNode }) {
+function AuthGate({
+  children,
+  redirectDriverOnly = false,
+}: {
+  children: React.ReactNode;
+  redirectDriverOnly?: boolean;
+}) {
   const location = useLocation();
   const [checking, setChecking] = useState(true);
   const [valid, setValid] = useState(false);
+  const [redirectTo, setRedirectTo] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     const check = async () => {
+      setRedirectTo(null);
       if (!isAuthenticated()) {
         if (!cancelled) {
           setValid(false);
@@ -40,6 +55,15 @@ function AuthGate({ children }: { children: React.ReactNode }) {
       }
 
       const ok = await validateSession();
+      if (ok && redirectDriverOnly) {
+        const session = await getSession().catch(() => null);
+        if (!cancelled && isDriverOnlyAuthUser(session?.user)) {
+          setRedirectTo('/driver');
+          setValid(true);
+          setChecking(false);
+          return;
+        }
+      }
       if (!cancelled) {
         setValid(ok);
         setChecking(false);
@@ -65,12 +89,16 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
+  if (redirectTo) {
+    return <Navigate to={redirectTo} replace state={{ from: location }} />;
+  }
+
   return <>{children}</>;
 }
 
 function ProtectedLayout() {
   return (
-    <AuthGate>
+    <AuthGate redirectDriverOnly>
       <ErrorBoundary
         title="Workspace Failed To Render"
         message="The operator shell hit a rendering problem. Reload to recover and check the desktop or browser logs if this repeats."
@@ -82,8 +110,43 @@ function ProtectedLayout() {
 }
 
 function LoginRoute() {
-  if (isAuthenticated()) {
-    return <Navigate to="/" replace />;
+  const [redirectTo, setRedirectTo] = useState<string | null>(null);
+  const [checking, setChecking] = useState(() => !isAuthBypassed() && isAuthenticated());
+
+  useEffect(() => {
+    let cancelled = false;
+    const resolveRedirect = async () => {
+      if (isAuthBypassed() || !isAuthenticated()) {
+        if (!cancelled) {
+          setChecking(false);
+          setRedirectTo(null);
+        }
+        return;
+      }
+      const session = await getSession().catch(() => null);
+      if (!cancelled) {
+        setRedirectTo(isDriverOnlyAuthUser(session?.user) ? '/driver' : '/');
+        setChecking(false);
+      }
+    };
+    void resolveRedirect();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (isAuthBypassed()) {
+    return <LoginPage />;
+  }
+  if (checking) {
+    return (
+      <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center' }}>
+        <CircularProgress size={28} />
+      </Box>
+    );
+  }
+  if (redirectTo) {
+    return <Navigate to={redirectTo} replace />;
   }
   return <LoginPage />;
 }

@@ -42,10 +42,13 @@ export function clearAuthToken() {
   setAuthToken(null);
 }
 
-function buildHeaders(init?: HeadersInit): Headers {
-  const headers = new Headers(init);
+function buildHeaders(init: RequestInit = {}): Headers {
+  const headers = new Headers(init.headers);
+  const body = init.body;
+  const isFormData =
+    typeof FormData !== 'undefined' && body instanceof FormData;
 
-  if (!headers.has('Content-Type')) {
+  if (!headers.has('Content-Type') && !isFormData) {
     headers.set('Content-Type', 'application/json');
   }
 
@@ -88,7 +91,7 @@ export async function apiFetchResponse(
   try {
     response = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
-      headers: buildHeaders(init.headers),
+      headers: buildHeaders(init),
       credentials: 'include',
       signal: controller.signal,
     });

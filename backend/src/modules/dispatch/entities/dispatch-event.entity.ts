@@ -11,6 +11,7 @@ export type DispatchEventLevel = 'info' | 'warning' | 'error';
 export type DispatchAggregateType = 'ROUTE' | 'JOB' | 'VEHICLE' | 'ROUTE_VERSION';
 
 @Entity('dispatch_events')
+@Index(['organizationId', 'createdAt'])
 @Index(['routeId', 'createdAt'])
 @Index(['source', 'createdAt'])
 @Index(['reasonCode', 'createdAt'])
@@ -20,6 +21,9 @@ export type DispatchAggregateType = 'ROUTE' | 'JOB' | 'VEHICLE' | 'ROUTE_VERSION
 export class DispatchEvent {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  @Column({ name: 'organization_id', type: 'uuid', nullable: true })
+  organizationId?: string | null;
 
   @Column({ name: 'route_id', type: 'uuid', nullable: true })
   routeId?: string | null;

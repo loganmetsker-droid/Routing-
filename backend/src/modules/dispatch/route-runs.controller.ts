@@ -1,13 +1,32 @@
-import { Body, Controller, Get, Param, Patch, Post, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Header,
+  Param,
+  Patch,
+  Post,
+  Req,
+  Res,
+  StreamableFile,
+  UploadedFile,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
+import { buildInlineContentDisposition } from '../../common/http/content-disposition.util';
 import { RouteRunsService } from './route-runs.service';
 import {
   CreateDispatchExceptionDto,
   ReassignRouteRunDto,
+  RouteRunMessageDto,
   StopNoteDto,
+  StopProofDecisionDto,
   StopProofDto,
+  StopProofFileDto,
   StopReasonDto,
   UpdateDispatchExceptionDto,
 } from './dto/route-run-actions.dto';
@@ -21,6 +40,13 @@ type AuthenticatedRequest = {
   };
 };
 
+type UploadedProofFile = {
+  originalname?: string;
+  mimetype?: string;
+  size?: number;
+  buffer?: Buffer;
+};
+
 @ApiTags('dispatch', 'route-runs', 'exceptions')
 @Controller()
 @ApiBearerAuth('JWT-auth')
@@ -32,15 +58,37 @@ export class RouteRunsController {
   board(@Req() req: AuthenticatedRequest) { return this.routeRuns.board(req.user); }
 
   @Get('route-runs')
-  @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'VIEWER', 'DRIVER')
+  @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'VIEWER')
   list(@Req() req: AuthenticatedRequest) { return this.routeRuns.list(req.user); }
 
   @Get('route-runs/:id')
   @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'VIEWER', 'DRIVER')
   detail(@Req() req: AuthenticatedRequest, @Param('id') routeId: string) { return this.routeRuns.detail(routeId, req.user); }
 
-  @Post('route-runs/:id/share-link')
+  @Get('route-runs/:id/messages')
+  @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'VIEWER', 'DRIVER')
+  messages(@Req() req: AuthenticatedRequest, @Param('id') routeId: string) {
+    return this.routeRuns.listRouteMessages(routeId, req.user);
+  }
+
+  @Post('route-runs/:id/messages')
   @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'DRIVER')
+  createMessage(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') routeId: string,
+    @Body() body: RouteRunMessageDto,
+  ) {
+    return this.routeRuns.createRouteMessage(routeId, body, req.user);
+  }
+
+  @Post('route-runs/:id/messages/read')
+  @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'VIEWER', 'DRIVER')
+  markMessagesRead(@Req() req: AuthenticatedRequest, @Param('id') routeId: string) {
+    return this.routeRuns.markRouteMessagesRead(routeId, req.user);
+  }
+
+  @Post('route-runs/:id/share-link')
+  @Roles('OWNER', 'ADMIN', 'DISPATCHER')
   shareLink(@Req() req: AuthenticatedRequest, @Param('id') routeId: string) {
     return this.routeRuns.createPublicTrackingLink(routeId, req.user);
   }
@@ -62,11 +110,11 @@ export class RouteRunsController {
   dispatch(@Req() req: AuthenticatedRequest, @Param('id') routeId: string) { return this.routeRuns.dispatchRoute(routeId, req.user); }
 
   @Post('route-runs/:id/start')
-  @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'DRIVER')
+  @Roles('OWNER', 'ADMIN', 'DISPATCHER')
   start(@Req() req: AuthenticatedRequest, @Param('id') routeId: string) { return this.routeRuns.startRoute(routeId, req.user); }
 
   @Post('route-runs/:id/complete')
-  @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'DRIVER')
+  @Roles('OWNER', 'ADMIN', 'DISPATCHER')
   complete(@Req() req: AuthenticatedRequest, @Param('id') routeId: string) { return this.routeRuns.completeRoute(routeId, req.user); }
 
   @Post('route-runs/:id/reassign')
@@ -106,6 +154,52 @@ export class RouteRunsController {
   @Post('route-run-stops/:id/proof')
   @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'DRIVER')
   proof(@Req() req: AuthenticatedRequest, @Param('id') stopId: string, @Body() body: StopProofDto) { return this.routeRuns.addProof(stopId, body, req.user); }
+
+  @Post('route-run-stops/:id/proof-file')
+  @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'DRIVER')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 15 * 1024 * 1024 } }))
+  proofFile(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') stopId: string,
+    @Body() body: StopProofFileDto,
+    @UploadedFile() file?: UploadedProofFile,
+  ) {
+    return this.routeRuns.addProofFile(stopId, body, file, req.user);
+  }
+
+  @Post('route-run-stops/:id/proof-decision')
+  @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'DRIVER')
+  proofDecision(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') stopId: string,
+    @Body() body: StopProofDecisionDto,
+  ) {
+    return this.routeRuns.recordProofDecision(stopId, body, req.user);
+  }
+
+  @Get('proof-artifacts/:id/download')
+  @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'VIEWER', 'DRIVER')
+  @Header('Cache-Control', 'private, max-age=60')
+  async downloadProof(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') proofId: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const file = await this.routeRuns.getProofArtifactDownload(proofId, req.user);
+    response.setHeader('Content-Type', file.contentType);
+    response.setHeader(
+      'Content-Disposition',
+      buildInlineContentDisposition(file.filename),
+    );
+    response.setHeader('X-Content-Type-Options', 'nosniff');
+    if (file.size !== undefined) {
+      response.setHeader('Content-Length', String(file.size));
+    }
+    if (Buffer.isBuffer(file.body)) {
+      return new StreamableFile(file.body);
+    }
+    return new StreamableFile(file.body);
+  }
 
   @Post('route-run-stops/:id/note')
   @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'DRIVER')

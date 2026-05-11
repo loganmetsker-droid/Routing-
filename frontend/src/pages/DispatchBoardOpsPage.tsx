@@ -36,6 +36,7 @@ import {
   useMoveDispatchStopMutation,
   useReassignRouteRunMutation,
   useReorderDispatchStopsMutation,
+  useRouteRunMessagesQuery,
   useStartRouteRunMutation,
 } from '../features/dispatch/api/routeRunsApi';
 import { buildDispatchMapRoutes } from '../features/dispatch/utils/opsMapData';
@@ -184,6 +185,10 @@ export default function DispatchBoardOpsPage() {
     orderedRouteLanes.find((item) => item.route.id === selectedRouteId) ||
     orderedRouteLanes[0] ||
     null;
+  const selectedRouteMessagesQuery = useRouteRunMessagesQuery(
+    selectedLane?.route.id || '',
+  );
+  const selectedRouteMessages = selectedRouteMessagesQuery.data?.messages || [];
 
   const mapRoutes = useMemo(
     () =>
@@ -680,6 +685,50 @@ export default function DispatchBoardOpsPage() {
                   </ListItem>
                 ))}
               </List>
+            )}
+          </Box>
+
+          <Box>
+            <Typography variant="h6" sx={{ mb: 0.75 }}>
+              Driver thread
+            </Typography>
+            {selectedRouteMessages.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                No route messages yet.
+              </Typography>
+            ) : (
+              <Stack spacing={0.65}>
+                {selectedRouteMessages.slice(-3).map((message) => (
+                  <Box
+                    key={message.id}
+                    sx={{
+                      px: 1,
+                      py: 0.75,
+                      borderRadius: 1,
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      bgcolor: 'background.paper',
+                    }}
+                  >
+                    <Typography variant="caption" color="text.secondary">
+                      {String(message.senderRole).toUpperCase() === 'DRIVER'
+                        ? 'Driver'
+                        : 'Dispatch'}
+                    </Typography>
+                    <Typography variant="body2" noWrap>
+                      {message.body}
+                    </Typography>
+                  </Box>
+                ))}
+                <Button
+                  component={RouterLink}
+                  to={`/route-runs/${selectedLane.route.id}`}
+                  variant="text"
+                  size="small"
+                >
+                  Open message thread
+                </Button>
+              </Stack>
             )}
           </Box>
         </Stack>

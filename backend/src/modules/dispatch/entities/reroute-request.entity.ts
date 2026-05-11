@@ -33,11 +33,15 @@ export type RerouteRequestStatus =
   | 'cancelled';
 
 @Entity('reroute_requests')
+@Index(['organizationId', 'routeId', 'status'])
 @Index(['routeId', 'status'])
 @Index(['createdAt'])
 export class RerouteRequest {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  @Column({ name: 'organization_id', type: 'uuid', nullable: true })
+  organizationId?: string | null;
 
   @Column({ name: 'route_id', type: 'uuid' })
   routeId: string;

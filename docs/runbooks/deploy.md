@@ -29,6 +29,7 @@ git diff --check
 For the Python routing service, verify in a Python version that supports the pinned OR-Tools package before launch:
 
 ```sh
+python3.11 -m pip install -r routing-service/requirements-dev.txt
 python3.11 -m pytest routing-service/tests
 ```
 

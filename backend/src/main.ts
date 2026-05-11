@@ -14,6 +14,13 @@ import {
 import { requestLoggingMiddleware } from './common/http/request-logging.middleware';
 import { createCorsOriginValidator } from './common/http/cors-origin.util';
 import { isSwaggerEnabled } from './common/http/swagger-enabled.util';
+import {
+  getMissingRuntimeConfig,
+  hasDatabaseConfig,
+  hasQueueConfig,
+  isStrictRuntime,
+} from './common/runtime/runtime-config.util';
+import { isGraphqlEnabled } from './config/graphql.config';
 
 function preloadEnvFiles() {
   const candidates = [
@@ -34,21 +41,6 @@ function preloadEnvFiles() {
   if (!process.env.TROVAN_ENV_SOURCES && loaded.length > 0) {
     process.env.TROVAN_ENV_SOURCES = loaded.join(',');
   }
-}
-
-function hasDatabaseConfig() {
-  return Boolean(
-    process.env.DATABASE_URL ||
-      (process.env.DATABASE_HOST &&
-        process.env.DATABASE_PORT &&
-        process.env.DATABASE_NAME &&
-        process.env.DATABASE_USER &&
-        process.env.DATABASE_PASSWORD),
-  );
-}
-
-function hasQueueConfig() {
-  return Boolean(process.env.REDIS_URL || process.env.REDIS_HOST);
 }
 
 function getConfigSummary() {
@@ -96,32 +88,8 @@ function getConfigSummary() {
 }
 
 function validateRuntimeConfig(logger: Logger) {
-  const strict =
-    String(process.env.STRICT_ENV_VALIDATION || 'false') === 'true' ||
-    !['development', 'test'].includes(process.env.NODE_ENV || 'development');
-
-  const missing: string[] = [];
-  if (!process.env.JWT_SECRET) {
-    missing.push('JWT_SECRET');
-  }
-  if (
-    ['production', 'staging'].includes(process.env.NODE_ENV || '') &&
-    !(
-      process.env.CORS_ORIGINS ||
-      process.env.CORS_ORIGIN ||
-      process.env.FRONTEND_URL
-    )
-  ) {
-    missing.push('CORS_ORIGINS or CORS_ORIGIN or FRONTEND_URL');
-  }
-  if (!hasDatabaseConfig()) {
-    missing.push(
-      'DATABASE_URL or DATABASE_HOST/DATABASE_PORT/DATABASE_NAME/DATABASE_USER/DATABASE_PASSWORD',
-    );
-  }
-  if (String(process.env.QUEUE_REQUIRED || 'false') === 'true' && !hasQueueConfig()) {
-    missing.push('REDIS_URL or REDIS_HOST');
-  }
+  const strict = isStrictRuntime();
+  const missing = getMissingRuntimeConfig();
 
   if (missing.length > 0) {
     const message = `Missing required runtime config: ${missing.join(', ')}`;
@@ -131,14 +99,6 @@ function validateRuntimeConfig(logger: Logger) {
     logger.warn(message);
   }
 
-  if (
-    process.env.NODE_ENV === 'production' &&
-    !String(process.env.METRICS_TOKEN || '').trim()
-  ) {
-    logger.warn(
-      'METRICS_TOKEN is not set; /api/metrics is public unless protected upstream',
-    );
-  }
 }
 
 async function bootstrap() {
@@ -263,7 +223,11 @@ async function bootstrap() {
   } else {
     logger.log('📚 API Documentation: disabled (SWAGGER_ENABLED=false)');
   }
-  logger.log(`🔮 GraphQL Playground: http://${host}:${port}/graphql`);
+  logger.log(
+    isGraphqlEnabled()
+      ? `🔮 GraphQL Playground: http://${host}:${port}/graphql`
+      : '🔮 GraphQL: disabled',
+  );
   logger.log(`❤️  Health Check: http://${host}:${port}/health`);
   logger.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
 }

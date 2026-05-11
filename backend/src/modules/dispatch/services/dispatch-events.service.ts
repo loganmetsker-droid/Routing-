@@ -43,6 +43,7 @@ export class DispatchEventsService {
         payload: event.payload || null,
       });
       const entity = this.dispatchEventRepository.create({
+        organizationId: event.organizationId || null,
         routeId: event.routeId || null,
         aggregateType: event.aggregateType || 'ROUTE',
         aggregateId: event.aggregateId || event.routeId || null,
@@ -70,6 +71,7 @@ export class DispatchEventsService {
   }
 
   async getTimeline(
+    organizationId: string | null | undefined,
     routeId?: string,
     limit = 100,
     filters: DispatchTimelineFilters = {},
@@ -83,6 +85,11 @@ export class DispatchEventsService {
 
     if (routeId) {
       qb.andWhere('event.route_id = :routeId', { routeId });
+    }
+    if (organizationId) {
+      qb.andWhere('event.organization_id = :organizationId', {
+        organizationId,
+      });
     }
     if (normalizedFilters.source) {
       qb.andWhere('event.source = :source', {

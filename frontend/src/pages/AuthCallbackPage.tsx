@@ -3,7 +3,10 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Alert, Box, Card, CardContent, CircularProgress, Stack, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { TopoShellBackground } from '../components/TopoShellBackground';
-import { completeWorkosCallback } from '../services/api.session';
+import {
+  completeWorkosCallback,
+  isDriverOnlyAuthUser,
+} from '../services/api.session';
 import { trovanColors } from '../theme/designTokens';
 
 export default function AuthCallbackPage() {
@@ -26,9 +29,11 @@ export default function AuthCallbackPage() {
       }
 
       try {
-        await completeWorkosCallback(code, invitationToken);
+        const session = await completeWorkosCallback(code, invitationToken);
         if (!cancelled) {
-          navigate('/', { replace: true });
+          navigate(isDriverOnlyAuthUser(session.user) ? '/driver' : '/', {
+            replace: true,
+          });
         }
       } catch (err: unknown) {
         if (!cancelled) {

@@ -3,6 +3,17 @@ import { ConfigService } from '@nestjs/config';
 import { ApolloDriverConfig } from '@nestjs/apollo';
 import { join } from 'path';
 
+export function isGraphqlEnabled(
+  env: Partial<Pick<NodeJS.ProcessEnv, 'GRAPHQL_ENABLED' | 'NODE_ENV'>> = process.env,
+) {
+  const explicit = String(env.GRAPHQL_ENABLED || '').trim().toLowerCase();
+  if (explicit) {
+    return explicit === 'true' || explicit === '1';
+  }
+
+  return ['development', 'test'].includes(env.NODE_ENV || 'development');
+}
+
 export const graphqlConfig = (
   configService: ConfigService,
 ): ApolloDriverConfig => ({
@@ -15,8 +26,12 @@ export const graphqlConfig = (
   sortSchema: true,
 
   // GraphQL Playground
-  playground: configService.get('NODE_ENV') !== 'production',
-  introspection: configService.get('NODE_ENV') !== 'production',
+  playground: ['development', 'test'].includes(
+    configService.get('NODE_ENV') || 'development',
+  ),
+  introspection: ['development', 'test'].includes(
+    configService.get('NODE_ENV') || 'development',
+  ),
 
   // Context - include request for auth
   context: ({ req, res }: { req: Request; res: Response }) => ({ req, res }),

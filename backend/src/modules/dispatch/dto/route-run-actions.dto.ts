@@ -1,11 +1,18 @@
+import { Transform } from 'class-transformer';
 import {
+  IsBoolean,
   IsIn,
   IsObject,
   IsOptional,
   IsString,
   IsUUID,
   Length,
+  Matches,
 } from 'class-validator';
+
+function trimString({ value }: { value: unknown }) {
+  return typeof value === 'string' ? value.trim() : value;
+}
 
 export class ReassignRouteRunDto {
   @IsOptional()
@@ -42,10 +49,51 @@ export class StopProofDto {
   metadata?: Record<string, unknown>;
 }
 
+export class StopProofFileDto {
+  @IsIn(['BOL', 'DOCUMENT'])
+  type: 'BOL' | 'DOCUMENT';
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 4000)
+  metadata?: string;
+}
+
+export class StopProofDecisionDto {
+  @IsIn(['BOL', 'DOCUMENTS'])
+  type: 'BOL' | 'DOCUMENTS';
+
+  @IsBoolean()
+  @Transform(({ value }) => {
+    if (value === 'false') return false;
+    if (value === 'true') return true;
+    return value;
+  })
+  required: boolean;
+
+  @IsOptional()
+  @IsString()
+  @Length(1, 500)
+  @Transform(trimString)
+  reason?: string;
+}
+
 export class StopNoteDto {
   @IsString()
   @Length(1, 2000)
   note: string;
+}
+
+export class RouteRunMessageDto {
+  @IsString()
+  @Length(1, 2000)
+  @Transform(trimString)
+  @Matches(/\S/, { message: 'body must not be blank' })
+  body: string;
+
+  @IsOptional()
+  @IsUUID()
+  routeRunStopId?: string;
 }
 
 export class CreateDispatchExceptionDto {

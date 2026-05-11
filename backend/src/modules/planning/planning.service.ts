@@ -33,7 +33,10 @@ import { RoutePlanStop } from './entities/route-plan-stop.entity';
 import { GenerateRoutePlanDto } from './dto/generate-route-plan.dto';
 import { UpdateRoutePlanGroupDto } from './dto/update-route-plan-group.dto';
 import { UpdateRoutePlanStopDto } from './dto/update-route-plan-stop.dto';
-import { resolveRoutingServiceUrl } from '../../common/routing/routing-service-url.util';
+import {
+  resolveRoutingServiceUrl,
+  routingServiceAuthHeaders,
+} from '../../common/routing/routing-service-url.util';
 
 type Actor = {
   userId?: string;
@@ -395,6 +398,7 @@ export class PlanningService {
     const response = (await firstValueFrom(
       this.httpService.post<OptimizeResponse>(requestUrl, request, {
         timeout: 60_000,
+        headers: routingServiceAuthHeaders(this.configService),
       }) as any,
     )) as { data?: OptimizeResponse };
     const data = response?.data as OptimizeResponse;

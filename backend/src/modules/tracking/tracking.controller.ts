@@ -19,6 +19,7 @@ import { TelemetryIngestDto } from './dto/telemetry-ingest.dto';
 type AuthenticatedRequest = {
   user?: {
     userId?: string;
+    email?: string;
     organizationId?: string;
     role?: string;
     roles?: string[];
@@ -85,7 +86,7 @@ export class TrackingController {
       telemetry: await this.trackingService.ingestTelemetry({
         ...body,
         organizationId,
-      }),
+      }, req.user),
     };
   }
 

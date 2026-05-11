@@ -7,6 +7,19 @@ export class BackfillRouteVersionsForExistingRoutes1741900100000
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
+      ALTER TABLE routes
+      ADD COLUMN IF NOT EXISTS job_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+      ADD COLUMN IF NOT EXISTS route_data jsonb NULL,
+      ADD COLUMN IF NOT EXISTS total_distance_km decimal(10,2) NULL,
+      ADD COLUMN IF NOT EXISTS total_duration_minutes decimal(10,2) NULL,
+      ADD COLUMN IF NOT EXISTS job_count int NOT NULL DEFAULT 0,
+      ADD COLUMN IF NOT EXISTS planned_start timestamptz NULL,
+      ADD COLUMN IF NOT EXISTS actual_start timestamptz NULL,
+      ADD COLUMN IF NOT EXISTS notes text NULL,
+      ADD COLUMN IF NOT EXISTS deleted_at timestamptz NULL;
+    `);
+
+    await queryRunner.query(`
       INSERT INTO route_versions (
         route_id,
         version_number,
