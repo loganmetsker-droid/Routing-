@@ -14,7 +14,8 @@ const authToken =
 const authHeaders = authToken ? { Authorization: `Bearer ${authToken}` } : {};
 
 const primaryRoutes = [
-  { slug: 'dashboard', path: '/' },
+  { slug: 'public-launch', path: '/' },
+  { slug: 'dashboard', path: '/dashboard' },
   { slug: 'jobs', path: '/jobs' },
   { slug: 'routing', path: '/routing' },
   { slug: 'dispatch', path: '/dispatch' },
@@ -236,6 +237,43 @@ async function clickAuditableControls(page: Page, routePath: string) {
 }
 
 test.describe('launch UI audit', () => {
+  test('public launch route audit flow is interactive', async ({ page }) => {
+    await gotoReady(page, '/');
+
+    await expect(page.getByRole('heading', { name: /Find the wasted miles/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Get a routing audit/i }).first()).toBeVisible();
+    await expect(page.getByLabel(/Route audit preview/i)).toBeVisible();
+
+    await page.getByRole('button', { name: '36-75' }).click();
+    await page.getByRole('button', { name: '250' }).click();
+    await page.getByLabel(/Biggest routing pain/i).click();
+    await page.getByRole('option', { name: /Customer ETAs/i }).click();
+
+    await expect(page.getByText(/Customer update gaps/i)).toBeVisible();
+    await expect(page.getByText(/High/i)).toBeVisible();
+
+    await page.getByRole('button', { name: /Build my audit/i }).click();
+    await expect(page.getByRole('dialog', { name: /Get a Trovan routing audit/i })).toBeVisible();
+    await page.getByLabel(/Work email/i).fill('ops@example.com');
+    await page.getByLabel(/Company/i).fill('Example Delivery');
+    await page.getByLabel(/Current planning method/i).fill('Spreadsheet and map tabs');
+    await page.getByRole('button', { name: /Request route audit/i }).click();
+    await expect(page.getByText(/Routing audit request captured locally/i)).toBeVisible();
+  });
+
+  test('public launch product proof tabs change content', async ({ page }) => {
+    await gotoReady(page, '/');
+
+    await page.getByRole('tab', { name: 'Dispatch' }).click();
+    await expect(page.getByText(/Keep route execution visible/i)).toBeVisible();
+
+    await page.getByRole('tab', { name: 'Drive' }).click();
+    await expect(page.getByText(/focused mobile route flow/i)).toBeVisible();
+
+    await page.getByRole('tab', { name: 'Track' }).click();
+    await expect(page.getByText(/Reduce customer where-is-it calls/i)).toBeVisible();
+  });
+
   test('renders every primary route on desktop and mobile with inventory evidence', async ({ page }) => {
     ensureAuditRoot();
     const issues: AuditIssue[] = [];
