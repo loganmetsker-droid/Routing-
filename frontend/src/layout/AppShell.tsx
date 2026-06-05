@@ -412,6 +412,7 @@ export function AppShell({ onLogout, children }: AppShellProps) {
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
             <IconButton
+              aria-label="Open workspace navigation"
               onClick={() => setMobileOpen(true)}
               sx={{
                 display: { xs: 'inline-flex', md: 'none' },
@@ -426,6 +427,7 @@ export function AppShell({ onLogout, children }: AppShellProps) {
               <MenuOutlinedIcon fontSize="small" />
             </IconButton>
             <IconButton
+              aria-label={desktopCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
               onClick={toggleDesktopCollapsed}
               sx={{
                 display: { xs: 'none', md: 'inline-flex' },

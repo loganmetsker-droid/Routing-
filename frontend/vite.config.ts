@@ -24,6 +24,7 @@ export default defineConfig(({ mode }) => {
   const frontendPort = Number(
     env.FRONTEND_PORT || env.VITE_FRONTEND_PORT || '5184',
   );
+  const productionSourcemaps = isTruthy(env.VITE_ENABLE_PRODUCTION_SOURCEMAPS);
 
   return {
     plugins: [react()],
@@ -60,7 +61,7 @@ export default defineConfig(({ mode }) => {
       strictPort: true,
     },
     build: {
-      sourcemap: true,
+      sourcemap: mode === 'production' ? productionSourcemaps : true,
       chunkSizeWarningLimit: 650,
       rollupOptions: {
         output: {

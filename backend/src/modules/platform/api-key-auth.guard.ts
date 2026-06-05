@@ -19,16 +19,26 @@ export class ApiKeyAuthGuard implements CanActivate {
 
     const headerKey = request.headers['x-api-key'];
     const authHeader = request.headers.authorization;
-    const rawKey = Array.isArray(headerKey)
-      ? headerKey[0]
-      : typeof headerKey === 'string'
-        ? headerKey
-        : typeof authHeader === 'string' && authHeader.startsWith('Bearer ')
-          ? authHeader.slice('Bearer '.length)
-          : '';
+    const rawKey = (() => {
+      const fromHeader = Array.isArray(headerKey)
+        ? headerKey.find((entry) => typeof entry === 'string')
+        : typeof headerKey === 'string'
+          ? headerKey
+          : null;
+      if (fromHeader) return fromHeader.trim();
+
+      if (typeof authHeader !== 'string') return '';
+      const match = authHeader.trim().match(/^Bearer\s+(.+)$/i);
+      return (match?.[1] || '').trim();
+    })();
 
     if (!rawKey) {
       throw new UnauthorizedException('Missing API key');
+    }
+
+    // Avoid passing arbitrary large headers to DB/auth logic.
+    if (rawKey.length > 512) {
+      throw new UnauthorizedException('Invalid API key');
     }
 
     const apiKey = await this.platformService.authenticateApiKey(rawKey);

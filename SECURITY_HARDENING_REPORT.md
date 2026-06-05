@@ -3,6 +3,588 @@
 Date: 2026-04-27
 Scope: local security and reliability audit of `/Users/logan/Desktop/Routing`
 
+## Daily Pass: 2026-06-01
+
+### Summary Of Risks Found
+
+- Reliability/misconfiguration risk: `TRUST_PROXY` accepted arbitrary hop counts. Extremely large values can unintentionally widen trust in `X-Forwarded-*` headers (client IP/proto) beyond the intended proxy topology.
+- Security hardening note (not changed in this pass): the frontend currently stores an auth token in `localStorage` (`AUTH_TOKEN_KEY=authToken`), which increases the impact of any XSS bug; prefer httpOnly cookies long-term.
+
+### Changes Made
+
+- Clamped `TRUST_PROXY` hop counts to a conservative maximum (10) to reduce accidental over-trust while preserving the intended “hop count” configuration mode.
+- Added a focused unit test covering the clamp behavior.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/common/http/trust-proxy.util.ts`
+- `backend/src/common/http/trust-proxy.util.spec.ts`
+
+### Checks And Commands Run
+
+- `npm run test --workspace=backend -- trust-proxy.util --reporter verbose`
+- `npm run build --workspace=backend`
+- `npm audit --audit-level=high`
+  - Failed: `getaddrinfo ENOTFOUND registry.npmjs.org` (network restricted) and npm could not write logs to `/Users/logan/.npm/_logs`.
+
+## Daily Pass: 2026-05-30
+
+### Summary Of Risks Found
+
+- Reliability/log-amplification risk: when `LOG_REQUEST_BODIES=true`, the request-body sanitizer could attempt to JSON-serialize binary-like payloads (ex: `Buffer`, `Uint8Array`) or extremely large strings/arrays, potentially producing huge log lines and unnecessary CPU/memory pressure during abuse or misconfiguration scenarios.
+
+### Changes Made
+
+- Treated binary-like bodies as `[BINARY]` to avoid accidental serialization into logs.
+- Added conservative caps for large strings and arrays during request-body sanitization so oversized values become `[TRUNCATED]` instead of ballooning logs.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/common/http/request-logging.middleware.ts`
+- `backend/src/common/http/request-logging.middleware.spec.ts`
+
+### Checks And Commands Run
+
+- `npm run test --workspace=backend -- request-logging.middleware --reporter verbose`
+  - Passed (10 tests).
+- `npm run build --workspace=backend`
+  - Passed (`nest build`).
+
+## Daily Pass: 2026-05-28
+
+### Summary Of Risks Found
+
+- The primary JWT auth surface accepted arbitrarily large `Authorization: Bearer ...` header values. Extremely long bearer tokens can amplify memory/CPU costs (parsing/base64) before signature validation and add avoidable reliability noise during abuse scenarios.
+- Local automation/artifact directories (`.codex/`, `.artifacts/`) were not ignored, increasing the risk of accidentally committing local-only outputs (which can include security-relevant logs or environment hints).
+
+### Changes Made
+
+- Added a strict length cap (4096 chars) for extracted JWT bearer tokens in `JwtStrategy` so overlong tokens fail closed before verification.
+- Added focused unit tests for the extractor behavior.
+- Updated `.gitignore` to ignore `.codex/` and `.artifacts/` directories.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/modules/auth/strategies/jwt.strategy.ts`
+- `backend/src/modules/auth/strategies/jwt.strategy.spec.ts`
+- `.gitignore`
+
+### Checks And Commands Run
+
+- `npm run test --workspace=backend -- jwt.strategy`
+  - Passed (3 tests).
+- `npm run build --workspace=backend`
+  - Passed (`nest build`).
+
+### Remaining Risks
+
+- Other authentication entry points (ex: WebSocket handshake headers, future auth middleware) could still parse large presented tokens if they implement custom extraction outside `JwtStrategy`; consider standardizing token extraction helpers across surfaces.
+
+### Recommended Next Actions
+
+1. Add request size limits for JSON bodies on public/auth endpoints (to reduce abuse/DoS surfaces independent of auth).
+2. Consider applying similar presented-token length caps for Socket.IO authentication and any bearer-style query param flows (if/when introduced).
+
+### Addendum (Later 2026-05-28): CORS Localhost In Staging
+
+#### Summary Of Risks Found
+
+- `createCorsOriginValidator()` implicitly allowed loopback (`localhost` / `127.0.0.1` / `*.localhost`) origins for any non-production `NODE_ENV`. In staging-like environments this can unintentionally allow credentialed cross-origin requests from `localhost` when a user has an active session cookie for the API domain.
+
+#### Changes Made
+
+- Limited implicit localhost CORS allowances to `NODE_ENV=development` / `test` only; staging-like environments now require an explicit `CORS_ORIGINS` allowlist entry for any localhost-based debugging.
+
+#### Files Changed By This Addendum
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/common/http/cors-origin.util.ts`
+- `backend/src/common/http/cors-origin.util.spec.ts`
+
+#### Checks And Commands Run
+
+- `cd backend && ../node_modules/.bin/vitest run --config vitest.config.ts cors-origin.util --reporter verbose`
+  - Passed (9 tests).
+- `npm run build --workspace=backend`
+  - Passed (`nest build`).
+
+## Daily Pass: 2026-05-29
+
+### Summary Of Risks Found
+
+- The Socket.IO authentication surface (`handshake.auth`, headers, or query string) accepted arbitrarily large bearer tokens before attempting JWT verification. Very large presented tokens can amplify CPU/memory work (regex/trim/base64 parsing) and add avoidable reliability noise during abuse scenarios.
+- The public tracking link surface (`GET /public/tracking/:token`) verified a JWT presented in a URL path segment without an explicit length cap, re-introducing the same “overlong presented token” reliability risk on a public endpoint (even though request logging redacts the token from logs).
+
+### Changes Made
+
+- Applied the same strict presented-token length cap (4096 chars) used by the primary JWT strategy to:
+  - Socket.IO bearer token extraction (`authenticateSocket()` / `extractSocketBearerToken()`).
+  - Public tracking JWT verification (`RouteRunsService.getPublicTracking()`).
+- Added focused unit tests ensuring overlong tokens fail closed *before* JWT verification is attempted.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/common/websocket/socket-auth.util.ts`
+- `backend/src/common/websocket/socket-auth.util.spec.ts`
+- `backend/src/modules/dispatch/route-runs.service.ts`
+- `backend/src/modules/dispatch/route-runs.service.spec.ts`
+
+### Checks And Commands Run
+
+- `npm run test --workspace=backend -- socket-auth.util --reporter verbose`
+  - Passed (10 tests).
+- `npm run test --workspace=backend -- route-runs.service --reporter verbose`
+  - Passed (11 tests).
+- `npm run build --workspace=backend`
+  - Passed (`nest build`).
+
+### Remaining Risks
+
+- Any other surfaces that verify JWTs from non-header locations (ex: future “magic link” flows, query-param auth, or other public token endpoints) should also enforce strict presented-token length caps before verification.
+
+### Recommended Next Actions
+
+1. Inventory all endpoints that accept “token-like” inputs (path/query/header/Socket.IO auth) and standardize on a shared token extraction helper with caps + normalization.
+2. Consider adding explicit request body size limits for the highest-risk public/auth endpoints (independent of auth) to reduce DoS surface.
+
+## Daily Pass: 2026-05-26
+
+### Summary Of Risks Found
+
+- The outbound webhook URL validator accepted non-HTTP(S) protocols (ex: `file://`) which would only fail later at delivery time, adding avoidable reliability noise and complicating incident triage.
+- In strict environments, webhook URLs could include embedded credentials (ex: `https://user:pass@host/...`), which risks credential leakage via database storage, logs, or accidental sharing of endpoint configuration.
+- The metrics auth helper accepted arbitrarily large `Authorization` / `x-metrics-token` header values, allowing avoidable memory/CPU amplification during token parsing and constant-time comparison.
+
+### Changes Made
+
+- Restricted webhook URLs to `http:` and `https:` only.
+- Blocked webhook URLs containing embedded credentials when `NODE_ENV` is not `development`/`test`.
+- Added focused unit tests covering both behaviors.
+- Capped presented metrics token length (512 chars) so overlong header values fail closed without large buffer allocations.
+- Added focused unit tests covering the length cap.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/common/http/outbound-webhook-url.util.ts`
+- `backend/src/common/http/outbound-webhook-url.util.spec.ts`
+- `backend/src/common/http/metrics-auth.util.ts`
+- `backend/src/common/http/metrics-auth.util.spec.ts`
+
+### Checks And Commands Run
+
+- `npm run test --workspace=backend -- outbound-webhook-url.util`
+  - Passed (11 tests).
+- `npm run test --workspace=backend -- metrics-auth.util`
+  - Passed (8 tests).
+- `npm run build --workspace=backend`
+  - Passed (`nest build`).
+
+### Remaining Risks
+
+- Webhook targets are still allowed over plaintext `http:` in strict environments; consider requiring `https:` by default (with an explicit opt-out env flag) to reduce confidentiality risks.
+
+### Recommended Next Actions
+
+1. Decide whether to enforce `https:` webhook URLs in production (with an explicit `WEBHOOK_ALLOW_INSECURE_HTTP` escape hatch if needed).
+2. Consider per-endpoint delivery backoff/jitter and a max retry budget to reduce webhook storm risk when a customer endpoint is degraded.
+
+## Daily Pass: 2026-05-24
+
+### Summary Of Risks Found
+
+- The request logging sanitizer (`sanitizeBody()` / `sanitizeValue()`) would recursively traverse request bodies without any depth cap. If `LOG_REQUEST_BODIES` is enabled (even temporarily), an attacker could send extremely deep JSON objects to spike CPU or trigger stack overflows during log sanitization.
+- Express defaults include the `X-Powered-By` response header, which is a low-severity information disclosure vector.
+
+### Changes Made
+
+- Added a maximum sanitization depth cap so deeply nested request bodies are replaced with `[TRUNCATED]` once the limit is reached.
+- Added a focused unit test covering the truncation behavior.
+- Disabled the Express `x-powered-by` header during backend bootstrap.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/common/http/request-logging.middleware.ts`
+- `backend/src/common/http/request-logging.middleware.spec.ts`
+- `backend/src/main.ts`
+
+### Checks And Commands Run
+
+- `npm run test --workspace=backend -- request-logging.middleware`
+  - Passed (8 tests).
+- `npm run build --workspace=backend`
+  - Passed (`nest build`).
+
+### Remaining Risks
+
+- The frontend supports an auth-bypass preview mode via `VITE_AUTH_BYPASS`; ensure this is never enabled in production build environments and that preview builds are isolated from real customer data.
+
+### Recommended Next Actions
+
+1. Add a basic server-side request size limit (JSON/body) and/or rate limiting for public/auth endpoints to reduce abuse/DoS surfaces.
+2. Add authenticated Socket.IO handshake + organization scoping for gateway broadcasts (`/dispatch`, `/tracking`) to avoid unauthenticated subscriptions.
+
+## Daily Pass: 2026-05-23
+
+### Summary Of Risks Found
+
+- Unhandled backend errors logged raw request URLs via `ApiExceptionFilter` (including path segments). This could leak bearer-style path tokens (ex: `/public/tracking/:token`) or other sensitive identifiers into error logs during 5xx/throw paths.
+- `ApiExceptionFilter` would fall back to an untrusted inbound `x-request-id` header when `request.requestId` was absent, re-introducing a log/header injection surface that was previously addressed in the request-context middleware.
+
+### Changes Made
+
+- Sanitized unhandled error log paths in `ApiExceptionFilter` using the same `sanitizePath()` logic as the request logging middleware.
+- Removed the untrusted `x-request-id` header fallback from `ApiExceptionFilter`; it now uses the middleware-provided `requestId` or generates a fresh UUID.
+- Added focused unit tests covering both behaviors.
+- Fixed `ApiKeyAuthGuard` unit tests to use Vitest (`vi.fn`) rather than Jest globals so they run reliably in CI/local.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/common/api/api-exception.filter.ts`
+- `backend/src/common/api/api-exception.filter.spec.ts`
+- `backend/src/modules/platform/api-key-auth.guard.spec.ts`
+
+### Checks And Commands Run
+
+- `npm run test --workspace=backend -- api-exception.filter`
+  - Passed (2 tests).
+- `npm run test --workspace=backend -- api-key-auth.guard`
+  - Passed (6 tests).
+- `npm run build --workspace=backend`
+  - Passed (`nest build`).
+
+### Remaining Risks
+
+- Other loggers (outside the request logging middleware + `ApiExceptionFilter`) may still log raw URLs/paths on error; any endpoint that uses opaque tokens in path segments remains a potential leak source until sanitized consistently.
+
+### Recommended Next Actions
+
+1. Grep for raw `req.originalUrl`/`req.url`/`request.originalUrl` usage in logs and standardize on `sanitizePath()` for any log lines that include request URLs.
+2. Inventory all “public link” endpoints (tracking, share links, magic links) and ensure both success-path logs and error-path logs redact their token segments.
+
+## Daily Pass: 2026-05-22
+
+### Summary Of Risks Found
+
+- The public tracking endpoint uses a bearer-style token in the URL path (`/public/tracking/:token`). The request logging sanitizer previously redacted UUIDs and JWT-like segments, but would log non-JWT tracking tokens in plaintext, increasing the risk of accidental token leakage via logs.
+
+### Changes Made
+
+- Redacted public tracking tokens from logged request paths regardless of token format by rewriting `/public/tracking/<token>` to `/public/tracking/:token` before other path sanitization runs.
+- Updated the focused unit test to assert that public tracking tokens are always redacted.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/common/http/request-logging.middleware.ts`
+- `backend/src/common/http/request-logging.middleware.spec.ts`
+
+### Checks And Commands Run
+
+- `npm run test --workspace=backend -- request-logging.middleware`
+  - Passed (7 tests).
+- `npm run build --workspace=backend`
+  - Passed (`nest build`).
+- `npm audit --omit=dev`
+  - Failed (sandbox blocked npm registry DNS: `getaddrinfo ENOTFOUND registry.npmjs.org`; also npm could not write logs to `/Users/logan/.npm/_logs`).
+
+### Blockers
+
+- Sandbox network restrictions prevent `npm audit` from reaching `registry.npmjs.org`.
+- Sandbox write restrictions prevent npm from writing error logs to `/Users/logan/.npm/_logs`.
+- `codex_auto_memory.sh` printed `Operation not permitted` errors while writing to `/Users/logan/Desktop/CodexBrain` in this sandbox, so brain notes may be stale.
+
+### Remaining Risks
+
+- Any other endpoints that place opaque bearer tokens in path segments (rather than headers) can still leak via logs unless explicitly sanitized.
+
+### Recommended Next Actions
+
+1. Inventory any “public link” style endpoints (tracking, share links, magic login links) and ensure request logging sanitizes their token segments.
+
+## Daily Pass: 2026-05-21
+
+### Summary Of Risks Found
+
+- The backend does not explicitly configure Express/Nest “trust proxy” behavior. When deployed behind one or more reverse proxies/load balancers, `req.ip` and related request metadata can be inaccurate. This undermines audit logging and makes future IP-based controls (throttling, allowlists, abuse detection) unreliable.
+
+### Changes Made
+
+- Added explicit, opt-in trust-proxy configuration:
+  - New `TRUST_PROXY` env parsing supports `true/false` (trust all / trust none) or hop-count integers (ex: `1` to trust one proxy hop).
+  - `backend/src/main.ts` now applies the setting during bootstrap when configured.
+- Added focused unit tests for the parser + configuration helper.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/common/http/trust-proxy.util.ts`
+- `backend/src/common/http/trust-proxy.util.spec.ts`
+- `backend/src/main.ts`
+
+### Checks And Commands Run
+
+- `npm run test --workspace=backend -- trust-proxy.util`
+  - Passed (6 tests).
+- `npm run build --workspace=backend`
+  - Passed (`nest build`).
+
+### Blockers
+
+- `codex_auto_memory.sh` could not write to `/Users/logan/Desktop/CodexBrain` in this sandbox (`Operation not permitted`), so brain automation notes may be stale until run with proper permissions.
+
+### Remaining Risks
+
+- Enabling `TRUST_PROXY=true` (trust all) can allow spoofed `X-Forwarded-For` chains to affect `req.ip` in logs unless upstream proxy configuration is correct; prefer a hop count (ex: `TRUST_PROXY=1`) in hosted environments.
+
+### Recommended Next Actions
+
+1. Decide the intended hosted deployment proxy topology and set `TRUST_PROXY` accordingly (prefer an integer hop count).
+2. Before adding any IP-based throttling/rate limiting, ensure proxy headers are being set and validated correctly by the edge/load balancer.
+
+## Daily Pass: 2026-05-20
+
+### Summary Of Risks Found
+
+- The request context middleware accepted arbitrary inbound `x-request-id` values and echoed them back in the response header and logs. This allowed unbounded/unsafe values (including control characters) to inflate log volume and risk log/header injection.
+
+### Changes Made
+
+- Hardened `x-request-id` handling:
+  - Accept only safe characters (`A-Za-z0-9._:-`) and cap length at 128 chars.
+  - Fall back to `crypto.randomUUID()` when the inbound header is blank/unsafe/too long.
+- Added focused unit tests for the new normalization behavior.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/common/http/request-context.middleware.ts`
+- `backend/src/common/http/request-context.middleware.spec.ts`
+
+### Checks And Commands Run
+
+- `npm run test --workspace=backend -- request-context.middleware`
+  - Passed (5 tests).
+- `npm run build --workspace=backend`
+  - Passed (`nest build`).
+
+### Blockers
+
+- `codex_auto_memory.sh` could not write to `/Users/logan/Desktop/CodexBrain` in this sandbox (`Operation not permitted`), so brain automation notes may be stale until run with proper permissions.
+
+### Remaining Risks
+
+- Even with validation, allowing clients to supply request IDs can still be used to spoof correlation; consider ignoring inbound `x-request-id` in production if that becomes an issue.
+
+### Recommended Next Actions
+
+1. Decide whether to trust inbound `x-request-id` at all in production (vs always generating server-side).
+2. Add per-route throttling for public + webhook endpoints before any self-serve exposure.
+
+## Daily Pass: 2026-05-19
+
+### Summary Of Risks Found
+
+- Request logging would include sanitized request bodies by default in non-production environments when `LOG_REQUEST_BODIES` was unset. This increases accidental sensitive-data exposure risk in shared staging/dev environments where `NODE_ENV` may be misconfigured.
+
+### Changes Made
+
+- Made request-body logging opt-in only:
+  - `shouldLogRequestBody()` now returns `true` only when `LOG_REQUEST_BODIES` is explicitly enabled (`1/true/yes/on`).
+  - Added a focused regression assertion to ensure development defaults to no request-body logging without explicit opt-in.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/common/http/request-logging.middleware.ts`
+- `backend/src/common/http/request-logging.middleware.spec.ts`
+
+### Checks And Commands Run
+
+- `npm run test --workspace=backend -- request-logging.middleware`
+  - Passed (7 tests).
+- `npm run build --workspace=backend`
+  - Passed (`nest build`).
+
+### Remaining Risks
+
+- Even with redaction, enabling `LOG_REQUEST_BODIES` can still leak unexpected sensitive values if clients place secrets under non-obvious keys; keep it disabled in hosted envs unless actively debugging.
+
+### Recommended Next Actions
+
+1. Add rate limiting/throttling for public + webhook endpoints before any self-serve exposure.
+2. Consider adding bounded-size truncation to request-body log output as defense-in-depth when `LOG_REQUEST_BODIES` is enabled.
+
+## Daily Pass: 2026-05-18
+
+### Summary Of Risks Found
+
+- The optimizer request debug logs included a JSON summary derived from inbound payload fields without bounding string lengths. A malicious (or buggy) client could send very large IDs/objective values to amplify log volume and add noise to debugging output.
+
+### Changes Made
+
+- Hardened optimizer request log summarization:
+  - Truncate overly long IDs/objective strings before logging.
+  - Omit non-primitive objective values from the summary.
+  - Treat any truncation as `truncated: true` in the summary for visibility.
+- Tightened background job processor logging to avoid emitting unsanitized `job.data.jobId` directly in log lines.
+- Added focused unit tests for the optimizer request log summary helper.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/common/routing/optimize-request-log.util.ts`
+- `backend/src/common/routing/optimize-request-log.util.spec.ts`
+- `backend/src/modules/jobs/jobs.processor.ts`
+
+### Checks And Commands Run
+
+- `npm run test --workspace=backend -- optimize-request-log.util`
+  - Passed (4 tests).
+- `npm run test --workspace=backend -- bull-job-log.util`
+  - Passed (2 tests).
+- `npm run build --workspace=backend`
+  - Passed (`nest build`).
+
+### Remaining Risks
+
+- Request bodies may still be logged outside production when `LOG_REQUEST_BODIES` is enabled; ensure staging/prod envs keep it disabled unless actively debugging.
+- Webhook endpoints and public routes still need hosted-staging probes for rate limiting, strict CORS behavior, and log redaction under real traffic.
+
+### Recommended Next Actions
+
+1. Add per-endpoint rate limiting (or at least IP-based throttling) on public and webhook endpoints before self-serve exposure.
+2. Run a full backend test suite once current in-flight changes settle to catch regressions across auth + dispatch flows.
+
+## Daily Pass: 2026-05-17
+
+### Summary Of Risks Found
+
+- The integration API key guard accepted untrimmed header values and did not bound input size. This makes authentication more brittle (whitespace/casing mismatches) and increases risk of header-based resource abuse (very large keys reaching downstream auth/DB logic).
+
+### Changes Made
+
+- Hardened API key extraction in `ApiKeyAuthGuard`:
+  - Trim `x-api-key` header values before authentication.
+  - Parse `Authorization: Bearer ...` case-insensitively and trim the extracted token.
+  - Reject excessively long API keys (over 512 chars) before invoking `PlatformService.authenticateApiKey()`.
+- Added a focused unit test suite for the guard to prevent regressions.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/modules/platform/api-key-auth.guard.ts`
+- `backend/src/modules/platform/api-key-auth.guard.spec.ts`
+
+### Checks And Commands Run
+
+- `npm run test --workspace=backend -- api-key-auth.guard`
+  - Passed (6 tests).
+- `npm run build --workspace=backend`
+  - Passed (`nest build`).
+- `npm run check:backend-deps`
+  - Passed.
+- `npm audit --workspaces --audit-level=moderate`
+  - Blocked: DNS `ENOTFOUND registry.npmjs.org` and cannot write logs to `/Users/logan/.npm/_logs`.
+
+### Remaining Risks
+
+- Integration keys are accepted via `Authorization: Bearer ...` as well as `x-api-key`. This is convenient, but can be confusing alongside JWT bearer auth in mixed-client environments; consider standardizing on `x-api-key` for integration clients.
+
+### Recommended Next Actions
+
+1. Decide whether integration API keys should be accepted via `Authorization` at all (or only `x-api-key`) to reduce operational ambiguity.
+2. Consider adding per-scope or per-endpoint rate limiting for integration routes if public exposure is planned.
+
+## Daily Pass: 2026-05-16
+
+### Summary Of Risks Found
+
+- Request logs could include sensitive bearer-style tokens when those tokens are embedded in the URL path (example: the public tracking JWT at `GET /api/public/tracking/:token`). This creates accidental token disclosure risk via log aggregation and developer consoles.
+
+### Changes Made
+
+- Redacted JWT-like path segments in request logging:
+  - Updated `sanitizePath()` to replace any JWT-looking URL path segment with `:jwt` after query/hash stripping and UUID sanitization.
+  - Added a focused unit test to prevent regressions.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/common/http/request-logging.middleware.ts`
+- `backend/src/common/http/request-logging.middleware.spec.ts`
+
+### Checks And Commands Run
+
+- `rg -l "sk_live|AKIA|-----BEGIN (RSA )?PRIVATE KEY|xox[baprs]-|ghp_" --hidden --glob '!node_modules/**' --glob '!.git/**'`
+  - No matches outside `SECURITY_HARDENING_REPORT.md`.
+- `npm run test --workspace=backend -- request-logging.middleware`
+  - Passed (7 tests).
+- `npm run build --workspace=backend`
+  - Passed (`nest build`).
+- `npm run check:backend-deps`
+  - Passed.
+
+### Remaining Risks
+
+- Other sensitive identifiers may still appear in paths (non-JWT opaque tokens). If more token-in-path routes are added, consider a more general “opaque token” segment redaction rule.
+
+### Recommended Next Actions
+
+1. If the public tracking token is ever moved to query string form, ensure query redaction remains strict (currently query/hash are stripped before logging).
+2. Consider adding per-route throttling for public tracking to reduce token brute-force and scraping risk.
+
+## Daily Pass: 2026-05-15
+
+### Summary Of Risks Found
+
+- Proof artifact downloads were served using stored `mimeType` metadata and `Content-Disposition: inline`. Combined with the frontend’s `blob:` open/download behavior (`target="_blank"`), this could enable blob-based XSS if an attacker uploads HTML/SVG or a spoofed file type.
+
+### Changes Made
+
+- Hardened proof-file uploads to reduce active-content injection risks:
+  - Added `backend/src/common/files/proof-file.util.ts` to detect common file signatures (JPG/PNG/WEBP/PDF) and resolve/validate upload MIME types.
+  - `backend/src/modules/dispatch/route-runs.service.ts` now rejects proof uploads unless the declared MIME type is allowed and matches the detected signature (or the client sends `application/octet-stream` and the signature is recognized).
+- Forced proof artifact downloads to be treated as downloads (defense-in-depth against rendering untrusted content):
+  - Added `buildAttachmentContentDisposition()` and switched proof downloads to `Content-Disposition: attachment`.
+  - Proof downloads now always use `Content-Type: application/octet-stream` regardless of stored metadata.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/common/files/proof-file.util.ts`
+- `backend/src/common/files/proof-file.util.spec.ts`
+- `backend/src/common/http/content-disposition.util.ts`
+- `backend/src/common/http/content-disposition.util.spec.ts`
+- `backend/src/modules/dispatch/route-runs.controller.ts`
+- `backend/src/modules/dispatch/route-runs.service.ts`
+
+### Checks And Commands Run
+
+- `rg -l "sk_live|AKIA|-----BEGIN (RSA )?PRIVATE KEY|xox[baprs]-|ghp_" --hidden --glob '!node_modules/**' --glob '!.git/**'`
+  - Passed: no matches.
+- `npm run test --workspace=backend -- proof-file.util content-disposition.util`
+  - Passed (8 tests).
+- `npm run build --workspace=backend`
+  - Passed (`nest build`).
+- `npm run check:backend-deps`
+  - Passed.
+
+### Remaining Risks
+
+- Frontend still opens proof blobs in a new tab (`target="_blank"`). With the backend now forcing `application/octet-stream`, this should behave as a download, but removing the new-tab open would be stronger defense-in-depth.
+
+### Recommended Next Actions
+
+1. Remove `target="_blank"` from the proof download UX (prefer a direct download only).
+2. Consider adding a per-org max proof count / rate limit to prevent storage abuse.
+
 ## Launch Readiness Pass: 2026-05-06
 
 ### Summary Of Risks Found
@@ -507,6 +1089,147 @@ Note: the working tree already contained many unrelated frontend changes before 
 
 1. If you need to run the `dispatch.integration.spec.ts` tests locally, use an environment that allows binding loopback ports (or refactor integration tests away from `supertest` socket binding).
 2. Re-run `npm audit` in an environment with registry access and writable npm logs; apply smallest same-major upgrades.
+
+## Daily Pass: 2026-05-14
+
+### Summary Of Risks Found
+
+- Privacy/logging risk: `JobsProcessor` debug logs were stringifying the full Bull job payload (`job.data`). Depending on what producers enqueue, this could include customer addresses, notes, contact info, or other sensitive metadata.
+- Observability reliability: error logging assumed `error.message`/`error.stack` are present (non-`Error` throwables can produce confusing logs).
+
+### Changes Made
+
+- Replaced full Bull job-payload debug logging with a safe structured summary:
+  - Added `summarizeBullJobDataForLog()` in `backend/src/common/logging/bull-job-log.util.ts`.
+  - `backend/src/modules/jobs/jobs.processor.ts` now logs `Job data summary` (ids + key list) instead of `JSON.stringify(job.data)`.
+  - Summary truncates large key sets to avoid log amplification.
+- Hardened `JobsProcessor` error logging to handle non-`Error` throwables.
+- Added focused unit tests:
+  - `backend/src/common/logging/bull-job-log.util.spec.ts`.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/common/logging/bull-job-log.util.ts`
+- `backend/src/common/logging/bull-job-log.util.spec.ts`
+- `backend/src/modules/jobs/jobs.processor.ts`
+
+### Checks And Commands Run
+
+- `npm run test --workspace=backend -- bull-job-log.util`
+  - Passed (2 tests).
+- `npm run build --workspace=backend`
+  - Passed (`nest build`).
+- `npm run check:backend-deps`
+  - Passed.
+- `npm audit --workspaces --audit-level=moderate`
+  - Failed: `getaddrinfo ENOTFOUND registry.npmjs.org` + cannot write logs to `/Users/logan/.npm/_logs`.
+
+### Blockers
+
+- `npm audit` is blocked by DNS failures and local permissions writing npm logs.
+
+### Remaining Risks
+
+- Other debug-level logs may still include sensitive customer location or metadata; prefer structured summaries and keep production log levels at `log/warn/error` unless actively debugging an incident.
+
+### Recommended Next Actions
+
+1. Re-run `npm audit` in an environment with npm registry access and a writable npm log directory; apply smallest same-major upgrades.
+2. Scan other `logger.debug(JSON.stringify(...))` patterns (especially queue processors and webhook flows) and replace with summaries/redaction.
+
+## Daily Pass: 2026-05-13
+
+### Summary Of Risks Found
+
+- Privacy/logging risk: backend debug logs included the full routing optimizer request payload (`lat`/`lng` coordinates for every stop and vehicle) via `DispatchService.callOptimizerV2()`. Even when debug logging is normally disabled in production, it is a footgun that can leak sensitive location data when debug is enabled.
+
+### Changes Made
+
+- Replaced the full optimizer payload debug log with a structured, coordinate-free summary:
+  - Added `summarizeOptimizeRequestForLog()` in `backend/src/common/routing/optimize-request-log.util.ts`.
+  - `backend/src/modules/dispatch/dispatch.service.ts` now logs `Payload summary` (counts + id samples) instead of `JSON.stringify(request)`.
+  - Summary truncates large id lists to avoid log amplification.
+- Added focused unit tests:
+  - `backend/src/common/routing/optimize-request-log.util.spec.ts`.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/common/routing/optimize-request-log.util.ts`
+- `backend/src/common/routing/optimize-request-log.util.spec.ts`
+- `backend/src/modules/dispatch/dispatch.service.ts`
+
+### Checks And Commands Run
+
+- `npm run test --workspace=backend -- optimize-request-log.util`
+  - Passed (2 tests).
+- `npm run build --workspace=backend`
+  - Passed (`nest build`).
+- `npm run check:backend-deps`
+  - Passed.
+- `npm audit --workspaces --audit-level=moderate`
+  - Failed: `getaddrinfo ENOTFOUND registry.npmjs.org` + cannot write logs to `/Users/logan/.npm/_logs`.
+
+### Blockers
+
+- `npm audit` is blocked here (DNS failures + cannot write logs to `/Users/logan/.npm/_logs`).
+
+### Remaining Risks
+
+- Debug logs still include optimizer request/response *summaries*; confirm production log level is `log/warn/error` unless explicitly debugging an incident.
+
+### Recommended Next Actions
+
+1. Re-run `npm audit` in an environment with npm registry access and a writable npm log directory; apply smallest same-major upgrades.
+2. Review other debug-level logs that may include customer location data (and prefer structured summaries/redaction).
+
+## Daily Pass: 2026-05-12
+
+### Summary Of Risks Found
+
+- Stripe webhook signature verification errors were returned verbatim to callers (`Webhook Error: ...`). This is mostly an information-leak footgun and makes the webhook surface noisier than necessary (even though the endpoint is only useful to Stripe).
+- Reliability/observability: webhook error logging assumed `err.message` in multiple places, which can produce confusing logs when non-`Error` values are thrown.
+- Report staleness note: the prior “WebSocket unauthenticated handshake” risk appears outdated — both `/dispatch` and `/tracking` gateways now authenticate during `handleConnection()` and join per-organization rooms.
+
+### Changes Made
+
+- Made Stripe webhook signature failures return a generic `400` response while preserving the detailed reason in server logs:
+  - `backend/src/modules/subscriptions/subscriptions.controller.ts` now throws `BadRequestException('Webhook signature verification failed')` instead of echoing the underlying Stripe error message.
+  - Error logging now safely handles non-`Error` throwables and includes stack traces when available.
+- Added a focused unit test to ensure signature-verification failure details do not leak in HTTP responses.
+
+### Files Changed By This Pass
+
+- `SECURITY_HARDENING_REPORT.md`
+- `backend/src/modules/subscriptions/subscriptions.controller.ts`
+- `backend/src/modules/subscriptions/subscriptions.controller.spec.ts`
+
+### Checks And Commands Run
+
+- `npm run test --workspace=backend -- subscriptions.controller`
+  - Passed (1 test).
+- `npm run build --workspace=backend`
+  - Passed (`nest build`).
+- `npm run check:backend-deps`
+  - Passed.
+- `npm audit --workspaces --audit-level=moderate`
+  - Failed: `getaddrinfo ENOTFOUND registry.npmjs.org` + cannot write logs to `/Users/logan/.npm/_logs`.
+
+### Blockers
+
+- `npm audit` is blocked by DNS failures and local permissions writing npm logs.
+
+### Remaining Risks
+
+- Public tracking endpoint (`GET /api/route-runs/public/tracking/:token`) is intentionally unauthenticated; ensure tokens are high-entropy, optionally time-limited, and that the response is scoped to the minimal data needed for the tracking UI.
+- Socket.IO token-in-query-string support (`handshake.query.token`) remains a potential accidental secret-exposure vector (URLs are routinely logged); consider restricting it to `development`/`test` once clients are verified.
+
+### Recommended Next Actions
+
+1. Re-run `npm audit` in an environment with npm registry access and a writable npm log directory; apply smallest same-major upgrades.
+2. Confirm public tracking link token properties (entropy + TTL) and add an explicit “expiresAt” check if the product requires link revocation.
+3. Decide whether to disallow socket auth tokens via query-string outside local development.
 
 ## Daily Pass: 2026-05-10
 

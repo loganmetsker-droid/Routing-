@@ -29,7 +29,7 @@ export function MapFilmOverlay() {
         position: 'absolute',
         inset: 0,
         pointerEvents: 'none',
-        zIndex: 450,
+        zIndex: 350,
       }}
     >
       <Box

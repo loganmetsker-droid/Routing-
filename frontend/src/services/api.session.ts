@@ -29,8 +29,14 @@ const hasLocalDemoPreviewBootstrap = () =>
   Boolean((window as unknown as { __TROVAN_LOCAL_DEMO_PREVIEW__?: boolean })
     .__TROVAN_LOCAL_DEMO_PREVIEW__);
 
+const hasLiveAuthOverride = () => {
+  if (typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).get('auth') === 'live';
+};
+
 const isLocalPreviewEnabled = () =>
   typeof window !== 'undefined' &&
+  !hasLiveAuthOverride() &&
   (hasLocalDemoPreviewBootstrap() || (isLocalPreviewHost() && AUTH_BYPASS));
 
 export type ApiRequestOptions = RequestInit & {
@@ -77,7 +83,9 @@ const shouldUseDriverPreviewUser = (email?: string | null) => {
   if (normalizedEmail.includes('driver')) return true;
   if (normalizedEmail === PREVIEW_DRIVER_EMAIL) return true;
   return (
-    typeof window !== 'undefined' && window.location.pathname.startsWith('/driver')
+    typeof window !== 'undefined' &&
+    (window.location.pathname === '/driver' ||
+      window.location.pathname.startsWith('/driver/'))
   );
 };
 

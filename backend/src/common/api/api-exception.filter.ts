@@ -1,10 +1,20 @@
-import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  ArgumentsHost,
+  Catch,
+  ExceptionFilter,
+  HttpException,
+  HttpStatus,
+  Logger,
+} from '@nestjs/common';
 import { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { errorEnvelope } from '../../../../shared/contracts';
+import { sanitizePath } from '../http/request-logging.middleware';
 
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
+  private readonly logger = new Logger(ApiExceptionFilter.name);
+
   catch(exception: unknown, host: ArgumentsHost) {
     if (host.getType() !== 'http') {
       throw exception;
@@ -13,7 +23,8 @@ export class ApiExceptionFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request & { requestId?: string }>();
-    const requestId = request.requestId || request.headers['x-request-id'] || randomUUID();
+    const requestId = request.requestId || randomUUID();
+    const safePath = sanitizePath(request.originalUrl || request.url);
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR;
     let code = 'INTERNAL_ERROR';
@@ -44,6 +55,15 @@ export class ApiExceptionFilter implements ExceptionFilter {
           code = 'FORBIDDEN';
         }
       }
+    } else if (exception instanceof Error) {
+      this.logger.error(
+        `Unhandled ${request.method} ${safePath} (${requestId}): ${exception.message}`,
+        exception.stack,
+      );
+    } else {
+      this.logger.error(
+        `Unhandled ${request.method} ${safePath} (${requestId}): ${String(exception)}`,
+      );
     }
 
     const envelope = errorEnvelope(code, message, String(requestId));

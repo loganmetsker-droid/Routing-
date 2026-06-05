@@ -13,6 +13,7 @@ import {
 } from './common/http/request-context.middleware';
 import { requestLoggingMiddleware } from './common/http/request-logging.middleware';
 import { createCorsOriginValidator } from './common/http/cors-origin.util';
+import { configureTrustProxy } from './common/http/trust-proxy.util';
 import { isSwaggerEnabled } from './common/http/swagger-enabled.util';
 import {
   getMissingRuntimeConfig,
@@ -118,6 +119,9 @@ async function bootstrap() {
     abortOnError: false,
     rawBody: true,
   });
+
+  app.getHttpAdapter().getInstance().disable('x-powered-by');
+  configureTrustProxy(app);
 
   app.use(requestContextMiddleware);
   app.use(requestLoggingMiddleware);

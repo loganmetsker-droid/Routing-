@@ -1,5 +1,16 @@
 const baseUrl = (process.env.ROUTING_SERVICE_URL || 'http://127.0.0.1:8000')
   .replace(/\/+$/, '');
+const routingToken =
+  process.env.STAGING_ROUTING_SERVICE_INTERNAL_TOKEN ||
+  process.env.ROUTING_SERVICE_INTERNAL_TOKEN ||
+  '';
+
+function routingHeaders(extra = {}) {
+  return {
+    ...extra,
+    ...(routingToken ? { 'x-routing-service-token': routingToken } : {}),
+  };
+}
 
 async function fetchJson(path, init) {
   const response = await fetch(`${baseUrl}${path}`, init);
@@ -56,9 +67,23 @@ if (health.status !== 'healthy') {
   throw new Error(`routing-service health is not healthy: ${JSON.stringify(health)}`);
 }
 
+if (routingToken) {
+  const anonymous = await fetch(`${baseUrl}/optimize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...request, stops: [] }),
+  });
+  if (![401, 403].includes(anonymous.status)) {
+    const body = await anonymous.text();
+    throw new Error(
+      `/optimize should reject anonymous hosted requests when ROUTING_SERVICE_INTERNAL_TOKEN is configured; received HTTP ${anonymous.status}: ${body}`,
+    );
+  }
+}
+
 const result = await fetchJson('/optimize', {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
+  headers: routingHeaders({ 'Content-Type': 'application/json' }),
   body: JSON.stringify(request),
 });
 
@@ -79,6 +104,7 @@ console.log(
       ok: true,
       baseUrl,
       status: health.status,
+      authenticated: Boolean(routingToken),
       objectiveUsed: result.objective_used,
       orderedStops: route.ordered_stops.map((stop) => stop.stop_id),
       totalDistanceM: route.total_distance_m,

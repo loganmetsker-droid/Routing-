@@ -75,7 +75,14 @@ export const trovanTypography = {
     '-apple-system',
     'sans-serif',
   ].join(','),
-  brandFontFamily: ['"Newsreader"', 'Georgia', '"Times New Roman"', 'serif'].join(','),
+  brandFontFamily: [
+    '"Instrument Sans"',
+    '"Avenir Next"',
+    '"Segoe UI"',
+    'system-ui',
+    '-apple-system',
+    'sans-serif',
+  ].join(','),
 } as const;
 
 export const trovanMapTokens = {
@@ -85,7 +92,7 @@ export const trovanMapTokens = {
     '#A96321',
     '#4E7A56',
     '#60789B',
-    '#C77D35',
+    '#B74D47',
     '#8E658D',
     '#5E8B70',
   ],

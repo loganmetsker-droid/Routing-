@@ -1,16 +1,25 @@
 import { timingSafeEqual } from 'crypto';
 
+const MAX_METRICS_TOKEN_LENGTH = 512;
+
 function firstHeaderValue(value: string | string[] | undefined): string | undefined {
   if (!value) return undefined;
   if (Array.isArray(value)) return value[0];
   return value;
 }
 
-function extractBearerToken(value: string): string {
+function normalizePresentedToken(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) return '';
+  if (trimmed.length > MAX_METRICS_TOKEN_LENGTH) return '';
+  return trimmed;
+}
+
+function extractBearerToken(value: string): string {
+  const trimmed = normalizePresentedToken(value);
+  if (!trimmed) return '';
   const match = /^bearer\s+(.+)$/i.exec(trimmed);
-  return (match?.[1] ?? trimmed).trim();
+  return normalizePresentedToken(match?.[1] ?? trimmed);
 }
 
 function timingSafeEqualStrings(a: string, b: string): boolean {
@@ -34,7 +43,8 @@ export function extractMetricsToken(
   }
 
   const metricsToken = firstHeaderValue(headers['x-metrics-token']);
-  return metricsToken?.trim() || undefined;
+  const normalized = metricsToken ? normalizePresentedToken(metricsToken) : '';
+  return normalized || undefined;
 }
 
 export function isMetricsRequestAuthorized(
@@ -56,4 +66,3 @@ export function isMetricsRequestAuthorized(
     tokenRequired: true,
   };
 }
-

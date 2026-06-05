@@ -21,10 +21,24 @@ const isLocalPreviewHost = () => {
   );
 };
 
+const hasLiveAuthOverride = () => {
+  if (typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).get('auth') === 'live';
+};
+
+const isDriverRoute = () => {
+  if (typeof window === 'undefined') return false;
+  return window.location.pathname === '/driver' || window.location.pathname.startsWith('/driver/');
+};
+
 const bootstrapLocalDemoMode = () => {
   try {
     if (typeof window === 'undefined') return;
     if (!isLocalPreviewHost()) return;
+    if (hasLiveAuthOverride()) {
+      window.localStorage.removeItem('authToken');
+      return;
+    }
     (window as unknown as { __TROVAN_LOCAL_DEMO_PREVIEW__?: boolean })
       .__TROVAN_LOCAL_DEMO_PREVIEW__ = true;
     if (!window.localStorage.getItem('authToken')) {
@@ -48,7 +62,17 @@ const queryClient = new QueryClient({
 
 if ('serviceWorker' in navigator && import.meta.env.PROD && !isLocalPreviewHost()) {
   window.addEventListener('load', () => {
-    void navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+    if (isDriverRoute()) {
+      void navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+      return;
+    }
+
+    void navigator.serviceWorker
+      .getRegistrations()
+      .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+      .then(() => ('caches' in window ? caches.keys() : []))
+      .then((keys) => Promise.all(keys.filter((key) => key.startsWith('trovan-')).map((key) => caches.delete(key))))
+      .catch(() => undefined);
   });
 }
 

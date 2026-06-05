@@ -1,0 +1,128 @@
+{
+  "baseUrl": "http://127.0.0.1:5185",
+  "generatedAt": "2026-05-22T22:03:43.989Z",
+  "captures": [
+    {
+      "filename": "plan-workspace.png",
+      "route": "/platform/plan",
+      "selector": "[data-testid=\"product-app-frame\"]",
+      "altText": "Trovan planning workspace with imported stops, route lanes, constraints, and connected map paths",
+      "placement": "Product Plan page hero and homepage route-day command center",
+      "routeUrl": "http://127.0.0.1:5185/platform/plan",
+      "png": "/Users/logan/Desktop/Routing/audit/marketing-captures/png/plan-workspace.png",
+      "webp": null,
+      "avif": "/Users/logan/Desktop/Routing/audit/marketing-captures/avif/plan-workspace.avif",
+      "renderedWidth": 641,
+      "renderedHeight": 437,
+      "deviceScaleFactor": 2
+    },
+    {
+      "filename": "dispatch-board.png",
+      "route": "/platform/dispatch",
+      "selector": "[data-testid=\"product-app-frame\"]",
+      "altText": "Trovan dispatch board with live route progress, driver status, and exception flags",
+      "placement": "Product Dispatch page hero",
+      "routeUrl": "http://127.0.0.1:5185/platform/dispatch",
+      "png": "/Users/logan/Desktop/Routing/audit/marketing-captures/png/dispatch-board.png",
+      "webp": null,
+      "avif": "/Users/logan/Desktop/Routing/audit/marketing-captures/avif/dispatch-board.avif",
+      "renderedWidth": 641,
+      "renderedHeight": 437,
+      "deviceScaleFactor": 2
+    },
+    {
+      "filename": "route-rebalance.png",
+      "route": "/demo",
+      "selector": "[data-testid=\"route-rebalance-staged-animation\"]",
+      "altText": "Trovan route rebalance staged overlay showing planned route, exception, and rebalanced route states",
+      "placement": "Homepage and demo route rebalance section",
+      "routeUrl": "http://127.0.0.1:5185/demo",
+      "png": "/Users/logan/Desktop/Routing/audit/marketing-captures/png/route-rebalance.png",
+      "webp": null,
+      "avif": "/Users/logan/Desktop/Routing/audit/marketing-captures/avif/route-rebalance.avif",
+      "renderedWidth": 738,
+      "renderedHeight": 461,
+      "deviceScaleFactor": 2
+    },
+    {
+      "filename": "driver-app-next-stop.png",
+      "route": "/platform/drive",
+      "selector": "[aria-label=\"Trovan Driver mobile app preview\"]",
+      "altText": "Trovan Driver mobile app showing next stop details, route notes, and completion actions",
+      "placement": "Driver app workflow page",
+      "viewport": {
+        "width": 390,
+        "height": 844,
+        "deviceScaleFactor": 3
+      },
+      "routeUrl": "http://127.0.0.1:5185/platform/drive",
+      "png": "/Users/logan/Desktop/Routing/audit/marketing-captures/png/driver-app-next-stop.png",
+      "webp": null,
+      "avif": "/Users/logan/Desktop/Routing/audit/marketing-captures/avif/driver-app-next-stop.avif",
+      "renderedWidth": 358,
+      "renderedHeight": 669,
+      "deviceScaleFactor": 3
+    },
+    {
+      "filename": "driver-proof.png",
+      "route": "/platform/drive",
+      "selector": "[aria-label=\"Trovan Driver mobile app preview\"]",
+      "altText": "Trovan Driver mobile proof workflow for notes, signatures, photos, documents, and completion state",
+      "placement": "Proof and driver-app sections",
+      "viewport": {
+        "width": 390,
+        "height": 844,
+        "deviceScaleFactor": 3
+      },
+      "routeUrl": "http://127.0.0.1:5185/platform/drive",
+      "png": "/Users/logan/Desktop/Routing/audit/marketing-captures/png/driver-proof.png",
+      "webp": null,
+      "avif": "/Users/logan/Desktop/Routing/audit/marketing-captures/avif/driver-proof.avif",
+      "renderedWidth": 358,
+      "renderedHeight": 669,
+      "deviceScaleFactor": 3
+    },
+    {
+      "filename": "customer-tracking.png",
+      "route": "/platform/track",
+      "selector": "[data-testid=\"product-app-frame\"]",
+      "altText": "Trovan customer tracking page with ETA, delivery status timeline, and support context",
+      "placement": "Customer tracking workflow page",
+      "routeUrl": "http://127.0.0.1:5185/platform/track",
+      "png": "/Users/logan/Desktop/Routing/audit/marketing-captures/png/customer-tracking.png",
+      "webp": null,
+      "avif": "/Users/logan/Desktop/Routing/audit/marketing-captures/avif/customer-tracking.avif",
+      "renderedWidth": 641,
+      "renderedHeight": 437,
+      "deviceScaleFactor": 2
+    },
+    {
+      "filename": "proof-summary.png",
+      "route": "/platform/proof",
+      "selector": "[data-testid=\"product-app-frame\"]",
+      "altText": "Trovan proof summary with completed route timestamps, notes, exceptions, and delivery records",
+      "placement": "Proof and analytics workflow page",
+      "routeUrl": "http://127.0.0.1:5185/platform/proof",
+      "png": "/Users/logan/Desktop/Routing/audit/marketing-captures/png/proof-summary.png",
+      "webp": null,
+      "avif": "/Users/logan/Desktop/Routing/audit/marketing-captures/avif/proof-summary.avif",
+      "renderedWidth": 641,
+      "renderedHeight": 437,
+      "deviceScaleFactor": 2
+    },
+    {
+      "filename": "fleet-manager-overview.png",
+      "route": "/platform",
+      "selector": "[data-testid=\"product-app-frame\"]",
+      "altText": "Trovan fleet manager overview with route-day progress, utilization, exceptions, and proof visibility",
+      "placement": "Fleet manager solution and platform overview",
+      "routeUrl": "http://127.0.0.1:5185/platform",
+      "png": "/Users/logan/Desktop/Routing/audit/marketing-captures/png/fleet-manager-overview.png",
+      "webp": null,
+      "avif": "/Users/logan/Desktop/Routing/audit/marketing-captures/avif/fleet-manager-overview.avif",
+      "renderedWidth": 641,
+      "renderedHeight": 437,
+      "deviceScaleFactor": 2
+    }
+  ]
+}

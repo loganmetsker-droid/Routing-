@@ -82,6 +82,11 @@ export function checkOutboundWebhookUrl(
     return { allowed: false, reason: 'Webhook URL must be a valid URL' };
   }
 
+  const protocol = parsed.protocol.toLowerCase();
+  if (protocol !== 'http:' && protocol !== 'https:') {
+    return { allowed: false, reason: 'Webhook URL must use http or https' };
+  }
+
   const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
   if (!hostname) {
     return { allowed: false, reason: 'Webhook URL must include a hostname' };
@@ -89,6 +94,13 @@ export function checkOutboundWebhookUrl(
 
   if (!isStrictWebhookEnvironment(env)) {
     return { allowed: true, normalizedUrl: parsed.toString() };
+  }
+
+  if (parsed.username || parsed.password) {
+    return {
+      allowed: false,
+      reason: 'Webhook URL must not include embedded credentials',
+    };
   }
 
   if (!isAllowedListedHost(hostname, env)) {

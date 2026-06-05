@@ -59,7 +59,6 @@ input CreateJobDto {
   quantity: Int
   specialInstructions: String
   status: String
-  timeWindow: JSON
   timeWindowEnd: String
   timeWindowStart: String
   volume: Float
@@ -322,10 +321,8 @@ input UpdateDriverDto {
 }
 
 input UpdateJobDto {
-  archived: Boolean
   archivedAt: String
   assignedRouteId: String
-  assignedVehicleId: String
   completedAt: String
   customerEmail: String
   customerId: String
@@ -334,7 +331,6 @@ input UpdateJobDto {
   deliveryAddress: String
   deliveryAddressStructured: JSON
   deliveryLocation: JSON
-  driverId: String
   estimatedDuration: Float
   notes: String
   pickupAddress: String
@@ -344,8 +340,6 @@ input UpdateJobDto {
   quantity: Int
   specialInstructions: String
   status: String
-  stopSequence: Float
-  timeWindow: JSON
   timeWindowEnd: String
   timeWindowStart: String
   volume: Float

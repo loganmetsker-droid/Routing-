@@ -88,6 +88,10 @@ function toNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function toWholeMinutes(value: unknown) {
+  return Math.max(0, Math.round(toNumber(value)));
+}
+
 function isObjectRecord(
   value: unknown,
 ): value is Record<string, unknown> {
@@ -451,9 +455,7 @@ export class PlanningService {
       targetGroup.entity.totalDistanceKm = Number(
         (route.total_distance_m / 1000).toFixed(2),
       );
-      targetGroup.entity.totalDurationMinutes = Number(
-        (route.total_duration_s / 60).toFixed(2),
-      );
+      targetGroup.entity.totalDurationMinutes = toWholeMinutes(route.total_duration_s / 60);
       targetGroup.entity.warnings = [];
       for (const orderedStop of route.ordered_stops) {
         const bundle = bundleByJobId.get(orderedStop.stop_id);
@@ -477,7 +479,7 @@ export class PlanningService {
         ),
         totalDurationMinutes:
           group.entity.totalDurationMinutes ||
-          Number(group.minutes.toFixed(2)),
+          toWholeMinutes(group.minutes),
         totalDistanceKm:
           group.entity.totalDistanceKm ||
           Number((group.minutes * 0.85).toFixed(2)),
@@ -496,18 +498,24 @@ export class PlanningService {
       const savedGroup = savedGroupByVehicleId.get(route.vehicle_id);
       if (!savedGroup) continue;
       let sequence = 1;
+      const usedSequences = new Set<number>();
       for (const orderedStop of route.ordered_stops) {
         const bundle = bundleByJobId.get(orderedStop.stop_id);
         if (!bundle) continue;
         for (const stop of bundle.stops) {
           const locked = params.lockedStops.get(stop.id);
+          const stopSequence = this.resolveStopSequence(
+            locked?.stopSequence,
+            usedSequences,
+            sequence,
+          );
           planStops.push(
             this.routePlanStops.create({
               routePlanId: params.plan.id,
               routePlanGroupId: savedGroup.id,
               jobId: bundle.job.id,
               jobStopId: stop.id,
-              stopSequence: sequence,
+              stopSequence,
               isLocked: Boolean(locked?.isLocked),
               plannedArrival:
                 locked?.plannedArrival ||
@@ -524,7 +532,7 @@ export class PlanningService {
               },
             }),
           );
-          sequence += 1;
+          sequence = Math.max(sequence + 1, stopSequence + 1);
         }
       }
     }
@@ -716,11 +724,27 @@ export class PlanningService {
           (sum, bundle) => sum + bundle.serviceMinutes,
           0,
         ),
-        totalDurationMinutes: group.minutes,
+        totalDurationMinutes: toWholeMinutes(group.minutes),
         totalDistanceKm: Number((group.minutes * 0.85).toFixed(2)),
         warnings: group.entity.vehicleId ? [] : ['No vehicle assigned'],
       })),
     );
+  }
+
+  private resolveStopSequence(
+    preferred: number | null | undefined,
+    usedSequences: Set<number>,
+    fallback: number,
+  ) {
+    let candidate =
+      Number.isInteger(preferred) && Number(preferred) > 0
+        ? Number(preferred)
+        : fallback;
+    while (usedSequences.has(candidate)) {
+      candidate += 1;
+    }
+    usedSequences.add(candidate);
+    return candidate;
   }
 
   private buildDraftPlanStops(
@@ -733,16 +757,22 @@ export class PlanningService {
     savedGroups.forEach((group, groupIndex) => {
       const source = sourceGroups[groupIndex];
       let sequence = 1;
+      const usedSequences = new Set<number>();
       for (const bundle of source.bundles) {
         for (const stop of bundle.stops) {
           const locked = lockedStops.get(stop.id);
+          const stopSequence = this.resolveStopSequence(
+            locked?.stopSequence,
+            usedSequences,
+            sequence,
+          );
           planStops.push(
             this.routePlanStops.create({
               routePlanId,
               routePlanGroupId: group.id,
               jobId: bundle.job.id,
               jobStopId: stop.id,
-              stopSequence: locked?.stopSequence || sequence,
+              stopSequence,
               isLocked: Boolean(locked?.isLocked),
               plannedArrival: stop.timeWindowStart || bundle.job.timeWindowStart,
               plannedDeparture: stop.timeWindowEnd || bundle.job.timeWindowEnd,
@@ -752,7 +782,7 @@ export class PlanningService {
               },
             }),
           );
-          sequence += 1;
+          sequence = Math.max(sequence + 1, stopSequence + 1);
         }
       }
     });
@@ -979,28 +1009,53 @@ export class PlanningService {
     const targetSequence = Math.max(1, dto.targetSequence || stop.stopSequence || 1);
     if (dto.isLocked !== undefined) stop.isLocked = dto.isLocked;
 
+    const shouldMoveStop = dto.targetGroupId !== undefined || dto.targetSequence !== undefined;
+    if (!shouldMoveStop) {
+      await this.routePlanStops.save(stop);
+      return this.getRoutePlan(routePlanId, actor);
+    }
+
+    const sourceSiblings = await this.routePlanStops.find({
+      where: { routePlanId, routePlanGroupId: sourceGroupId },
+      order: { stopSequence: 'ASC', createdAt: 'ASC' },
+    });
     const targetSiblings = await this.routePlanStops.find({
       where: { routePlanId, routePlanGroupId: targetGroupId },
       order: { stopSequence: 'ASC', createdAt: 'ASC' },
     });
     const reorderedTarget = targetSiblings.filter((candidate) => candidate.id !== stop.id);
-    stop.routePlanGroupId = targetGroupId;
     reorderedTarget.splice(Math.min(targetSequence - 1, reorderedTarget.length), 0, stop);
-    reorderedTarget.forEach((candidate, index) => {
-      candidate.stopSequence = index + 1;
-    });
-    await this.routePlanStops.save(reorderedTarget);
 
+    const finalAssignments = new Map<string, { stop: RoutePlanStop; routePlanGroupId: string; stopSequence: number }>();
+    reorderedTarget.forEach((candidate, index) => {
+      finalAssignments.set(candidate.id, {
+        stop: candidate,
+        routePlanGroupId: targetGroupId,
+        stopSequence: index + 1,
+      });
+    });
     if (sourceGroupId !== targetGroupId) {
-      const sourceSiblings = await this.routePlanStops.find({
-        where: { routePlanId, routePlanGroupId: sourceGroupId },
-        order: { stopSequence: 'ASC', createdAt: 'ASC' },
+      sourceSiblings.filter((candidate) => candidate.id !== stop.id).forEach((candidate, index) => {
+        finalAssignments.set(candidate.id, {
+          stop: candidate,
+          routePlanGroupId: sourceGroupId,
+          stopSequence: index + 1,
+        });
       });
-      sourceSiblings.forEach((candidate, index) => {
-        candidate.stopSequence = index + 1;
-      });
-      await this.routePlanStops.save(sourceSiblings);
     }
+    const affectedStops = Array.from(finalAssignments.values());
+    const temporarySequenceOffset = 100_000;
+    affectedStops.forEach((assignment, index) => {
+      assignment.stop.routePlanGroupId = assignment.routePlanGroupId;
+      assignment.stop.stopSequence = temporarySequenceOffset + index + 1;
+    });
+    await this.routePlanStops.save(affectedStops.map((assignment) => assignment.stop));
+
+    affectedStops.forEach((assignment) => {
+      assignment.stop.routePlanGroupId = assignment.routePlanGroupId;
+      assignment.stop.stopSequence = assignment.stopSequence;
+    });
+    await this.routePlanStops.save(affectedStops.map((assignment) => assignment.stop));
     return this.getRoutePlan(routePlanId, actor);
   }
 

@@ -3,7 +3,10 @@ import { UnauthorizedException } from '@nestjs/common';
 import type { Socket } from 'socket.io';
 import type { Repository } from 'typeorm';
 import type { AuthSession } from '../../modules/auth/entities/auth-session.entity';
-import type { JwtPayload } from '../../modules/auth/strategies/jwt.strategy';
+import {
+  MAX_JWT_BEARER_TOKEN_LENGTH,
+  type JwtPayload,
+} from '../../modules/auth/strategies/jwt.strategy';
 
 export type SocketAuthContext = {
   token: string;
@@ -26,8 +29,12 @@ function firstString(value: unknown): string | null {
 function normalizeBearerToken(value: unknown): string | null {
   const raw = firstString(value)?.trim();
   if (!raw) return null;
+  if (raw.length > MAX_JWT_BEARER_TOKEN_LENGTH + 32) return null;
   const bearerMatch = raw.match(/^Bearer\s+(.+)$/i);
-  return (bearerMatch?.[1] || raw).trim() || null;
+  const token = (bearerMatch?.[1] || raw).trim();
+  if (!token) return null;
+  if (token.length > MAX_JWT_BEARER_TOKEN_LENGTH) return null;
+  return token;
 }
 
 export function extractSocketBearerToken(client: Pick<Socket, 'handshake'>) {

@@ -58,6 +58,30 @@ describe('socket auth utilities', () => {
     ).rejects.toThrow('Invalid socket authentication token');
   });
 
+  it('rejects overlong socket tokens before attempting JWT verification', async () => {
+    const jwtService = {
+      verifyAsync: vi.fn(async () => ({
+        sub: 'user-1',
+        organizationId: 'org-1',
+      })),
+    } as any;
+
+    const token = `Bearer ${'a'.repeat(6000)}`;
+    expect(
+      extractSocketBearerToken(
+        socketWithHandshake({ auth: { token }, headers: {}, query: {} }),
+      ),
+    ).toBeNull();
+
+    await expect(
+      authenticateSocket(
+        jwtService,
+        socketWithHandshake({ auth: { token }, headers: {}, query: {} }),
+      ),
+    ).rejects.toThrow('token is required');
+    expect(jwtService.verifyAsync).not.toHaveBeenCalled();
+  });
+
   it('returns normalized auth context for scoped JWTs', async () => {
     const jwtService = {
       verifyAsync: vi.fn(async () => ({

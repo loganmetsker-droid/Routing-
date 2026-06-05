@@ -1,8 +1,20 @@
 import { PlanningService } from './planning.service';
 
 describe('PlanningService', () => {
-  function createRepo(initial: any[] = []) {
+  function createRepo(initial: any[] = [], options: { enforceRoutePlanStopSequence?: boolean } = {}) {
     let items = [...initial];
+    const assertUniqueRoutePlanStopSequences = () => {
+      if (!options.enforceRoutePlanStopSequence) return;
+      const seen = new Set<string>();
+      for (const item of items) {
+        if (!item.routePlanId || !item.routePlanGroupId || item.stopSequence === undefined) continue;
+        const key = `${item.routePlanId}:${item.routePlanGroupId}:${item.stopSequence}`;
+        if (seen.has(key)) {
+          throw new Error(`duplicate route plan stop sequence: ${key}`);
+        }
+        seen.add(key);
+      }
+    };
     return {
       items,
       create: (value: any) => ({ ...value, id: value.id || `id-${Math.random().toString(36).slice(2, 8)}`, createdAt: value.createdAt || new Date(), updatedAt: new Date() }),
@@ -12,12 +24,14 @@ describe('PlanningService', () => {
             const index = items.findIndex((candidate) => candidate.id === entry.id);
             if (index >= 0) items[index] = { ...items[index], ...entry };
             else items.push(entry);
+            assertUniqueRoutePlanStopSequences();
           });
           return value;
         }
         const index = items.findIndex((candidate) => candidate.id === value.id);
         if (index >= 0) items[index] = { ...items[index], ...value };
         else items.push(value);
+        assertUniqueRoutePlanStopSequences();
         return value;
       }),
       findOne: jest.fn(async ({ where }: any) => items.find((item) => Object.entries(where).every(([key, val]) => item[key] === val)) || null),
@@ -160,7 +174,7 @@ describe('PlanningService', () => {
       { id: 'stop-a', routePlanId: 'plan-1', routePlanGroupId: 'group-1', jobId: 'job-1', jobStopId: 'job-stop-1', stopSequence: 1, isLocked: false, createdAt: new Date('2026-04-10T08:00:00Z') },
       { id: 'stop-b', routePlanId: 'plan-1', routePlanGroupId: 'group-1', jobId: 'job-2', jobStopId: 'job-stop-2', stopSequence: 2, isLocked: false, createdAt: new Date('2026-04-10T08:05:00Z') },
       { id: 'stop-c', routePlanId: 'plan-1', routePlanGroupId: 'group-2', jobId: 'job-3', jobStopId: 'job-stop-3', stopSequence: 1, isLocked: false, createdAt: new Date('2026-04-10T08:10:00Z') },
-    ]);
+    ], { enforceRoutePlanStopSequence: true });
     const jobs = createRepo();
     const jobStops = createRepo();
     const vehicles = createRepo();

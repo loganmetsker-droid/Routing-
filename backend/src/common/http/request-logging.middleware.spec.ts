@@ -62,6 +62,14 @@ describe('request logging sanitizers', () => {
     ).toBe('/api/jobs/:uuid');
   });
 
+  it('redacts public tracking tokens from request paths to avoid leaking them in logs', () => {
+    const token =
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJraW5kIjoicHVibGljLXRyYWNraW5nIiwicm91dGVJZCI6IjEyMyIsImV4cCI6MTcwMDAwMDAwMH0.dGhpcy1pcy1ub3QtYS1yZWFsLXNpZ25hdHVyZQ';
+    expect(sanitizePath(`/api/public/tracking/${token}`)).toBe(
+      '/api/public/tracking/:token',
+    );
+  });
+
   it('keeps production request bodies out of logs unless explicitly enabled', () => {
     expect(shouldLogRequestBody({ NODE_ENV: 'production' })).toBe(false);
     expect(
@@ -70,6 +78,7 @@ describe('request logging sanitizers', () => {
         LOG_REQUEST_BODIES: 'true',
       }),
     ).toBe(true);
+    expect(shouldLogRequestBody({ NODE_ENV: 'development' })).toBe(false);
     expect(
       shouldLogRequestBody({
         NODE_ENV: 'development',
@@ -82,5 +91,61 @@ describe('request logging sanitizers', () => {
     expect(isSensitiveKey('authorization')).toBe(true);
     expect(isSensitiveKey('customer_phone')).toBe(true);
     expect(isSensitiveKey('routeId')).toBe(false);
+  });
+
+  it('truncates deeply nested bodies to cap log processing cost', () => {
+    const deep = {
+      level1: {
+        level2: {
+          level3: {
+            level4: {
+              level5: {
+                level6: {
+                  level7: {
+                    level8: {
+                      level9: {
+                        level10: { ok: true },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    expect(sanitizeBody(deep)).toEqual({
+      level1: {
+        level2: {
+          level3: {
+            level4: {
+              level5: {
+                level6: {
+                  level7: {
+                    level8: '[TRUNCATED]',
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+  });
+
+  it('avoids serializing binary bodies into logs', () => {
+    expect(sanitizeBody(Buffer.from('hello'))).toBe('[BINARY]');
+    expect(sanitizeBody(new Uint8Array([1, 2, 3]))).toBe('[BINARY]');
+  });
+
+  it('truncates overly large strings and arrays to cap log size', () => {
+    expect(sanitizeBody({ note: 'a'.repeat(3000) })).toEqual({
+      note: '[TRUNCATED]',
+    });
+    expect(sanitizeBody({ values: Array.from({ length: 150 }, (_, i) => i) })).toEqual({
+      values: '[TRUNCATED]',
+    });
   });
 });

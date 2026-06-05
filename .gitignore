@@ -114,6 +114,8 @@ venv.bak/
 
 # Local agent/runtime temp files
 .tmp/
+.artifacts/
+.codex/
 playwright-report*/
 frontend/artifacts/
 

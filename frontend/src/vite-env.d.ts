@@ -5,6 +5,10 @@ interface ImportMetaEnv {
   readonly VITE_REST_API_URL?: string;
   readonly VITE_GRAPHQL_URL?: string;
   readonly VITE_WS_URL?: string;
+  readonly VITE_AUTH_BYPASS?: string;
+  readonly VITE_MOCK_PREVIEW?: string;
+  readonly VITE_LEAD_INTAKE_EMAIL?: string;
+  readonly VITE_LEAD_INTAKE_WEBHOOK_URL?: string;
 }
 
 interface ImportMeta {

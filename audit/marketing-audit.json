@@ -1,0 +1,758 @@
+{
+  "baseUrl": "http://127.0.0.1:5199",
+  "routes": [
+    "/",
+    "/platform",
+    "/platform/plan",
+    "/platform/dispatch",
+    "/platform/drive",
+    "/platform/track",
+    "/platform/proof",
+    "/demo",
+    "/pricing",
+    "/testimonials",
+    "/security",
+    "/resources",
+    "/resources/downloads",
+    "/support",
+    "/company",
+    "/mission",
+    "/careers",
+    "/legal/privacy",
+    "/legal/terms",
+    "/legal/cookies",
+    "/legal/exercise-rights"
+  ],
+  "crossSiteScreenshotUsage": [
+    {
+      "src": "/marketing/routing-workspace-dotted.png",
+      "count": 3,
+      "routes": [
+        "/",
+        "/demo",
+        "/platform/plan"
+      ],
+      "altTexts": [
+        "Trovan route planning workspace with imported stops, draft lanes, and connected route map"
+      ]
+    },
+    {
+      "src": "/marketing/hero-route-command-center-v2.png",
+      "count": 2,
+      "routes": [
+        "/",
+        "/demo"
+      ],
+      "altTexts": [
+        "Trovan route-day command center cropped to show the map, selected route, route lanes, and publish-ready context"
+      ]
+    },
+    {
+      "src": "/marketing/routing-multistop-workspace-dotted.png",
+      "count": 2,
+      "routes": [
+        "/",
+        "/demo"
+      ],
+      "altTexts": [
+        "Actual Trovan multi-stop route planning map with three colored lanes and thirty connected stops"
+      ]
+    },
+    {
+      "src": "/marketing/routing-workspace.png",
+      "count": 2,
+      "routes": [
+        "/",
+        "/demo"
+      ],
+      "altTexts": [
+        "Trovan route planning workspace with imported stops, draft lanes, and connected route map"
+      ]
+    },
+    {
+      "src": "/marketing/trovan-route-rebalance-poster.png",
+      "count": 2,
+      "routes": [
+        "/",
+        "/demo"
+      ],
+      "altTexts": [
+        "Trovan routing workspace with a staged route rebalance overlay showing affected stops and lanes"
+      ]
+    },
+    {
+      "src": "/marketing/dispatch-board.png",
+      "count": 1,
+      "routes": [
+        "/platform/dispatch"
+      ],
+      "altTexts": [
+        "Trovan live dispatch board with route progress, driver status, and exception context"
+      ]
+    },
+    {
+      "src": "/marketing/driver-workspace.png",
+      "count": 1,
+      "routes": [
+        "/platform/drive"
+      ],
+      "altTexts": [
+        "Trovan Driver mobile app showing next stop, route notes, and completion actions"
+      ]
+    },
+    {
+      "src": "/marketing/proof-workspace.png",
+      "count": 1,
+      "routes": [
+        "/platform/proof"
+      ],
+      "altTexts": [
+        "Trovan proof summary showing completed route records, timestamps, notes, and proof of delivery"
+      ]
+    },
+    {
+      "src": "/marketing/public-launch.png",
+      "count": 1,
+      "routes": [
+        "/platform"
+      ],
+      "altTexts": [
+        "Trovan public launch and product workspace screenshot"
+      ]
+    },
+    {
+      "src": "/marketing/tracking-workspace.png",
+      "count": 1,
+      "routes": [
+        "/platform/track"
+      ],
+      "altTexts": [
+        "Trovan customer tracking page with ETA, delivery status timeline, and support context"
+      ]
+    }
+  ],
+  "crossSiteScreenshotFindings": [],
+  "results": [
+    {
+      "url": "http://127.0.0.1:5199/",
+      "route": "/",
+      "status": 200,
+      "title": "TryTrovan | Route planning, dispatch, driver app, tracking, and proof",
+      "h1": "Plan the route. Run the day. Prove every stop.",
+      "primaryCta": "Book demo",
+      "visibleCtas": [
+        "Book demo",
+        "Book demo",
+        "Get a free route audit",
+        "Book demo",
+        "Cookie preferences"
+      ],
+      "imageCount": 5,
+      "screenshotImages": [
+        {
+          "src": "/marketing/hero-route-command-center-v2.png",
+          "currentSrc": "/marketing/hero-route-command-center-v2.avif",
+          "alt": "Trovan route-day command center cropped to show the map, selected route, route lanes, and publish-ready context",
+          "complete": true,
+          "naturalWidth": 2628,
+          "naturalHeight": 1734,
+          "objectFit": "contain",
+          "allowRepeat": false
+        },
+        {
+          "src": "/marketing/routing-workspace.png",
+          "currentSrc": "/marketing/routing-workspace.png",
+          "alt": "Trovan route planning workspace with imported stops, draft lanes, and connected route map",
+          "complete": true,
+          "naturalWidth": 1314,
+          "naturalHeight": 1251,
+          "objectFit": "contain",
+          "allowRepeat": false
+        },
+        {
+          "src": "/marketing/routing-multistop-workspace-dotted.png",
+          "currentSrc": "/marketing/routing-multistop-workspace-dotted.png",
+          "alt": "Actual Trovan multi-stop route planning map with three colored lanes and thirty connected stops",
+          "complete": true,
+          "naturalWidth": 660,
+          "naturalHeight": 540,
+          "objectFit": "contain",
+          "allowRepeat": false
+        },
+        {
+          "src": "/marketing/routing-workspace-dotted.png",
+          "currentSrc": "/marketing/routing-workspace-dotted.png",
+          "alt": "Trovan route planning workspace with imported stops, draft lanes, and connected route map",
+          "complete": true,
+          "naturalWidth": 1314,
+          "naturalHeight": 1251,
+          "objectFit": "contain",
+          "allowRepeat": false
+        },
+        {
+          "src": "/marketing/trovan-route-rebalance-poster.png",
+          "currentSrc": "/marketing/trovan-route-rebalance-poster.png",
+          "alt": "Trovan routing workspace with a staged route rebalance overlay showing affected stops and lanes",
+          "complete": true,
+          "naturalWidth": 1440,
+          "naturalHeight": 900,
+          "objectFit": "contain",
+          "allowRepeat": false
+        }
+      ],
+      "missingAlt": [],
+      "brokenImages": [],
+      "brokenLinks": [],
+      "buttonsWithoutNames": 0,
+      "screenshotFindings": [],
+      "consoleErrors": []
+    },
+    {
+      "url": "http://127.0.0.1:5199/platform",
+      "route": "/platform",
+      "status": 200,
+      "title": "TryTrovan Platform | Route-day control from plan to proof",
+      "h1": "Trovan platform for delivery and distribution route days",
+      "primaryCta": "Book demo",
+      "visibleCtas": [
+        "Book demo",
+        "Book demo",
+        "Watch product walkthrough",
+        "Book demo",
+        "Cookie preferences"
+      ],
+      "imageCount": 1,
+      "screenshotImages": [
+        {
+          "src": "/marketing/public-launch.png",
+          "currentSrc": "/marketing/public-launch.png",
+          "alt": "Trovan public launch and product workspace screenshot",
+          "complete": true,
+          "naturalWidth": 1256,
+          "naturalHeight": 780,
+          "objectFit": "contain",
+          "allowRepeat": false
+        }
+      ],
+      "missingAlt": [],
+      "brokenImages": [],
+      "brokenLinks": [],
+      "buttonsWithoutNames": 0,
+      "screenshotFindings": [],
+      "consoleErrors": []
+    },
+    {
+      "url": "http://127.0.0.1:5199/platform/plan",
+      "route": "/platform/plan",
+      "status": 200,
+      "title": "TryTrovan | Plan routes for route planning and dispatch",
+      "h1": "Build routes your team can actually run.",
+      "primaryCta": "Book demo",
+      "visibleCtas": [
+        "Book demo",
+        "Book demo",
+        "Watch product walkthrough",
+        "Book demo",
+        "Book demo",
+        "Cookie preferences"
+      ],
+      "imageCount": 1,
+      "screenshotImages": [
+        {
+          "src": "/marketing/routing-workspace-dotted.png",
+          "currentSrc": "/marketing/routing-workspace-dotted.png",
+          "alt": "Trovan route planning workspace with imported stops, draft lanes, and connected route map",
+          "complete": true,
+          "naturalWidth": 1314,
+          "naturalHeight": 1251,
+          "objectFit": "contain",
+          "allowRepeat": false
+        }
+      ],
+      "missingAlt": [],
+      "brokenImages": [],
+      "brokenLinks": [],
+      "buttonsWithoutNames": 0,
+      "screenshotFindings": [],
+      "consoleErrors": []
+    },
+    {
+      "url": "http://127.0.0.1:5199/platform/dispatch",
+      "route": "/platform/dispatch",
+      "status": 200,
+      "title": "TryTrovan | Dispatch live for route planning and dispatch",
+      "h1": "Run the route day from one live board.",
+      "primaryCta": "Book demo",
+      "visibleCtas": [
+        "Book demo",
+        "Book demo",
+        "Watch product walkthrough",
+        "Book demo",
+        "Book demo",
+        "Cookie preferences"
+      ],
+      "imageCount": 1,
+      "screenshotImages": [
+        {
+          "src": "/marketing/dispatch-board.png",
+          "currentSrc": "/marketing/dispatch-board.png",
+          "alt": "Trovan live dispatch board with route progress, driver status, and exception context",
+          "complete": true,
+          "naturalWidth": 1256,
+          "naturalHeight": 780,
+          "objectFit": "contain",
+          "allowRepeat": false
+        }
+      ],
+      "missingAlt": [],
+      "brokenImages": [],
+      "brokenLinks": [],
+      "buttonsWithoutNames": 0,
+      "screenshotFindings": [],
+      "consoleErrors": []
+    },
+    {
+      "url": "http://127.0.0.1:5199/platform/drive",
+      "route": "/platform/drive",
+      "status": 200,
+      "title": "TryTrovan | Driver app for route planning and dispatch",
+      "h1": "Give drivers the next best action.",
+      "primaryCta": "Book demo",
+      "visibleCtas": [
+        "Book demo",
+        "Book demo",
+        "Watch product walkthrough",
+        "Book demo",
+        "Book demo",
+        "Cookie preferences"
+      ],
+      "imageCount": 1,
+      "screenshotImages": [
+        {
+          "src": "/marketing/driver-workspace.png",
+          "currentSrc": "/marketing/driver-workspace.png",
+          "alt": "Trovan Driver mobile app showing next stop, route notes, and completion actions",
+          "complete": true,
+          "naturalWidth": 780,
+          "naturalHeight": 860,
+          "objectFit": "contain",
+          "allowRepeat": false
+        }
+      ],
+      "missingAlt": [],
+      "brokenImages": [],
+      "brokenLinks": [],
+      "buttonsWithoutNames": 0,
+      "screenshotFindings": [],
+      "consoleErrors": []
+    },
+    {
+      "url": "http://127.0.0.1:5199/platform/track",
+      "route": "/platform/track",
+      "status": 200,
+      "title": "TryTrovan | Customer tracking & ETA for route planning and dispatch",
+      "h1": "Keep customers updated before they call.",
+      "primaryCta": "Book demo",
+      "visibleCtas": [
+        "Book demo",
+        "Book demo",
+        "Watch product walkthrough",
+        "Book demo",
+        "Book demo",
+        "Cookie preferences"
+      ],
+      "imageCount": 1,
+      "screenshotImages": [
+        {
+          "src": "/marketing/tracking-workspace.png",
+          "currentSrc": "/marketing/tracking-workspace.png",
+          "alt": "Trovan customer tracking page with ETA, delivery status timeline, and support context",
+          "complete": true,
+          "naturalWidth": 1256,
+          "naturalHeight": 780,
+          "objectFit": "contain",
+          "allowRepeat": false
+        }
+      ],
+      "missingAlt": [],
+      "brokenImages": [],
+      "brokenLinks": [],
+      "buttonsWithoutNames": 0,
+      "screenshotFindings": [],
+      "consoleErrors": []
+    },
+    {
+      "url": "http://127.0.0.1:5199/platform/proof",
+      "route": "/platform/proof",
+      "status": 200,
+      "title": "TryTrovan | Proof & analytics for route planning and dispatch",
+      "h1": "Know what happened on every route.",
+      "primaryCta": "Book demo",
+      "visibleCtas": [
+        "Book demo",
+        "Book demo",
+        "Watch product walkthrough",
+        "Book demo",
+        "Book demo",
+        "Cookie preferences"
+      ],
+      "imageCount": 1,
+      "screenshotImages": [
+        {
+          "src": "/marketing/proof-workspace.png",
+          "currentSrc": "/marketing/proof-workspace.png",
+          "alt": "Trovan proof summary showing completed route records, timestamps, notes, and proof of delivery",
+          "complete": true,
+          "naturalWidth": 1256,
+          "naturalHeight": 780,
+          "objectFit": "contain",
+          "allowRepeat": false
+        }
+      ],
+      "missingAlt": [],
+      "brokenImages": [],
+      "brokenLinks": [],
+      "buttonsWithoutNames": 0,
+      "screenshotFindings": [],
+      "consoleErrors": []
+    },
+    {
+      "url": "http://127.0.0.1:5199/demo",
+      "route": "/demo",
+      "status": 200,
+      "title": "TryTrovan Demo | Product walkthrough for a full route day",
+      "h1": "Watch a full route day in Trovan.",
+      "primaryCta": "Book demo",
+      "visibleCtas": [
+        "Book demo",
+        "Book demo",
+        "Book demo",
+        "Cookie preferences"
+      ],
+      "imageCount": 5,
+      "screenshotImages": [
+        {
+          "src": "/marketing/hero-route-command-center-v2.png",
+          "currentSrc": "/marketing/hero-route-command-center-v2.png",
+          "alt": "Trovan route-day command center cropped to show the map, selected route, route lanes, and publish-ready context",
+          "complete": true,
+          "naturalWidth": 2628,
+          "naturalHeight": 1734,
+          "objectFit": "contain",
+          "allowRepeat": false
+        },
+        {
+          "src": "/marketing/trovan-route-rebalance-poster.png",
+          "currentSrc": "/marketing/trovan-route-rebalance-poster.png",
+          "alt": "Trovan routing workspace with a staged route rebalance overlay showing affected stops and lanes",
+          "complete": true,
+          "naturalWidth": 1440,
+          "naturalHeight": 900,
+          "objectFit": "contain",
+          "allowRepeat": false
+        },
+        {
+          "src": "/marketing/routing-workspace-dotted.png",
+          "currentSrc": "/marketing/routing-workspace-dotted.png",
+          "alt": "Trovan route planning workspace with imported stops, draft lanes, and connected route map",
+          "complete": true,
+          "naturalWidth": 1314,
+          "naturalHeight": 1251,
+          "objectFit": "contain",
+          "allowRepeat": false
+        },
+        {
+          "src": "/marketing/routing-multistop-workspace-dotted.png",
+          "currentSrc": "/marketing/routing-multistop-workspace-dotted.png",
+          "alt": "Actual Trovan multi-stop route planning map with three colored lanes and thirty connected stops",
+          "complete": true,
+          "naturalWidth": 660,
+          "naturalHeight": 540,
+          "objectFit": "contain",
+          "allowRepeat": false
+        },
+        {
+          "src": "/marketing/routing-workspace.png",
+          "currentSrc": "/marketing/routing-workspace.png",
+          "alt": "Trovan route planning workspace with imported stops, draft lanes, and connected route map",
+          "complete": true,
+          "naturalWidth": 1314,
+          "naturalHeight": 1251,
+          "objectFit": "contain",
+          "allowRepeat": false
+        }
+      ],
+      "missingAlt": [],
+      "brokenImages": [],
+      "brokenLinks": [],
+      "buttonsWithoutNames": 0,
+      "screenshotFindings": [],
+      "consoleErrors": []
+    },
+    {
+      "url": "http://127.0.0.1:5199/pricing",
+      "route": "/pricing",
+      "status": 200,
+      "title": "TryTrovan Pricing | Route-day ROI and rollout packages",
+      "h1": "Pricing built around route volume and operational impact",
+      "primaryCta": "Book demo",
+      "visibleCtas": [
+        "Book demo",
+        "Book demo",
+        "Cookie preferences"
+      ],
+      "imageCount": 0,
+      "screenshotImages": [],
+      "missingAlt": [],
+      "brokenImages": [],
+      "brokenLinks": [],
+      "buttonsWithoutNames": 0,
+      "screenshotFindings": [],
+      "consoleErrors": []
+    },
+    {
+      "url": "http://127.0.0.1:5199/testimonials",
+      "route": "/testimonials",
+      "status": 200,
+      "title": "TryTrovan Testimonials | Route operation scenarios",
+      "h1": "Operator scenarios for route-day problems",
+      "primaryCta": "Book demo",
+      "visibleCtas": [
+        "Book demo",
+        "Cookie preferences"
+      ],
+      "imageCount": 0,
+      "screenshotImages": [],
+      "missingAlt": [],
+      "brokenImages": [],
+      "brokenLinks": [],
+      "buttonsWithoutNames": 0,
+      "screenshotFindings": [],
+      "consoleErrors": []
+    },
+    {
+      "url": "http://127.0.0.1:5199/security",
+      "route": "/security",
+      "status": 200,
+      "title": "TryTrovan Security | RBAC, audit logs, and route data controls",
+      "h1": "Security and control for route operations.",
+      "primaryCta": "Book demo",
+      "visibleCtas": [
+        "Book demo",
+        "Cookie preferences"
+      ],
+      "imageCount": 0,
+      "screenshotImages": [],
+      "missingAlt": [],
+      "brokenImages": [],
+      "brokenLinks": [],
+      "buttonsWithoutNames": 0,
+      "screenshotFindings": [],
+      "consoleErrors": []
+    },
+    {
+      "url": "http://127.0.0.1:5199/resources",
+      "route": "/resources",
+      "status": 200,
+      "title": "TryTrovan Resources | Route audit, buyer guide, and rollout tools",
+      "h1": "Resources for route audit and rollout planning",
+      "primaryCta": "Book demo",
+      "visibleCtas": [
+        "Book demo",
+        "Cookie preferences"
+      ],
+      "imageCount": 0,
+      "screenshotImages": [],
+      "missingAlt": [],
+      "brokenImages": [],
+      "brokenLinks": [],
+      "buttonsWithoutNames": 0,
+      "screenshotFindings": [],
+      "consoleErrors": []
+    },
+    {
+      "url": "http://127.0.0.1:5199/resources/downloads",
+      "route": "/resources/downloads",
+      "status": 200,
+      "title": "TryTrovan Downloads | Route audit and implementation checklists",
+      "h1": "Downloads and public resources",
+      "primaryCta": "Book demo",
+      "visibleCtas": [
+        "Book demo",
+        "Cookie preferences"
+      ],
+      "imageCount": 0,
+      "screenshotImages": [],
+      "missingAlt": [],
+      "brokenImages": [],
+      "brokenLinks": [],
+      "buttonsWithoutNames": 0,
+      "screenshotFindings": [],
+      "consoleErrors": []
+    },
+    {
+      "url": "http://127.0.0.1:5199/support",
+      "route": "/support",
+      "status": 200,
+      "title": "TryTrovan Support | Login, implementation, and security help",
+      "h1": "Support for access, rollout, and route operations",
+      "primaryCta": "Book demo",
+      "visibleCtas": [
+        "Book demo",
+        "Request access/support",
+        "Cookie preferences"
+      ],
+      "imageCount": 0,
+      "screenshotImages": [],
+      "missingAlt": [],
+      "brokenImages": [],
+      "brokenLinks": [],
+      "buttonsWithoutNames": 0,
+      "screenshotFindings": [],
+      "consoleErrors": []
+    },
+    {
+      "url": "http://127.0.0.1:5199/company",
+      "route": "/company",
+      "status": 200,
+      "title": "TryTrovan Company | Route operations software",
+      "h1": "Built for the route day operators actually run",
+      "primaryCta": "Book demo",
+      "visibleCtas": [
+        "Book demo",
+        "Book demo",
+        "Get a free route audit",
+        "Cookie preferences"
+      ],
+      "imageCount": 0,
+      "screenshotImages": [],
+      "missingAlt": [],
+      "brokenImages": [],
+      "brokenLinks": [],
+      "buttonsWithoutNames": 0,
+      "screenshotFindings": [],
+      "consoleErrors": []
+    },
+    {
+      "url": "http://127.0.0.1:5199/mission",
+      "route": "/mission",
+      "status": 200,
+      "title": "TryTrovan Mission | Make route days easier to run and prove",
+      "h1": "Trovan exists to make route days easier to run and easier to prove.",
+      "primaryCta": "Book demo",
+      "visibleCtas": [
+        "Book demo",
+        "Cookie preferences"
+      ],
+      "imageCount": 0,
+      "screenshotImages": [],
+      "missingAlt": [],
+      "brokenImages": [],
+      "brokenLinks": [],
+      "buttonsWithoutNames": 0,
+      "screenshotFindings": [],
+      "consoleErrors": []
+    },
+    {
+      "url": "http://127.0.0.1:5199/careers",
+      "route": "/careers",
+      "status": 200,
+      "title": "TryTrovan Careers | Route operations software roles",
+      "h1": "Careers at Trovan",
+      "primaryCta": "Book demo",
+      "visibleCtas": [
+        "Book demo",
+        "Cookie preferences"
+      ],
+      "imageCount": 0,
+      "screenshotImages": [],
+      "missingAlt": [],
+      "brokenImages": [],
+      "brokenLinks": [],
+      "buttonsWithoutNames": 0,
+      "screenshotFindings": [],
+      "consoleErrors": []
+    },
+    {
+      "url": "http://127.0.0.1:5199/legal/privacy",
+      "route": "/legal/privacy",
+      "status": 200,
+      "title": "TryTrovan Privacy Policy | Route and delivery data",
+      "h1": "Privacy Policy",
+      "primaryCta": "Book demo",
+      "visibleCtas": [
+        "Book demo",
+        "Cookie preferences"
+      ],
+      "imageCount": 0,
+      "screenshotImages": [],
+      "missingAlt": [],
+      "brokenImages": [],
+      "brokenLinks": [],
+      "buttonsWithoutNames": 0,
+      "screenshotFindings": [],
+      "consoleErrors": []
+    },
+    {
+      "url": "http://127.0.0.1:5199/legal/terms",
+      "route": "/legal/terms",
+      "status": 200,
+      "title": "TryTrovan Terms of Service | Route operations SaaS",
+      "h1": "Terms of Service",
+      "primaryCta": "Book demo",
+      "visibleCtas": [
+        "Book demo",
+        "Cookie preferences"
+      ],
+      "imageCount": 0,
+      "screenshotImages": [],
+      "missingAlt": [],
+      "brokenImages": [],
+      "brokenLinks": [],
+      "buttonsWithoutNames": 0,
+      "screenshotFindings": [],
+      "consoleErrors": []
+    },
+    {
+      "url": "http://127.0.0.1:5199/legal/cookies",
+      "route": "/legal/cookies",
+      "status": 200,
+      "title": "TryTrovan Cookie Policy | Cookie preferences",
+      "h1": "Cookie Policy",
+      "primaryCta": "Book demo",
+      "visibleCtas": [
+        "Book demo",
+        "Cookie preferences",
+        "Cookie preferences"
+      ],
+      "imageCount": 0,
+      "screenshotImages": [],
+      "missingAlt": [],
+      "brokenImages": [],
+      "brokenLinks": [],
+      "buttonsWithoutNames": 0,
+      "screenshotFindings": [],
+      "consoleErrors": []
+    },
+    {
+      "url": "http://127.0.0.1:5199/legal/exercise-rights",
+      "route": "/legal/exercise-rights",
+      "status": 200,
+      "title": "TryTrovan Privacy Rights Request | Data access and deletion",
+      "h1": "Privacy Rights Request",
+      "primaryCta": "Book demo",
+      "visibleCtas": [
+        "Book demo",
+        "Cookie preferences"
+      ],
+      "imageCount": 0,
+      "screenshotImages": [],
+      "missingAlt": [],
+      "brokenImages": [],
+      "brokenLinks": [],
+      "buttonsWithoutNames": 0,
+      "screenshotFindings": [],
+      "consoleErrors": []
+    }
+  ]
+}

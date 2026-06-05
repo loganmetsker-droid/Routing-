@@ -45,3 +45,10 @@ export function buildInlineContentDisposition(filename: unknown) {
   });
   return `inline; filename="${safe}"`;
 }
+
+export function buildAttachmentContentDisposition(filename: unknown) {
+  const safe = sanitizeContentDispositionFilename(filename, {
+    fallback: 'download',
+  });
+  return `attachment; filename="${safe}"`;
+}

@@ -14,12 +14,15 @@ type OpsJobRecord = {
   pickupAddress?: string;
   deliveryLocation?: { lat?: number; lng?: number } | null;
   pickupLocation?: { lat?: number; lng?: number } | null;
+  priority?: string | null;
+  status?: string | null;
 };
 
 export type OpsMapRoute = {
   id: string;
   color: string;
   polyline?: { coordinates?: [number, number][] } | null;
+  hasException?: boolean;
   vehicle?: {
     id: string;
     make: string;
@@ -41,7 +44,23 @@ export type OpsMapRoute = {
     lng: number;
     address: string;
     type: 'pickup' | 'delivery';
+    status?: string;
+    priority?: string;
+    isLocked?: boolean;
+    hasException?: boolean;
+    isLateRisk?: boolean;
+    isBlocking?: boolean;
   }>;
+};
+
+const jobHasException = (job?: OpsJobRecord | null, extra?: unknown) => {
+  const status = String(job?.status || '').toLowerCase();
+  return Boolean(extra) || /exception|failed|blocked|unresolved/.test(status);
+};
+
+const jobIsLateRisk = (job?: OpsJobRecord | null) => {
+  const status = String(job?.status || '').toLowerCase();
+  return /late|risk/.test(status);
 };
 
 const extractJobLocation = (job?: OpsJobRecord | null) => {
@@ -51,6 +70,14 @@ const extractJobLocation = (job?: OpsJobRecord | null) => {
     return null;
   }
   return raw;
+};
+
+const extractVehicleLocation = (vehicle?: VehicleRecord | null) => {
+  const raw = vehicle?.currentLocation;
+  if (!raw || typeof raw.lat !== 'number' || typeof raw.lng !== 'number') {
+    return null;
+  }
+  return { lat: raw.lat, lng: raw.lng };
 };
 
 const routeColor = (index: number) =>
@@ -108,6 +135,11 @@ export const buildDispatchMapRoutes = ({
           lng: location.lng,
           address: job?.deliveryAddress || job?.pickupAddress || 'Address pending',
           type: 'delivery' as const,
+          status: job?.status || undefined,
+          priority: job?.priority || undefined,
+          hasException: jobHasException(job),
+          isLateRisk: jobIsLateRisk(job),
+          isBlocking: jobHasException(job),
         };
       }).filter(Boolean) || []
     ) as OpsMapRoute['stops'];
@@ -175,13 +207,15 @@ export const buildPlannerMapRoutes = ({
       .filter(Boolean) as Array<{ lat: number; lng: number }>;
     const vehicle = group.vehicleId ? vehicleById.get(group.vehicleId) : null;
     const driver = group.driverId ? driverById.get(group.driverId) : null;
+    const vehicleStart = extractVehicleLocation(vehicle);
+    const pathPoints = vehicleStart ? [vehicleStart, ...points] : points;
 
     return {
       id: group.id,
       color: routeColor(index),
-      polyline: points.length
+      polyline: pathPoints.length
         ? {
-            coordinates: points.map((point) => [point.lng, point.lat] as [number, number]),
+            coordinates: pathPoints.map((point) => [point.lng, point.lat] as [number, number]),
           }
         : null,
       vehicle: vehicle
@@ -190,8 +224,10 @@ export const buildPlannerMapRoutes = ({
             make: vehicle.make || 'Vehicle',
             model: vehicle.model || '',
             licensePlate: vehicle.licensePlate || vehicle.id,
-            currentLocation: points[0]
-              ? { lat: points[0].lat, lng: points[0].lng }
+            currentLocation: vehicleStart
+              ? { lat: vehicleStart.lat, lng: vehicleStart.lng }
+              : points[0]
+                ? { lat: points[0].lat, lng: points[0].lng }
               : undefined,
           }
         : undefined,
@@ -218,6 +254,12 @@ export const buildPlannerMapRoutes = ({
               job?.deliveryAddress ||
               'Address pending',
             type: 'delivery' as const,
+            status: job?.status || undefined,
+            priority: job?.priority || undefined,
+            isLocked: Boolean(stop.isLocked),
+            hasException: jobHasException(job, stop.metadata?.exception),
+            isLateRisk: jobIsLateRisk(job),
+            isBlocking: jobHasException(job, stop.metadata?.exception),
           };
         })
         .filter(Boolean) as OpsMapRoute['stops'],

@@ -19,6 +19,117 @@ import type {
 } from './api.types';
 import { clonePreview, isRecord } from './api.types';
 
+const buildDensePreviewDemandJobs = (): DispatchJob[] => {
+  const clusters = [
+    {
+      key: 'northwest',
+      prefix: 'Northwest Market',
+      street: 'W 38th Ave',
+      zip: '80211',
+      pickupAddress: 'Northwest Cross Dock',
+      pickupLocation: { lat: 39.7620, lng: -105.0180 },
+      center: { lat: 39.7750, lng: -105.0300 },
+      latStep: 0.0062,
+      lngStep: -0.0046,
+      latWave: 0.0050,
+      lngWave: 0.0042,
+      count: 7,
+    },
+    {
+      key: 'industrial',
+      prefix: 'Industrial Parts',
+      street: 'Washington St',
+      zip: '80216',
+      pickupAddress: 'North Industrial Hub',
+      pickupLocation: { lat: 39.8060, lng: -104.9900 },
+      center: { lat: 39.7940, lng: -104.9700 },
+      latStep: -0.0052,
+      lngStep: 0.0058,
+      latWave: 0.0050,
+      lngWave: 0.0048,
+      count: 8,
+    },
+    {
+      key: 'east',
+      prefix: 'Eastside Clinic',
+      street: 'E Colfax Ave',
+      zip: '80220',
+      pickupAddress: 'Medical Fulfillment Hub',
+      pickupLocation: { lat: 39.7480, lng: -104.9400 },
+      center: { lat: 39.7420, lng: -104.9150 },
+      latStep: -0.0040,
+      lngStep: 0.0068,
+      latWave: -0.0050,
+      lngWave: 0.0050,
+      count: 8,
+    },
+    {
+      key: 'south',
+      prefix: 'Southline Foods',
+      street: 'S Broadway',
+      zip: '80210',
+      pickupAddress: 'South Denver Depot',
+      pickupLocation: { lat: 39.7080, lng: -104.9970 },
+      center: { lat: 39.6900, lng: -104.9950 },
+      latStep: -0.0060,
+      lngStep: 0.0054,
+      latWave: 0.0052,
+      lngWave: -0.0050,
+      count: 7,
+    },
+    {
+      key: 'southeast',
+      prefix: 'Southeast Supply',
+      street: 'S Havana St',
+      zip: '80231',
+      pickupAddress: 'Southeast Staging',
+      pickupLocation: { lat: 39.7000, lng: -104.9450 },
+      center: { lat: 39.6940, lng: -104.9250 },
+      latStep: -0.0044,
+      lngStep: 0.0070,
+      latWave: -0.0048,
+      lngWave: 0.0052,
+      count: 8,
+    },
+  ] as const;
+
+  return clusters.flatMap((cluster, clusterIndex) =>
+    Array.from({ length: cluster.count }, (_, stopIndex) => {
+      const globalIndex = clusters
+        .slice(0, clusterIndex)
+        .reduce((sum, item) => sum + item.count, 0) + stopIndex + 17;
+      const totalSteps = Math.max(cluster.count - 1, 1);
+      const offset = stopIndex - totalSteps / 2;
+      const progress = stopIndex / totalSteps;
+      const lat =
+        cluster.center.lat +
+        offset * cluster.latStep +
+        Math.sin(progress * Math.PI) * cluster.latWave;
+      const lng =
+        cluster.center.lng +
+        offset * cluster.lngStep +
+        Math.cos(progress * Math.PI * 1.5) * cluster.lngWave;
+      const priority = stopIndex % 9 === 0 ? 'urgent' : stopIndex % 4 === 0 ? 'high' : 'normal';
+
+      return {
+        id: `job-${cluster.key}-${stopIndex + 1}`,
+        customerName: `${cluster.prefix} ${String(stopIndex + 1).padStart(2, '0')}`,
+        deliveryAddress: `${1200 + globalIndex * 11} ${cluster.street}, Denver, CO ${cluster.zip}`,
+        pickupAddress: cluster.pickupAddress,
+        pickupLocation: cluster.pickupLocation,
+        deliveryLocation: {
+          lat: Number(lat.toFixed(5)),
+          lng: Number(lng.toFixed(5)),
+        },
+        status: 'pending',
+        priority,
+        assignedRouteId: null,
+        createdAt: `2026-04-10T10:${String(Math.min(globalIndex, 58)).padStart(2, '0')}:00.000Z`,
+      };
+    }),
+  );
+};
+
 const PREVIEW_STATE_SEED: PreviewState = {
   jobs: clonePreview<DispatchJob[]>([
     {
@@ -83,16 +194,137 @@ const PREVIEW_STATE_SEED: PreviewState = {
     },
     {
       id: 'job-route-6',
-      customerName: 'Route Ops QA',
-      deliveryAddress: '1010 Platte St, Denver, CO 80204',
-      pickupAddress: 'QA Staging',
-      pickupLocation: { lat: 39.7588, lng: -105.0108 },
-      deliveryLocation: { lat: 39.7544, lng: -105.0044 },
+      customerName: 'Aurora Office Supply',
+      deliveryAddress: '12100 E Iliff Ave, Aurora, CO 80014',
+      pickupAddress: 'Southeast Staging',
+      pickupLocation: { lat: 39.7, lng: -104.945 },
+      deliveryLocation: { lat: 39.676, lng: -104.885 },
       status: 'pending',
       priority: 'low',
       assignedRouteId: null,
       createdAt: '2026-04-10T09:25:00.000Z',
     },
+    {
+      id: 'job-highland-7',
+      customerName: 'Arvada Grocer',
+      deliveryAddress: '7600 W 57th Ave, Arvada, CO 80002',
+      pickupAddress: 'Northwest Cross Dock',
+      pickupLocation: { lat: 39.762, lng: -105.018 },
+      deliveryLocation: { lat: 39.794, lng: -105.052 },
+      status: 'pending',
+      priority: 'normal',
+      assignedRouteId: null,
+      createdAt: '2026-04-10T09:30:00.000Z',
+    },
+    {
+      id: 'job-sloan-8',
+      customerName: 'Wheat Ridge Pharmacy',
+      deliveryAddress: '4990 Kipling St, Wheat Ridge, CO 80033',
+      pickupAddress: 'Northwest Cross Dock',
+      pickupLocation: { lat: 39.762, lng: -105.018 },
+      deliveryLocation: { lat: 39.772, lng: -105.060 },
+      status: 'pending',
+      priority: 'high',
+      assignedRouteId: null,
+      createdAt: '2026-04-10T09:35:00.000Z',
+    },
+    {
+      id: 'job-cherry-9',
+      customerName: 'Aurora Cold Storage',
+      deliveryAddress: '14600 E Alameda Ave, Aurora, CO 80012',
+      pickupAddress: 'Eastside Cold Chain Dock',
+      pickupLocation: { lat: 39.748, lng: -104.94 },
+      deliveryLocation: { lat: 39.724, lng: -104.885 },
+      status: 'pending',
+      priority: 'urgent',
+      assignedRouteId: null,
+      createdAt: '2026-04-10T09:40:00.000Z',
+    },
+    {
+      id: 'job-civic-10',
+      customerName: 'Havana Market Foods',
+      deliveryAddress: '10450 E Mississippi Ave, Aurora, CO 80247',
+      pickupAddress: 'Southeast Staging',
+      pickupLocation: { lat: 39.7, lng: -104.945 },
+      deliveryLocation: { lat: 39.704, lng: -104.892 },
+      status: 'pending',
+      priority: 'normal',
+      assignedRouteId: null,
+      createdAt: '2026-04-10T09:45:00.000Z',
+    },
+    {
+      id: 'job-parkhill-11',
+      customerName: 'Park Hill Clinic',
+      deliveryAddress: '9800 E Colfax Ave, Aurora, CO 80010',
+      pickupAddress: 'Medical Fulfillment Hub',
+      pickupLocation: { lat: 39.748, lng: -104.94 },
+      deliveryLocation: { lat: 39.754, lng: -104.896 },
+      status: 'pending',
+      priority: 'high',
+      assignedRouteId: null,
+      createdAt: '2026-04-10T09:50:00.000Z',
+    },
+    {
+      id: 'job-washpark-12',
+      customerName: 'Wash Park Market',
+      deliveryAddress: '1090 S Downing St, Denver, CO 80210',
+      pickupAddress: 'South Denver Depot',
+      pickupLocation: { lat: 39.7061, lng: -105.0015 },
+      deliveryLocation: { lat: 39.6956, lng: -104.9735 },
+      status: 'pending',
+      priority: 'normal',
+      assignedRouteId: null,
+      createdAt: '2026-04-10T09:55:00.000Z',
+    },
+    {
+      id: 'job-globeville-13',
+      customerName: 'Globeville Wholesale',
+      deliveryAddress: '4800 Washington St, Denver, CO 80216',
+      pickupAddress: 'North Industrial Hub',
+      pickupLocation: { lat: 39.806, lng: -104.99 },
+      deliveryLocation: { lat: 39.812, lng: -104.935 },
+      status: 'pending',
+      priority: 'normal',
+      assignedRouteId: null,
+      createdAt: '2026-04-10T10:00:00.000Z',
+    },
+    {
+      id: 'job-auraria-14',
+      customerName: 'Southwest Campus Supply',
+      deliveryAddress: '5900 S Santa Fe Dr, Littleton, CO 80120',
+      pickupAddress: 'South Denver Depot',
+      pickupLocation: { lat: 39.708, lng: -104.997 },
+      deliveryLocation: { lat: 39.662, lng: -105.018 },
+      status: 'pending',
+      priority: 'low',
+      assignedRouteId: null,
+      createdAt: '2026-04-10T10:05:00.000Z',
+    },
+    {
+      id: 'job-sunnyside-15',
+      customerName: 'Lakeside Floral',
+      deliveryAddress: '5801 W 44th Ave, Denver, CO 80212',
+      pickupAddress: 'Northwest Cross Dock',
+      pickupLocation: { lat: 39.762, lng: -105.018 },
+      deliveryLocation: { lat: 39.758, lng: -105.052 },
+      status: 'pending',
+      priority: 'normal',
+      assignedRouteId: null,
+      createdAt: '2026-04-10T10:10:00.000Z',
+    },
+    {
+      id: 'job-central-pack-16',
+      customerName: 'Commerce City Packaging',
+      deliveryAddress: '5600 E 60th Ave, Commerce City, CO 80022',
+      pickupAddress: 'North Industrial Hub',
+      pickupLocation: { lat: 39.806, lng: -104.99 },
+      deliveryLocation: { lat: 39.818, lng: -104.918 },
+      status: 'pending',
+      priority: 'low',
+      assignedRouteId: null,
+      createdAt: '2026-04-10T10:15:00.000Z',
+    },
+    ...buildDensePreviewDemandJobs(),
   ]),
   routes: clonePreview<RouteRecord[]>([
     {
@@ -223,6 +455,30 @@ const PREVIEW_STATE_SEED: PreviewState = {
       currentHours: 6.5,
       maxHours: 10,
     },
+    {
+      id: 'driver-maya-4',
+      firstName: 'Maya',
+      lastName: 'Vega',
+      status: 'on_duty',
+      currentHours: 1.4,
+      maxHours: 11,
+    },
+    {
+      id: 'driver-eli-5',
+      firstName: 'Eli',
+      lastName: 'Brooks',
+      status: 'on_duty',
+      currentHours: 3.2,
+      maxHours: 11,
+    },
+    {
+      id: 'driver-nora-6',
+      firstName: 'Nora',
+      lastName: 'Shaw',
+      status: 'available',
+      currentHours: 0.7,
+      maxHours: 12,
+    },
   ]),
   vehicles: clonePreview<DispatchVehicle[]>([
     {
@@ -233,6 +489,7 @@ const PREVIEW_STATE_SEED: PreviewState = {
       vehicleType: 'cargo_van',
       status: 'available',
       capacity: 1500,
+      currentLocation: { lat: 39.762, lng: -105.018 },
     },
     {
       id: 'veh-van-2',
@@ -242,6 +499,7 @@ const PREVIEW_STATE_SEED: PreviewState = {
       vehicleType: 'box_truck',
       status: 'available',
       capacity: 1200,
+      currentLocation: { lat: 39.806, lng: -104.99 },
     },
     {
       id: 'veh-shuttle-3',
@@ -251,6 +509,7 @@ const PREVIEW_STATE_SEED: PreviewState = {
       vehicleType: 'sprinter_van',
       status: 'in_use',
       capacity: 1800,
+      currentLocation: { lat: 39.748, lng: -104.94 },
     },
     {
       id: 'veh-semi-4',
@@ -260,6 +519,17 @@ const PREVIEW_STATE_SEED: PreviewState = {
       vehicleType: 'semi_truck',
       status: 'available',
       capacity: 18000,
+      currentLocation: { lat: 39.708, lng: -104.997 },
+    },
+    {
+      id: 'veh-box-5',
+      make: 'Isuzu',
+      model: 'NPR',
+      licensePlate: 'DEN-544',
+      vehicleType: 'box_truck',
+      status: 'available',
+      capacity: 5200,
+      currentLocation: { lat: 39.7, lng: -104.945 },
     },
   ]),
   optimizerHealth: {

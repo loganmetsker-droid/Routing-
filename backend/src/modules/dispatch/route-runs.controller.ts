@@ -17,7 +17,8 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Public } from '../../common/decorators/public.decorator';
-import { buildInlineContentDisposition } from '../../common/http/content-disposition.util';
+import { buildAttachmentContentDisposition } from '../../common/http/content-disposition.util';
+import { getSafeProofDownloadContentType } from '../../common/files/proof-file.util';
 import { RouteRunsService } from './route-runs.service';
 import {
   CreateDispatchExceptionDto,
@@ -186,10 +187,10 @@ export class RouteRunsController {
     @Res({ passthrough: true }) response: Response,
   ) {
     const file = await this.routeRuns.getProofArtifactDownload(proofId, req.user);
-    response.setHeader('Content-Type', file.contentType);
+    response.setHeader('Content-Type', getSafeProofDownloadContentType());
     response.setHeader(
       'Content-Disposition',
-      buildInlineContentDisposition(file.filename),
+      buildAttachmentContentDisposition(file.filename),
     );
     response.setHeader('X-Content-Type-Options', 'nosniff');
     if (file.size !== undefined) {

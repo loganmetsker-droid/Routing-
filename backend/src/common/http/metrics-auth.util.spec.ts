@@ -30,6 +30,14 @@ describe('metrics auth util', () => {
     ).toBe('secret-token');
   });
 
+  it('ignores overlong x-metrics-token values', () => {
+    expect(
+      extractMetricsToken({
+        'x-metrics-token': 'a'.repeat(600),
+      }),
+    ).toBeUndefined();
+  });
+
   it('denies when a token is configured but not provided', () => {
     expect(isMetricsRequestAuthorized({}, { METRICS_TOKEN: 'secret-token' })).toEqual({
       authorized: false,
@@ -53,5 +61,13 @@ describe('metrics auth util', () => {
         { METRICS_TOKEN: 'secret-token' },
       ),
     ).toEqual({ authorized: true, tokenRequired: true });
+  });
+
+  it('denies when an overlong token is provided', () => {
+    const result = isMetricsRequestAuthorized(
+      { authorization: `Bearer ${'a'.repeat(600)}` },
+      { METRICS_TOKEN: 'secret-token' },
+    );
+    expect(result).toEqual({ authorized: false, tokenRequired: true });
   });
 });

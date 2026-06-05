@@ -16,6 +16,20 @@ describe('checkOutboundWebhookUrl', () => {
     });
   });
 
+  it('blocks non-http protocols', () => {
+    const result = checkOutboundWebhookUrl('file:///etc/passwd', {
+      NODE_ENV: 'production',
+    });
+    expect(result.allowed).toBe(false);
+  });
+
+  it('blocks embedded credentials in strict environments', () => {
+    const result = checkOutboundWebhookUrl('https://user:pass@webhooks.example.com/hook', {
+      NODE_ENV: 'production',
+    });
+    expect(result.allowed).toBe(false);
+  });
+
   it('blocks localhost in strict environments', () => {
     const result = checkOutboundWebhookUrl('https://localhost/hook', {
       NODE_ENV: 'production',

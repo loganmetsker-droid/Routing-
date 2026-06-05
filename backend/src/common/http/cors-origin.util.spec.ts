@@ -47,12 +47,55 @@ describe('createCorsOriginValidator', () => {
     expect(result.allowed).toBe(true);
   });
 
+  it('allows tenant-style localhost origins in development', async () => {
+    const validator = createCorsOriginValidator({
+      env: { NODE_ENV: 'development' } as any,
+    });
+
+    const result = await runValidator(validator, 'http://trovan.localhost:5185');
+    expect(result.err).toBeNull();
+    expect(result.allowed).toBe(true);
+  });
+
+  it('does not implicitly allow localhost origins in staging', async () => {
+    const validator = createCorsOriginValidator({
+      env: { NODE_ENV: 'staging' } as any,
+    });
+
+    const result = await runValidator(validator, 'http://localhost:5173');
+    expect(result.err).toBeInstanceOf(Error);
+    expect(result.allowed).toBe(false);
+  });
+
+  it('keeps development localhost origins available when an app origin is configured', async () => {
+    const validator = createCorsOriginValidator({
+      env: {
+        NODE_ENV: 'development',
+        FRONTEND_URL: 'https://trytrovan.com',
+      } as any,
+    });
+
+    const result = await runValidator(validator, 'http://trovan.localhost:5185');
+    expect(result.err).toBeNull();
+    expect(result.allowed).toBe(true);
+  });
+
   it('blocks unknown origins when unconfigured in dev', async () => {
     const validator = createCorsOriginValidator({
       env: { NODE_ENV: 'development' } as any,
     });
 
     const result = await runValidator(validator, 'https://evil.example');
+    expect(result.err).toBeInstanceOf(Error);
+    expect(result.allowed).toBe(false);
+  });
+
+  it('does not treat lookalike localhost domains as local', async () => {
+    const validator = createCorsOriginValidator({
+      env: { NODE_ENV: 'development' } as any,
+    });
+
+    const result = await runValidator(validator, 'https://localhost.evil.example');
     expect(result.err).toBeInstanceOf(Error);
     expect(result.allowed).toBe(false);
   });
@@ -71,4 +114,3 @@ describe('createCorsOriginValidator', () => {
     expect(blocked.allowed).toBe(false);
   });
 });
-

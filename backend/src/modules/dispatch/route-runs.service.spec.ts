@@ -498,6 +498,35 @@ describe('RouteRunsService', () => {
     );
   });
 
+  it('rejects overlong public tracking tokens before attempting verification', async () => {
+    const jwtService = {
+      verifyAsync: jest.fn(async () => ({
+        kind: 'public-tracking',
+        routeId: 'route-1',
+        organizationId: 'org-1',
+      })),
+    } as any;
+    const service = new RouteRunsService(
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      audit,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      jwtService,
+    );
+
+    await expect(
+      service.getPublicTracking('a'.repeat(6000)),
+    ).rejects.toThrow('Invalid tracking token');
+    expect(jwtService.verifyAsync).not.toHaveBeenCalled();
+  });
+
   it('does not expose vehicles from other organizations on public tracking payloads', async () => {
     const routes = createRepo([
       {

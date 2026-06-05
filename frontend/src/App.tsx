@@ -29,6 +29,7 @@ const AuthCallbackPage = lazy(() => import('./pages/AuthCallbackPage'));
 const DriverWorkspacePage = lazy(() => import('./pages/DriverWorkspacePage'));
 const DriverRouteRunPage = lazy(() => import('./pages/DriverRouteRunPage'));
 const PublicTrackingPage = lazy(() => import('./pages/PublicTrackingPage'));
+const PublicLaunchPage = lazy(() => import('./pages/PublicLaunchPage'));
 
 function AuthGate({
   children,
@@ -125,7 +126,7 @@ function LoginRoute() {
       }
       const session = await getSession().catch(() => null);
       if (!cancelled) {
-        setRedirectTo(isDriverOnlyAuthUser(session?.user) ? '/driver' : '/');
+        setRedirectTo(isDriverOnlyAuthUser(session?.user) ? '/driver' : '/dashboard');
         setChecking(false);
       }
     };
@@ -177,14 +178,32 @@ function App() {
         <Route path="/login" element={<LoginRoute />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
         <Route path="/track/:token" element={<PublicTrackingPage />} />
+        <Route path="/" element={<PublicLaunchPage />} />
+        <Route path="/platform" element={<PublicLaunchPage />} />
+        <Route path="/platform/:workflow" element={<PublicLaunchPage />} />
+        <Route path="/demo" element={<PublicLaunchPage />} />
+        <Route path="/pricing" element={<PublicLaunchPage />} />
+        <Route path="/testimonials" element={<PublicLaunchPage />} />
+        <Route path="/security" element={<PublicLaunchPage />} />
+        <Route path="/resources" element={<PublicLaunchPage />} />
+        <Route path="/resources/downloads" element={<PublicLaunchPage />} />
+        <Route path="/support" element={<PublicLaunchPage />} />
+        <Route path="/company" element={<PublicLaunchPage />} />
+        <Route path="/mission" element={<PublicLaunchPage />} />
+        <Route path="/careers" element={<PublicLaunchPage />} />
+        <Route path="/legal/privacy" element={<PublicLaunchPage />} />
+        <Route path="/legal/terms" element={<PublicLaunchPage />} />
+        <Route path="/legal/cookies" element={<PublicLaunchPage />} />
+        <Route path="/legal/exercise-rights" element={<PublicLaunchPage />} />
         <Route path="/driver" element={<DriverLayout />}>
           <Route index element={<DriverWorkspacePage />} />
           <Route path="route-runs/:id" element={<DriverRouteRunPage />} />
         </Route>
         <Route path="/" element={<ProtectedLayout />}>
-          <Route index element={<Dashboard />} />
+          <Route path="dashboard" element={<Dashboard />} />
           <Route path="jobs" element={<JobsPageEnhancedV2 />} />
           <Route path="routing" element={<RoutingWorkspacePage />} />
+          <Route path="planning" element={<RoutingWorkspacePage />} />
           <Route path="dispatch" element={<DispatchBoardOpsPage />} />
           <Route path="route-runs/:id" element={<RouteRunDetailPage />} />
           <Route path="exceptions" element={<ExceptionsQueuePage />} />
@@ -194,7 +213,7 @@ function App() {
           <Route path="customers" element={<CustomersPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="settings" element={<SettingsPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>
     </Suspense>

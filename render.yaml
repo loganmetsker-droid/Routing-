@@ -10,7 +10,7 @@ services:
     runtime: node
     plan: standard
     autoDeployTrigger: commit
-    buildCommand: npm ci && npm run build --workspace=backend
+    buildCommand: npm ci --include=dev && npm run build --workspace=backend
     startCommand: npm run start:prod --workspace=backend
     healthCheckPath: /health/readiness
     envVars:
@@ -119,7 +119,7 @@ services:
     runtime: static
     plan: standard
     autoDeployTrigger: commit
-    buildCommand: npm ci && npm run build --workspace=frontend
+    buildCommand: npm ci --include=dev && npm run build --workspace=frontend
     staticPublishPath: frontend/dist
     headers:
       - path: /*

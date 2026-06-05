@@ -1,8 +1,11 @@
 const DEFAULT_LOCAL_ORIGINS = [
   'http://localhost:5173',
   'http://localhost:5184',
+  'http://localhost:5185',
   'http://127.0.0.1:5173',
   'http://127.0.0.1:5184',
+  'http://127.0.0.1:5185',
+  'http://trovan.localhost:5185',
   'http://localhost:3000',
   'http://127.0.0.1:3000',
 ] as const;
@@ -19,6 +22,27 @@ export function parseAllowedOriginsFromEnv(
 type OriginCallback = (err: Error | null, allowed?: boolean) => void;
 type OriginValidator = (origin: string | undefined, callback: OriginCallback) => void;
 
+function isDevelopmentLoopbackOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    const hostname = url.hostname.toLowerCase();
+    return (
+      (url.protocol === 'http:' || url.protocol === 'https:') &&
+      (hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        hostname === '[::1]' ||
+        hostname.endsWith('.localhost'))
+    );
+  } catch {
+    return false;
+  }
+}
+
+function isDevLikeEnv(nodeEnv: string): boolean {
+  const normalized = nodeEnv.toLowerCase();
+  return normalized === 'development' || normalized === 'test';
+}
+
 export function createCorsOriginValidator(options?: {
   env?: NodeJS.ProcessEnv;
   allowedOrigins?: string[];
@@ -28,15 +52,22 @@ export function createCorsOriginValidator(options?: {
   const nodeEnv = env.NODE_ENV || 'development';
   const allowedOrigins = options?.allowedOrigins ?? parseAllowedOriginsFromEnv(env);
   const localOrigins = new Set(options?.localOrigins ?? DEFAULT_LOCAL_ORIGINS);
+  const allowLocalOrigins = isDevLikeEnv(nodeEnv);
 
   return (origin, callback) => {
     if (!origin) {
       return callback(null, true);
     }
 
-    if (allowedOrigins.length === 0 && nodeEnv !== 'production') {
-      const allowed = localOrigins.has(origin);
-      return callback(allowed ? null : new Error('Origin not allowed'), allowed);
+    if (
+      allowLocalOrigins &&
+      (localOrigins.has(origin) || isDevelopmentLoopbackOrigin(origin))
+    ) {
+      return callback(null, true);
+    }
+
+    if (allowedOrigins.length === 0 && !allowLocalOrigins) {
+      return callback(new Error('Origin not allowed'), false);
     }
 
     const allowed = allowedOrigins.includes(origin);

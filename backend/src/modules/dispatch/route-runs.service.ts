@@ -24,6 +24,8 @@ import { JobStop } from '../jobs/entities/job-stop.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PlatformService } from '../platform/platform.service';
 import { ProofStorageService } from './services/proof-storage.service';
+import { resolveProofUploadMimeType } from '../../common/files/proof-file.util';
+import { MAX_JWT_BEARER_TOKEN_LENGTH } from '../auth/strategies/jwt.strategy';
 import type {
   DriverManifestResponse,
   PresentedRouteRunStop,
@@ -932,6 +934,15 @@ export class RouteRunsService {
     if (!file?.buffer?.length) {
       throw new BadRequestException('Proof file is required');
     }
+    const resolvedMimeType = resolveProofUploadMimeType(
+      file.mimetype,
+      file.buffer,
+    );
+    if (!resolvedMimeType) {
+      throw new BadRequestException(
+        'Unsupported proof file type. Allowed: JPG, PNG, WEBP, PDF.',
+      );
+    }
     const userMetadata = this.parseProofMetadata(payload.metadata);
     const capturedAt = new Date().toISOString();
     const stored = await this.getProofStorage().saveProofFile({
@@ -939,7 +950,7 @@ export class RouteRunsService {
       routeRunStopId: stop.id,
       type: proofType as 'BOL' | 'DOCUMENT',
       originalName: file.originalname || 'proof-file',
-      mimeType: file.mimetype || 'application/octet-stream',
+      mimeType: resolvedMimeType,
       buffer: file.buffer,
     });
     const proof = await this.proofs.save(this.proofs.create({
@@ -1314,6 +1325,11 @@ export class RouteRunsService {
       throw new BadRequestException('JWT verification is unavailable');
     }
 
+    const normalized = String(token ?? '').trim();
+    if (!normalized || normalized.length > MAX_JWT_BEARER_TOKEN_LENGTH) {
+      throw new BadRequestException('Invalid tracking token');
+    }
+
     let payload: {
       kind?: string;
       routeId?: string;
@@ -1326,7 +1342,7 @@ export class RouteRunsService {
         routeId?: string;
         organizationId?: string | null;
         exp?: number;
-      }>(token);
+      }>(normalized);
     } catch {
       throw new BadRequestException('Invalid tracking token');
     }

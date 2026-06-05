@@ -30,6 +30,30 @@ const primaryRoutes = [
   { slug: 'public-tracking', path: '/track/demo-token' },
 ];
 
+const publicMarketingRoutes = [
+  { path: '/', heading: /Plan the route\. Run the day\. Prove every stop/i },
+  { path: '/platform', heading: /Trovan platform/i },
+  { path: '/platform/plan', heading: /Build routes your team can actually run/i },
+  { path: '/platform/dispatch', heading: /Run the route day from one live board/i },
+  { path: '/platform/drive', heading: /Give drivers the next best action/i },
+  { path: '/platform/track', heading: /Keep customers updated before they call/i },
+  { path: '/platform/proof', heading: /Know what happened on every route/i },
+  { path: '/demo', heading: /Watch a full route day/i },
+  { path: '/pricing', heading: /Pricing built around route volume/i },
+  { path: '/testimonials', heading: /Operator scenarios/i },
+  { path: '/security', heading: /Security and control for route operations/i },
+  { path: '/resources', heading: /Resources/i },
+  { path: '/support', heading: /Support/i },
+  { path: '/company', heading: /Built for the route day operators/i },
+  { path: '/mission', heading: /Trovan exists to make route days/i },
+  { path: '/careers', heading: /Careers/i },
+  { path: '/legal/privacy', heading: /Privacy/i },
+  { path: '/legal/terms', heading: /Terms/i },
+  { path: '/legal/cookies', heading: /Cookie/i },
+  { path: '/legal/exercise-rights', heading: /Privacy Rights Request/i },
+  { path: '/resources/downloads', heading: /Downloads/i },
+];
+
 const viewports = [
   { slug: 'desktop', width: 1440, height: 960 },
   { slug: 'mobile', width: 390, height: 844 },
@@ -114,6 +138,9 @@ async function gotoReady(
   routePath: string,
   options: { settle?: boolean } = {},
 ) {
+  await page.addInitScript(() => {
+    window.localStorage.removeItem('trovan-preview-auth-user');
+  });
   if (authToken) {
     await page.addInitScript((token) => {
       window.localStorage.setItem('authToken', token);
@@ -240,38 +267,321 @@ test.describe('launch UI audit', () => {
   test('public launch route audit flow is interactive', async ({ page }) => {
     await gotoReady(page, '/');
 
-    await expect(page.getByRole('heading', { name: /Find the wasted miles/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Get a routing audit/i }).first()).toBeVisible();
-    await expect(page.getByLabel(/Route audit preview/i)).toBeVisible();
+    await expect(page.getByRole('heading', { name: /Plan the route\. Run the day\. Prove every stop/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Book demo$/i }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Get a free route audit$/i }).first()).toBeVisible();
+    await expect(page.getByLabel(/Route audit preview/i)).toHaveCount(0);
+    await expect(page.getByText(/Start with one real route day/i)).toHaveCount(0);
+    await expect(page.getByText(/Ready routes|Needs review|Live ETAs/i)).toHaveCount(0);
 
-    await page.getByRole('button', { name: '36-75' }).click();
-    await page.getByRole('button', { name: '250' }).click();
-    await page.getByLabel(/Biggest routing pain/i).click();
-    await page.getByRole('option', { name: /Customer ETAs/i }).click();
-
-    await expect(page.getByText(/Customer update gaps/i)).toBeVisible();
-    await expect(page.getByText(/High/i)).toBeVisible();
-
-    await page.getByRole('button', { name: /Build my audit/i }).click();
-    await expect(page.getByRole('dialog', { name: /Get a Trovan routing audit/i })).toBeVisible();
+    await page.getByRole('button', { name: /^Get a free route audit$/i }).first().click();
+    await expect(page.getByRole('dialog', { name: /Talk to Trovan/i })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: /Request type/i })).toContainText('Route audit');
+    await page.getByRole('combobox', { name: /Fleet size/i }).click();
+    await expect(page.getByRole('option', { name: '300+ / Custom' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await page.getByLabel(/Name/i).fill('Launch Operator');
     await page.getByLabel(/Work email/i).fill('ops@example.com');
     await page.getByLabel(/Company/i).fill('Example Delivery');
-    await page.getByLabel(/Current planning method/i).fill('Spreadsheet and map tabs');
-    await page.getByRole('button', { name: /Request route audit/i }).click();
-    await expect(page.getByText(/Routing audit request captured locally/i)).toBeVisible();
+    await page.getByLabel(/Optional notes/i).fill('Spreadsheet and map tabs');
+    await page.getByRole('button', { name: /Prepare request email|Send request/i }).click();
+    await expect(page.getByTestId('request-success')).toBeVisible();
+    await expect(page.getByText(/captured locally/i)).toHaveCount(0);
+  });
+
+  test('book demo opens the unified request modal with demo selected', async ({ page }) => {
+    await gotoReady(page, '/');
+
+    await page.getByRole('button', { name: /^Book demo$/i }).first().click();
+    await expect(page.getByRole('dialog', { name: /Talk to Trovan/i })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: /Request type/i })).toContainText('Book demo');
+  });
+
+  test('homepage does not expose the old route audit calculator', async ({ page }) => {
+    await gotoReady(page, '/');
+
+    await expect(page.locator('#route-audit')).toHaveCount(0);
+    await expect(page.getByLabel(/Biggest routing pain/i)).toHaveCount(0);
+    await expect(page.getByText(/Planning hours at risk/i)).toHaveCount(0);
+  });
+
+  test('starter pricing CTA does not imply checkout before checkout exists', async ({ page }) => {
+    await gotoReady(page, '/');
+
+    await page.locator('#pricing').scrollIntoViewIfNeeded();
+    await expect(page.getByText(/Launch onboarding is currently reviewed before activation/i)).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Start Starter$/i })).toHaveCount(0);
+    await page.getByRole('button', { name: /^Request Launch setup$/i }).click();
+    await expect(page.getByRole('dialog', { name: /Talk to Trovan/i })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: /Request type/i })).toContainText('Implementation');
+  });
+
+  test('pricing page has a semantic page heading', async ({ page }) => {
+    await gotoReady(page, '/pricing');
+
+    await expect(
+      page.getByRole('heading', { level: 1, name: /Pricing built around route volume and operational impact/i }),
+    ).toBeVisible();
+  });
+
+  test('public demo chips are either real tabs or inert labels', async ({ page }) => {
+    await gotoReady(page, '/');
+
+    await expect(page.getByRole('button', { name: /^Dispatch workflow$/i })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Driver execution$/i })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Customer tracking$/i })).toHaveCount(0);
+
+    const dispatchTab = page.getByRole('tab', { name: 'Dispatch live' });
+    await dispatchTab.click();
+    await expect(dispatchTab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByText(/Keep route execution visible/i)).toBeVisible();
+  });
+
+  test('demo tabs remain readable when inactive', async ({ page }) => {
+    await gotoReady(page, '/demo');
+
+    const dispatchTab = page.getByRole('tab', { name: 'Dispatch live' });
+    await expect(dispatchTab).toBeVisible();
+    await expect(dispatchTab).toHaveCSS('color', 'rgb(23, 17, 13)');
+  });
+
+  test('driver workflow page uses a mobile app proof frame', async ({ page }) => {
+    await gotoReady(page, '/platform/drive');
+
+    await expect(page.getByLabel(/Trovan Driver mobile app preview/i)).toBeVisible();
+    await expect(page.getByText(/Driver mobile app proof/i)).toBeVisible();
   });
 
   test('public launch product proof tabs change content', async ({ page }) => {
     await gotoReady(page, '/');
 
-    await page.getByRole('tab', { name: 'Dispatch' }).click();
+    await page.getByRole('tab', { name: 'Dispatch live' }).click();
     await expect(page.getByText(/Keep route execution visible/i)).toBeVisible();
 
-    await page.getByRole('tab', { name: 'Drive' }).click();
-    await expect(page.getByText(/focused mobile route flow/i)).toBeVisible();
+    await page.getByRole('tab', { name: 'Driver app' }).click();
+    await expect(page.getByRole('heading', { name: /Give drivers the next best action/i })).toBeVisible();
 
-    await page.getByRole('tab', { name: 'Track' }).click();
+    await page.getByRole('tab', { name: 'Customer tracking & ETA' }).click();
     await expect(page.getByText(/Reduce customer where-is-it calls/i)).toBeVisible();
+  });
+
+  test('login unavailable state is friendly and recoverable', async ({ page }) => {
+    await page.route('**/api/auth/config', async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Auth service unavailable' }),
+      });
+    });
+
+    await page.goto('/login?auth=live', { waitUntil: 'domcontentloaded' });
+    await page.locator('#root').waitFor({ state: 'visible' });
+
+    await expect(page.getByTestId('login-unavailable')).toBeVisible();
+    await expect(page.getByText(/Request timed out|Backend may be unavailable/i)).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^Retry$/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Request access\/support/i })).toBeVisible();
+  });
+
+  test('public page does not expose broken demo tracking or local-capture copy', async ({ page }) => {
+    await gotoReady(page, '/');
+
+    await expect(page.getByText(/captured locally/i)).toHaveCount(0);
+    await expect(page.locator('a[href="/track/demo-token"]')).toHaveCount(0);
+  });
+
+  test('enterprise public marketing routes render without stealing protected app routes', async ({ page }) => {
+    test.setTimeout(240_000);
+    for (const route of publicMarketingRoutes) {
+      await gotoReady(page, route.path, { settle: false });
+      await expect(page).not.toHaveURL(/\/login|\/dashboard/);
+      await expect(page.getByTestId('public-site-shell')).toBeVisible();
+      await expect(page.getByRole('heading', { name: route.heading })).toBeVisible();
+    }
+
+    await gotoReady(page, '/testimonials', { settle: false });
+    await expect(page.getByRole('heading', { name: /Operator scenarios/i })).toBeVisible();
+
+    await gotoReady(page, '/customers', { settle: false });
+    await expect(page.getByTestId('public-site-shell')).toHaveCount(0);
+    await expect(page).toHaveURL(/\/(customers|login)/);
+  });
+
+  test('public nav exposes workflow pages and footer links resolve to real destinations', async ({ page }) => {
+    await gotoReady(page, '/');
+
+    await page.getByRole('button', { name: /^Product$/i }).click();
+    await page.getByRole('menuitem', { name: /Plan/i }).click();
+    await expect(page).toHaveURL(/\/platform\/plan$/);
+    await expect(page.getByRole('heading', { name: /Build routes your team can actually run/i })).toBeVisible();
+
+    await gotoReady(page, '/');
+    const footerLinks = page.getByTestId('public-footer').locator('a[href]');
+    const hrefs = await footerLinks.evaluateAll((links) =>
+      links
+        .map((link) => link.getAttribute('href') || '')
+        .filter((href) => href.startsWith('/')),
+    );
+
+    expect(hrefs.length).toBeGreaterThan(8);
+    expect(hrefs).not.toContain('/customers');
+
+    for (const href of hrefs) {
+      await gotoReady(page, href);
+      await expect(page).not.toHaveURL(/\/login|\/dashboard/);
+      await expect(page.getByTestId('public-site-shell')).toBeVisible();
+    }
+  });
+
+  test('public conversion CTAs and demo tour are interactive', async ({ page }) => {
+    await gotoReady(page, '/pricing');
+
+    await page.getByRole('button', { name: /^Book ROI walkthrough$/i }).click();
+    await expect(page.getByRole('dialog', { name: /Talk to Trovan/i })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: /Request type/i })).toContainText('Book demo');
+    await page.keyboard.press('Escape');
+
+    await gotoReady(page, '/demo');
+    await page.getByRole('tab', { name: /Dispatch live/i }).click();
+    await expect(page.getByRole('heading', { name: /Dispatch board walkthrough/i })).toBeVisible();
+    await page.getByRole('button', { name: /^Book demo$/i }).first().click();
+    await expect(page.getByRole('dialog', { name: /Talk to Trovan/i })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: /Request type/i })).toContainText('Book demo');
+  });
+
+  test('quick product demo walks a route day from plan to proof', async ({ page }) => {
+    await gotoReady(page, '/demo');
+
+    await expect(page.getByRole('heading', { name: /Click through the route day loop/i })).toBeVisible();
+    await expect(page.getByText('46 stops imported', { exact: true })).toBeVisible();
+
+    await page.getByRole('button', { name: /Dispatch routes/i }).click();
+    await expect(page.getByText('Routes published to dispatch', { exact: true })).toBeVisible();
+    await expect(page.getByText(/Dispatch sees route lanes/i)).toBeVisible();
+
+    await page.getByRole('button', { name: /Driver mobile app/i }).click();
+    await expect(page.getByText('Driver opens the mobile app', { exact: true })).toBeVisible();
+    await expect(page.getByLabel(/Quick demo status/i)).toContainText('Driver');
+
+    await page.getByRole('button', { name: /Proof of delivery/i }).click();
+    await expect(page.getByText(/Proof, notes, and route history are attached/i)).toBeVisible();
+
+    await page.getByRole('button', { name: /^Replay demo$/i }).click();
+    await expect(page.getByText('46 stops imported', { exact: true })).toBeVisible();
+  });
+
+  test('demo page uses short motion proof and connected route lines', async ({ page }) => {
+    await gotoReady(page, '/demo');
+
+    await expect(page.getByText(/Product walkthrough video/i)).toBeVisible();
+    await expect(page.getByTestId('route-rebalance-staged-animation')).toBeVisible();
+
+    const routePreview = page.getByLabel('Actual connected route preview');
+    await expect(routePreview).toBeVisible();
+    await expect(routePreview.getByTestId('product-app-frame')).toBeVisible();
+    await expect(page.getByText('Route lines connect every planned stop')).toBeVisible();
+
+    await page.getByRole('button', { name: /Driver mobile app/i }).click();
+    await expect(page.getByText('Mobile app shows the next stop in sequence')).toBeVisible();
+  });
+
+  test('public header exposes Fleetio-inspired mega menus', async ({ page }) => {
+    await gotoReady(page, '/');
+
+    await page.getByRole('button', { name: /^Product$/i }).click();
+    await expect(page.getByRole('heading', { name: /Route day workflows/i })).toBeVisible();
+    await expect(page.getByText(/Plan, dispatch, driver execution, tracking, and proof/i)).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    await page.getByRole('button', { name: /^Solutions$/i }).click();
+    await expect(page.getByRole('heading', { name: /Built for route-heavy operators/i })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /Delivery operations/i })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /Distribution teams/i })).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    await page.getByRole('button', { name: /^Resources$/i }).click();
+    await expect(page.getByRole('heading', { name: /Launch resources/i })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /Route audit checklist/i })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: /Support/i })).toBeVisible();
+  });
+
+  test('marketing dashboard frames do not use fake browser chrome', async ({ page }) => {
+    await gotoReady(page, '/');
+
+    await expect(page.getByText(/trytrovan\.com/i)).toHaveCount(0);
+    await expect(page.getByTestId('fake-browser-dot')).toHaveCount(0);
+    await expect(page.getByTestId('product-app-frame').first()).toBeVisible();
+    await expect(page.getByText(/Live Trovan workspace/i).first()).toBeVisible();
+  });
+
+  test('homepage has a proof-heavy scroll story with restrained motion', async ({ page }) => {
+    await gotoReady(page, '/');
+
+    await expect(page.getByRole('heading', { name: /Route days run better when every team sees the same route-day picture/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /One workspace for the route day/i })).toBeVisible();
+    await expect(page.getByText(/live route-day system/i)).toHaveCount(0);
+    await expect(page.getByText(/live operating system/i)).toBeVisible();
+    await expect(page.getByText(/Plans, route lanes, driver assignments, map context/i)).toBeVisible();
+    await expect(page.getByText(/Trovan uses real product workflows/i)).toBeVisible();
+    await expect(page.getByText(/No fake customer logos|Until named references|website reads like/i)).toHaveCount(0);
+    await expect(page.locator('[data-motion="scroll-reveal"]')).toHaveCount(3);
+  });
+
+  test('cookie preferences persist without enabling analytics by default', async ({ page }) => {
+    await gotoReady(page, '/');
+
+    await page.getByRole('button', { name: /Cookie preferences/i }).click();
+    await expect(page.getByRole('dialog', { name: /Cookie preferences/i })).toBeVisible();
+    await expect(page.getByRole('checkbox', { name: /Essential/i })).toBeChecked();
+    await expect(page.getByRole('checkbox', { name: /Analytics/i })).not.toBeChecked();
+    await expect(page.getByRole('checkbox', { name: /Marketing/i })).not.toBeChecked();
+    await page.getByRole('checkbox', { name: /Analytics/i }).check();
+    await page.getByRole('button', { name: /Save preferences/i }).click();
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: /Cookie preferences/i }).click();
+    await expect(page.getByRole('checkbox', { name: /Analytics/i })).toBeChecked();
+    await expect(page.getByRole('checkbox', { name: /Marketing/i })).not.toBeChecked();
+  });
+
+  test('security and testimonial pages avoid unsupported claims', async ({ page }) => {
+    await gotoReady(page, '/security');
+    await expect(page.getByText(/SOC\s*2|HIPAA|ISO\s*27001|certified|certification/i)).toHaveCount(0);
+    await expect(page.getByText(/request IDs|redaction|audit logs|RBAC/i).first()).toBeVisible();
+
+    await gotoReady(page, '/testimonials');
+    await expect(page.getByText(/Acme|Globex|Initech|five stars|customer quote/i)).toHaveCount(0);
+    await expect(page.getByText(/scenario|operator|dispatcher/i).first()).toBeVisible();
+  });
+
+  test('public workflow pages render local product screenshot assets', async ({ page }) => {
+    for (const route of publicMarketingRoutes.filter((item) => item.path.startsWith('/platform'))) {
+      await gotoReady(page, route.path);
+      const imagesLoaded = await page.locator('img[src^="/marketing/"]').evaluateAll((images) =>
+        images.every((image) => image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0),
+      );
+      expect(imagesLoaded).toBe(true);
+    }
+  });
+
+  test('public marketing screenshots are framed without side cropping', async ({ page }) => {
+    for (const route of ['/', '/demo', '/platform', ...publicMarketingRoutes.filter((item) => item.path.startsWith('/platform')).map((item) => item.path)]) {
+      await gotoReady(page, route);
+      const croppedScreenshots = await page.locator('img[src^="/marketing/"]').evaluateAll((images) =>
+        images
+          .map((image) => {
+            const element = image as HTMLImageElement;
+            const style = window.getComputedStyle(element);
+            return {
+              src: element.getAttribute('src'),
+              fit: style.objectFit,
+            };
+          })
+          .filter((item) => item.fit !== 'contain'),
+      );
+
+      expect(croppedScreenshots).toEqual([]);
+    }
   });
 
   test('renders every primary route on desktop and mobile with inventory evidence', async ({ page }) => {

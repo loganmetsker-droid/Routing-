@@ -1,0 +1,119 @@
+{
+  "organization": {
+    "name": "Trovan MVP Staging",
+    "timezone": "America/Chicago"
+  },
+  "users": {
+    "dispatcher": {
+      "name": "MVP Dispatcher",
+      "email": "dispatcher-mvp@trovan.test",
+      "role": "DISPATCHER"
+    },
+    "driver": {
+      "name": "MVP Driver",
+      "email": "driver-mvp@trovan.test",
+      "role": "DRIVER"
+    }
+  },
+  "depot": {
+    "name": "Kansas City Depot",
+    "address": "100 Dispatch Way, Kansas City, MO 64106",
+    "lat": 39.0997,
+    "lng": -94.5786
+  },
+  "vehicle": {
+    "label": "MVP Van 01",
+    "type": "van",
+    "licensePlate": "MVP-101",
+    "capacityWeightKg": 1200,
+    "capacityVolumeM3": 14
+  },
+  "jobs": [
+    {
+      "customerName": "Jane Bakery",
+      "deliveryAddress": "1425 Market Ave, Kansas City, MO 64105",
+      "timeWindow": "09:00-10:30",
+      "serviceMinutes": 15,
+      "priority": "HIGH",
+      "weightKg": 90,
+      "volumeM3": 1.2,
+      "notes": "Dock opens at 9. Signature required."
+    },
+    {
+      "customerName": "Omega Medical",
+      "deliveryAddress": "2100 Santa Fe St, Kansas City, MO 64108",
+      "timeWindow": "09:30-11:00",
+      "serviceMinutes": 20,
+      "priority": "URGENT",
+      "weightKg": 45,
+      "volumeM3": 0.8,
+      "notes": "Temperature-sensitive cartons. Call on arrival."
+    },
+    {
+      "customerName": "Riverfront Catering",
+      "deliveryAddress": "500 Berkley Pkwy, Kansas City, MO 64120",
+      "timeWindow": "10:30-12:00",
+      "serviceMinutes": 12,
+      "priority": "NORMAL",
+      "weightKg": 120,
+      "volumeM3": 2.5,
+      "notes": "Use south service entrance."
+    },
+    {
+      "customerName": "North Loop Market",
+      "deliveryAddress": "315 Armour Rd, North Kansas City, MO 64116",
+      "timeWindow": "11:00-13:00",
+      "serviceMinutes": 15,
+      "priority": "NORMAL",
+      "weightKg": 75,
+      "volumeM3": 1.1,
+      "notes": "Manager prefers delivery before lunch rush."
+    },
+    {
+      "customerName": "Brookside Floral",
+      "deliveryAddress": "633 E 63rd St, Kansas City, MO 64110",
+      "timeWindow": "12:00-14:00",
+      "serviceMinutes": 10,
+      "priority": "HIGH",
+      "weightKg": 35,
+      "volumeM3": 0.6,
+      "notes": "Fragile. Keep upright."
+    },
+    {
+      "customerName": "Plaza Office Supply",
+      "deliveryAddress": "4622 Pennsylvania Ave, Kansas City, MO 64112",
+      "timeWindow": "13:00-15:00",
+      "serviceMinutes": 18,
+      "priority": "NORMAL",
+      "weightKg": 210,
+      "volumeM3": 3.0,
+      "notes": "Freight elevator on west side."
+    },
+    {
+      "customerName": "West Bottoms Warehouse",
+      "deliveryAddress": "1400 Union Ave, Kansas City, MO 64101",
+      "timeWindow": "14:00-16:00",
+      "serviceMinutes": 20,
+      "priority": "LOW",
+      "weightKg": 300,
+      "volumeM3": 3.8,
+      "notes": "Pallet jack available at dock."
+    },
+    {
+      "customerName": "Crown Center Events",
+      "deliveryAddress": "2450 Grand Blvd, Kansas City, MO 64108",
+      "timeWindow": "15:00-17:00",
+      "serviceMinutes": 15,
+      "priority": "HIGH",
+      "weightKg": 160,
+      "volumeM3": 2.4,
+      "notes": "Event setup cutoff at 5 PM."
+    }
+  ],
+  "acceptance": [
+    "Dispatcher can see all eight jobs.",
+    "Optimizer returns an ordered route for the vehicle without fallback/mock flags.",
+    "Driver can complete at least one stop with proof.",
+    "Public tracking link opens from a fresh browser session."
+  ]
+}

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from 'react-leaflet';
+import { useEffect, useMemo, useState } from 'react';
+import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Box, Chip, Paper, Typography } from '@mui/material';
@@ -23,59 +23,165 @@ const DefaultIcon = L.icon({
 
 L.Marker.prototype.options.icon = DefaultIcon;
 
-const createVehicleIcon = (color: string) =>
+type MapRenderLevel = 'overview' | 'context' | 'detail';
+type StopImportance = 'normal' | 'late-risk' | 'exception' | 'blocking';
+
+const DENSE_ROUTE_DAY_STOP_THRESHOLD = 60;
+const VERY_DENSE_ROUTE_DAY_STOP_THRESHOLD = 100;
+const LOW_ZOOM_MARKER_BUDGET = 40;
+
+const escapeHtml = (value: string | number) =>
+  String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const createVehicleIcon = (color: string, muted = false, selected = false) =>
   L.divIcon({
     className: 'custom-vehicle-marker',
     html: `
       <div style="
         background: linear-gradient(180deg, ${color}, ${color});
-        width: 34px;
-        height: 34px;
+        width: ${selected ? 40 : 34}px;
+        height: ${selected ? 40 : 34}px;
         border-radius: 50%;
-        border: 2px solid #FFF8F1;
-        box-shadow: 0 10px 24px rgba(65, 42, 24, 0.18);
+        border: ${selected ? 3 : 2}px solid #FFF8F1;
+        box-shadow: ${selected ? `0 0 0 5px ${color}40, 0 16px 32px rgba(65, 42, 24, 0.26)` : '0 8px 14px rgba(65, 42, 24, 0.14)'};
         display: flex;
         align-items: center;
         justify-content: center;
+        opacity: ${muted ? 0.38 : 1};
       ">
         <svg xmlns="http://www.w3.org/2000/svg" fill="#FFF8F1" viewBox="0 0 24 24" width="20" height="20">
           <path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/>
         </svg>
       </div>
     `,
-    iconSize: [34, 34],
-    iconAnchor: [17, 17],
+    iconSize: selected ? [40, 40] : [34, 34],
+    iconAnchor: selected ? [20, 20] : [17, 17],
   });
 
-const createStopIcon = (index: number, color: string) =>
+const createClusterIcon = ({
+  color,
+  count,
+  label,
+  muted = false,
+}: {
+  color: string;
+  count: number;
+  label: string;
+  muted?: boolean;
+}) =>
   L.divIcon({
+    className: 'custom-route-cluster-marker',
+    html: `
+      <button
+        type="button"
+        data-testid="routing-route-cluster-marker"
+        data-route-label="${escapeHtml(label)}"
+        aria-label="${escapeHtml(`${label}, ${count} stops`)}"
+        title="${escapeHtml(`${label}: ${count} stops`)}"
+        style="
+          min-width: 52px;
+          height: 34px;
+          border-radius: 10px;
+          border: 2px solid ${color};
+          background: #fff8f1;
+          color: #241712;
+          display: inline-flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 0;
+          font-family: inherit;
+          font-weight: 800;
+          line-height: 1;
+          cursor: pointer;
+          opacity: ${muted ? 0.76 : 1};
+          box-shadow: 0 2px 5px rgba(36, 23, 18, 0.16);
+        "
+      >
+        <span style="font-size: 12px; letter-spacing: 0;">${escapeHtml(label)}</span>
+        <span style="font-size: 11px; letter-spacing: 0;">${count} stops</span>
+      </button>
+    `,
+    iconSize: [58, 36],
+    iconAnchor: [29, 18],
+  });
+
+const createStopIcon = ({
+  index,
+  color,
+  compact = false,
+  muted = false,
+  selected = false,
+  routeFocus,
+  importance,
+  role,
+}: {
+  index: number;
+  color: string;
+  compact?: boolean;
+  muted?: boolean;
+  selected?: boolean;
+  routeFocus: 'selected' | 'muted' | 'default';
+  importance: StopImportance;
+  role: 'start' | 'end' | 'stop';
+}) => {
+  const isImportant = importance !== 'normal';
+  const baseSize = selected ? (compact ? 23 : 31) : compact ? 17 : 26;
+  const size = isImportant ? Math.max(baseSize, selected ? 33 : 29) : baseSize;
+  const issueColor =
+    importance === 'blocking' || importance === 'exception'
+      ? '#b42318'
+      : importance === 'late-risk'
+        ? '#9a6700'
+        : color;
+  const markerColor = isImportant ? issueColor : color;
+  return L.divIcon({
     className: 'custom-stop-marker',
     html: `
-      <div style="
-        background: ${color};
-        width: 26px;
-        height: 26px;
+      <div
+        data-testid="routing-stop-marker"
+        data-route-focus="${routeFocus}"
+        data-stop-importance="${importance}"
+        data-stop-role="${role}"
+        style="
+        background: ${markerColor};
+        width: ${size}px;
+        height: ${size}px;
         border-radius: 50%;
-        border: 2px solid #FFF8F1;
-        box-shadow: 0 8px 20px rgba(65, 42, 24, 0.16);
+        border: ${isImportant ? 3 : selected ? 3 : compact ? 1.5 : 2}px solid #FFF8F1;
+        box-shadow: ${selected ? `0 0 0 3px ${color}38, 0 7px 14px rgba(65, 42, 24, 0.18)` : isImportant ? '0 0 0 3px rgba(180, 35, 24, 0.18)' : '0 4px 9px rgba(65, 42, 24, 0.12)'};
         display: flex;
         align-items: center;
         justify-content: center;
         color: #FFF8F1;
         font-weight: 700;
-        font-size: 12px;
+        font-size: ${compact ? 8 : 12}px;
+        line-height: 1;
+        opacity: ${muted ? 0.3 : 1};
       ">
         ${index + 1}
+        ${
+          isImportant
+            ? `<span data-testid="routing-exception-marker" aria-hidden="true" style="position:absolute; transform:translate(11px,-11px); width:13px; height:13px; border-radius:50%; background:#fff8f1; color:${issueColor}; border:1px solid ${issueColor}; display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:900;">!</span>`
+            : ''
+        }
       </div>
     `,
-    iconSize: [26, 26],
-    iconAnchor: [13, 13],
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
   });
+};
 
 interface RouteData {
   id: string;
   color: string;
   polyline?: { coordinates?: [number, number][] } | null;
+  hasException?: boolean;
   vehicle?: {
     id: string;
     make: string;
@@ -97,8 +203,16 @@ interface RouteData {
     lng: number;
     address: string;
     type: 'pickup' | 'delivery';
+    status?: string;
+    priority?: string;
+    isLocked?: boolean;
+    hasException?: boolean;
+    isLateRisk?: boolean;
+    isBlocking?: boolean;
   }>;
 }
+
+export type MapDisplayMode = 'selected' | 'all' | 'density' | 'exceptions';
 
 interface MultiRouteMapProps {
   routes: RouteData[];
@@ -106,6 +220,8 @@ interface MultiRouteMapProps {
   showLegend?: boolean;
   selectedRouteId?: string | null;
   onRouteSelect?: (routeId: string | null) => void;
+  displayMode?: MapDisplayMode;
+  distanceUnit?: 'mi' | 'km';
 }
 
 function FitBounds({ routes }: { routes: RouteData[] }) {
@@ -129,9 +245,25 @@ function FitBounds({ routes }: { routes: RouteData[] }) {
     });
 
     if (allPoints.length > 0) {
-      map.fitBounds(L.latLngBounds(allPoints), { padding: [54, 54], maxZoom: 14 });
+      map.fitBounds(L.latLngBounds(allPoints), { padding: [38, 38], maxZoom: 14 });
     }
   }, [routes, map]);
+
+  return null;
+}
+
+function MapZoomObserver({
+  onZoomChange,
+}: {
+  onZoomChange: (zoom: number) => void;
+}) {
+  const map = useMapEvents({
+    zoomend: () => onZoomChange(map.getZoom()),
+  });
+
+  useEffect(() => {
+    onZoomChange(map.getZoom());
+  }, [map, onZoomChange]);
 
   return null;
 }
@@ -142,10 +274,30 @@ export default function MultiRouteMap({
   showLegend = true,
   selectedRouteId,
   onRouteSelect,
+  displayMode = 'all',
+  distanceUnit = 'km',
 }: MultiRouteMapProps) {
   const [internalSelectedRoute, setInternalSelectedRoute] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(12);
   const selectedRoute = selectedRouteId ?? internalSelectedRoute;
   const defaultCenter: [number, number] = [37.7749, -122.4194];
+  const totalStops = useMemo(
+    () => routes.reduce((count, route) => count + (route.stops?.length || route.jobCount || 0), 0),
+    [routes],
+  );
+  const isDenseRouteDay = totalStops >= DENSE_ROUTE_DAY_STOP_THRESHOLD;
+  const isVeryDenseRouteDay = totalStops >= VERY_DENSE_ROUTE_DAY_STOP_THRESHOLD;
+
+  const renderLevel: MapRenderLevel = useMemo(() => {
+    if (displayMode === 'density' || displayMode === 'exceptions') return 'overview';
+    if (zoom >= 13) return 'detail';
+    if (zoom <= 10) return 'overview';
+    if (isVeryDenseRouteDay && (displayMode === 'selected' || displayMode === 'all')) {
+      return 'overview';
+    }
+    if (zoom >= 11 && zoom <= 12) return 'context';
+    return isDenseRouteDay ? 'context' : 'detail';
+  }, [displayMode, isDenseRouteDay, isVeryDenseRouteDay, zoom]);
 
   const selectRoute = (routeId: string) => {
     const nextRouteId = selectedRoute === routeId ? null : routeId;
@@ -182,9 +334,42 @@ export default function MultiRouteMap({
         return 'default';
     }
   };
+  const formatDistance = (distanceKm?: number) => {
+    if (!Number.isFinite(distanceKm)) return 'N/A';
+    const safeDistance = Number(distanceKm);
+    return distanceUnit === 'mi'
+      ? `${(safeDistance * 0.621371).toFixed(1)} mi`
+      : `${safeDistance.toFixed(1)} km`;
+  };
+  const routeLabel = (route: RouteData) =>
+    route.vehicle?.licensePlate ||
+    (route.driver ? `${route.driver.firstName} ${route.driver.lastName}` : `Route ${route.id.slice(-4)}`);
+  const routeCentroid = (route: RouteData): [number, number] => {
+    const points = route.stops?.length
+      ? route.stops.map((stop) => [stop.lat, stop.lng] as [number, number])
+      : route.vehicle?.currentLocation
+        ? [[route.vehicle.currentLocation.lat, route.vehicle.currentLocation.lng] as [number, number]]
+        : [defaultCenter];
+    const lat = points.reduce((sum, point) => sum + point[0], 0) / points.length;
+    const lng = points.reduce((sum, point) => sum + point[1], 0) / points.length;
+    return [lat, lng];
+  };
+  const stopImportance = (stop: NonNullable<RouteData['stops']>[number]): StopImportance => {
+    const status = String(stop.status || '').toLowerCase();
+    if (stop.isBlocking || stop.hasException || /exception|failed|blocked|unresolved/.test(status)) return 'exception';
+    if (stop.isLateRisk || /late|risk/.test(status)) return 'late-risk';
+    return 'normal';
+  };
 
   return (
     <Box sx={{ position: 'relative', height }} className="trovan-map">
+      <Box
+        data-testid="routing-map-render-level"
+        data-render-level={renderLevel}
+        data-total-stops={totalStops}
+        data-marker-budget={LOW_ZOOM_MARKER_BUDGET}
+        sx={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0, pointerEvents: 'none' }}
+      />
       {showLegend && routes.length > 0 ? (
         <Paper
           sx={{
@@ -250,7 +435,7 @@ export default function MultiRouteMap({
                     : 'No driver assigned'}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" display="block">
-                  Stops: {route.jobCount} | Distance: {route.totalDistanceKm?.toFixed(1) || 'N/A'} km
+                  Stops: {route.jobCount} | Distance: {formatDistance(route.totalDistanceKm)}
                 </Typography>
                 {route.eta ? (
                   <Typography variant="caption" color="text.secondary" display="block">
@@ -271,23 +456,107 @@ export default function MultiRouteMap({
         className="z-0"
       >
         <TileLayer attribution={trovanMapLayer.attribution} url={trovanMapLayer.url} />
+        <MapZoomObserver onZoomChange={setZoom} />
 
-        {routes.map((route) => (
-          <div key={route.id}>
-            {route.polyline?.coordinates ? (
+        {routes.map((route) => {
+          const hasSelectedRoute = Boolean(selectedRoute);
+          const isRouteSelected = selectedRoute === route.id;
+          const isExceptionOnlyHidden = displayMode === 'exceptions' && !route.hasException && !isRouteSelected;
+          const isSelectedModeMuted = displayMode === 'selected' && hasSelectedRoute && !isRouteSelected;
+          const isDensityMode = displayMode === 'density';
+          const isOverview = renderLevel === 'overview';
+          const isContext = renderLevel === 'context';
+          const isDetail = renderLevel === 'detail';
+          const stops = route.stops || [];
+          const importantStops = stops.filter((stop) => stopImportance(stop) !== 'normal');
+          const isRouteMuted = isExceptionOnlyHidden || isSelectedModeMuted || (hasSelectedRoute && !isRouteSelected && displayMode !== 'all');
+          const simplifyUnrelated =
+            (displayMode === 'selected' && hasSelectedRoute && !isRouteSelected) ||
+            isExceptionOnlyHidden ||
+            (displayMode === 'all' && isOverview) ||
+            isDensityMode;
+          const shouldClusterRoute =
+            stops.length > 0 &&
+            (
+              (displayMode === 'selected' && hasSelectedRoute && !isRouteSelected && !isDetail) ||
+              (displayMode === 'all' && !isDetail && totalStops > LOW_ZOOM_MARKER_BUDGET) ||
+              isDensityMode
+            );
+          const routeLineWeight = isRouteSelected
+            ? 5.4
+            : simplifyUnrelated
+              ? isDensityMode ? 1.3 : 0.9
+              : isDensityMode
+                ? 1.7
+                : isRouteMuted
+                  ? 2
+                  : 3;
+          const routeLineOpacity = isRouteSelected
+            ? 1
+            : isExceptionOnlyHidden
+              ? 0.05
+              : simplifyUnrelated
+                ? isDensityMode ? 0.26 : 0.1
+                : isDensityMode
+                  ? 0.42
+                  : isRouteMuted
+                    ? 0.22
+                    : 0.82;
+          const visibleStops = (() => {
+            if (displayMode === 'exceptions') return importantStops;
+            if (isDensityMode) return importantStops;
+            if (displayMode === 'selected' && hasSelectedRoute) {
+              if (isRouteSelected) return stops;
+              return isDetail ? importantStops : importantStops;
+            }
+            if (displayMode === 'all' && !isDetail && totalStops > LOW_ZOOM_MARKER_BUDGET) {
+              return importantStops;
+            }
+            if (isContext && totalStops > LOW_ZOOM_MARKER_BUDGET) {
+              return stops.filter((stop, index) => stopImportance(stop) !== 'normal' || index === 0 || index === stops.length - 1);
+            }
+            return stops;
+          })();
+          const routeFocus = isRouteSelected ? 'selected' : isRouteMuted || shouldClusterRoute ? 'muted' : 'default';
+          const routeIsHiddenForExceptions = displayMode === 'exceptions' && !route.hasException && !isRouteSelected;
+
+          return (
+          <div
+            key={route.id}
+            data-route-id={route.id}
+            data-route-focus={routeFocus}
+            data-route-simplified={simplifyUnrelated ? 'true' : 'false'}
+            data-map-display-mode={displayMode}
+            data-map-render-level={renderLevel}
+          >
+            {route.polyline?.coordinates && !routeIsHiddenForExceptions ? (
               <Polyline
                 positions={route.polyline.coordinates.map((coord: [number, number]) => [
                   coord[1],
                   coord[0],
                 ])}
                 color={route.color}
-                weight={selectedRoute === route.id ? 5.5 : 4.5}
-                opacity={selectedRoute === route.id ? 0.94 : 0.82}
-                dashArray={route.status === 'planned' || route.status === 'draft' ? '9, 9' : undefined}
+                weight={routeLineWeight}
+                opacity={routeLineOpacity}
+                dashArray="6 1"
+                lineCap="butt"
+                lineJoin="round"
+                className={
+                  isRouteSelected
+                    ? `trovan-route-line route-line-${route.id} is-selected`
+                    : simplifyUnrelated
+                      ? `trovan-route-line route-line-${route.id} is-simplified`
+                      : isRouteMuted
+                        ? `trovan-route-line route-line-${route.id} is-muted`
+                        : `trovan-route-line route-line-${route.id}`
+                }
+                eventHandlers={{
+                  click: () => selectRoute(route.id),
+                }}
               />
             ) : null}
 
-            {route.vehicle ? (
+            {route.vehicle && !(shouldClusterRoute && !isRouteSelected) && !routeIsHiddenForExceptions && displayMode !== 'density' ? (
               <Marker
                 position={
                   route.vehicle.currentLocation
@@ -296,7 +565,11 @@ export default function MultiRouteMap({
                       ? [route.stops[0].lat, route.stops[0].lng]
                       : defaultCenter
                 }
-                icon={createVehicleIcon(route.color)}
+                icon={createVehicleIcon(route.color, isRouteMuted, isRouteSelected)}
+                opacity={simplifyUnrelated ? 0.16 : isRouteMuted ? 0.46 : 1}
+                eventHandlers={{
+                  click: () => selectRoute(route.id),
+                }}
               >
                 <Popup>
                   <Box sx={{ p: 0.5 }}>
@@ -322,16 +595,64 @@ export default function MultiRouteMap({
               </Marker>
             ) : null}
 
-            {route.stops?.map((stop, index) => (
+            {shouldClusterRoute && !routeIsHiddenForExceptions ? (
               <Marker
-                key={`${route.id}-stop-${index}`}
-                position={[stop.lat, stop.lng]}
-                icon={createStopIcon(index, route.color)}
+                position={routeCentroid(route)}
+                icon={createClusterIcon({
+                  color: route.color,
+                  count: stops.length,
+                  label: routeLabel(route),
+                  muted: !isRouteSelected,
+                })}
+                eventHandlers={{
+                  click: () => selectRoute(route.id),
+                }}
               >
                 <Popup>
                   <Box sx={{ p: 0.5 }}>
                     <Typography variant="subtitle2" fontWeight={600}>
-                      Stop #{index + 1}
+                      {routeLabel(route)}
+                    </Typography>
+                    <Typography variant="caption" display="block" color="text.secondary">
+                      {stops.length} stops summarized
+                    </Typography>
+                  </Box>
+                </Popup>
+              </Marker>
+            ) : null}
+
+            {visibleStops.map((stop) => {
+              const originalIndex = Math.max(0, stops.indexOf(stop));
+              const importance = stopImportance(stop);
+              const stopRole =
+                originalIndex === 0
+                  ? 'start'
+                  : originalIndex === stops.length - 1
+                    ? 'end'
+                    : 'stop';
+              return (
+              <Marker
+                key={`${route.id}-stop-${originalIndex}`}
+                position={[stop.lat, stop.lng]}
+                icon={createStopIcon({
+                  index: originalIndex,
+                  color: route.color,
+                  compact: stops.length >= 8 && !isDetail,
+                  muted: isRouteMuted && importance === 'normal',
+                  selected: isRouteSelected,
+                  routeFocus,
+                  importance,
+                  role: stopRole,
+                })}
+                opacity={isRouteMuted ? 0.4 : 1}
+                eventHandlers={{
+                  click: () => selectRoute(route.id),
+                }}
+              >
+                <Popup>
+                  <Box sx={{ p: 0.5 }}>
+                    <Typography variant="subtitle2" fontWeight={600}>
+                      Stop #{originalIndex + 1}
                     </Typography>
                     <Typography variant="caption" display="block" color="text.secondary">
                       Type: {stop.type}
@@ -342,9 +663,11 @@ export default function MultiRouteMap({
                   </Box>
                 </Popup>
               </Marker>
-            ))}
+              );
+            })}
           </div>
-        ))}
+          );
+        })}
 
         <FitBounds routes={routes} />
       </MapContainer>

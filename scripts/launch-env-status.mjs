@@ -15,7 +15,13 @@ const groups = {
     allOf: ['WORKOS_TEST_EMAIL', 'WORKOS_TEST_PASSWORD'],
   },
   stripeSmoke: {
-    allOf: ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET'],
+    allOf: [
+      'STRIPE_SECRET_KEY',
+      'STRIPE_WEBHOOK_SECRET',
+      'STRIPE_PRICE_STARTER',
+      'STRIPE_PRICE_PROFESSIONAL',
+      'STRIPE_PRICE_ENTERPRISE',
+    ],
   },
   webhookSmoke: {
     allOf: ['STAGING_WEBHOOK_RECEIVER_URL'],

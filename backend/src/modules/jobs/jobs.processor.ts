@@ -5,6 +5,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Job as JobEntity, JobStatus } from './entities/job.entity';
 import { Route, RouteStatus } from '../dispatch/entities/route.entity';
+import { summarizeBullJobDataForLog } from '../../common/logging/bull-job-log.util';
 
 @Processor('jobs')
 export class JobsProcessor {
@@ -19,8 +20,9 @@ export class JobsProcessor {
 
   @Process('process-job')
   async handleJobProcessing(job: Job) {
-    this.logger.log(`Processing job ${job.data.jobId}`);
-    this.logger.debug(`Job data: ${JSON.stringify(job.data)}`);
+    const summary = summarizeBullJobDataForLog(job.data);
+    this.logger.log(`Processing job ${summary.jobId || 'unknown'}`);
+    this.logger.debug(`Job data summary: ${JSON.stringify(summary)}`);
 
     try {
       // Update progress
@@ -40,17 +42,20 @@ export class JobsProcessor {
 
       await job.progress(100);
 
-      this.logger.log(`Successfully processed job ${job.data.jobId}`);
+      this.logger.log(
+        `Successfully processed job ${summary.jobId || 'unknown'}`,
+      );
 
       return {
         success: true,
-        jobId: job.data.jobId,
+        jobId: summary.jobId,
         processedAt: new Date().toISOString(),
       };
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.error(
-        `Failed to process job ${job.data.jobId}: ${error.message}`,
-        error.stack,
+        `Failed to process job ${summary.jobId || 'unknown'}: ${errorMessage}`,
+        error instanceof Error ? error.stack : undefined,
       );
       throw error;
     }
@@ -58,13 +63,15 @@ export class JobsProcessor {
 
   @Process('assign-to-route')
   async handleRouteAssignment(job: Job) {
-    this.logger.log(`Assigning job ${job.data.jobId} to route`);
+    const summary = summarizeBullJobDataForLog(job.data);
+    this.logger.log(`Assigning job ${summary.jobId || 'unknown'} to route`);
+    this.logger.debug(`Job data summary: ${JSON.stringify(summary)}`);
 
     const queuedJob = await this.jobsRepository.findOne({
       where: { id: job.data.jobId },
     });
     if (!queuedJob) {
-      throw new Error(`Queued job not found: ${job.data.jobId}`);
+      throw new Error(`Queued job not found: ${summary.jobId || 'unknown'}`);
     }
 
     const candidateRoutes = await this.routesRepository.find({

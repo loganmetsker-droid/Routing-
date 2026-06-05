@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
-import { ExtractJwt, Strategy } from 'passport-jwt';
+import { Strategy } from 'passport-jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthSession } from '../entities/auth-session.entity';
@@ -20,6 +20,37 @@ export interface JwtPayload {
   exp?: number;
 }
 
+export const MAX_JWT_BEARER_TOKEN_LENGTH = 4096;
+
+function firstHeaderValue(value: unknown): string | null {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    const entry = value.find((item) => typeof item === 'string');
+    return typeof entry === 'string' ? entry : null;
+  }
+  return null;
+}
+
+export function extractJwtFromAuthHeader(req: {
+  headers?: Record<string, unknown>;
+}): string | null {
+  const headers = req?.headers;
+  if (!headers) return null;
+
+  const authorization =
+    firstHeaderValue(headers.authorization) ??
+    firstHeaderValue(headers.Authorization);
+
+  if (!authorization) return null;
+
+  const match = /^Bearer\s+(.+)$/i.exec(authorization.trim());
+  if (!match) return null;
+
+  const token = match[1].trim();
+  if (!token || token.length > MAX_JWT_BEARER_TOKEN_LENGTH) return null;
+  return token;
+}
+
 /**
  * JWT Strategy for Passport
  * Validates JWT tokens and extracts user information
@@ -32,7 +63,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly authSessions: Repository<AuthSession>,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: extractJwtFromAuthHeader,
       ignoreExpiration: false,
       secretOrKey: (() => {
         const secret = configService.get<string>('JWT_SECRET');

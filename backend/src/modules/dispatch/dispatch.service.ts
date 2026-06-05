@@ -84,6 +84,7 @@ import {
   resolveRoutingServiceUrl,
   routingServiceAuthHeaders,
 } from '../../common/routing/routing-service-url.util';
+import { summarizeOptimizeRequestForLog } from '../../common/routing/optimize-request-log.util';
 
 @Injectable()
 export class DispatchService {
@@ -743,7 +744,11 @@ export class DispatchService {
     this.logger.log(
       `[ROUTING:REQUEST] Calling routing service v2 at ${requestUrl} for ${request.vehicles.length} vehicles and ${request.stops.length} stops`,
     );
-    this.logger.debug(`[ROUTING:REQUEST] Payload: ${JSON.stringify(request)}`);
+    this.logger.debug(
+      `[ROUTING:REQUEST] Payload summary: ${JSON.stringify(
+        summarizeOptimizeRequestForLog(request),
+      )}`,
+    );
 
     const startTime = Date.now();
     const response: any = await firstValueFrom(

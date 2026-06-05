@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getOptimizationObjectiveLabel,
   normalizeOptimizationObjective,
+  unwrapApiData,
   type OptimizationObjective,
 } from '@shared/contracts';
 import type { DispatchJob } from '../types/dispatch';
@@ -51,7 +52,7 @@ const previewPlannerLocks = new Map<string, boolean>();
 let previewPlannerServiceDate = new Date().toISOString().slice(0, 10);
 let previewPlannerObjective: OptimizationObjective = 'balanced';
 
-const previewVehicleColors = ['#B97129', '#59729B', '#6E8B67', '#A45E52'];
+const previewVehicleColors = ['#B97129', '#59729B', '#6E8B67', '#B74D47', '#8E658D'];
 
 const buildPreviewStopId = (routeId: string, jobId: string) => `${routeId}::${jobId}`;
 
@@ -253,7 +254,8 @@ const buildPreviewPlannerView = (): PlannerViewResponse => {
 };
 
 const normalizePlannerView = (value: unknown): PlannerViewResponse => {
-  const data = isRecord(value) ? value : {};
+  const unwrapped = unwrapApiData<unknown>(value);
+  const data = isRecord(unwrapped) ? unwrapped : {};
   const rawPlan = (data.plan as PlannerRoutePlan | null | undefined) ?? null;
   return {
     plan: rawPlan
@@ -340,6 +342,57 @@ const buildPreviewRouteSeeds = (vehicleIds?: string[]) => {
   ) satisfies PreviewRouteSeed[];
 };
 
+const assignJobToPreviewSeed = (
+  job: DispatchJob,
+  seed: PreviewRouteSeed,
+) => {
+  const location = job.deliveryLocation || job.pickupLocation || seed.anchor;
+  seed.jobIds.push(job.id);
+  seed.durationMinutes +=
+    previewTravelMinutes(seed.anchor, location) +
+    Number(job.estimatedDuration || 10);
+  seed.anchor = {
+    lat: Number(location.lat || seed.anchor.lat),
+    lng: Number(location.lng || seed.anchor.lng),
+  };
+};
+
+const reserveMinimumStopsPerPreviewLane = (
+  jobs: DispatchJob[],
+  seeds: PreviewRouteSeed[],
+  minimumStops: number,
+) => {
+  if (!seeds.length || jobs.length < seeds.length * minimumStops) {
+    return jobs;
+  }
+
+  const remainingJobs = jobs.slice();
+  const seedOrigins = new Map(
+    seeds.map((seed) => [seed.id, { lat: seed.anchor.lat, lng: seed.anchor.lng }]),
+  );
+  seeds.forEach((seed) => {
+    const seedOrigin = seedOrigins.get(seed.id) || seed.anchor;
+    while (seed.jobIds.length < minimumStops && remainingJobs.length) {
+      const bestIndex = remainingJobs.reduce((best, job, index) => {
+        const bestJob = remainingJobs[best];
+        const location = job.deliveryLocation || job.pickupLocation || seedOrigin;
+        const bestLocation = bestJob.deliveryLocation || bestJob.pickupLocation || seedOrigin;
+        const score =
+          previewDistanceKm(seedOrigin, location) -
+          previewPriorityWeight(job.priority) * 0.01;
+        const bestScore =
+          previewDistanceKm(seedOrigin, bestLocation) -
+          previewPriorityWeight(bestJob.priority) * 0.01;
+        return score < bestScore ? index : best;
+      }, 0);
+      const [nextJob] = remainingJobs.splice(bestIndex, 1);
+      assignJobToPreviewSeed(nextJob, seed);
+    }
+  });
+
+  return remainingJobs;
+};
+
 const assignPreviewJobsByObjective = (
   jobs: DispatchJob[],
   seeds: PreviewRouteSeed[],
@@ -347,7 +400,8 @@ const assignPreviewJobsByObjective = (
 ) => {
   if (!seeds.length) return;
 
-  const orderedJobs = jobs
+  const remainingJobs = reserveMinimumStopsPerPreviewLane(jobs, seeds, 10);
+  const orderedJobs = remainingJobs
     .slice()
     .sort((left, right) => {
       const leftLocation =
@@ -400,14 +454,7 @@ const assignPreviewJobsByObjective = (
       return candidateScore < bestScore ? candidate : best;
     }, seeds[0]);
 
-    targetSeed.jobIds.push(job.id);
-    targetSeed.durationMinutes +=
-      previewTravelMinutes(targetSeed.anchor, location) +
-      Number(job.estimatedDuration || 10);
-    targetSeed.anchor = {
-      lat: Number(location.lat || targetSeed.anchor.lat),
-      lng: Number(location.lng || targetSeed.anchor.lng),
-    };
+    assignJobToPreviewSeed(job, targetSeed);
   });
 };
 

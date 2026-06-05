@@ -29,7 +29,7 @@ export const navSections: NavSection[] = [
   {
     label: 'Overview',
     items: [
-      { label: 'Dashboard', to: '/', icon: TrovanDashboardIcon },
+      { label: 'Dashboard', to: '/dashboard', icon: TrovanDashboardIcon },
     ],
   },
   {
@@ -77,7 +77,7 @@ export const navSections: NavSection[] = [
 export function getActiveNavItem(pathname: string) {
   for (const section of navSections) {
     for (const item of section.items) {
-      if (item.to === '/' ? pathname === '/' : pathname === item.to || pathname.startsWith(item.to + '/')) {
+      if (pathname === item.to || pathname.startsWith(item.to + '/')) {
         return item;
       }
     }

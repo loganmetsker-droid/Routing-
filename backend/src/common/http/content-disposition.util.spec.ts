@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildAttachmentContentDisposition,
   buildInlineContentDisposition,
   sanitizeContentDispositionFilename,
 } from './content-disposition.util';
@@ -24,6 +25,12 @@ describe('content-disposition filename utilities', () => {
   it('builds a quoted inline content-disposition header', () => {
     const header = buildInlineContentDisposition('hello\r\nworld.pdf');
     expect(header).toBe('inline; filename="helloworld.pdf"');
+    expect(header).not.toMatch(/[\r\n]/);
+  });
+
+  it('builds a quoted attachment content-disposition header', () => {
+    const header = buildAttachmentContentDisposition('hello\r\nworld.pdf');
+    expect(header).toBe('attachment; filename="helloworld.pdf"');
     expect(header).not.toMatch(/[\r\n]/);
   });
 });

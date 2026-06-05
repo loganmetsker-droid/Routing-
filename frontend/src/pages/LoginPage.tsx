@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { type FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -25,6 +25,16 @@ import {
   useAuthConfigQuery,
 } from '../services/api.session';
 
+const supportHref = 'mailto:support@trytrovan.com?subject=Trovan%20access%20or%20login%20help';
+
+function getFriendlyLoginError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || '');
+  if (/timed out|backend|network|failed to fetch|unavailable/i.test(message)) {
+    return 'We could not reach Trovan sign-in. Retry in a moment or request access/support.';
+  }
+  return message || 'Login failed. Check your credentials or request access/support.';
+}
+
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -38,17 +48,19 @@ export default function LoginPage() {
     authConfig?.preferredProvider === 'workos' &&
     authConfig.enabled &&
     authConfig.workos.clientIdConfigured;
+  const backendUnavailable = !authBypassed && authConfigQuery.isError;
+  const checkingSignIn = authConfigQuery.isLoading || authConfigQuery.isFetching;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
 
     try {
       setLoading(true);
       const session = await login(email, password);
-      navigate(isDriverOnlyAuthUser(session.user) ? '/driver' : '/');
-    } catch (err: any) {
-      setError(err.message || 'Login failed');
+      navigate(isDriverOnlyAuthUser(session.user) ? '/driver' : '/dashboard');
+    } catch (err: unknown) {
+      setError(getFriendlyLoginError(err));
     } finally {
       setLoading(false);
     }
@@ -60,8 +72,8 @@ export default function LoginPage() {
       setLoading(true);
       await login('driver-demo@trovan.local', 'preview');
       navigate('/driver');
-    } catch (err: any) {
-      setError(err.message || 'Unable to open demo');
+    } catch (err: unknown) {
+      setError(getFriendlyLoginError(err));
     } finally {
       setLoading(false);
     }
@@ -73,7 +85,7 @@ export default function LoginPage() {
       setLoading(true);
       await beginWorkosLogin();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Unable to start WorkOS sign-in.');
+      setError(getFriendlyLoginError(err));
       setLoading(false);
     }
   };
@@ -133,13 +145,37 @@ export default function LoginPage() {
             </Alert>
           )}
 
-          {authConfigQuery.isLoading ? (
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+          {checkingSignIn ? (
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }} data-testid="login-loading">
               <CircularProgress size={16} />
               <Typography variant="body2" color="text.secondary">
-                Checking sign-in configuration...
+                Checking sign-in availability...
               </Typography>
             </Stack>
+          ) : null}
+
+          {backendUnavailable ? (
+            <Alert severity="warning" sx={{ mb: 2 }} data-testid="login-unavailable">
+              <Typography sx={{ fontWeight: 800, mb: 0.5 }}>
+                Sign-in is temporarily unavailable.
+              </Typography>
+              <Typography variant="body2" sx={{ mb: 1.5 }}>
+                Trovan could not reach the authentication service. Your route workspace is safe; try again or request access/support.
+              </Typography>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                <Button
+                  variant="contained"
+                  size="small"
+                  onClick={() => void authConfigQuery.refetch()}
+                  disabled={authConfigQuery.isFetching}
+                >
+                  {authConfigQuery.isFetching ? 'Checking...' : 'Retry'}
+                </Button>
+                <Button component="a" href={supportHref} variant="outlined" size="small">
+                  Request access/support
+                </Button>
+              </Stack>
+            </Alert>
           ) : null}
 
           {error && (
@@ -148,7 +184,7 @@ export default function LoginPage() {
             </Alert>
           )}
 
-          {providerReady ? (
+          {providerReady && !backendUnavailable ? (
             <Button
               variant="contained"
               fullWidth
@@ -163,7 +199,7 @@ export default function LoginPage() {
             </Button>
           ) : null}
 
-          {authConfig?.workos.mfaManagedByProvider ? (
+          {authConfig?.workos.mfaManagedByProvider && !backendUnavailable ? (
             <Alert severity="success" sx={{ mb: authConfig?.localLoginAllowed ? 2 : 0 }}>
               MFA and SSO policy are handled by WorkOS when provider sign-in is enabled.
             </Alert>
@@ -183,7 +219,7 @@ export default function LoginPage() {
             </Button>
           ) : null}
 
-          {!authBypassed && (authConfig?.localLoginAllowed || !providerReady) ? (
+          {!backendUnavailable && !authBypassed && (authConfig?.localLoginAllowed || !providerReady) ? (
             <form onSubmit={handleSubmit} data-testid="login-form">
               <TextField
                 fullWidth
@@ -223,6 +259,11 @@ export default function LoginPage() {
                       : 'Sign In'}
               </Button>
             </form>
+          ) : null}
+          {!authBypassed && !backendUnavailable ? (
+            <Button component="a" href={supportHref} variant="text" fullWidth sx={{ mt: 1.5 }}>
+              Request access/support
+            </Button>
           ) : null}
         </CardContent>
       </Card>

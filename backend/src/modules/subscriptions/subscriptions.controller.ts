@@ -147,15 +147,20 @@ export class SubscriptionsController {
         this.webhookSecret,
       );
     } catch (err) {
-      this.logger.error(`Webhook signature verification failed: ${err.message}`);
-      throw new BadRequestException(`Webhook Error: ${err.message}`);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`Webhook signature verification failed: ${errorMessage}`);
+      throw new BadRequestException('Webhook signature verification failed');
     }
 
     try {
       await this.subscriptionsService.handleWebhookEvent(event);
       return { received: true };
     } catch (err) {
-      this.logger.error(`Error processing webhook: ${err.message}`);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      this.logger.error(
+        `Error processing webhook: ${errorMessage}`,
+        err instanceof Error ? err.stack : undefined,
+      );
       throw err;
     }
   }
