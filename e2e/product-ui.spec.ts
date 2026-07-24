@@ -310,10 +310,31 @@ test.describe('routing workspace product UI', () => {
 
     await expect(page.locator('[data-route-lane-focus="selected"]').first()).toBeVisible();
     await expect(page.getByTestId('routing-route-timeline-strip')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Overview', exact: true })).toBeVisible();
     await expect(page.getByTestId('routing-route-summaries-panel')).toBeVisible();
     if (laneId) {
       await expect(page.getByTestId('routing-workspace-page')).toHaveAttribute('data-selected-route-id', laneId);
     }
+  });
+
+  test('desktop route inspector protects and clears a route order as one workflow', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'dense-route-day');
+    const { firstLane } = await selectFirstRouteLane(page);
+    const routeStops = firstLane.locator('[data-testid="routing-compact-stop-row"]');
+    expect(await routeStops.count()).toBeGreaterThan(1);
+
+    await page.getByRole('button', { name: 'Stops', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Protect route order', exact: true })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Protect route order', exact: true }).click();
+    await expect.poll(async () =>
+      routeStops.evaluateAll((stops) => stops.every((stop) => stop.getAttribute('data-stop-locked') === 'true')),
+    ).toBe(true);
+
+    await page.getByRole('button', { name: 'Clear route protection', exact: true }).click();
+    await expect.poll(async () =>
+      routeStops.evaluateAll((stops) => stops.every((stop) => stop.getAttribute('data-stop-locked') === 'false')),
+    ).toBe(true);
   });
 
   test('selected-route map mode keeps selected route details and summarizes render level', async ({ page }, testInfo) => {

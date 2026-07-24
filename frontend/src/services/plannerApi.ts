@@ -780,6 +780,30 @@ export const updateRoutePlanGroup = async (
   }).then(async (response) => normalizePlannerView(await response.json()));
 };
 
+export const updateRouteOrderProtection = async (
+  routePlanId: string,
+  groupId: string,
+  isLocked: boolean,
+) => {
+  if (isPreview()) {
+    const route = previewState.routes.find((item) => item.id === groupId);
+    if (!route) {
+      throw new Error(`Preview route group not found: ${groupId}`);
+    }
+    route.jobIds.forEach((jobId) => {
+      previewPlannerLocks.set(buildPreviewStopId(groupId, jobId), isLocked);
+    });
+    return createPreviewResponse();
+  }
+  return apiFetch(
+    `/api/route-plans/${routePlanId}/groups/${groupId}/order-protection`,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ isLocked }),
+    },
+  ).then(async (response) => normalizePlannerView(await response.json()));
+};
+
 export const updateRoutePlanStop = async (
   routePlanId: string,
   stopId: string,

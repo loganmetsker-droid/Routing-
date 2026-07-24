@@ -1275,6 +1275,38 @@ export class PlanningService {
     return this.getRoutePlan(routePlanId, actor);
   }
 
+  async updateRouteOrderProtection(
+    routePlanId: string,
+    groupId: string,
+    isLocked: boolean,
+    actor?: Actor,
+  ) {
+    const view = await this.getRoutePlan(routePlanId, actor);
+    const group = view.groups.find((item) => item.id === groupId);
+    if (!group) throw new NotFoundException(`Route plan group not found: ${groupId}`);
+
+    await this.routePlanStops.update(
+      { routePlanId, routePlanGroupId: groupId },
+      { isLocked },
+    );
+    this.audit.record({
+      actorId: actor?.userId || 'system',
+      actorType: 'user',
+      entityType: 'route_plan_group',
+      entityId: groupId,
+      action: isLocked
+        ? 'route-plan.group.order-protected'
+        : 'route-plan.group.order-unprotected',
+      source: 'user',
+      newValue: { isLocked },
+      metadata: {
+        organizationId: view.routePlan.organizationId,
+        routePlanId,
+      },
+    });
+    return this.getRoutePlan(routePlanId, actor);
+  }
+
   async updateStop(routePlanId: string, stopId: string, dto: UpdateRoutePlanStopDto, actor?: Actor) {
     await this.getRoutePlan(routePlanId, actor);
     const stop = await this.routePlanStops.findOne({ where: { id: stopId, routePlanId } });

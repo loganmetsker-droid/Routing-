@@ -4,6 +4,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { GenerateRoutePlanDto } from './dto/generate-route-plan.dto';
 import { UpdateRoutePlanGroupDto } from './dto/update-route-plan-group.dto';
 import { UpdateRoutePlanStopDto } from './dto/update-route-plan-stop.dto';
+import { UpdateRouteOrderProtectionDto } from './dto/update-route-order-protection.dto';
 import { AcceptPublishRiskDto } from './dto/accept-publish-risk.dto';
 import { PlanningService } from './planning.service';
 
@@ -74,6 +75,22 @@ export class PlanningController {
     @Body() dto: UpdateRoutePlanGroupDto,
   ) {
     return this.planning.updateGroup(routePlanId, groupId, dto, req.user);
+  }
+
+  @Patch('route-plans/:id/groups/:groupId/order-protection')
+  @Roles('OWNER', 'ADMIN', 'DISPATCHER')
+  updateRouteOrderProtection(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') routePlanId: string,
+    @Param('groupId') groupId: string,
+    @Body() dto: UpdateRouteOrderProtectionDto,
+  ) {
+    return this.planning.updateRouteOrderProtection(
+      routePlanId,
+      groupId,
+      dto.isLocked,
+      req.user,
+    );
   }
 
   @Patch('route-plans/:id/stops/:stopId')

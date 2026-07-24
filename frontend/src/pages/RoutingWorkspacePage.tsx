@@ -54,6 +54,7 @@ import {
   type PlannerRoutePlanGroup,
   type PlannerRoutePlanStop,
   updateRoutePlanGroup,
+  updateRouteOrderProtection,
   updateRoutePlanStop,
   usePlannerQuery,
   useRoutePlanPublishReadinessQuery,
@@ -1857,6 +1858,14 @@ export default function RoutingWorkspacePage() {
 
   const toggleStopLock = async (stopId: string, isLocked: boolean) => {
     if (!plan?.id) return;
+    if (isLocalPlannerScenario) {
+      setStops((current) =>
+        current.map((stop) =>
+          stop.id === stopId ? { ...stop, isLocked: !isLocked } : stop,
+        ),
+      );
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -1873,17 +1882,25 @@ export default function RoutingWorkspacePage() {
 
   const setRouteOrderProtection = async (locked: boolean) => {
     if (!plan?.id || !selectedGroup?.stops.length) return;
+    if (isLocalPlannerScenario) {
+      setStops((current) =>
+        current.map((stop) =>
+          stop.routePlanGroupId === selectedGroup.id
+            ? { ...stop, isLocked: locked }
+            : stop,
+        ),
+      );
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
-      let latest: PlannerWorkspacePayload | null = null;
-      for (const stop of selectedGroup.stops) {
-        if (stop.isLocked === locked) continue;
-        latest = await updateRoutePlanStop(plan.id, stop.id, { isLocked: locked });
-      }
-      if (latest) {
-        refreshPlanView(latest);
-      }
+      const result = await updateRouteOrderProtection(
+        plan.id,
+        selectedGroup.id,
+        locked,
+      );
+      refreshPlanView(result);
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Failed to update route lock protection.'));
     } finally {
@@ -3281,8 +3298,9 @@ export default function RoutingWorkspacePage() {
             </Stack>
 
             <Stack spacing={1.2} sx={{ minHeight: 0, minWidth: 0, overflow: 'visible' }}>
-              {routeSummariesPanel}
+              {inspectorPanel}
               {planningAlertsPanel}
+              {routeSummariesPanel}
             </Stack>
           </Box>
           <Box sx={{ display: { xs: 'none', xl: 'block' } }}>

@@ -55,6 +55,17 @@ describe('PlanningService', () => {
       delete: jest.fn(async (where: any) => {
         items = items.filter((item) => !Object.entries(where).every(([key, val]) => item[key] === val));
       }),
+      update: jest.fn(async (where: any, patch: any) => {
+        let affected = 0;
+        items = items.map((item) => {
+          if (!Object.entries(where).every(([key, val]) => item[key] === val)) {
+            return item;
+          }
+          affected += 1;
+          return { ...item, ...patch, updatedAt: new Date() };
+        });
+        return { affected };
+      }),
       createQueryBuilder: jest.fn(() => ({
         update: jest.fn().mockReturnThis(),
         set: jest.fn().mockReturnThis(),
@@ -288,6 +299,52 @@ describe('PlanningService', () => {
     const result = await service.generateDraft({ serviceDate: '2026-04-10', vehicleIds: ['veh-1'], objective: 'distance' }, { userId: 'user-1', organizationId: 'org-1' });
 
     expect(result.stops[0].isLocked).toBe(true);
+  });
+
+  it('protects every stop in a route group with one scoped update', async () => {
+    const routePlans = createRepo([{ id: 'plan-1', organizationId: 'org-1', serviceDate: '2026-04-10', status: 'READY', objective: 'distance', warnings: [], metrics: {}, depotId: 'dep-1' }]);
+    const routePlanGroups = createRepo([
+      { id: 'group-1', routePlanId: 'plan-1', groupIndex: 1, label: 'Route 1', vehicleId: 'veh-1' },
+      { id: 'group-2', routePlanId: 'plan-1', groupIndex: 2, label: 'Route 2', vehicleId: 'veh-2' },
+    ]);
+    const routePlanStops = createRepo([
+      { id: 'stop-a', routePlanId: 'plan-1', routePlanGroupId: 'group-1', stopSequence: 1, isLocked: false },
+      { id: 'stop-b', routePlanId: 'plan-1', routePlanGroupId: 'group-1', stopSequence: 2, isLocked: false },
+      { id: 'stop-c', routePlanId: 'plan-1', routePlanGroupId: 'group-2', stopSequence: 1, isLocked: false },
+    ]);
+    const service = createPlanningService(
+      routePlans,
+      routePlanGroups,
+      routePlanStops,
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      createRepo(),
+    );
+
+    const result = await service.updateRouteOrderProtection(
+      'plan-1',
+      'group-1',
+      true,
+      { userId: 'user-1', organizationId: 'org-1' },
+    );
+
+    expect(routePlanStops.update).toHaveBeenCalledTimes(1);
+    expect(routePlanStops.update).toHaveBeenCalledWith(
+      { routePlanId: 'plan-1', routePlanGroupId: 'group-1' },
+      { isLocked: true },
+    );
+    expect(result.stops.filter((stop: any) => stop.routePlanGroupId === 'group-1').every((stop: any) => stop.isLocked)).toBe(true);
+    expect(result.stops.find((stop: any) => stop.id === 'stop-c').isLocked).toBe(false);
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: 'route-plan.group.order-protected',
+      entityId: 'group-1',
+      metadata: expect.objectContaining({ organizationId: 'org-1', routePlanId: 'plan-1' }),
+    }));
   });
 
   it('resequences source and target groups when moving a stop', async () => {

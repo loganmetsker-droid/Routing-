@@ -14,6 +14,7 @@ Trovan is not being prepared for self-serve general availability. Launch is $399
 - Public subscription creation is rejected unless `SELF_SERVE_BILLING_ENABLED=true`; the pilot configuration fixes it to false.
 - Lead request types are shared between frontend and backend, the primary action posts to `VITE_REST_API_URL`, and email is an error fallback.
 - Driver preview sessions clear auth/data/route state and seed an explicit dispatcher or driver identity.
+- Desktop routing exposes the selected-route inspector, and whole-route order protection is one tenant-checked backend update with an audit event instead of a partial per-stop request loop.
 - Authentication configuration uses a bounded request and a visible retry/error state.
 - Pilot readiness live-probes database, Redis/worker, routing, WorkOS, Postmark, and R2 with bounded timeouts; any unavailable critical dependency returns HTTP 503.
 - Render migrations run before deployment, not during application startup.
@@ -30,9 +31,9 @@ Trovan is not being prepared for self-serve general availability. Launch is $399
 
 - [x] Reproducible `npm ci` and workspace production build.
 - [x] Frontend lint with zero warnings.
-- [x] Backend: 241 tests; frontend: 52 tests; routing service: 13 tests.
+- [x] Backend: 242 tests; frontend: 52 tests; routing service: 13 tests.
 - [x] Driver workflow: three consecutive isolated runs, two tests per run.
-- [x] Complete Chromium Playwright suite: 77 passed, one hosted-only persistence test skipped, zero failures.
+- [x] Complete Chromium Playwright suite: 78 passed, one hosted-only persistence test skipped, zero failures.
 - [x] Production dependency audit: zero critical/high findings. Two accepted React Router 6 moderate advisories remain documented for the pilot.
 - [x] Database migrations applied successfully.
 - [x] Release scope contains only application code, migrations, configuration, production assets, tests, and runbooks; generated QA/audit artifacts are excluded.
@@ -62,7 +63,7 @@ Production promotion must use the exact staging SHA. Verify live readiness, Work
 These items do not change the assisted-pilot commercial boundary, but they should be completed before self-serve GA:
 
 - Move from React Router 6 to Router 7 and remove the two accepted moderate advisories.
-- Replace the remaining local-only route exception decisions, route-version display, draft save, autosave status, and route-order locking with durable backend transactions before exposing those controls in production.
+- Replace the remaining local-only route exception decisions, route-version display, draft save, and autosave status with durable backend transactions before exposing those controls in production.
 - Split the large public-site and routing-workspace bundles further to improve first-load and route-change performance.
 - Replace the stale external Vercel repository checks with Cloudflare/Render checks so a retired frontend provider cannot leave unrelated red statuses on release PRs.
 - Add production analytics funnels only after consent, retention, and event ownership are approved.
