@@ -2299,7 +2299,14 @@ export default function RoutingWorkspacePage() {
         sx={{ px: 1.2, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}
       >
         <Typography variant="h6">Unassigned Jobs ({unassignedJobCount})</Typography>
-        <Button size="small" variant="text" onClick={() => setLeftPanelTab('jobs')}>
+        <Button
+          size="small"
+          variant="text"
+          onClick={() => {
+            setLeftPanelTab('jobs');
+            setRoutingActionNotice('Job filters are ready in the Jobs panel.');
+          }}
+        >
           Filters
         </Button>
       </Stack>
