@@ -53,6 +53,8 @@ export const marketingRequestTypes = [
 
 export type MarketingRequestType = (typeof marketingRequestTypes)[number];
 
+export const TRACKING_STALE_SIGNAL_MS = 15 * 60 * 1000;
+
 export type AssistedPilotPlanKey = 'starter' | 'professional' | 'enterprise';
 
 export type AssistedPilotPlan = {

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { TRACKING_STALE_SIGNAL_MS } from '../shared/contracts/index';
 import {
   preparePreviewSession,
   type PreviewSessionRole,
@@ -422,7 +423,11 @@ test.describe('launch calculation and control proof', () => {
     const liveRoutes = seed.routes.filter((route) => route.vehicleId && hasCoordinate(route));
     const staleSignals = liveRoutes.filter((route) => {
       const timestamp = route.dispatchedAt || route.createdAt;
-      return !timestamp || Date.now() - new Date(timestamp).getTime() > 10 * 60 * 1000;
+      return (
+        !timestamp ||
+        Date.now() - new Date(timestamp).getTime() >
+          TRACKING_STALE_SIGNAL_MS
+      );
     }).length;
     const adherence = liveRoutes.length ? Math.max(62, 100 - staleSignals * 12) : 0;
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
+import { TRACKING_STALE_SIGNAL_MS } from '@shared/contracts';
 import { Box, Button, Grid, List, ListItem, ListItemText, Stack, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { useQueryClient } from '@tanstack/react-query';
@@ -26,8 +27,6 @@ import {
   trovanMapLayers,
   usePersistedTrovanMapStyle,
 } from '../components/maps/mapPresentation';
-
-const STALE_SIGNAL_MS = 15 * 60 * 1000;
 
 export default function TrackingEnhanced() {
   const [showHowItWorks, setShowHowItWorks] = useState(false);
@@ -79,7 +78,8 @@ export default function TrackingEnhanced() {
     () =>
       liveLocations.filter(
         (location) =>
-          Date.now() - new Date(location.timestamp).getTime() > STALE_SIGNAL_MS,
+          Date.now() - new Date(location.timestamp).getTime() >
+          TRACKING_STALE_SIGNAL_MS,
       ).length,
     [liveLocations],
   );
@@ -218,7 +218,9 @@ export default function TrackingEnhanced() {
                     {liveLocations.map((location) => {
                       const route = liveRoutes.find((item) => item.vehicleId === location.vehicleId);
                       const driver = drivers.find((item) => item.id === route?.driverId);
-                      const isStale = Date.now() - new Date(location.timestamp).getTime() > STALE_SIGNAL_MS;
+                      const isStale =
+                        Date.now() - new Date(location.timestamp).getTime() >
+                        TRACKING_STALE_SIGNAL_MS;
                       return (
                         <CircleMarker
                           key={location.vehicleId}
