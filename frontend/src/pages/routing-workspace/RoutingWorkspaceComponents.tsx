@@ -1846,7 +1846,17 @@ export function RouteInspector({
                       <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 850 }}>
                         {label}
                       </Typography>
-                      <Typography variant="body2" noWrap sx={{ fontWeight: 850, textAlign: 'right' }}>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          minWidth: 0,
+                          maxWidth: '62%',
+                          fontWeight: 850,
+                          lineHeight: 1.25,
+                          overflowWrap: 'anywhere',
+                          textAlign: 'right',
+                        }}
+                      >
                         {value}
                       </Typography>
                     </Stack>

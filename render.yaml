@@ -93,6 +93,12 @@ services:
         sync: false
       - key: LEAD_INTAKE_FROM_EMAIL
         sync: false
+      - key: LEAD_INTAKE_OPERATOR_EMAILS
+        sync: false
+      - key: LEAD_NOTIFICATION_MAX_ATTEMPTS
+        value: "3"
+      - key: LEAD_NOTIFICATION_RETRY_BASE_SECONDS
+        value: "60"
       - key: STORAGE_MODE
         value: r2
       - key: R2_BUCKET

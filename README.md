@@ -71,8 +71,8 @@ Optional:
 - Run `npm run bootstrap:local` to generate `backend/.env.local` with a fresh JWT secret and local runtime guidance.
 - Use `npm run smoke:local` from the repo root to confirm backend/frontend health endpoints and local Postgres reachability.
 - For managed auth, configure `WORKOS_CLIENT_ID`, `WORKOS_API_KEY`, and `WORKOS_REDIRECT_URI`.
-- For live customer comms, configure Postmark and Twilio.
-- For self-serve billing, configure Stripe keys and price IDs.
+- For assisted-pilot email and lead intake, configure Postmark. SMS remains disabled.
+- For manually approved billing, configure Stripe keys and Launch/Scale price IDs; public checkout remains disabled.
 - For proof storage outside local dev, configure the R2 variables in `backend/.env.local.example`.
 
 Admin surfaces now available in the live UI:
@@ -83,6 +83,7 @@ Admin surfaces now available in the live UI:
   - organization members and invitations
   - scoped API keys
   - webhook endpoints, signing-secret rotation, and failed-delivery replay
+  - pilot-request readback, intake status, and operator email retry
 - `/analytics` shows live operational KPIs from `/api/metrics/overview`.
 - `/driver` shows the driver manifest workspace.
 - `/track/:token` renders the branded public delivery tracking portal.

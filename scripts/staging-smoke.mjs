@@ -196,14 +196,25 @@ async function probeLeadIntake(backendUrl, authToken) {
   );
   if (!created || !authToken) return;
 
-  const leadId = created.json?.data?.id || created.json?.id;
-  if (!leadId) {
-    record('lead-intake:receipt-id', 'fail', {
-      reason: 'lead creation response did not include a durable lead id',
-    });
-    return;
-  }
-  record('lead-intake:receipt-id', 'pass', { leadId });
+  await expectStatus(
+    'lead-intake:deduplicate-repeat',
+    `${backendUrl}/api/marketing-leads`,
+    201,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Staging Smoke',
+        workEmail,
+        company: 'Trovan Staging Verification',
+        fleetSize: '5–15',
+        requestType: 'Book demo',
+        notes: 'Automated staging lead-intake verification. Safe to close.',
+        source: 'staging-smoke',
+        pagePath: '/pricing',
+      }),
+    },
+  );
 
   const listed = await expectStatus(
     'lead-intake:operator-queue',
@@ -212,14 +223,22 @@ async function probeLeadIntake(backendUrl, authToken) {
     { headers: authHeaders(authToken) },
   );
   const leads = listed?.json?.data?.leads || listed?.json?.leads || [];
-  if (!Array.isArray(leads) || !leads.some((lead) => lead.id === leadId && lead.workEmail === workEmail)) {
+  const matchingLeads = Array.isArray(leads)
+    ? leads.filter((lead) => lead.workEmail === workEmail)
+    : [];
+  const leadId = matchingLeads[0]?.id;
+  if (!leadId || matchingLeads.length !== 1) {
     record('lead-intake:durable-readback', 'fail', {
-      reason: 'created lead was not visible in the authenticated operator queue',
-      leadId,
+      reason:
+        'operator queue did not contain exactly one durable record after duplicate submission',
+      matchingLeadCount: matchingLeads.length,
     });
     return;
   }
-  record('lead-intake:durable-readback', 'pass', { leadId });
+  record('lead-intake:durable-readback', 'pass', {
+    leadId,
+    duplicateCount: matchingLeads.length,
+  });
 
   await expectStatus(
     'lead-intake:close-smoke-record',

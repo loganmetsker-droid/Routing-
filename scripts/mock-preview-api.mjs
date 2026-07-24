@@ -495,11 +495,7 @@ const server = createServer(async (req, res) => {
     const body = await readBody(req);
     const existing = marketingLeads.find((lead) => lead.workEmail === body.workEmail);
     if (existing) {
-      json(res, 201, {
-        id: existing.id,
-        duplicate: true,
-        notificationStatus: existing.notificationStatus,
-      });
+      json(res, 201, { accepted: true });
       return;
     }
     const lead = {
@@ -510,11 +506,7 @@ const server = createServer(async (req, res) => {
       createdAt: new Date().toISOString(),
     };
     marketingLeads.unshift(lead);
-    json(res, 201, {
-      id: lead.id,
-      duplicate: false,
-      notificationStatus: lead.notificationStatus,
-    });
+    json(res, 201, { accepted: true });
     return;
   }
 

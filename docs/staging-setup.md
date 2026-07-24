@@ -17,6 +17,7 @@ Staging mirrors the production topology: Cloudflare serves the frontend; Render 
 - WorkOS: `WORKOS_CLIENT_ID`, `WORKOS_API_KEY`, `WORKOS_REDIRECT_URI`, `WORKOS_LOGOUT_REDIRECT_URI`
 - Stripe test mode: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_LAUNCH`, `STRIPE_PRICE_SCALE`
 - Postmark: `POSTMARK_SERVER_TOKEN`, `POSTMARK_FROM_EMAIL`, `LEAD_INTAKE_EMAIL`, `LEAD_INTAKE_FROM_EMAIL`
+- Lead operations: `LEAD_INTAKE_OPERATOR_EMAILS` must include the authenticated staging smoke/operator account; customer organization admins remain denied.
 - R2: `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_ENDPOINT`
 
 The Blueprint supplies the database, Redis, routing host, and generated JWT secret. Keep:

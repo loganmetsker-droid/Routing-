@@ -7,6 +7,7 @@ import { BullModule } from '@nestjs/bull';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TerminusModule } from '@nestjs/terminus';
 import { APP_GUARD } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { join } from 'path';
 
 // Configuration
@@ -41,6 +42,9 @@ import { AuditModule } from './common/audit/audit.module';
 import { RuntimeStatusModule } from './common/runtime/runtime-status.module';
 import { WorkosModule } from './common/integrations/workos.module';
 
+const scheduleImports =
+  process.env.ENABLE_SCHEDULER === '1' ? [ScheduleModule.forRoot()] : [];
+
 @Module({
   imports: [
     // Global configuration module
@@ -62,6 +66,7 @@ import { WorkosModule } from './common/integrations/workos.module';
         limit: 120,
       },
     ]),
+    ...scheduleImports,
 
     // Database - PostgreSQL with TimescaleDB
     TypeOrmModule.forRootAsync({

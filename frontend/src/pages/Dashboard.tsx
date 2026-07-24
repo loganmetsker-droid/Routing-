@@ -117,6 +117,10 @@ function MetricTile({ card }: { card: MetricCard }) {
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
+        '@media (min-width: 360px) and (max-width: 599.95px)': {
+          minHeight: 104,
+          p: 1.05,
+        },
       }}
     >
       <Stack direction="row" alignItems="center" spacing={1.15}>
@@ -129,15 +133,38 @@ function MetricTile({ card }: { card: MetricCard }) {
             placeItems: 'center',
             bgcolor: danger ? alpha(trovanColors.semantic.danger, 0.13) : alpha(trovanColors.semantic.blue, 0.12),
             color: danger ? trovanColors.semantic.danger : trovanColors.semantic.blue,
+            '@media (min-width: 360px) and (max-width: 599.95px)': {
+              width: 34,
+              height: 34,
+            },
           }}
         >
-          <Icon sx={{ fontSize: 21 }} />
+          <Icon
+            sx={{
+              fontSize: 21,
+              '@media (min-width: 360px) and (max-width: 599.95px)': {
+                fontSize: 19,
+              },
+            }}
+          />
         </Box>
         <Box sx={{ minWidth: 0 }}>
           <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 750, fontSize: 11.5 }}>
             {card.label}
           </Typography>
-          <Typography variant="h2" component="p" sx={{ mt: 0.15, fontSize: 25, lineHeight: 1.05, color: danger ? trovanColors.semantic.danger : 'text.primary' }}>
+          <Typography
+            variant="h2"
+            component="p"
+            sx={{
+              mt: 0.15,
+              fontSize: 25,
+              lineHeight: 1.05,
+              color: danger ? trovanColors.semantic.danger : 'text.primary',
+              '@media (min-width: 360px) and (max-width: 599.95px)': {
+                fontSize: 22,
+              },
+            }}
+          >
             {card.value}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.15, fontSize: 11.5 }}>{card.note}</Typography>
@@ -419,9 +446,18 @@ export default function Dashboard() {
   return (
     <Box data-testid="operations-dashboard-page">
       <Box
+        data-testid="dashboard-metric-grid"
         sx={{
           display: 'grid',
-          gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(3, 1fr)', xl: 'repeat(6, 1fr)' },
+          gridTemplateColumns: {
+            xs: '1fr',
+            sm: 'repeat(2, minmax(0, 1fr))',
+            lg: 'repeat(3, minmax(0, 1fr))',
+            xl: 'repeat(6, minmax(0, 1fr))',
+          },
+          '@media (min-width: 360px) and (max-width: 599.95px)': {
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+          },
           gap: 1.1,
           mb: 1.35,
         }}

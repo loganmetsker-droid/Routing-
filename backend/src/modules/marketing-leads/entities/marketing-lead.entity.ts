@@ -53,6 +53,23 @@ export class MarketingLead {
   @Column({ name: 'notification_error', type: 'varchar', length: 240, nullable: true })
   notificationError?: string | null;
 
+  @Column({ name: 'notification_attempts', type: 'integer', default: 0 })
+  notificationAttempts: number;
+
+  @Column({
+    name: 'last_notification_attempt_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  lastNotificationAttemptAt?: Date | null;
+
+  @Column({
+    name: 'next_notification_attempt_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  nextNotificationAttemptAt?: Date | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt: Date;
 

@@ -15,7 +15,7 @@ If the legal owner name or operator contact differs, correct this document befor
 ## Provider setup evidence
 
 - WorkOS redirect/logout URLs, test user, session expiry, logout, and revocation
-- Postmark verified sender, SPF/DKIM, operator reply-to, delivery activity, bounce webhook/alert, and acknowledgement
+- Postmark verified sender, SPF/DKIM, operator reply-to, delivery activity, bounce webhook/alert, and acknowledgement. Confirm `LEAD_INTAKE_OPERATOR_EMAILS` includes only named Trovan operators, a customer admin is denied, and Settings → Platform shows persistence, status changes, scheduled retry after a confirmed transient response, and manual review after an ambiguous outcome.
 - R2 bucket access, proof upload/download, persistence after deployment, recovery/versioning check
 - Stripe test-mode Launch/Scale prices, signed-order-form workflow, invoice/subscription, failed payment, period-end cancellation, and refund procedure
 - Render failure notification and authenticated scheduled health smoke. Configure the dedicated `PRODUCTION_AUTH_TOKEN` and `PRODUCTION_METRICS_TOKEN` GitHub Actions secrets; either missing or expired token intentionally fails the monitor.

@@ -62,6 +62,14 @@ import {
 import { useBillingOverviewQuery } from '../services/subscriptionsApi';
 import { useTrackingReadinessQuery } from '../services/trackingApi';
 import { useNotificationsOverviewQuery } from '../services/notificationsApi';
+import {
+  type LeadNotificationStatus,
+  type MarketingLeadStatus,
+  useMarketingLeadAccessQuery,
+  useMarketingLeadsQuery,
+  useRetryMarketingLeadNotificationMutation,
+  useUpdateMarketingLeadStatusMutation,
+} from '../services/marketingLeadsApi';
 import { getErrorMessage, type TrackingReadiness } from '../services/api.types';
 import { trovanColors } from '../theme/designTokens';
 
@@ -80,6 +88,26 @@ const webhookEventOptions = [
   'exception.resolved',
 ];
 const dividerItemSx = { borderBottom: '1px solid', borderColor: 'divider' } as const;
+
+const leadStatusTone = (status: MarketingLeadStatus): StatusPillTone =>
+  status === 'qualified'
+    ? 'success'
+    : status === 'contacted'
+      ? 'info'
+      : status === 'closed'
+        ? 'default'
+        : 'accent';
+
+const notificationStatusTone = (
+  status: LeadNotificationStatus,
+): StatusPillTone =>
+  status === 'sent'
+    ? 'success'
+    : status === 'failed'
+      ? 'danger'
+      : status === 'skipped'
+        ? 'warning'
+        : 'info';
 
 type SettingsSectionId =
   | 'overview'
@@ -312,6 +340,11 @@ export default function SettingsPage() {
   const auditOverviewQuery = useAuditOverviewQuery();
   const billingOverviewQuery = useBillingOverviewQuery();
   const notificationsOverviewQuery = useNotificationsOverviewQuery();
+  const marketingLeadAccessQuery = useMarketingLeadAccessQuery();
+  const hasMarketingLeadAccess = marketingLeadAccessQuery.data === true;
+  const marketingLeadsQuery = useMarketingLeadsQuery(
+    hasMarketingLeadAccess,
+  );
   const platformOverviewQuery = usePlatformOverviewQuery();
   const apiKeysQuery = useApiKeysQuery();
   const webhooksQuery = useWebhooksQuery();
@@ -328,6 +361,10 @@ export default function SettingsPage() {
   const updateWebhookMutation = useUpdateWebhookMutation();
   const rotateWebhookSecretMutation = useRotateWebhookSecretMutation();
   const replayWebhookDeliveryMutation = useReplayWebhookDeliveryMutation();
+  const updateMarketingLeadStatusMutation =
+    useUpdateMarketingLeadStatusMutation();
+  const retryMarketingLeadNotificationMutation =
+    useRetryMarketingLeadNotificationMutation();
 
   const currentOrganization = currentOrganizationQuery.data ?? null;
   const organizations = organizationsQuery.data ?? [];
@@ -340,6 +377,7 @@ export default function SettingsPage() {
   const auditOverview = auditOverviewQuery.data ?? null;
   const billingOverview = billingOverviewQuery.data ?? null;
   const notificationsOverview = notificationsOverviewQuery.data ?? null;
+  const marketingLeads = marketingLeadsQuery.data ?? [];
   const platformOverview = platformOverviewQuery.data ?? null;
   const apiKeys = apiKeysQuery.data ?? [];
   const webhooks = webhooksQuery.data ?? [];
@@ -1403,6 +1441,202 @@ export default function SettingsPage() {
                 </SurfacePanel>
               </Grid>
             </Grid>
+
+            {hasMarketingLeadAccess ? (
+              <SurfacePanel variant="panel" data-testid="marketing-lead-inbox">
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={1}
+                alignItems={{ xs: 'flex-start', sm: 'center' }}
+                justifyContent="space-between"
+              >
+                <Box>
+                  <Typography variant="h5" component="div">
+                    Pilot request inbox
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    component="div"
+                    color="text.secondary"
+                    sx={{ mt: 0.5 }}
+                  >
+                    Review Trytrovan.com requests, confirm operator email
+                    delivery, and move each assisted-pilot lead through intake.
+                  </Typography>
+                </Box>
+                <StatusPill
+                  label={`${marketingLeads.filter((lead) => lead.status !== 'closed').length} open`}
+                  tone={marketingLeads.length ? 'accent' : 'default'}
+                />
+              </Stack>
+
+              {marketingLeadsQuery.isError ? (
+                <Alert severity="warning" sx={{ mt: 1.5 }}>
+                  Lead readback is unavailable. Owner or admin access is
+                  required.
+                </Alert>
+              ) : null}
+
+              <Stack spacing={1.15} sx={{ mt: 1.5 }}>
+                {marketingLeads.slice(0, 12).map((lead) => (
+                  <Box
+                    key={lead.id}
+                    data-testid={`marketing-lead-${lead.id}`}
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: {
+                        xs: 'minmax(0, 1fr)',
+                        md: 'minmax(0, 1.45fr) minmax(190px, 0.75fr) auto',
+                      },
+                      gap: 1.25,
+                      alignItems: 'center',
+                      p: 1.25,
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      borderRadius: 1.4,
+                      bgcolor: 'background.default',
+                    }}
+                  >
+                    <Box sx={{ minWidth: 0 }}>
+                      <Stack
+                        direction="row"
+                        spacing={0.75}
+                        alignItems="center"
+                        flexWrap="wrap"
+                        useFlexGap
+                      >
+                        <Typography
+                          variant="subtitle1"
+                          component="div"
+                          sx={{ fontWeight: 850 }}
+                        >
+                          {lead.company}
+                        </Typography>
+                        <StatusPill
+                          label={lead.status}
+                          tone={leadStatusTone(lead.status)}
+                        />
+                        <StatusPill
+                          label={`email ${lead.notificationStatus}`}
+                          tone={notificationStatusTone(
+                            lead.notificationStatus,
+                          )}
+                        />
+                      </Stack>
+                      <Typography
+                        variant="body2"
+                        component="div"
+                        sx={{ mt: 0.5, fontWeight: 700 }}
+                      >
+                        {lead.name} • {lead.workEmail}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        component="div"
+                        color="text.secondary"
+                        sx={{ mt: 0.4 }}
+                      >
+                        {lead.requestType} •{' '}
+                        {lead.exactFleetSize || lead.fleetSize} vehicles •{' '}
+                        {new Date(lead.createdAt).toLocaleString()}
+                      </Typography>
+                      {lead.notes ? (
+                        <Typography
+                          variant="body2"
+                          component="div"
+                          color="text.secondary"
+                          sx={{ mt: 0.65 }}
+                        >
+                          {lead.notes}
+                        </Typography>
+                      ) : null}
+                      {lead.notificationError ? (
+                        <Typography
+                          variant="caption"
+                          component="div"
+                          sx={{
+                            mt: 0.55,
+                            color:
+                              lead.notificationStatus === 'failed'
+                                ? 'error.main'
+                                : 'text.secondary',
+                          }}
+                        >
+                          {lead.notificationError} • attempts{' '}
+                          {lead.notificationAttempts}
+                        </Typography>
+                      ) : null}
+                    </Box>
+
+                    <TextField
+                      select
+                      size="small"
+                      label="Intake status"
+                      value={lead.status}
+                      disabled={updateMarketingLeadStatusMutation.isPending}
+                      onChange={async (event) => {
+                        setError(null);
+                        try {
+                          await updateMarketingLeadStatusMutation.mutateAsync({
+                            leadId: lead.id,
+                            status: event.target.value as MarketingLeadStatus,
+                          });
+                          setNotice('Pilot request status updated.');
+                        } catch (err: unknown) {
+                          setError(
+                            getErrorMessage(
+                              err,
+                              'Failed to update pilot request.',
+                            ),
+                          );
+                        }
+                      }}
+                    >
+                      <MenuItem value="new">New</MenuItem>
+                      <MenuItem value="contacted">Contacted</MenuItem>
+                      <MenuItem value="qualified">Qualified</MenuItem>
+                      <MenuItem value="closed">Closed</MenuItem>
+                    </TextField>
+
+                    <Button
+                      variant="outlined"
+                      disabled={
+                        lead.notificationStatus === 'sent' ||
+                        retryMarketingLeadNotificationMutation.isPending
+                      }
+                      onClick={async () => {
+                        setError(null);
+                        try {
+                          await retryMarketingLeadNotificationMutation.mutateAsync(
+                            lead.id,
+                          );
+                          setNotice('Operator notification delivered.');
+                        } catch (err: unknown) {
+                          setError(
+                            getErrorMessage(
+                              err,
+                              'Failed to retry operator notification.',
+                            ),
+                          );
+                        }
+                      }}
+                    >
+                      {lead.notificationStatus === 'sent'
+                        ? 'Email delivered'
+                        : 'Retry email'}
+                    </Button>
+                  </Box>
+                ))}
+                {!marketingLeadsQuery.isLoading &&
+                marketingLeads.length === 0 ? (
+                  <Alert severity="info">
+                    No pilot requests yet. New Trytrovan.com submissions will
+                    appear here after persistence.
+                  </Alert>
+                ) : null}
+              </Stack>
+              </SurfacePanel>
+            ) : null}
 
             <Grid container spacing={2}>
               <Grid item xs={12} md={5}>

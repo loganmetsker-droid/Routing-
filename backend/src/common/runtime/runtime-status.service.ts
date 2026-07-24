@@ -156,6 +156,9 @@ export class RuntimeStatusService {
               process.env.LEAD_INTAKE_EMAIL &&
               process.env.LEAD_INTAKE_FROM_EMAIL,
           ),
+          operatorAccessConfigured: Boolean(
+            process.env.LEAD_INTAKE_OPERATOR_EMAILS,
+          ),
         },
         twilio: {
           configured: Boolean(

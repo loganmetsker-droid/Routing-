@@ -34,6 +34,7 @@ function runtimeSummary(overrides: Record<string, unknown> = {}) {
       leadIntake: {
         persistenceConfigured: true,
         operatorNotificationConfigured: true,
+        operatorAccessConfigured: true,
       },
       twilio: { configured: false },
       storage: { configured: true, mode: 'r2' },
@@ -156,5 +157,23 @@ describe('HealthController readiness', () => {
 
     expect(response.status).toHaveBeenCalledWith(503);
     expect(result.missingCritical).toContain('workos');
+  });
+
+  it('returns 503 when the operator inbox allowlist is missing', async () => {
+    const summary = runtimeSummary({
+      integrations: {
+        ...runtimeSummary().integrations,
+        leadIntake: {
+          persistenceConfigured: true,
+          operatorNotificationConfigured: true,
+          operatorAccessConfigured: false,
+        },
+      },
+    });
+    const response = { status: vi.fn() };
+    const result = await createController(summary).readiness(response as never);
+
+    expect(response.status).toHaveBeenCalledWith(503);
+    expect(result.missingCritical).toContain('leadIntake');
   });
 });

@@ -158,6 +158,29 @@ test.describe('launch calculation and control proof', () => {
     expect(layout.scrollWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
   });
 
+  test('mobile dashboard keeps route awareness above the fold with a two-column KPI summary', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await gotoReady(page, '/dashboard');
+
+    const metricGrid = page.getByTestId('dashboard-metric-grid');
+    const mapHeading = page.getByText('Live Operations Map', { exact: true });
+    await expect(metricGrid).toBeVisible();
+    await expect(mapHeading).toBeVisible();
+
+    const layout = await metricGrid.evaluate((element) => ({
+      columns: getComputedStyle(element).gridTemplateColumns
+        .split(' ')
+        .filter(Boolean).length,
+      scrollWidth: element.scrollWidth,
+      clientWidth: element.clientWidth,
+    }));
+    const mapBounds = await mapHeading.boundingBox();
+
+    expect(layout.columns).toBe(2);
+    expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth + 1);
+    expect(mapBounds?.y).toBeLessThan(844);
+  });
+
   test('public ROI calculator reconciles every displayed output and caps impossible mileage savings', async ({ page }) => {
     await gotoReady(page, '/pricing');
     const calculator = page.getByTestId('roi-calculator');
@@ -752,6 +775,28 @@ test.describe('launch calculation and control proof', () => {
     ).toBeVisible();
 
     await page.getByRole('button', { name: /^Platform API keys/i }).click();
+    const leadInbox = page.getByTestId('marketing-lead-inbox');
+    await expect(leadInbox).toBeVisible();
+    const retryLead = page.getByTestId('marketing-lead-preview-lead-2');
+    await expect(retryLead).toContainText('email failed');
+    await retryLead.getByRole('button', { name: 'Retry email' }).click();
+    await expect(retryLead).toContainText('email sent');
+    await expect(
+      page
+        .getByRole('alert')
+        .filter({ hasText: 'Operator notification delivered.' }),
+    ).toBeVisible();
+
+    const newLead = page.getByTestId('marketing-lead-preview-lead-1');
+    await newLead.getByRole('combobox', { name: /Intake status/i }).click();
+    await page.getByRole('option', { name: 'Qualified', exact: true }).click();
+    await expect(newLead).toContainText('qualified');
+    await expect(
+      page
+        .getByRole('alert')
+        .filter({ hasText: 'Pilot request status updated.' }),
+    ).toBeVisible();
+
     await expect(page.getByText('API keys', { exact: true })).toBeVisible();
     const createApiKey = page.getByRole('button', { name: 'Create API key' });
     await expect(createApiKey).toBeDisabled();

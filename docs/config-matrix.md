@@ -106,6 +106,8 @@ Strict staging/production webhook validation blocks localhost, raw private IP ta
 | `POSTMARK_SERVER_TOKEN`, `POSTMARK_FROM_EMAIL` | Required | Required | Email is launch-critical. Sender authentication and bounce alerts are operational gates. |
 | `NOTIFICATION_MAX_ATTEMPTS`, `NOTIFICATION_RETRY_BASE_SECONDS` | `3`, `60` | `3`, `60` | Only known retry-safe HTTP failures are retried. Timeouts and ambiguous outcomes require operator review to avoid duplicate customer messages. |
 | `LEAD_INTAKE_EMAIL`, `LEAD_INTAKE_FROM_EMAIL` | Required | Required | Operator destination and verified sender for lead intake. |
+| `LEAD_INTAKE_OPERATOR_EMAILS` | Required | Required | Comma-separated authenticated platform-operator accounts. Customer organization admins are denied global lead readback. |
+| `LEAD_NOTIFICATION_MAX_ATTEMPTS`, `LEAD_NOTIFICATION_RETRY_BASE_SECONDS` | `3`, `60` | `3`, `60` | Bounded lead-email retry for confirmed transient provider responses. Ambiguous outcomes remain in the operator inbox for manual review. |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Test mode | Live after approval | Operator-created invoices/subscriptions only. |
 | `STRIPE_PRICE_LAUNCH`, `STRIPE_PRICE_SCALE` | Required | Required | $399/month and $899/month. Enterprise is custom. |
 

@@ -560,6 +560,20 @@ test.describe('launch UI audit', () => {
     );
   });
 
+  test('Enterprise pricing action opens the security-led assisted onboarding path', async ({ page }) => {
+    await gotoReady(page, '/pricing');
+
+    await page
+      .getByRole('button', { name: 'Request security review', exact: true })
+      .click();
+    await expect(
+      page.getByRole('dialog', { name: /Talk to Trovan/i }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('combobox', { name: /Request type/i }),
+    ).toContainText('Security review');
+  });
+
   test('pricing page has a semantic page heading', async ({ page }) => {
     await gotoReady(page, '/pricing');
 

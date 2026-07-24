@@ -119,7 +119,7 @@ export const assistedPilotPlanCatalog: readonly AssistedPilotPlan[] = [
     selfServeEnabled: false,
     dispatcherSeats: 999,
     requestType: 'Security review',
-    cta: 'Review route-day ROI',
+    cta: 'Request security review',
     publicDescription:
       'For multi-team fleets requiring security review, implementation planning, API access, and custom support terms.',
     features: [

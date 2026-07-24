@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { HttpModule } from '@nestjs/axios';
-import { ScheduleModule } from '@nestjs/schedule';
 import { Route } from './entities/route.entity';
 import { RerouteRequest } from './entities/reroute-request.entity';
 import { DispatchEvent } from './entities/dispatch-event.entity';
@@ -37,8 +36,6 @@ import { AuthModule } from '../auth/auth.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PlatformModule } from '../platform/platform.module';
 
-const scheduleImports = process.env.ENABLE_SCHEDULER === '1' ? [ScheduleModule.forRoot()] : [];
-
 @Module({
   imports: [
     AuthModule,
@@ -67,7 +64,6 @@ const scheduleImports = process.env.ENABLE_SCHEDULER === '1' ? [ScheduleModule.f
       timeout: 30000, // 30 second timeout for routing-service calls
       maxRedirects: 5,
     }),
-    ...scheduleImports,
   ],
   controllers: [DispatchController, RouteRunsController],
   providers: [

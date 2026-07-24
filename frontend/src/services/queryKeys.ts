@@ -20,6 +20,8 @@ export const queryKeys = {
     ['audit-entries', params] as const,
   billingOverview: ['billing-overview'] as const,
   notificationsOverview: ['notifications-overview'] as const,
+  marketingLeadAccess: ['marketing-lead-access'] as const,
+  marketingLeads: ['marketing-leads'] as const,
   platformOverview: ['platform-overview'] as const,
   apiKeys: ['platform-api-keys'] as const,
   webhooks: ['platform-webhooks'] as const,

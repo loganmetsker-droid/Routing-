@@ -383,6 +383,19 @@ export class HealthController {
         ...postmark,
         required: hostedEnvironment,
       },
+      leadIntake: {
+        configured:
+          runtime.integrations.leadIntake.persistenceConfigured &&
+          runtime.integrations.leadIntake.operatorNotificationConfigured &&
+          runtime.integrations.leadIntake.operatorAccessConfigured,
+        required: hostedEnvironment,
+        status:
+          runtime.integrations.leadIntake.persistenceConfigured &&
+          runtime.integrations.leadIntake.operatorNotificationConfigured &&
+          runtime.integrations.leadIntake.operatorAccessConfigured
+            ? 'up'
+            : 'missing',
+      },
       storage: {
         ...storage,
         required: hostedEnvironment,

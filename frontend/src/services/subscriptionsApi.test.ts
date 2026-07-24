@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { assistedPilotPlanCatalog } from '@shared/contracts';
 import { getBillingOverview } from './subscriptionsApi';
 
 describe('subscriptionsApi', () => {
@@ -78,5 +79,21 @@ describe('subscriptionsApi', () => {
     expect(overview.plans[0].monthlyPriceUsd).toBe(399);
     expect(overview.plans[0].selfServeEnabled).toBe(false);
     expect(overview.controls.webhookConfigured).toBe(true);
+  });
+
+  it('keeps the Enterprise public action aligned with security-led onboarding', () => {
+    const enterprise = assistedPilotPlanCatalog.find(
+      (plan) => plan.plan === 'enterprise',
+    );
+
+    expect(enterprise).toEqual(
+      expect.objectContaining({
+        label: 'Enterprise',
+        requestType: 'Security review',
+        cta: 'Request security review',
+        monthlyPriceUsd: null,
+        selfServeEnabled: false,
+      }),
+    );
   });
 });

@@ -255,6 +255,25 @@ test.describe('routing workspace product UI', () => {
     await expect(page.getByTestId('routing-scenario-cards')).toContainText(/Scenarios/i);
   });
 
+  test('route readiness keeps long operational values readable in the inspector', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'dense-route-day');
+
+    const readiness = page.getByTestId('routing-route-readiness-summary');
+    const impactRow = readiness
+      .getByText('Unassigned impact', { exact: true })
+      .locator('..');
+    const impactValue = impactRow.getByText(/jobs outside routes/i);
+    await expect(impactValue).toBeVisible();
+
+    const layout = await impactValue.evaluate((element) => ({
+      whiteSpace: getComputedStyle(element).whiteSpace,
+      scrollWidth: element.scrollWidth,
+      clientWidth: element.clientWidth,
+    }));
+    expect(layout.whiteSpace).not.toBe('nowrap');
+    expect(layout.scrollWidth).toBeLessThanOrEqual(layout.clientWidth + 1);
+  });
+
   test('route density mode renders observable map state and stop markers', async ({ page }, testInfo) => {
     await gotoRoutingWorkspace(page, testInfo, 'dense-route-day');
 

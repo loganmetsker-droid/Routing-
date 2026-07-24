@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ScheduleModule } from '@nestjs/schedule';
 import { Telemetry } from './entities/telemetry.entity';
 import { Vehicle } from '../vehicles/entities/vehicle.entity';
 import { Driver } from '../drivers/entities/driver.entity';
@@ -10,13 +9,10 @@ import { TrackingController } from './tracking.controller';
 import { AuthModule } from '../auth/auth.module';
 import { AuthSession } from '../auth/entities/auth-session.entity';
 
-const scheduleImports = process.env.ENABLE_SCHEDULER === '1' ? [ScheduleModule.forRoot()] : [];
-
 @Module({
   imports: [
     AuthModule,
     TypeOrmModule.forFeature([Telemetry, Vehicle, Driver, AuthSession]),
-    ...scheduleImports,
   ],
   controllers: [TrackingController],
   providers: [TrackingService, TrackingGateway],

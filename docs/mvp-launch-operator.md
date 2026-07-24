@@ -5,7 +5,7 @@ This is the one-step-at-a-time operator guide for the MVP launch pass.
 ## Launch Defaults
 
 - Hosting: all Render services from `render.yaml`.
-- Branch/commit: `codex/route-optimization-objectives` or commit `eebe751`.
+- Branch/commit: use the immutable assisted-pilot release SHA that passed staging.
 - Billing: Stripe test mode first.
 - AI claim: use "AI-assisted route optimization" until trained-model evidence is packaged.
 - Secrets: keep values in provider dashboards or local shell env only.
@@ -36,7 +36,7 @@ node scripts/mvp-launch-next-step.mjs --strict
 2. Render environment values: backend, frontend, routing-service.
 3. WorkOS staging auth.
 4. Stripe test billing and webhook.
-5. Postmark, Twilio, and R2 sandbox resources.
+5. Postmark and R2 sandbox resources. SMS/Twilio is outside assisted-pilot readiness.
 6. MVP seed dataset from `docs/launch/mvp-seed-dataset.json`.
 7. Hosted optimizer proof.
 8. Full staging smoke and launch audit.

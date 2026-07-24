@@ -32,6 +32,7 @@ const groups = {
       'POSTMARK_FROM_EMAIL',
       'LEAD_INTAKE_EMAIL',
       'LEAD_INTAKE_FROM_EMAIL',
+      'LEAD_INTAKE_OPERATOR_EMAILS',
     ],
   },
   storageSmoke: {
