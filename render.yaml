@@ -39,6 +39,10 @@ services:
         value: "false"
       - key: SMS_NOTIFICATIONS_ENABLED
         value: "false"
+      - key: NOTIFICATION_MAX_ATTEMPTS
+        value: "3"
+      - key: NOTIFICATION_RETRY_BASE_SECONDS
+        value: "60"
       - key: ROUTING_SERVICE_HOSTPORT
         fromService:
           name: trovan-routing-service

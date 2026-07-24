@@ -15,6 +15,8 @@ This file is the canonical environment/config reference for local, dev, staging,
 | `LAUNCH_PROFILE` | Optional | `assisted-pilot` | `assisted-pilot` | Documents the approved commercial posture. |
 | `SELF_SERVE_BILLING_ENABLED` | `false` | `false` | `false` | Must remain false until self-serve GA gates pass. |
 | `SMS_NOTIFICATIONS_ENABLED` | `false` | `false` | `false` | SMS is deferred from the pilot release. |
+| `NOTIFICATION_MAX_ATTEMPTS` | `3` | `3` | `3` | Caps delivery attempts for failures with a confirmed retry-safe provider response. |
+| `NOTIFICATION_RETRY_BASE_SECONDS` | `60` | `60` | `60` | Base delay for bounded exponential notification retries. |
 
 ## Backend Core
 
@@ -102,6 +104,7 @@ Strict staging/production webhook validation blocks localhost, raw private IP ta
 | --- | --- | --- | --- |
 | `WORKOS_CLIENT_ID`, `WORKOS_API_KEY` | Required | Required | WorkOS authentication; include redirect/logout URLs. |
 | `POSTMARK_SERVER_TOKEN`, `POSTMARK_FROM_EMAIL` | Required | Required | Email is launch-critical. Sender authentication and bounce alerts are operational gates. |
+| `NOTIFICATION_MAX_ATTEMPTS`, `NOTIFICATION_RETRY_BASE_SECONDS` | `3`, `60` | `3`, `60` | Only known retry-safe HTTP failures are retried. Timeouts and ambiguous outcomes require operator review to avoid duplicate customer messages. |
 | `LEAD_INTAKE_EMAIL`, `LEAD_INTAKE_FROM_EMAIL` | Required | Required | Operator destination and verified sender for lead intake. |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Test mode | Live after approval | Operator-created invoices/subscriptions only. |
 | `STRIPE_PRICE_LAUNCH`, `STRIPE_PRICE_SCALE` | Required | Required | $399/month and $899/month. Enterprise is custom. |

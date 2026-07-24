@@ -54,7 +54,13 @@ function deliverySummary(delivery: NotificationDeliveryRecord) {
     delivery.channel,
     delivery.recipient,
     delivery.provider,
-    delivery.sentAt || delivery.createdAt || 'Pending timestamp',
+    delivery.attempts > 0
+      ? `${delivery.attempts} ${delivery.attempts === 1 ? 'attempt' : 'attempts'}`
+      : null,
+    formatWhen(delivery.sentAt || delivery.lastAttemptAt || delivery.createdAt),
+    delivery.nextAttemptAt
+      ? `Next retry ${formatWhen(delivery.nextAttemptAt)}`
+      : null,
   ];
   return parts.filter(Boolean).join(' • ');
 }
@@ -378,7 +384,15 @@ export default function RouteRunDetailPage() {
                   >
                     <ListItemText
                       primary={delivery.eventType.replace(/_/g, ' ')}
-                      secondary={`${deliverySummary(delivery)}\n${delivery.message}`}
+                      secondary={[
+                        deliverySummary(delivery),
+                        delivery.message,
+                        delivery.failureReason
+                          ? `Delivery issue: ${delivery.failureReason}`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join('\n')}
                       secondaryTypographyProps={{ sx: { whiteSpace: 'pre-line' } }}
                     />
                     <Chip

@@ -1333,10 +1333,16 @@ export default function SettingsPage() {
                         secondary={`${notificationsOverview?.sentLast24Hours ?? 0} deliveries`}
                       />
                     </ListItem>
-                    <ListItem disableGutters>
+                    <ListItem disableGutters sx={dividerItemSx}>
                       <ListItemText
                         primary="Failed last 24h"
                         secondary={`${notificationsOverview?.failedLast24Hours ?? 0} deliveries`}
+                      />
+                    </ListItem>
+                    <ListItem disableGutters>
+                      <ListItemText
+                        primary="Needs operator review"
+                        secondary={`${notificationsOverview?.pendingReviewLast24Hours ?? 0} deliveries`}
                       />
                     </ListItem>
                   </List>

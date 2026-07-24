@@ -9,6 +9,7 @@ type NotificationsOverviewRecord = {
   smsProvider: string;
   sentLast24Hours: number;
   failedLast24Hours: number;
+  pendingReviewLast24Hours: number;
   controls: {
     emailReady: boolean;
     smsReady: boolean;
@@ -44,6 +45,10 @@ const normalizeNotificationsOverview = (
       typeof record.failedLast24Hours === 'number'
         ? record.failedLast24Hours
         : 0,
+    pendingReviewLast24Hours:
+      typeof record.pendingReviewLast24Hours === 'number'
+        ? record.pendingReviewLast24Hours
+        : 0,
     controls: {
       emailReady: Boolean(controls.emailReady),
       smsReady: Boolean(controls.smsReady),
@@ -59,6 +64,7 @@ export async function getNotificationsOverview(): Promise<NotificationsOverviewR
       smsProvider: 'disabled',
       sentLast24Hours: 18,
       failedLast24Hours: 2,
+      pendingReviewLast24Hours: 0,
       controls: {
         emailReady: true,
         smsReady: false,

@@ -304,10 +304,16 @@ export function AppShell({ onLogout, children }: AppShellProps) {
     : 'Operator';
   const notificationOverview = notificationsOverviewQuery.data;
   const failedNotificationCount = notificationOverview?.failedLast24Hours ?? 0;
+  const pendingNotificationReviewCount =
+    notificationOverview?.pendingReviewLast24Hours ?? 0;
+  const notificationAttentionCount =
+    failedNotificationCount + pendingNotificationReviewCount;
   const notificationSummary = notificationsOverviewQuery.isLoading
     ? 'Checking customer notification delivery status…'
     : notificationsOverviewQuery.isError
       ? 'Notification delivery status is temporarily unavailable.'
+      : pendingNotificationReviewCount > 0
+        ? `${pendingNotificationReviewCount} customer notification ${pendingNotificationReviewCount === 1 ? 'delivery needs' : 'deliveries need'} operator review because the provider outcome could not be confirmed.`
       : failedNotificationCount > 0
         ? `${failedNotificationCount} customer notification ${failedNotificationCount === 1 ? 'delivery has' : 'deliveries have'} failed in the last 24 hours. Review delivery settings and affected routes.`
         : notificationOverview?.controls.emailReady
@@ -578,10 +584,10 @@ export function AppShell({ onLogout, children }: AppShellProps) {
             sx={{ width: 38, height: 38, border: '1px solid', borderColor: 'divider', borderRadius: '9px' }}
           >
             <Badge
-              badgeContent={failedNotificationCount}
+              badgeContent={notificationAttentionCount}
               color="error"
               max={99}
-              invisible={failedNotificationCount === 0}
+              invisible={notificationAttentionCount === 0}
             >
               <NotificationsNoneOutlined />
             </Badge>

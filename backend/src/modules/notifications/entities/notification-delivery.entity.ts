@@ -17,6 +17,7 @@ export type NotificationDeliveryStatus =
 @Entity('notification_deliveries')
 @Index(['organizationId', 'createdAt'])
 @Index(['routeId', 'createdAt'])
+@Index(['idempotencyKey'], { unique: true })
 export class NotificationDelivery {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -38,6 +39,9 @@ export class NotificationDelivery {
 
   @Column({ name: 'event_type', length: 64 })
   eventType: string;
+
+  @Column({ name: 'idempotency_key', length: 64 })
+  idempotencyKey: string;
 
   @Column({ length: 16 })
   channel: NotificationChannel;
@@ -71,6 +75,21 @@ export class NotificationDelivery {
 
   @Column({ name: 'sent_at', type: 'timestamptz', nullable: true })
   sentAt?: Date | null;
+
+  @Column({ type: 'int', default: 0 })
+  attempts: number;
+
+  @Column({ name: 'last_attempt_at', type: 'timestamptz', nullable: true })
+  lastAttemptAt?: Date | null;
+
+  @Column({ name: 'next_attempt_at', type: 'timestamptz', nullable: true })
+  nextAttemptAt?: Date | null;
+
+  @Column({ name: 'attempt_token', length: 64, nullable: true })
+  attemptToken?: string | null;
+
+  @Column({ name: 'lease_expires_at', type: 'timestamptz', nullable: true })
+  leaseExpiresAt?: Date | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

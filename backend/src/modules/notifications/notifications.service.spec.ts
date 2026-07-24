@@ -8,6 +8,7 @@ function repositoryMock() {
     find: vi.fn().mockResolvedValue([]),
     findOne: vi.fn().mockResolvedValue(null),
     save: vi.fn(async (value) => ({ id: `delivery-${Math.random()}`, ...value })),
+    update: vi.fn().mockResolvedValue({ affected: 1 }),
   };
 }
 
@@ -169,6 +170,13 @@ describe('NotificationsService', () => {
       provider: 'postmark',
       status: 'FAILED',
       failureReason: 'Sender signature missing',
+      attempts: 1,
+      nextAttemptAt: null,
+      metadata: {
+        retryable: false,
+        outcomeUnknown: false,
+        providerStatus: 422,
+      },
     });
     expect(context.deliveries.save).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -209,7 +217,149 @@ describe('NotificationsService', () => {
       provider: 'postmark',
       status: 'FAILED',
       failureReason: 'Postmark request timed out',
+      attempts: 1,
+      nextAttemptAt: null,
+      metadata: {
+        retryable: false,
+        outcomeUnknown: true,
+        providerStatus: null,
+      },
     });
+  });
+
+  it('uses one durable reservation for repeated notification events', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({ MessageID: 'postmark-message-1' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const context = createService({
+      POSTMARK_SERVER_TOKEN: 'postmark-test-token',
+      POSTMARK_FROM_EMAIL: 'updates@example.test',
+    });
+    context.jobs.findOne.mockResolvedValue({
+      id: 'job-a',
+      organizationId: 'org-a',
+      customerEmail: 'customer@example.com',
+    });
+    context.organizations.findOne.mockResolvedValue({
+      id: 'org-a',
+      name: 'Acme Fleet',
+      settings: { notifications: { emailEnabled: true } },
+    });
+
+    const stored = new Map<string, Record<string, unknown>>();
+    context.deliveries.save.mockImplementation(async (value) => {
+      if (!value.id) {
+        if (stored.has(value.idempotencyKey)) {
+          throw Object.assign(new Error('duplicate'), { code: '23505' });
+        }
+        value.id = `delivery-${stored.size + 1}`;
+      }
+      stored.set(value.idempotencyKey, value);
+      return value;
+    });
+    context.deliveries.findOne.mockImplementation(async ({ where }) => {
+      return stored.get(where.idempotencyKey) || null;
+    });
+
+    const input = {
+      organizationId: 'org-a',
+      routeId: 'route-a',
+      routeRunStopId: 'stop-a',
+      jobId: 'job-a',
+      eventType: 'en_route' as const,
+      trackingUrl: 'https://track.example.test/token-a',
+    };
+    const first = await context.service.notifyCustomer(input);
+    const repeated = await context.service.notifyCustomer({
+      ...input,
+      trackingUrl: 'https://track.example.test/token-b',
+    });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(repeated.map((delivery) => delivery.id)).toEqual(
+      first.map((delivery) => delivery.id),
+    );
+    expect(repeated[0]).toMatchObject({
+      status: 'SENT',
+      attempts: 1,
+      providerMessageId: 'postmark-message-1',
+    });
+  });
+
+  it('retries known transient provider failures and stops after success', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        json: vi.fn().mockResolvedValue({ Message: 'Provider unavailable' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: vi.fn().mockResolvedValue({ MessageID: 'postmark-message-2' }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+    const context = createService({
+      POSTMARK_SERVER_TOKEN: 'postmark-test-token',
+      POSTMARK_FROM_EMAIL: 'updates@example.test',
+      NOTIFICATION_RETRY_BASE_SECONDS: '5',
+    });
+    context.jobs.findOne.mockResolvedValue({
+      id: 'job-a',
+      organizationId: 'org-a',
+      customerEmail: 'customer@example.com',
+    });
+    context.organizations.findOne.mockResolvedValue({
+      id: 'org-a',
+      name: 'Acme Fleet',
+      settings: { notifications: { emailEnabled: true } },
+    });
+
+    const initial = await context.service.notifyCustomer({
+      organizationId: 'org-a',
+      routeRunStopId: 'stop-a',
+      jobId: 'job-a',
+      eventType: 'arriving_soon',
+    });
+    const failed = initial[0];
+    expect(failed).toMatchObject({
+      status: 'FAILED',
+      attempts: 1,
+      metadata: {
+        retryable: true,
+        outcomeUnknown: false,
+        providerStatus: 503,
+      },
+    });
+    expect(failed.nextAttemptAt).toBeInstanceOf(Date);
+
+    failed.nextAttemptAt = new Date(Date.now() - 1_000);
+    context.deliveries.find.mockResolvedValue([failed]);
+    context.deliveries.findOne.mockImplementation(async ({ where }) => ({
+      ...failed,
+      status: 'PENDING',
+      nextAttemptAt: null,
+      attemptToken: where.attemptToken,
+    }));
+
+    await expect(context.service.retryDueDeliveries()).resolves.toEqual({
+      attempted: 1,
+      sent: 1,
+      failed: 0,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(context.deliveries.save).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        status: 'SENT',
+        attempts: 2,
+        nextAttemptAt: null,
+        providerMessageId: 'postmark-message-2',
+      }),
+    );
   });
 
   it('scopes job and customer lookups to the notification organization', async () => {

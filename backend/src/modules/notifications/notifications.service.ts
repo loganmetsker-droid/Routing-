@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { MoreThan, Repository } from 'typeorm';
+import { createHash, randomUUID } from 'crypto';
+import { LessThanOrEqual, MoreThan, Repository } from 'typeorm';
 import { NotificationDelivery } from './entities/notification-delivery.entity';
 import { Job } from '../jobs/entities/job.entity';
 import { Customer } from '../customers/entities/customer.entity';
@@ -40,6 +41,16 @@ type BrandingConfig = {
   supportPhone?: string | null;
 };
 
+type DeliveryAttemptResult = {
+  provider: string;
+  status: 'SENT' | 'FAILED' | 'SKIPPED';
+  providerMessageId?: string | null;
+  failureReason?: string | null;
+  providerStatus?: number | null;
+  retryable: boolean;
+  outcomeUnknown?: boolean;
+};
+
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
@@ -72,6 +83,87 @@ export class NotificationsService {
       this.configService.get<string>('TWILIO_FROM_NUMBER')
       ? 'twilio'
       : 'disabled';
+  }
+
+  private getMaxAttempts() {
+    const configured = Number(
+      this.configService.get<string>('NOTIFICATION_MAX_ATTEMPTS', '3'),
+    );
+    return Number.isFinite(configured)
+      ? Math.max(1, Math.min(10, Math.floor(configured)))
+      : 3;
+  }
+
+  private getRetryBaseSeconds() {
+    const configured = Number(
+      this.configService.get<string>(
+        'NOTIFICATION_RETRY_BASE_SECONDS',
+        '60',
+      ),
+    );
+    return Number.isFinite(configured)
+      ? Math.max(5, Math.min(3_600, Math.floor(configured)))
+      : 60;
+  }
+
+  private buildIdempotencyKey(
+    input: NotifyCustomerInput,
+    channel: 'EMAIL' | 'SMS',
+    recipient: string,
+  ) {
+    return createHash('sha256')
+      .update(
+        JSON.stringify([
+          input.organizationId,
+          input.routeId || null,
+          input.routeRunStopId || null,
+          input.jobId || null,
+          input.customerId || null,
+          input.eventType,
+          channel,
+          recipient,
+          input.eta || null,
+          input.reason || null,
+        ]),
+      )
+      .digest('hex');
+  }
+
+  private isUniqueViolation(error: unknown) {
+    return Boolean(
+      error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        String((error as { code?: unknown }).code) === '23505',
+    );
+  }
+
+  private getNextAttemptAt(attempts: number) {
+    const delaySeconds = Math.min(
+      60 * 60,
+      this.getRetryBaseSeconds() * 5 ** Math.max(0, attempts - 1),
+    );
+    return new Date(Date.now() + delaySeconds * 1_000);
+  }
+
+  private async reserveDelivery(delivery: NotificationDelivery) {
+    try {
+      return {
+        delivery: await this.deliveries.save(delivery),
+        reserved: true,
+      };
+    } catch (error) {
+      if (!this.isUniqueViolation(error)) {
+        throw error;
+      }
+      const existing = await this.deliveries.findOne({
+        where: { idempotencyKey: delivery.idempotencyKey },
+      });
+      if (!existing) {
+        throw error;
+      }
+      return { delivery: existing, reserved: false };
+    }
   }
 
   private getOrganizationBranding(
@@ -201,6 +293,7 @@ export class NotificationsService {
         provider: 'disabled',
         status: 'SKIPPED' as const,
         failureReason: 'Email provider is not configured',
+        retryable: false,
       };
     }
 
@@ -228,9 +321,14 @@ export class NotificationsService {
         unknown
       >;
       if (!response.ok) {
+        const retryable = [408, 425, 429, 500, 502, 503, 504].includes(
+          response.status,
+        );
         return {
           provider: 'postmark',
           status: 'FAILED' as const,
+          providerStatus: response.status,
+          retryable,
           failureReason:
             typeof payload.Message === 'string'
               ? payload.Message
@@ -242,11 +340,15 @@ export class NotificationsService {
         status: 'SENT' as const,
         providerMessageId:
           typeof payload.MessageID === 'string' ? payload.MessageID : null,
+        providerStatus: response.status,
+        retryable: false,
       };
     } catch (error) {
       return {
         provider: 'postmark',
         status: 'FAILED' as const,
+        retryable: false,
+        outcomeUnknown: true,
         failureReason:
           error instanceof Error && error.name === 'AbortError'
             ? 'Postmark request timed out'
@@ -269,6 +371,7 @@ export class NotificationsService {
         provider: 'disabled',
         status: 'SKIPPED' as const,
         failureReason: 'SMS provider is not configured',
+        retryable: false,
       };
     }
 
@@ -296,9 +399,14 @@ export class NotificationsService {
         unknown
       >;
       if (!response.ok) {
+        const retryable = [408, 425, 429, 500, 502, 503, 504].includes(
+          response.status,
+        );
         return {
           provider: 'twilio',
           status: 'FAILED' as const,
+          providerStatus: response.status,
+          retryable,
           failureReason:
             typeof payload.message === 'string'
               ? payload.message
@@ -310,19 +418,156 @@ export class NotificationsService {
         status: 'SENT' as const,
         providerMessageId:
           typeof payload.sid === 'string' ? payload.sid : null,
+        providerStatus: response.status,
+        retryable: false,
       };
     } catch (error) {
       return {
         provider: 'twilio',
         status: 'FAILED' as const,
+        retryable: false,
+        outcomeUnknown: true,
         failureReason: error instanceof Error ? error.message : String(error),
       };
     }
   }
 
+  private getStoredBranding(
+    delivery: NotificationDelivery,
+  ): BrandingConfig {
+    const metadata = delivery.metadata || {};
+    return {
+      brandName:
+        typeof metadata.brandName === 'string' ? metadata.brandName : null,
+      supportEmail:
+        typeof metadata.supportEmail === 'string'
+          ? metadata.supportEmail
+          : null,
+      supportPhone:
+        typeof metadata.supportPhone === 'string'
+          ? metadata.supportPhone
+          : null,
+    };
+  }
+
+  private getStoredNotificationConfig(
+    delivery: NotificationDelivery,
+  ): NotificationConfig {
+    const metadata = delivery.metadata || {};
+    return {
+      emailEnabled: delivery.channel === 'EMAIL',
+      smsEnabled: delivery.channel === 'SMS',
+      replyToEmail:
+        typeof metadata.replyToEmail === 'string'
+          ? metadata.replyToEmail
+          : null,
+    };
+  }
+
+  private async attemptDelivery(delivery: NotificationDelivery) {
+    const branding = this.getStoredBranding(delivery);
+    const notificationConfig = this.getStoredNotificationConfig(delivery);
+    delivery.attempts = Number(delivery.attempts || 0) + 1;
+    delivery.lastAttemptAt = new Date();
+    delivery.status = 'PENDING';
+    await this.deliveries.save(delivery);
+
+    const result: DeliveryAttemptResult =
+      delivery.channel === 'EMAIL'
+        ? await this.deliverEmail(
+            delivery.recipient,
+            delivery.subject || 'Delivery update',
+            delivery.message,
+            branding,
+            notificationConfig,
+          )
+        : await this.deliverSms(delivery.recipient, delivery.message);
+
+    delivery.provider = result.provider;
+    delivery.status = result.status;
+    delivery.providerMessageId = result.providerMessageId || null;
+    delivery.failureReason = result.failureReason || null;
+    delivery.attemptToken = null;
+    delivery.leaseExpiresAt = null;
+    delivery.metadata = {
+      ...(delivery.metadata || {}),
+      retryable: result.retryable,
+      outcomeUnknown: Boolean(result.outcomeUnknown),
+      providerStatus: result.providerStatus || null,
+    };
+
+    if (result.status === 'SENT') {
+      delivery.sentAt = new Date();
+      delivery.nextAttemptAt = null;
+    } else if (
+      result.status === 'FAILED' &&
+      result.retryable &&
+      delivery.attempts < this.getMaxAttempts()
+    ) {
+      delivery.nextAttemptAt = this.getNextAttemptAt(delivery.attempts);
+    } else {
+      delivery.nextAttemptAt = null;
+    }
+
+    return this.deliveries.save(delivery);
+  }
+
+  private async claimRetry(delivery: NotificationDelivery) {
+    const now = new Date();
+    const attemptToken = randomUUID();
+    const leaseExpiresAt = new Date(now.getTime() + 2 * 60 * 1_000);
+    const claimed = await this.deliveries.update(
+      {
+        id: delivery.id,
+        status: 'FAILED',
+        nextAttemptAt: LessThanOrEqual(now),
+      },
+      {
+        status: 'PENDING',
+        nextAttemptAt: null,
+        attemptToken,
+        leaseExpiresAt,
+      },
+    );
+    if (claimed.affected !== 1) {
+      return null;
+    }
+    return this.deliveries.findOne({
+      where: { id: delivery.id, attemptToken },
+    });
+  }
+
+  async retryDueDeliveries(limit = 25) {
+    const now = new Date();
+    const due = await this.deliveries.find({
+      where: {
+        status: 'FAILED',
+        nextAttemptAt: LessThanOrEqual(now),
+      },
+      order: { nextAttemptAt: 'ASC' },
+      take: Math.max(1, Math.min(100, limit)),
+    });
+
+    const results = await Promise.all(
+      due.map(async (candidate) => {
+        const claimed = await this.claimRetry(candidate);
+        return claimed ? this.attemptDelivery(claimed) : null;
+      }),
+    );
+    const attempted = results.filter(
+      (delivery): delivery is NotificationDelivery => Boolean(delivery),
+    );
+    return {
+      attempted: attempted.length,
+      sent: attempted.filter((delivery) => delivery.status === 'SENT').length,
+      failed: attempted.filter((delivery) => delivery.status === 'FAILED')
+        .length,
+    };
+  }
+
   async getOverview(organizationId: string) {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const [sent24h, failed24h, recent] = await Promise.all([
+    const [sent24h, failed24h, pendingReview24h, recent] = await Promise.all([
       this.deliveries.count({
         where: {
           organizationId,
@@ -335,6 +580,14 @@ export class NotificationsService {
           organizationId,
           status: 'FAILED',
           createdAt: MoreThan(since),
+        },
+      }),
+      this.deliveries.count({
+        where: {
+          organizationId,
+          status: 'PENDING',
+          createdAt: MoreThan(since),
+          leaseExpiresAt: LessThanOrEqual(new Date()),
         },
       }),
       this.deliveries.find({
@@ -350,6 +603,7 @@ export class NotificationsService {
       smsProvider: this.getSmsProvider(),
       sentLast24Hours: sent24h,
       failedLast24Hours: failed24h,
+      pendingReviewLast24Hours: pendingReview24h,
       recentDeliveries: recent,
       controls: {
         emailReady:
@@ -466,6 +720,8 @@ export class NotificationsService {
 
     const saved = await Promise.all(
       recipients.map(async ({ channel, enabled, recipient }) => {
+        const normalizedRecipient =
+          recipient || `${channel.toLowerCase()}-missing`;
         const delivery = this.deliveries.create({
           organizationId: input.organizationId,
           routeId: input.routeId || null,
@@ -473,8 +729,13 @@ export class NotificationsService {
           jobId: input.jobId || null,
           customerId: customer?.id || input.customerId || null,
           eventType: input.eventType,
+          idempotencyKey: this.buildIdempotencyKey(
+            input,
+            channel,
+            normalizedRecipient,
+          ),
           channel,
-          recipient: recipient || `${channel.toLowerCase()}-missing`,
+          recipient: normalizedRecipient,
           provider:
             channel === 'EMAIL'
               ? this.getEmailProvider()
@@ -487,47 +748,36 @@ export class NotificationsService {
             brandName,
             supportEmail: branding.supportEmail,
             supportPhone: branding.supportPhone,
+            replyToEmail: notificationConfig.replyToEmail,
           },
+          attempts: 0,
+          lastAttemptAt: null,
+          nextAttemptAt: null,
+          attemptToken: null,
+          leaseExpiresAt: null,
         });
 
         if (!enabled) {
           delivery.status = 'SKIPPED';
           delivery.failureReason = `${channel} notifications are disabled`;
-          return this.deliveries.save(delivery);
-        }
-
-        if (!recipient) {
+        } else if (!recipient) {
           delivery.status = 'SKIPPED';
           delivery.failureReason = `Missing ${channel.toLowerCase()} recipient`;
-          return this.deliveries.save(delivery);
+        } else {
+          delivery.attemptToken = randomUUID();
+          delivery.leaseExpiresAt = new Date(Date.now() + 2 * 60 * 1_000);
         }
 
-        const result =
-          channel === 'EMAIL'
-            ? await this.deliverEmail(
-                recipient,
-                composed.subject,
-                composed.message,
-                branding,
-                notificationConfig,
-              )
-            : await this.deliverSms(recipient, composed.message);
-
-        delivery.provider = result.provider;
-        delivery.status = result.status;
-        delivery.providerMessageId =
-          'providerMessageId' in result ? result.providerMessageId || null : null;
-        delivery.failureReason =
-          'failureReason' in result ? result.failureReason || null : null;
-        if (result.status === 'SENT') {
-          delivery.sentAt = new Date();
+        const reservation = await this.reserveDelivery(delivery);
+        if (!reservation.reserved || reservation.delivery.status === 'SKIPPED') {
+          return reservation.delivery;
         }
-        return this.deliveries.save(delivery);
+        return this.attemptDelivery(reservation.delivery);
       }),
     );
 
     this.logger.log(
-      `Notification event ${input.eventType} created ${saved.length} delivery records`,
+      `Notification event ${input.eventType} resolved ${saved.length} delivery records`,
     );
     return saved;
   }

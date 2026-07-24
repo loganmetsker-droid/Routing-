@@ -153,6 +153,9 @@ export type NotificationDeliveryRecord = {
   message: string;
   trackingUrl?: string | null;
   failureReason?: string | null;
+  attempts: number;
+  lastAttemptAt?: string | null;
+  nextAttemptAt?: string | null;
   sentAt?: string | null;
   createdAt?: string;
 };
@@ -869,6 +872,14 @@ const normalizeNotificationDelivery = (
       typeof record.trackingUrl === 'string' ? record.trackingUrl : null,
     failureReason:
       typeof record.failureReason === 'string' ? record.failureReason : null,
+    attempts:
+      typeof record.attempts === 'number' && Number.isFinite(record.attempts)
+        ? record.attempts
+        : 0,
+    lastAttemptAt:
+      typeof record.lastAttemptAt === 'string' ? record.lastAttemptAt : null,
+    nextAttemptAt:
+      typeof record.nextAttemptAt === 'string' ? record.nextAttemptAt : null,
     sentAt: typeof record.sentAt === 'string' ? record.sentAt : null,
     createdAt:
       typeof record.createdAt === 'string' ? record.createdAt : undefined,
