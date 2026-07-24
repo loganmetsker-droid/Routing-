@@ -12,6 +12,9 @@ This file is the canonical environment/config reference for local, dev, staging,
 | `ENABLE_SCHEDULER` | `0` by default | `1` if embedded worker used | `1` if embedded worker used | Dedicated worker is intentionally deferred. |
 | `SWAGGER_ENABLED` | Optional | `false` unless explicitly needed | `false` unless explicitly needed | Production docs surface is opt-in. |
 | `METRICS_TOKEN` | Optional | Required unless protected upstream | Required unless protected upstream | Protects `/api/metrics`. |
+| `LAUNCH_PROFILE` | Optional | `assisted-pilot` | `assisted-pilot` | Documents the approved commercial posture. |
+| `SELF_SERVE_BILLING_ENABLED` | `false` | `false` | `false` | Must remain false until self-serve GA gates pass. |
+| `SMS_NOTIFICATIONS_ENABLED` | `false` | `false` | `false` | SMS is deferred from the pilot release. |
 
 ## Backend Core
 
@@ -72,6 +75,7 @@ Strict staging/production webhook validation blocks localhost, raw private IP ta
 | `VITE_API_URL` | Optional alias | Optional alias | Optional alias | |
 | `VITE_WS_URL` | Optional | Yes when sockets are enabled | Yes when sockets are enabled | Socket.IO base URL. |
 | `VITE_ENABLE_SOCKETS` | Optional | `true` | `true` | Can be set `false` only for local/mock preview. |
+| `VITE_API_TIMEOUT_MS` | `12000` default | `8000` | `8000` | Bounds auth-config and API waits so login can show a retry state. |
 | `VITE_AUTH_BYPASS` | Allowed only for preview/local | Forbidden | Forbidden | Local-only shortcut. |
 | `VITE_MOCK_PREVIEW` | Allowed only for preview/local | Forbidden | Forbidden | Local-only shortcut. |
 
@@ -87,6 +91,22 @@ Strict staging/production webhook validation blocks localhost, raw private IP ta
 | --- | --- | --- | --- | --- |
 | `STORAGE_MODE` | `local` | `local` or `object` | `object` preferred | Exports/uploads/reports. |
 | `STORAGE_PATH` | Optional | Optional | Optional | For local filesystem storage. |
+| `R2_BUCKET` | Optional | Required | Required | Pilot proof-file object storage. |
+| `R2_ACCESS_KEY_ID` | Optional | Required | Required | Secret-store only. |
+| `R2_SECRET_ACCESS_KEY` | Optional | Required | Required | Secret-store only. |
+| `R2_ENDPOINT` | Optional | Required | Required | Environment-specific R2 endpoint. |
+
+## Assisted-pilot providers
+
+| Variable | Staging | Production | Notes |
+| --- | --- | --- | --- |
+| `WORKOS_CLIENT_ID`, `WORKOS_API_KEY` | Required | Required | WorkOS authentication; include redirect/logout URLs. |
+| `POSTMARK_SERVER_TOKEN`, `POSTMARK_FROM_EMAIL` | Required | Required | Email is launch-critical. Sender authentication and bounce alerts are operational gates. |
+| `LEAD_INTAKE_EMAIL`, `LEAD_INTAKE_FROM_EMAIL` | Required | Required | Operator destination and verified sender for lead intake. |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Test mode | Live after approval | Operator-created invoices/subscriptions only. |
+| `STRIPE_PRICE_LAUNCH`, `STRIPE_PRICE_SCALE` | Required | Required | $399/month and $899/month. Enterprise is custom. |
+
+Twilio variables are not required for assisted-pilot readiness. `SMS_NOTIFICATIONS_ENABLED` must remain false.
 
 ## Runtime Visibility
 

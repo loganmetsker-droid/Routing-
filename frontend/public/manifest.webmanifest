@@ -1,13 +1,18 @@
 {
-  "name": "Trovan Driver",
-  "short_name": "Driver",
-  "description": "Driver stop execution, proof capture, and dispatch messaging.",
-  "start_url": "/driver",
+  "name": "Trovan Route Operations",
+  "short_name": "Trovan",
+  "description": "Route planning, dispatch, driver execution, customer tracking, and proof of delivery.",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#1F1A17",
-  "theme_color": "#1F1A17",
+  "background_color": "#0B1324",
+  "theme_color": "#0B1324",
   "shortcuts": [
+    {
+      "name": "Operations Dashboard",
+      "short_name": "Dashboard",
+      "url": "/dashboard"
+    },
     {
       "name": "Driver Manifest",
       "short_name": "Driver",
@@ -28,7 +33,7 @@
       "purpose": "any maskable"
     },
     {
-      "src": "/trovan-mark.svg",
+      "src": "/brand/assets/trovan-app-icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"

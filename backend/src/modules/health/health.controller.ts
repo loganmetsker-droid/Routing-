@@ -1,4 +1,4 @@
-import { Controller, Get, Optional } from '@nestjs/common';
+import { Controller, Get, HttpStatus, Optional, Res } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import {
   HealthCheck,
@@ -14,6 +14,11 @@ import { JobsService } from '../jobs/jobs.service';
 import { RuntimeStatusService } from '../../common/runtime/runtime-status.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PlatformService } from '../platform/platform.service';
+import type { Response } from 'express';
+import {
+  resolveRoutingServiceUrl,
+  routingServiceAuthHeaders,
+} from '../../common/routing/routing-service-url.util';
 
 @ApiTags('health')
 @Controller('health')
@@ -40,7 +45,7 @@ export class HealthController {
     }
 
     const nodeEnv = this.configService.get('NODE_ENV', 'development');
-    return ['development', 'test'].includes(nodeEnv) ? 0.98 : 0.9;
+    return ['development', 'test', 'local'].includes(nodeEnv) ? 0.98 : 0.9;
   }
 
   @Get()
@@ -191,65 +196,186 @@ export class HealthController {
   @SkipThrottle()
   @ApiOperation({ summary: 'Readiness truth for launch-critical dependencies' })
   @ApiResponse({ status: 200, description: 'Readiness details' })
-  async readiness() {
+  async readiness(@Res({ passthrough: true }) response: Response) {
     const runtime = this.runtimeStatusService.getSummary();
     const nodeEnv = this.configService.get('NODE_ENV', 'development');
-    const [notificationsOverview, platformOverview] = await Promise.all([
+    const hostedEnvironment = ['staging', 'production'].includes(nodeEnv);
+    const routingConfigured = Boolean(
+      this.configService.get('ROUTING_SERVICE_URL') ||
+        this.configService.get('ROUTING_PROVIDER_URL') ||
+        this.configService.get('ROUTING_SERVICE_HOSTPORT'),
+    );
+
+    const databaseProbe = this.db
+      .pingCheck('database')
+      .then(() => ({ configured: true, required: true, status: 'up' }))
+      .catch(() => ({ configured: true, required: true, status: 'down' }));
+
+    const routingProbe = (async () => {
+      if (!routingConfigured && !hostedEnvironment) {
+        return {
+          configured: false,
+          required: false,
+          status: 'disabled',
+        };
+      }
+      if (!routingConfigured) {
+        return {
+          configured: false,
+          required: true,
+          status: 'missing',
+        };
+      }
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 4_000);
+      try {
+        const routingUrl = resolveRoutingServiceUrl(this.configService);
+        const routingResponse = await fetch(`${routingUrl}/health`, {
+          headers: routingServiceAuthHeaders(this.configService),
+          signal: controller.signal,
+        });
+        return {
+          configured: true,
+          required: hostedEnvironment,
+          status: routingResponse.ok ? 'up' : 'down',
+        };
+      } catch {
+        return {
+          configured: true,
+          required: hostedEnvironment,
+          status: 'down',
+        };
+      } finally {
+        clearTimeout(timer);
+      }
+    })();
+
+    const queueProbe = this.jobsService
+      ? this.jobsService
+          .getQueueStatus()
+          .then((queue) => ({
+            configured: queue.queueEnabled,
+            required:
+              String(this.configService.get('QUEUE_REQUIRED', 'false')) ===
+              'true',
+            status: queue.queueEnabled ? 'up' : 'disabled',
+          }))
+          .catch(() => ({
+            configured: Boolean(
+              this.configService.get('REDIS_URL') ||
+                this.configService.get('REDIS_HOST'),
+            ),
+            required:
+              String(this.configService.get('QUEUE_REQUIRED', 'false')) ===
+              'true',
+            status: 'down',
+          }))
+      : Promise.resolve({
+          configured: Boolean(
+            this.configService.get('REDIS_URL') ||
+              this.configService.get('REDIS_HOST'),
+          ),
+          required:
+            String(this.configService.get('QUEUE_REQUIRED', 'false')) ===
+            'true',
+          status: 'unknown',
+        });
+
+    const [
+      notificationsOverview,
+      platformOverview,
+      database,
+      redis,
+      routingService,
+    ] = await Promise.all([
       this.notificationsService?.getOverview().catch(() => null) || null,
       this.platformService?.getOverview(
         this.configService.get('DEFAULT_ORGANIZATION_ID', 'default'),
       ).catch(() => null) || null,
+      databaseProbe,
+      queueProbe,
+      routingProbe,
     ]);
 
     const dependencies = {
-      database: { configured: true, required: true },
-      redis: {
-        configured: Boolean(
-          this.configService.get('REDIS_URL') || this.configService.get('REDIS_HOST'),
-        ),
-        required: String(this.configService.get('QUEUE_REQUIRED', 'false')) === 'true',
+      database,
+      redis,
+      worker: {
+        configured: runtime.worker.mode !== 'disabled',
+        required: hostedEnvironment,
+        status:
+          runtime.worker.mode === 'disabled'
+            ? 'disabled'
+            : runtime.worker.heartbeatAt &&
+                Date.now() - new Date(runtime.worker.heartbeatAt).getTime() <
+                  5 * 60 * 1000 &&
+                !runtime.worker.lastFailure
+              ? 'up'
+              : 'down',
       },
-      workos: runtime.integrations.workos,
-      stripe: runtime.integrations.stripe,
-      postmark: runtime.integrations.postmark,
-      twilio: runtime.integrations.twilio,
-      storage: runtime.integrations.storage,
+      routingService,
+      workos: {
+        ...runtime.integrations.workos,
+        required: hostedEnvironment,
+        status: runtime.integrations.workos.configured ? 'up' : 'missing',
+      },
+      postmark: {
+        configured:
+          runtime.integrations.postmark.configured &&
+          runtime.integrations.leadIntake.operatorNotificationConfigured,
+        required: hostedEnvironment,
+        status:
+          runtime.integrations.postmark.configured &&
+          runtime.integrations.leadIntake.operatorNotificationConfigured
+            ? 'up'
+            : 'missing',
+      },
+      storage: {
+        ...runtime.integrations.storage,
+        required: hostedEnvironment,
+        status: runtime.integrations.storage.configured ? 'up' : 'missing',
+      },
+      stripe: {
+        ...runtime.integrations.stripe,
+        required: false,
+        status: runtime.integrations.stripe.configured ? 'up' : 'optional',
+      },
+      twilio: {
+        ...runtime.integrations.twilio,
+        required: false,
+        status: runtime.integrations.twilio.configured ? 'up' : 'disabled',
+      },
     };
 
-    const hostedEnvironment = ['staging', 'production'].includes(nodeEnv);
     const missingCritical = Object.entries(dependencies)
-      .filter(([name, state]) => {
-        if (name === 'database') {
-          return false;
-        }
-        if ('required' in state && state.required && !state.configured) {
-          return true;
-        }
-        if (
-          hostedEnvironment &&
-          ['workos', 'storage'].includes(name) &&
-          !state.configured
-        ) {
-          return true;
-        }
-        return false;
-      })
+      .filter(([, state]) =>
+        Boolean(
+          'required' in state &&
+            state.required &&
+            (!state.configured ||
+              ('status' in state &&
+                !['up', 'ok'].includes(String(state.status)))),
+        ),
+      )
       .map(([name]) => name);
     const launchWarnings = Object.entries(dependencies)
-      .filter(([name, state]) => name !== 'database' && !state.configured)
+      .filter(([, state]) => !state.configured)
       .map(([name]) => `${name} is not configured`);
+    const status = missingCritical.length > 0 ? 'error' : 'ok';
+
+    response.status(
+      missingCritical.length > 0
+        ? HttpStatus.SERVICE_UNAVAILABLE
+        : HttpStatus.OK,
+    );
 
     return {
-      status:
-        missingCritical.length > 0
-          ? 'error'
-          : launchWarnings.length > 0
-            ? 'degraded'
-            : 'ok',
+      status,
       runtime,
       dependencies,
       notifications: notificationsOverview,
       platform: platformOverview,
+      missingCritical,
       launchWarnings,
     };
   }

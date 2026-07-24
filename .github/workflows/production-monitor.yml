@@ -1,0 +1,35 @@
+name: Trovan Production Monitor
+
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: Public Health And Discovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify frontend, API, auth config, and sitemap
+        env:
+          PRODUCTION_FRONTEND_URL: ${{ vars.PRODUCTION_FRONTEND_URL }}
+          PRODUCTION_BACKEND_URL: ${{ vars.PRODUCTION_BACKEND_URL }}
+        run: |
+          curl -fsS --max-time 20 "$PRODUCTION_FRONTEND_URL" > /dev/null
+          curl -fsS --max-time 20 "$PRODUCTION_BACKEND_URL/health/readiness" > /dev/null
+          curl -fsS --max-time 20 "$PRODUCTION_BACKEND_URL/api/auth/config" > /dev/null
+          content_type="$(
+            curl -fsSI --max-time 20 "$PRODUCTION_FRONTEND_URL/sitemap.xml" |
+              tr -d '\r' |
+              awk -F': ' 'tolower($1) == "content-type" { print tolower($2) }'
+          )"
+          case "$content_type" in
+            *xml*) ;;
+            *)
+              echo "sitemap.xml has unexpected content type: $content_type"
+              exit 1
+              ;;
+          esac
+          curl -fsS --max-time 20 "$PRODUCTION_FRONTEND_URL/sitemap.xml" |
+            grep -q '<urlset'

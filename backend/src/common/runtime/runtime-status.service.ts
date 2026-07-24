@@ -140,6 +140,18 @@ export class RuntimeStatusService {
                 process.env.NOTIFICATION_FROM_EMAIL),
           ),
         },
+        leadIntake: {
+          persistenceConfigured: Boolean(
+            process.env.DATABASE_URL ||
+              process.env.DATABASE_HOST ||
+              process.env.DB_HOST,
+          ),
+          operatorNotificationConfigured: Boolean(
+            process.env.POSTMARK_SERVER_TOKEN &&
+              process.env.LEAD_INTAKE_EMAIL &&
+              process.env.LEAD_INTAKE_FROM_EMAIL,
+          ),
+        },
         twilio: {
           configured: Boolean(
             process.env.TWILIO_ACCOUNT_SID &&

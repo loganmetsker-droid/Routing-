@@ -16,6 +16,7 @@ const routes = [
   { slug: 'drivers', path: '/drivers' },
   { slug: 'vehicles', path: '/vehicles' },
   { slug: 'customers', path: '/customers' },
+  { slug: 'pod', path: '/pod' },
   { slug: 'analytics', path: '/analytics' },
   { slug: 'settings', path: '/settings' },
   { slug: 'driver', path: '/driver' },

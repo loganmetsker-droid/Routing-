@@ -126,6 +126,26 @@ function SignatureProofPreview({ proof }: { proof: ProofArtifactRecord }) {
   );
 }
 
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return;
+  } catch {
+    const input = document.createElement('textarea');
+    input.value = text;
+    input.setAttribute('readonly', 'true');
+    input.style.position = 'fixed';
+    input.style.opacity = '0';
+    document.body.appendChild(input);
+    input.select();
+    const copied = document.execCommand('copy');
+    input.remove();
+    if (!copied) {
+      throw new Error('Clipboard access is unavailable.');
+    }
+  }
+}
+
 export default function RouteRunDetailPage() {
   const { id = '' } = useParams();
   const [error, setError] = useState<string | null>(null);
@@ -219,7 +239,7 @@ export default function RouteRunDetailPage() {
     setError(null);
     try {
       const link = await shareLinkMutation.mutateAsync(id);
-      await navigator.clipboard.writeText(link.url);
+      await copyText(link.url);
       setError(`Tracking link copied: ${link.url}`);
     } catch (err: unknown) {
       setError(getRouteRunsErrorMessage(err));
@@ -269,10 +289,11 @@ export default function RouteRunDetailPage() {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.target = '_blank';
-      anchor.rel = 'noreferrer';
       anchor.download = filename;
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
       anchor.click();
+      anchor.remove();
       window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
     } catch (err: unknown) {
       setError(getRouteRunsErrorMessage(err));
@@ -316,7 +337,7 @@ export default function RouteRunDetailPage() {
               <Typography variant="h6" sx={{ mb: 1 }}>Route Summary</Typography>
               <Stack spacing={1}>
                 <Chip label={detail.routeRun.status} color={statusColor(detail.routeRun.status)} data-testid="route-run-status-chip" />
-                <Typography variant="body2" color="text.secondary">Distance: {Number(detail.routeRun.totalDistanceKm || 0).toFixed(1)} km</Typography>
+                <Typography variant="body2" color="text.secondary">Distance: {(Number(detail.routeRun.totalDistanceKm || 0) * 0.621371).toFixed(1)} mi</Typography>
                 <Typography variant="body2" color="text.secondary">Duration: {detail.routeRun.totalDurationMinutes || 0} min</Typography>
                 <Typography variant="body2" color="text.secondary">Jobs: {detail.routeRun.jobCount || 0}</Typography>
                 <Typography variant="body2" color="text.secondary">Planned start: {detail.routeRun.plannedStart || '—'}</Typography>

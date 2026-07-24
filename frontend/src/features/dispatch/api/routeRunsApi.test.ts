@@ -2,10 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   addRouteRunStopProof,
   createRouteRunMessage,
+  dispatchRouteRun,
   getRouteRunDetail,
   listRouteRunMessages,
   markRouteRunMessagesRead,
+  reassignRouteRun,
 } from './routeRunsApi';
+import { previewState } from '../../../services/api.preview';
 
 describe('routeRunsApi driver execution contracts', () => {
   afterEach(() => {
@@ -186,5 +189,51 @@ describe('routeRunsApi driver execution contracts', () => {
         }),
       }),
     );
+  });
+
+  it('dispatches and reassigns preview route runs locally without starting the route', async () => {
+    vi.stubGlobal('window', {
+      location: { hostname: '127.0.0.1', search: '' },
+      __TROVAN_LOCAL_DEMO_PREVIEW__: true,
+    } as unknown as Window & typeof globalThis);
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const route = previewState.routes.find((item) => item.id === 'route-beta-002');
+    if (!route) {
+      throw new Error('Expected preview route route-beta-002 to exist.');
+    }
+    const original = {
+      status: route.status,
+      workflowStatus: route.workflowStatus,
+      driverId: route.driverId,
+      dispatchedAt: route.dispatchedAt,
+      dispatchedByUserId: route.dispatchedByUserId,
+      dispatchNote: route.dispatchNote,
+    };
+
+    try {
+      await reassignRouteRun('route-beta-002', {
+        driverId: 'driver-1',
+        reason: 'unit test',
+      });
+      await dispatchRouteRun('route-beta-002', {
+        note: 'Preview dispatch note.',
+      });
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(route.driverId).toBe('driver-1');
+      expect(route.status).toBe('assigned');
+      expect(route.workflowStatus).toBe('ready_for_dispatch');
+      expect(route.dispatchedAt).toEqual(expect.any(String));
+      expect(route.dispatchedByUserId).toBe('preview-user');
+      expect(route.dispatchNote).toBe('Preview dispatch note.');
+    } finally {
+      route.status = original.status;
+      route.workflowStatus = original.workflowStatus;
+      route.driverId = original.driverId;
+      route.dispatchedAt = original.dispatchedAt;
+      route.dispatchedByUserId = original.dispatchedByUserId;
+      route.dispatchNote = original.dispatchNote;
+    }
   });
 });

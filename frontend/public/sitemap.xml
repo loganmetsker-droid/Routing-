@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://trytrovan.com/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://trytrovan.com/platform</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://trytrovan.com/platform/plan</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://trytrovan.com/platform/dispatch</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://trytrovan.com/platform/drive</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://trytrovan.com/platform/track</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://trytrovan.com/platform/proof</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://trytrovan.com/demo</loc><changefreq>weekly</changefreq><priority>0.9</priority></url>
+  <url><loc>https://trytrovan.com/pricing</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://trytrovan.com/testimonials</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://trytrovan.com/security</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://trytrovan.com/resources</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://trytrovan.com/resources/downloads</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://trytrovan.com/support</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://trytrovan.com/company</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
+  <url><loc>https://trytrovan.com/mission</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://trytrovan.com/careers</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://trytrovan.com/legal/privacy</loc><changefreq>yearly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://trytrovan.com/legal/terms</loc><changefreq>yearly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://trytrovan.com/legal/cookies</loc><changefreq>yearly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://trytrovan.com/legal/exercise-rights</loc><changefreq>yearly</changefreq><priority>0.4</priority></url>
+</urlset>

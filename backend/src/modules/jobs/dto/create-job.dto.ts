@@ -7,6 +7,7 @@ import {
   IsEnum,
   IsDateString,
   IsNumber,
+  IsObject,
   IsPositive,
   Length,
   Min,
@@ -163,6 +164,28 @@ export class CreateJobDto {
   @IsString()
   @Field({ nullable: true })
   specialInstructions?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Routing-critical requirements: pallet/load dimensions, stackability, required equipment, driver, site/access rules, hazmat, and temperature control',
+    example: {
+      load: {
+        palletCount: 4,
+        palletLengthIn: 48,
+        palletWidthIn: 40,
+        palletHeightIn: 54,
+        palletWeightLb: 900,
+        stackable: false,
+      },
+      requiredEquipment: ['liftgate'],
+      site: { dockAppointment: true, accessNotes: 'Use east dock' },
+      temperatureRequirement: 'refrigerated',
+    },
+  })
+  @IsOptional()
+  @IsObject()
+  @Field(() => GraphQLJSON, { nullable: true })
+  routingRequirements?: any;
 
   @ApiPropertyOptional({
     description: 'Job lifecycle status',

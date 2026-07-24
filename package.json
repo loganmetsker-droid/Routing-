@@ -20,6 +20,7 @@
     "audit:marketing": "node scripts/marketing-site-audit.mjs",
     "audit:product-ui": "node scripts/product-ui-audit.mjs",
     "capture:marketing-screenshots": "node --experimental-strip-types scripts/capture-marketing-screenshots.ts",
+    "capture:launch-media": "node scripts/capture-launch-media.mjs",
     "launch:audit": "playwright test e2e/launch-audit.spec.ts --project=chromium",
     "smoke:local": "node scripts/local-smoke.mjs",
     "smoke:optimizer": "node scripts/optimizer-smoke.mjs",
@@ -27,21 +28,29 @@
     "smoke:staging": "node scripts/staging-smoke.mjs",
     "launch:mvp-next": "node scripts/mvp-launch-next-step.mjs",
     "launch:env-status": "node scripts/launch-env-status.mjs",
+    "release:check-scope": "node scripts/release-candidate-check.mjs",
     "check:backend-deps": "npm ls --workspace=backend @nestjs/common @nestjs/core @nestjs/platform-express @nestjs/typeorm typeorm",
     "docker:dev": "docker-compose -f infrastructure/docker/docker-compose.dev.yml up",
     "docker:prod": "docker-compose -f infrastructure/docker/docker-compose.yml up",
     "k8s:deploy": "kubectl apply -f infrastructure/k8s/"
   },
-  "dependencies": {},
   "devDependencies": {
     "@playwright/test": "^1.59.1",
     "concurrently": "^8.2.2",
+    "sharp": "^0.35.3",
     "typescript": "^5.3.3"
   },
   "overrides": {
-    "@nestjs/common": "11.1.19",
-    "@nestjs/core": "11.1.19",
-    "@nestjs/platform-express": "11.1.19"
+    "@nestjs/common": "11.1.28",
+    "@nestjs/core": "11.1.28",
+    "@nestjs/platform-express": "11.1.28",
+    "body-parser": "2.3.0",
+    "brace-expansion@1.1.14": "1.1.16",
+    "brace-expansion@2.1.0": "2.1.2",
+    "brace-expansion@5.0.6": "5.0.8",
+    "fast-uri@3.1.3": "3.1.4",
+    "ws": "8.21.0",
+    "uuid": "11.1.1"
   },
   "engines": {
     "node": ">=20.0.0",

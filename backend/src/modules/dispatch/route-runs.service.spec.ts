@@ -160,6 +160,230 @@ describe('RouteRunsService', () => {
     }));
   });
 
+  it('blocks dispatch when the route is missing critical readiness fields', async () => {
+    const routeRunStops = createRepo([
+      {
+        id: 'stop-1',
+        organizationId: 'org-1',
+        routeId: 'route-missing-driver',
+        jobId: 'job-1',
+        jobStopId: 'job-stop-1',
+        status: 'PENDING',
+        stopSequence: 1,
+      },
+      {
+        id: 'stop-2',
+        organizationId: 'org-1',
+        routeId: 'route-missing-vehicle',
+        jobId: 'job-2',
+        jobStopId: 'job-stop-2',
+        status: 'PENDING',
+        stopSequence: 1,
+      },
+    ]);
+    const routes = createRepo([
+      {
+        id: 'route-missing-driver',
+        organizationId: 'org-1',
+        vehicleId: 'vehicle-1',
+        driverId: null,
+        status: 'planned',
+        workflowStatus: 'planned',
+      },
+      {
+        id: 'route-missing-vehicle',
+        organizationId: 'org-1',
+        vehicleId: null,
+        driverId: 'driver-1',
+        status: 'planned',
+        workflowStatus: 'planned',
+      },
+      {
+        id: 'route-no-stops',
+        organizationId: 'org-1',
+        vehicleId: 'vehicle-1',
+        driverId: 'driver-1',
+        status: 'planned',
+        workflowStatus: 'planned',
+      },
+    ]);
+    const service = new RouteRunsService(
+      routes,
+      routeRunStops,
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      audit,
+    );
+    const actor = { userId: 'dispatcher-1', organizationId: 'org-1', roles: ['DISPATCHER'] };
+
+    await expect(service.dispatchRoute('route-missing-driver', {}, actor)).rejects.toThrow(
+      'Route is not ready to dispatch',
+    );
+    await expect(service.dispatchRoute('route-missing-vehicle', {}, actor)).rejects.toThrow(
+      'Route is not ready to dispatch',
+    );
+    await expect(service.dispatchRoute('route-no-stops', {}, actor)).rejects.toThrow(
+      'Route is not ready to dispatch',
+    );
+  });
+
+  it('blocks dispatch while a route has an open exception', async () => {
+    const routes = createRepo([
+      {
+        id: 'route-1',
+        organizationId: 'org-1',
+        vehicleId: 'vehicle-1',
+        driverId: 'driver-1',
+        status: 'planned',
+        workflowStatus: 'planned',
+      },
+    ]);
+    const routeRunStops = createRepo([
+      {
+        id: 'stop-1',
+        organizationId: 'org-1',
+        routeId: 'route-1',
+        jobId: 'job-1',
+        jobStopId: 'job-stop-1',
+        status: 'PENDING',
+        stopSequence: 1,
+      },
+    ]);
+    const exceptions = createRepo([
+      {
+        id: 'exception-1',
+        organizationId: 'org-1',
+        routeId: 'route-1',
+        status: 'OPEN',
+        code: 'ACCESS_ISSUE',
+        message: 'Dock is blocked',
+      },
+    ]);
+    const service = new RouteRunsService(
+      routes,
+      routeRunStops,
+      createRepo(),
+      createRepo(),
+      exceptions,
+      createRepo(),
+      audit,
+    );
+
+    await expect(
+      service.dispatchRoute('route-1', {}, {
+        userId: 'dispatcher-1',
+        organizationId: 'org-1',
+        roles: ['DISPATCHER'],
+      }),
+    ).rejects.toThrow('Route is not ready to dispatch');
+  });
+
+  it('marks a route as sent to driver without starting it and records an optional note', async () => {
+    const routes = createRepo([
+      {
+        id: 'route-1',
+        organizationId: 'org-1',
+        vehicleId: 'vehicle-1',
+        driverId: 'driver-1',
+        status: 'planned',
+        workflowStatus: 'planned',
+        actualStart: null,
+      },
+    ]);
+    const routeRunStops = createRepo([
+      {
+        id: 'stop-1',
+        organizationId: 'org-1',
+        routeId: 'route-1',
+        jobId: 'job-1',
+        jobStopId: 'job-stop-1',
+        status: 'PENDING',
+        stopSequence: 1,
+      },
+    ]);
+    const messages = createRepo();
+    const service = new RouteRunsService(
+      routes,
+      routeRunStops,
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      audit,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      messages,
+    );
+
+    const result = await service.dispatchRoute(
+      'route-1',
+      { note: 'Check in before backing into dock B.' },
+      { userId: 'dispatcher-1', organizationId: 'org-1', roles: ['DISPATCHER'] },
+    );
+    const savedMessages = await messages.find();
+
+    expect(result.routeRun.status).toBe('assigned');
+    expect(result.routeRun.workflowStatus).toBe('ready_for_dispatch');
+    expect(result.routeRun.actualStart).toBeNull();
+    expect(result.routeRun.dispatchedAt).toBeInstanceOf(Date);
+    expect(result.routeRun.dispatchedByUserId).toBe('dispatcher-1');
+    expect(result.routeRun.dispatchNote).toBe('Check in before backing into dock B.');
+    expect(savedMessages).toHaveLength(1);
+    expect(savedMessages[0]).toEqual(
+      expect.objectContaining({
+        routeId: 'route-1',
+        senderRole: 'DISPATCH',
+        body: 'Check in before backing into dock B.',
+      }),
+    );
+  });
+
+  it('auto-applies a driver current vehicle during dispatch reassignment', async () => {
+    const routes = createRepo([
+      {
+        id: 'route-1',
+        organizationId: 'org-1',
+        vehicleId: null,
+        driverId: null,
+        status: 'planned',
+        workflowStatus: 'planned',
+      },
+    ]);
+    const drivers = createRepo([
+      {
+        id: 'driver-1',
+        organizationId: 'org-1',
+        currentVehicleId: 'vehicle-1',
+      },
+    ]);
+    const service = new RouteRunsService(
+      routes,
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      audit,
+      drivers,
+    );
+
+    const result = await service.reassign(
+      'route-1',
+      { driverId: 'driver-1', reason: 'dispatch card assignment' },
+      { userId: 'dispatcher-1', organizationId: 'org-1', roles: ['DISPATCHER'] },
+    );
+
+    expect(result.routeRun.driverId).toBe('driver-1');
+    expect(result.routeRun.vehicleId).toBe('vehicle-1');
+  });
+
   it('creates branded public tracking links and scopes driver manifests to the authenticated driver', async () => {
     const routes = createRepo([
       {

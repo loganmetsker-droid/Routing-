@@ -48,7 +48,7 @@ const normalizePublicTracking = (value: unknown): PublicTrackingRecord => {
       name:
         typeof organization.name === 'string'
           ? organization.name
-          : 'Trovan Logistics',
+          : 'Trovan Dispatch',
       slug: typeof organization.slug === 'string' ? organization.slug : 'trovan',
       branding: {
         brandName:
@@ -152,7 +152,7 @@ const getPreviewPublicTracking = (token: string): PublicTrackingRecord => {
       slug: 'trovan-preview',
       branding: {
         brandName: 'Trovan Local Preview',
-        primaryColor: '#1F1A17',
+        primaryColor: '#0B1324',
         accentColor: '#C87441',
         supportEmail: 'dispatch@trovan.local',
         supportPhone: '(555) 010-2026',

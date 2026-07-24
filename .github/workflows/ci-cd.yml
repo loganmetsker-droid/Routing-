@@ -1,22 +1,23 @@
-name: Trovan CI/CD
+name: Trovan Release Gate
 
 on:
   pull_request:
-    branches: [main]
   push:
     branches: [main, develop]
   workflow_dispatch:
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '24'
+  PYTHON_VERSION: '3.11'
 
 jobs:
-  build-and-test:
-    name: Build And Test
+  release-gate:
+    name: Build, Test, Security, And E2E
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     services:
       postgres:
-        image: postgres:15
+        image: postgis/postgis:15-3.5
         env:
           POSTGRES_DB: routing_dispatch_test
           POSTGRES_USER: postgres
@@ -38,9 +39,26 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
+    env:
+      DATABASE_HOST: 127.0.0.1
+      DATABASE_PORT: 5432
+      DATABASE_NAME: routing_dispatch_test
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: postgres
+      REDIS_HOST: 127.0.0.1
+      REDIS_PORT: 6379
+      JWT_SECRET: ci-test-secret
+      AUTH_PROVIDER: local-config
+      ALLOW_LOCAL_AUTH: 'true'
+      AUTH_ADMIN_EMAIL: admin@example.com
+      AUTH_ADMIN_PASSWORD: ci-only-password
+      PLAYWRIGHT_NODE: node
+
     steps:
-      - name: Checkout
+      - name: Checkout exact commit
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -48,112 +66,63 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Install dependencies
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            routing-service/requirements.txt
+            routing-service/requirements-dev.txt
+
+      - name: Install JavaScript dependencies
         run: npm ci
+
+      - name: Exclude generated audit and QA artifacts
+        env:
+          RELEASE_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: npm run release:check-scope -- "$RELEASE_BASE_SHA"
+
+      - name: Require zero production high or critical advisories
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Check patch whitespace
+        run: git diff --check
 
       - name: Build workspace
         run: npm run build
 
-      - name: Run tests
-        run: npm test
-        env:
-          DATABASE_HOST: 127.0.0.1
-          DATABASE_PORT: 5432
-          DATABASE_NAME: routing_dispatch_test
-          DATABASE_USER: postgres
-          DATABASE_PASSWORD: postgres
-          REDIS_HOST: 127.0.0.1
-          REDIS_PORT: 6379
-          JWT_SECRET: ci-test-secret
-          AUTH_PROVIDER: local-config
-          ALLOW_LOCAL_AUTH: 'true'
-          AUTH_ADMIN_EMAIL: admin@example.com
-          AUTH_ADMIN_PASSWORD: ChangeMe123!
+      - name: Lint frontend
+        run: npm run lint --workspace=frontend
 
-  migration-check:
-    name: Backend Migration Check
-    runs-on: ubuntu-latest
-    needs: build-and-test
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_DB: routing_dispatch_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres -d routing_dispatch_test"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+      - name: Test backend
+        run: npm run test --workspace=backend
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Test frontend
+        run: npm run test --workspace=frontend -- --run
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run backend migrations
+      - name: Verify migrations from an empty database
         run: npm run migration:run --workspace=backend
-        env:
-          DATABASE_HOST: 127.0.0.1
-          DATABASE_PORT: 5432
-          DATABASE_NAME: routing_dispatch_test
-          DATABASE_USER: postgres
-          DATABASE_PASSWORD: postgres
-          JWT_SECRET: ci-test-secret
 
-  deploy-staging:
-    name: Deploy Staging
-    runs-on: ubuntu-latest
-    needs: migration-check
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
-    environment: staging
+      - name: Install routing-service test dependencies
+        run: pip install -r routing-service/requirements-dev.txt
 
-    steps:
-      - name: Trigger Vercel staging deploy
-        run: curl -fsSL -X POST "${{ secrets.VERCEL_STAGING_DEPLOY_HOOK_URL }}"
+      - name: Test routing service
+        run: python -m pytest routing-service/tests
 
-      - name: Trigger Render staging deploy
-        run: curl -fsSL -X POST "${{ secrets.RENDER_STAGING_DEPLOY_HOOK_URL }}"
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
 
-      - name: Wait for deploy hooks
-        run: sleep 45
+      - name: Run full Playwright suite
+        run: npm run test:e2e -- --project=chromium
 
-      - name: Smoke staging frontend
-        run: curl -fsSL "${{ secrets.STAGING_FRONTEND_URL }}"
-
-      - name: Smoke staging backend readiness
-        run: curl -fsSL "${{ secrets.STAGING_BACKEND_URL }}/health/readiness"
-
-  deploy-production:
-    name: Promote Production
-    runs-on: ubuntu-latest
-    needs: deploy-staging
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    environment: production
-
-    steps:
-      - name: Trigger Vercel production deploy
-        run: curl -fsSL -X POST "${{ secrets.VERCEL_PRODUCTION_DEPLOY_HOOK_URL }}"
-
-      - name: Trigger Render production deploy
-        run: curl -fsSL -X POST "${{ secrets.RENDER_PRODUCTION_DEPLOY_HOOK_URL }}"
-
-      - name: Wait for deploy hooks
-        run: sleep 45
-
-      - name: Smoke production frontend
-        run: curl -fsSL "${{ secrets.PRODUCTION_FRONTEND_URL }}"
-
-      - name: Smoke production backend readiness
-        run: curl -fsSL "${{ secrets.PRODUCTION_BACKEND_URL }}/health/readiness"
+      - name: Upload failure evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-gate-failure-${{ github.sha }}
+          path: |
+            .tmp/playwright/
+            .codex/launch-audit/
+          if-no-files-found: ignore
+          retention-days: 14

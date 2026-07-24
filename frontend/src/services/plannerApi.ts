@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  evaluateJobRoutingReadiness,
   getOptimizationObjectiveLabel,
   normalizeOptimizationObjective,
   unwrapApiData,
@@ -46,6 +47,43 @@ type PublishRoutePlanResult = {
 };
 
 export type { PublishRoutePlanResult };
+
+export type PlannerPublishDecision = {
+  id: string;
+  decision: 'accepted_risk' | 'resolved';
+  blockerCode: string;
+  reason: string;
+  actorId?: string | null;
+  jobId?: string | null;
+  groupId?: string | null;
+  warningIndex?: number | null;
+  createdAt: string;
+};
+
+export type PlannerPublishBlocker = {
+  code: string;
+  message: string;
+  severity: 'blocking';
+  canAcceptRisk: boolean;
+  groupId?: string;
+  jobId?: string;
+  warningIndex?: number;
+  acceptedDecision?: PlannerPublishDecision;
+};
+
+export type PlannerPublishReadiness = {
+  ok: boolean;
+  routePlanId: string;
+  ready: boolean;
+  blockers: PlannerPublishBlocker[];
+  blockingBlockers: PlannerPublishBlocker[];
+  decisions: PlannerPublishDecision[];
+  summary: {
+    blockerCount: number;
+    blockingCount: number;
+    acceptedRiskCount: number;
+  };
+};
 
 const PREVIEW_ROUTE_PLAN_ID = 'preview-plan-1';
 const previewPlannerLocks = new Map<string, boolean>();
@@ -177,7 +215,7 @@ const rebuildPreviewRouteArtifacts = (routeId: string) => {
   route.totalDurationMinutes = route.jobIds.length * 14 + (route.jobIds.length ? 10 : 0);
   route.estimatedCapacity = 900 + route.jobIds.length * 180;
   route.optimizationStatus = 'optimized';
-  route.dataQuality = 'simulated';
+  route.dataQuality = 'degraded';
   route.planningWarnings = route.jobIds.length ? [] : ['No assigned jobs'];
 };
 
@@ -483,7 +521,7 @@ const generatePreviewDraft = (payload: {
     status: 'planned',
     workflowStatus: 'planned',
     jobIds: seed.jobIds,
-    dataQuality: 'simulated' as const,
+    dataQuality: 'degraded' as const,
     optimizationStatus: 'optimized' as const,
     routeData: {
       planner_diagnostics: {
@@ -507,6 +545,155 @@ const createPreviewResponse = (): PlannerMutationResult => {
     stops: view.stops,
     unassignedJobs: view.unassignedJobs,
     warnings: view.plan?.warnings,
+  };
+};
+
+const previewPublishDecisions = new Map<string, PlannerPublishDecision[]>();
+
+const getPreviewPublishDecisions = (routePlanId: string) =>
+  previewPublishDecisions.get(routePlanId) || [];
+
+const withPreviewPublishDecisions = (
+  routePlanId: string,
+  blockers: PlannerPublishBlocker[],
+) => {
+  const decisions = getPreviewPublishDecisions(routePlanId);
+  return blockers.map((blocker) => ({
+    ...blocker,
+    acceptedDecision: blocker.canAcceptRisk
+      ? decisions.find((decision) => {
+          if (decision.decision !== 'accepted_risk') return false;
+          if (decision.blockerCode !== blocker.code) return false;
+          if (blocker.jobId && decision.jobId !== blocker.jobId) return false;
+          if (blocker.groupId && decision.groupId !== blocker.groupId) return false;
+          if (
+            blocker.warningIndex !== undefined &&
+            decision.warningIndex !== blocker.warningIndex
+          ) {
+            return false;
+          }
+          return true;
+        })
+      : undefined,
+  }));
+};
+
+const buildPreviewPublishReadiness = (): PlannerPublishReadiness => {
+  const view = buildPreviewPlannerView();
+  const blockers: PlannerPublishBlocker[] = [];
+  const routePlanId = view.plan?.id || PREVIEW_ROUTE_PLAN_ID;
+  const stopGroupIds = new Set(view.stops.map((stop) => stop.routePlanGroupId));
+  view.groups.forEach((group) => {
+    if (!stopGroupIds.has(group.id)) return;
+    if (!group.vehicleId) {
+      blockers.push({
+        code: 'MISSING_VEHICLE',
+        message: `${group.label || 'Route'} needs a vehicle before publish.`,
+        severity: 'blocking',
+        canAcceptRisk: false,
+        groupId: group.id,
+      });
+    }
+    if (!group.driverId) {
+      blockers.push({
+        code: 'MISSING_DRIVER',
+        message: `${group.label || 'Route'} needs a driver before publish.`,
+        severity: 'blocking',
+        canAcceptRisk: false,
+        groupId: group.id,
+      });
+    }
+  });
+  view.plan?.warnings?.forEach((warning, index) => {
+    blockers.push({
+      code: 'ROUTE_PLAN_WARNING',
+      message: typeof warning === 'string' ? warning : String(warning.message || warning.type || 'Planner warning requires review'),
+      severity: 'blocking',
+      canAcceptRisk: true,
+      warningIndex: index,
+    });
+  });
+  view.stops.forEach((stop) => {
+    const job = findPreviewJob(stop.jobId);
+    if (!job) return;
+    const readiness = evaluateJobRoutingReadiness({
+      deliveryAddress: job.deliveryAddress,
+      timeWindowStart: job.timeWindowStart,
+      timeWindowEnd: job.timeWindowEnd,
+      estimatedDuration: job.estimatedDuration,
+      weight: job.weight,
+      volume: job.volume,
+      quantity: job.quantity,
+      routingRequirements: job.routingRequirements,
+    });
+    if (readiness.status === 'routable') return;
+    blockers.push({
+      code:
+        readiness.status === 'missing_data'
+          ? 'JOB_MISSING_DATA'
+          : readiness.status === 'capacity_risk'
+            ? 'JOB_CAPACITY_RISK'
+            : readiness.status === 'appointment_risk'
+              ? 'JOB_APPOINTMENT_RISK'
+              : 'JOB_ACCESS_RISK',
+      message: `${job.customerName || job.id}: ${readiness.summary}`,
+      severity: 'blocking',
+      canAcceptRisk: readiness.status !== 'missing_data',
+      jobId: job.id,
+    });
+  });
+  view.unassignedJobs.forEach((job) => {
+    blockers.push({
+      code: 'UNASSIGNED_JOB',
+      message: `${job.customerName || job.id} is not assigned to the route plan.`,
+      severity: 'blocking',
+      canAcceptRisk: false,
+      jobId: job.id,
+    });
+  });
+
+  const blockersWithDecisions = withPreviewPublishDecisions(routePlanId, blockers);
+  const blockingBlockers = blockersWithDecisions.filter((blocker) => !blocker.acceptedDecision);
+  return {
+    ok: true,
+    routePlanId,
+    ready: blockingBlockers.length === 0,
+    blockers: blockersWithDecisions,
+    blockingBlockers,
+    decisions: getPreviewPublishDecisions(routePlanId),
+    summary: {
+      blockerCount: blockersWithDecisions.length,
+      blockingCount: blockingBlockers.length,
+      acceptedRiskCount: blockersWithDecisions.filter((blocker) => blocker.acceptedDecision).length,
+    },
+  };
+};
+
+const normalizePublishReadiness = (value: unknown): PlannerPublishReadiness => {
+  const data = unwrapApiData<unknown>(value);
+  const record = isRecord(data) ? data : {};
+  const blockers = Array.isArray(record.blockers)
+    ? (record.blockers as PlannerPublishBlocker[])
+    : [];
+  const blockingBlockers = Array.isArray(record.blockingBlockers)
+    ? (record.blockingBlockers as PlannerPublishBlocker[])
+    : blockers.filter((blocker) => !blocker.acceptedDecision);
+  return {
+    ok: record.ok !== false,
+    routePlanId: typeof record.routePlanId === 'string' ? record.routePlanId : '',
+    ready: Boolean(record.ready),
+    blockers,
+    blockingBlockers,
+    decisions: Array.isArray(record.decisions)
+      ? (record.decisions as PlannerPublishDecision[])
+      : [],
+    summary: isRecord(record.summary)
+      ? (record.summary as PlannerPublishReadiness['summary'])
+      : {
+          blockerCount: blockers.length,
+          blockingCount: blockingBlockers.length,
+          acceptedRiskCount: blockers.filter((blocker) => blocker.acceptedDecision).length,
+        },
   };
 };
 
@@ -628,6 +815,10 @@ export const updateRoutePlanStop = async (
 
 export const publishRoutePlan = async (routePlanId: string) => {
   if (isPreview()) {
+    const readiness = buildPreviewPublishReadiness();
+    if (!readiness.ready) {
+      throw new Error('Route plan is not ready to publish.');
+    }
     previewState.routes.forEach((route) => {
       route.status = 'assigned';
       route.workflowStatus = 'ready_for_dispatch';
@@ -653,11 +844,76 @@ export const publishRoutePlan = async (routePlanId: string) => {
   });
 };
 
+export const getRoutePlanPublishReadiness = async (
+  routePlanId: string,
+): Promise<PlannerPublishReadiness> => {
+  if (isPreview()) {
+    return buildPreviewPublishReadiness();
+  }
+  const response = await apiFetch(`/api/route-plans/${routePlanId}/publish-readiness`);
+  return normalizePublishReadiness(await response.json());
+};
+
+export const acceptRoutePlanPublishRisk = async (
+  routePlanId: string,
+  payload: {
+    blockerCode: string;
+    reason: string;
+    jobId?: string;
+    groupId?: string;
+    warningIndex?: number;
+  },
+): Promise<PlannerPublishReadiness> => {
+  if (isPreview()) {
+    const decision: PlannerPublishDecision = {
+      id: `decision-preview-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      decision: 'accepted_risk',
+      blockerCode: payload.blockerCode,
+      reason: payload.reason,
+      actorId: 'preview-user',
+      jobId: payload.jobId || null,
+      groupId: payload.groupId || null,
+      warningIndex: payload.warningIndex ?? null,
+      createdAt: new Date().toISOString(),
+    };
+    previewPublishDecisions.set(routePlanId, [
+      ...getPreviewPublishDecisions(routePlanId).filter(
+        (item) =>
+          !(
+            item.blockerCode === decision.blockerCode &&
+            (decision.jobId ? item.jobId === decision.jobId : true) &&
+            (decision.groupId ? item.groupId === decision.groupId : true) &&
+            (decision.warningIndex !== null ? item.warningIndex === decision.warningIndex : true)
+          ),
+      ),
+      decision,
+    ]);
+    return buildPreviewPublishReadiness();
+  }
+  const response = await apiFetch(
+    `/api/route-plans/${routePlanId}/publish-decisions/accept-risk`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+  return normalizePublishReadiness(await response.json());
+};
+
 export const usePlannerQuery = (serviceDate: string) =>
   useQuery({
     queryKey: queryKeys.planner(serviceDate),
     queryFn: () => getPlanner(serviceDate),
     enabled: Boolean(serviceDate),
+  });
+
+export const useRoutePlanPublishReadinessQuery = (
+  routePlanId?: string | null,
+) =>
+  useQuery({
+    queryKey: queryKeys.plannerPublishReadiness(routePlanId || 'none'),
+    queryFn: () => getRoutePlanPublishReadiness(routePlanId || ''),
+    enabled: Boolean(routePlanId),
   });
 
 export const useGenerateDraftRoutePlanMutation = (serviceDate: string) => {

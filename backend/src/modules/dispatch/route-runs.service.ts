@@ -28,6 +28,7 @@ import { resolveProofUploadMimeType } from '../../common/files/proof-file.util';
 import { MAX_JWT_BEARER_TOKEN_LENGTH } from '../auth/strategies/jwt.strategy';
 import type {
   DriverManifestResponse,
+  DispatchReadiness,
   PresentedRouteRunStop,
   PublicTrackingResponse,
   RouteRunMessagesResponse,
@@ -46,6 +47,10 @@ type Actor = {
   organizationId?: string;
   roles?: string[];
   email?: string;
+};
+
+type DispatchRoutePayload = {
+  note?: string | null;
 };
 
 type UploadedProofFile = {
@@ -460,6 +465,82 @@ export class RouteRunsService {
     return stop;
   }
 
+  private buildDispatchReadiness(
+    route: Route,
+    stops: RouteRunStop[],
+    exceptions: DispatchException[],
+  ): DispatchReadiness {
+    const blockers: DispatchReadiness['blockers'] = [];
+    const routeId = route.id;
+    const routeStatus = String(route.status || '').toLowerCase();
+
+    if (['in_progress', 'completed', 'cancelled'].includes(routeStatus)) {
+      blockers.push({
+        code: 'ROUTE_NOT_EDITABLE',
+        message: 'Only planned or ready routes can be sent to a driver.',
+        severity: 'blocking',
+        routeId,
+      });
+    }
+
+    if (!route.driverId) {
+      blockers.push({
+        code: 'MISSING_DRIVER',
+        message: 'Assign a driver before dispatch.',
+        severity: 'blocking',
+        routeId,
+      });
+    }
+
+    if (!route.vehicleId) {
+      blockers.push({
+        code: 'MISSING_VEHICLE',
+        message: 'Assign a vehicle before dispatch.',
+        severity: 'blocking',
+        routeId,
+      });
+    }
+
+    if (stops.length === 0) {
+      blockers.push({
+        code: 'NO_STOPS',
+        message: 'Add at least one stop before dispatch.',
+        severity: 'blocking',
+        routeId,
+      });
+    }
+
+    exceptions
+      .filter((exception) => String(exception.status || '').toUpperCase() === 'OPEN')
+      .forEach((exception) => {
+        blockers.push({
+          code: 'OPEN_EXCEPTION',
+          message: `${exception.code}: ${exception.message}`,
+          severity: 'blocking',
+          routeId,
+          exceptionId: exception.id,
+        });
+      });
+
+    return {
+      ready: blockers.length === 0,
+      blockers,
+    };
+  }
+
+  private async getDispatchReadiness(route: Route, actor?: Actor) {
+    const [stops, exceptions] = await Promise.all([
+      this.routeRunStops.find({
+        where: this.stopListWhere(route.id, route.organizationId || actor?.organizationId),
+      }),
+      this.exceptions.find({
+        where: this.exceptionRouteWhere(route.id, route.organizationId || actor?.organizationId),
+      }),
+    ]);
+
+    return this.buildDispatchReadiness(route, stops, exceptions);
+  }
+
   private getTrackingBaseUrl() {
     return (process.env.FRONTEND_URL || 'http://127.0.0.1:5184').replace(/\/+$/, '');
   }
@@ -591,11 +672,34 @@ export class RouteRunsService {
           where: { routeId: In(routeIds), status: 'OPEN' },
         })
       : [];
+    const stopsByRoute = stops.reduce<Record<string, RouteRunStop[]>>((acc, stop) => {
+      acc[stop.routeId] = [...(acc[stop.routeId] || []), stop];
+      return acc;
+    }, {});
+    const exceptionsByRoute = exceptions.reduce<Record<string, DispatchException[]>>(
+      (acc, exception) => {
+        if (!exception.routeId) return acc;
+        acc[exception.routeId] = [...(acc[exception.routeId] || []), exception];
+        return acc;
+      },
+      {},
+    );
+    const dispatchReadiness = Object.fromEntries(
+      routes.map((route) => [
+        route.id,
+        this.buildDispatchReadiness(
+          route,
+          stopsByRoute[route.id] || [],
+          exceptionsByRoute[route.id] || [],
+        ),
+      ]),
+    );
     return {
       ok: true,
       routes,
       routeRunStops: stops,
       exceptions,
+      dispatchReadiness,
     };
   }
 
@@ -660,15 +764,31 @@ export class RouteRunsService {
       proofArtifacts,
       notificationDeliveries,
       messages,
+      dispatchReadiness: this.buildDispatchReadiness(route, stops, exceptions),
     };
   }
 
-  async dispatchRoute(routeId: string, actor?: Actor) {
+  async dispatchRoute(routeId: string, payload: DispatchRoutePayload = {}, actor?: Actor) {
     const route = await this.getAccessibleRoute(routeId, actor);
+    const readiness = await this.getDispatchReadiness(route, actor);
+    if (!readiness.ready) {
+      throw new BadRequestException({
+        message: 'Route is not ready to dispatch',
+        blockers: readiness.blockers,
+      });
+    }
+    const note = String(payload.note || '').trim();
+    const dispatchedAt = new Date();
     route.status = RouteStatus.ASSIGNED;
     route.workflowStatus = RouteWorkflowStatus.READY_FOR_DISPATCH;
+    route.dispatchedAt = dispatchedAt;
+    route.dispatchedByUserId = actor?.userId || null;
+    route.dispatchNote = note || null;
     await this.routes.save(route);
-    this.audit.record({ actorId: actor?.userId || 'system', actorType: 'user', entityType: 'route_run', entityId: routeId, action: 'route-run.dispatched', source: 'user', newValue: { status: route.status }, metadata: { organizationId: actor?.organizationId } });
+    if (note) {
+      await this.createRouteMessage(route.id, { body: note }, actor);
+    }
+    this.audit.record({ actorId: actor?.userId || 'system', actorType: 'user', entityType: 'route_run', entityId: routeId, action: 'route-run.dispatched', source: 'user', newValue: { status: route.status, workflowStatus: route.workflowStatus, dispatchedAt, dispatchedByUserId: route.dispatchedByUserId, dispatchNote: route.dispatchNote }, metadata: { organizationId: actor?.organizationId } });
     await this.notifyRouteJobs(route, 'assignment', {}, actor);
     await this.emitWebhookEvent(route, 'route.published', {
       routeRun: route,
@@ -723,7 +843,22 @@ export class RouteRunsService {
 
   async reassign(routeId: string, payload: { driverId?: string; vehicleId?: string; reason?: string }, actor?: Actor) {
     const route = await this.getAccessibleRoute(routeId, actor);
-    if (payload.driverId !== undefined) route.driverId = payload.driverId || null;
+    if (payload.driverId !== undefined) {
+      route.driverId = payload.driverId || null;
+      if (!payload.vehicleId && route.driverId && this.drivers) {
+        const driver = await this.drivers.findOne({
+          where: route.organizationId || actor?.organizationId
+            ? {
+                id: route.driverId,
+                organizationId: route.organizationId || actor?.organizationId,
+              }
+            : { id: route.driverId },
+        });
+        if (driver?.currentVehicleId) {
+          route.vehicleId = driver.currentVehicleId;
+        }
+      }
+    }
     if (payload.vehicleId !== undefined && payload.vehicleId) route.vehicleId = payload.vehicleId;
     await this.routes.save(route);
     await this.routeAssignments.save(this.routeAssignments.create({

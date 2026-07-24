@@ -57,6 +57,7 @@ input CreateJobDto {
   pickupLocation: JSON
   priority: String
   quantity: Int
+  routingRequirements: JSON
   specialInstructions: String
   status: String
   timeWindowEnd: String
@@ -159,6 +160,8 @@ type Job {
   pickupAddress: String!
   priority: String!
   quantity: Int
+  routingReadiness: JSON
+  routingRequirements: JSON
   specialInstructions: String
   startDate: DateTime
   status: String!
@@ -338,6 +341,7 @@ input UpdateJobDto {
   pickupLocation: JSON
   priority: String
   quantity: Int
+  routingRequirements: JSON
   specialInstructions: String
   status: String
   timeWindowEnd: String

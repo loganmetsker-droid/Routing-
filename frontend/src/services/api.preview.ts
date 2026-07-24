@@ -3,7 +3,7 @@ import type {
   DispatchJob,
   DispatchVehicle,
 } from '../types/dispatch';
-import { isAuthBypassed } from './api.session';
+import { getTrovanDataMode, usesPreviewDataMode } from './dataMode';
 import type {
   DispatchTimelineEvent,
   JsonRecord,
@@ -18,6 +18,15 @@ import type {
   TrackingVehicleLocation,
 } from './api.types';
 import { clonePreview, isRecord } from './api.types';
+
+const PREVIEW_BASE_DATE = '2026-04-10';
+
+function shiftPreviewDatesToToday<T>(value: T): T {
+  const currentServiceDate = new Date().toISOString().slice(0, 10);
+  return JSON.parse(
+    JSON.stringify(value).split(PREVIEW_BASE_DATE).join(currentServiceDate),
+  ) as T;
+}
 
 const buildDensePreviewDemandJobs = (): DispatchJob[] => {
   const clusters = [
@@ -130,10 +139,11 @@ const buildDensePreviewDemandJobs = (): DispatchJob[] => {
   );
 };
 
-const PREVIEW_STATE_SEED: PreviewState = {
+const PREVIEW_STATE_SEED: PreviewState = shiftPreviewDatesToToday({
   jobs: clonePreview<DispatchJob[]>([
     {
       id: 'job-jane-1',
+      customerId: 'CUST-ROUTE-1001',
       customerName: 'Jane & Sons Bakery',
       deliveryAddress: '1425 Market Ave, Denver, CO 80202',
       pickupAddress: 'Bakery Loading Dock',
@@ -146,6 +156,7 @@ const PREVIEW_STATE_SEED: PreviewState = {
     },
     {
       id: 'job-omega-2',
+      customerId: 'CUST-ROUTE-1002',
       customerName: 'Omega Medical',
       deliveryAddress: '2100 Santa Fe Dr, Denver, CO 80204',
       pickupAddress: 'Medical Fulfillment Hub',
@@ -158,6 +169,7 @@ const PREVIEW_STATE_SEED: PreviewState = {
     },
     {
       id: 'job-pioneer-3',
+      customerId: 'CUST-ROUTE-1003',
       customerName: 'Pioneer Logistics',
       deliveryAddress: '3300 Peña Blvd, Denver, CO 80216',
       pickupAddress: 'Distribution Center',
@@ -170,6 +182,7 @@ const PREVIEW_STATE_SEED: PreviewState = {
     },
     {
       id: 'job-ridge-4',
+      customerId: 'CUST-ROUTE-1004',
       customerName: 'Ridgewood Labs',
       deliveryAddress: '4100 Irving St, Denver, CO 80217',
       pickupAddress: 'Regional Depot',
@@ -182,6 +195,7 @@ const PREVIEW_STATE_SEED: PreviewState = {
     },
     {
       id: 'job-river-5',
+      customerId: 'CUST-ROUTE-1005',
       customerName: 'Riverfront Catering',
       deliveryAddress: '870 W Evans Ave, Denver, CO 80223',
       pickupAddress: 'Kitchen Hub',
@@ -194,6 +208,7 @@ const PREVIEW_STATE_SEED: PreviewState = {
     },
     {
       id: 'job-route-6',
+      customerId: 'CUST-ROUTE-1006',
       customerName: 'Aurora Office Supply',
       deliveryAddress: '12100 E Iliff Ave, Aurora, CO 80014',
       pickupAddress: 'Southeast Staging',
@@ -206,6 +221,7 @@ const PREVIEW_STATE_SEED: PreviewState = {
     },
     {
       id: 'job-highland-7',
+      customerId: 'CUST-ROUTE-1007',
       customerName: 'Arvada Grocer',
       deliveryAddress: '7600 W 57th Ave, Arvada, CO 80002',
       pickupAddress: 'Northwest Cross Dock',
@@ -218,6 +234,7 @@ const PREVIEW_STATE_SEED: PreviewState = {
     },
     {
       id: 'job-sloan-8',
+      customerId: 'CUST-ROUTE-1008',
       customerName: 'Wheat Ridge Pharmacy',
       deliveryAddress: '4990 Kipling St, Wheat Ridge, CO 80033',
       pickupAddress: 'Northwest Cross Dock',
@@ -336,7 +353,7 @@ const PREVIEW_STATE_SEED: PreviewState = {
       totalDurationMinutes: 35,
       jobIds: ['job-jane-1', 'job-omega-2'],
       workflowStatus: 'planned',
-      dataQuality: 'simulated',
+      dataQuality: 'degraded',
       optimizationStatus: 'optimized',
       optimizedStops: [
         {
@@ -367,7 +384,7 @@ const PREVIEW_STATE_SEED: PreviewState = {
           ],
         },
       },
-      planningWarnings: ['Simulated planning path used'],
+      planningWarnings: ['Capacity review required before dispatch'],
       droppedJobIds: [],
       estimatedCapacity: 1400,
       optimizedAt: '2026-04-10T10:00:00.000Z',
@@ -418,7 +435,7 @@ const PREVIEW_STATE_SEED: PreviewState = {
       totalDurationMinutes: 58,
       jobIds: ['job-ridge-4'],
       workflowStatus: 'in_progress',
-      dataQuality: 'simulated',
+      dataQuality: 'degraded',
       optimizationStatus: 'degraded',
       optimizedStops: [
         {
@@ -443,42 +460,39 @@ const PREVIEW_STATE_SEED: PreviewState = {
       id: 'driver-anna-2',
       firstName: 'Anna',
       lastName: 'Quinn',
-      status: 'on_duty',
-      currentHours: 2.1,
-      maxHours: 12,
-    },
-    {
-      id: 'driver-carl-3',
-      firstName: 'Carl',
-      lastName: 'Snyder',
-      status: 'on_route',
-      currentHours: 6.5,
-      maxHours: 10,
-    },
-    {
-      id: 'driver-maya-4',
-      firstName: 'Maya',
-      lastName: 'Vega',
-      status: 'on_duty',
+      email: 'anna.quinn@trovan.local',
+      phone: '(555) 010-2102',
+      licenseNumber: 'CO-CDL-2102',
+      licenseType: 'CLASS_B',
+      status: 'ACTIVE',
+      currentVehicleId: 'veh-van-2',
+      assignedVehicleId: 'veh-van-2',
       currentHours: 1.4,
       maxHours: 11,
     },
     {
-      id: 'driver-eli-5',
-      firstName: 'Eli',
-      lastName: 'Brooks',
-      status: 'on_duty',
-      currentHours: 3.2,
+      id: 'D-1023',
+      firstName: 'Sarah',
+      lastName: 'Johnson',
+      email: 'sarah.johnson@trovan.com',
+      phone: '(555) 123-4567',
+      licenseNumber: 'TX-CDL-1023',
+      licenseType: 'CLASS_A',
+      status: 'ACTIVE',
+      currentVehicleId: 'veh-van-1',
+      assignedVehicleId: 'veh-van-1',
+      currentHours: 6.2,
       maxHours: 11,
     },
-    {
-      id: 'driver-nora-6',
-      firstName: 'Nora',
-      lastName: 'Shaw',
-      status: 'available',
-      currentHours: 0.7,
-      maxHours: 12,
-    },
+    { id: 'D-1008', firstName: 'James', lastName: 'Martinez', email: 'james.martinez@trovan.com', phone: '(555) 123-1008', licenseNumber: 'TX-CDL-1008', licenseType: 'CLASS_A', status: 'ACTIVE', currentVehicleId: 'veh-van-2', assignedVehicleId: 'veh-van-2', currentHours: 0, maxHours: 11 },
+    { id: 'D-1015', firstName: 'Michael', lastName: 'Chen', email: 'michael.chen@trovan.com', phone: '(555) 123-1015', licenseNumber: 'TX-CDL-1015', licenseType: 'CLASS_B', status: 'ACTIVE', currentVehicleId: 'veh-shuttle-3', assignedVehicleId: 'veh-shuttle-3', currentHours: 5.7, maxHours: 11 },
+    { id: 'D-1003', firstName: 'David', lastName: 'Thompson', email: 'david.thompson@trovan.com', phone: '(555) 123-1003', licenseNumber: 'TX-CDL-1003', licenseType: 'CLASS_A', status: 'ACTIVE', currentVehicleId: 'veh-semi-4', assignedVehicleId: 'veh-semi-4', currentHours: 3.4, maxHours: 11 },
+    { id: 'D-1018', firstName: 'Lisa', lastName: 'Rodriguez', email: 'lisa.rodriguez@trovan.com', phone: '(555) 123-1018', licenseNumber: 'TX-CDL-1018', licenseType: 'CLASS_A', status: 'ACTIVE', currentVehicleId: 'veh-van-5', assignedVehicleId: 'veh-van-5', currentHours: 4.9, maxHours: 11 },
+    { id: 'D-1005', firstName: 'Robert', lastName: 'Williams', email: 'robert.williams@trovan.com', phone: '(555) 123-1005', licenseNumber: 'TX-CDL-1005', licenseType: 'CLASS_B', status: 'OFF_DUTY', currentVehicleId: null, assignedVehicleId: null, currentHours: 0, maxHours: 11 },
+    { id: 'D-1021', firstName: 'Emily', lastName: 'Davis', email: 'emily.davis@trovan.com', phone: '(555) 123-1021', licenseNumber: 'TX-CDL-1021', licenseType: 'CLASS_A', status: 'ACTIVE', currentVehicleId: 'veh-van-2', assignedVehicleId: 'veh-van-2', currentHours: 7.1, maxHours: 11 },
+    { id: 'D-1007', firstName: 'Daniel', lastName: 'Brown', email: 'daniel.brown@trovan.com', phone: '(555) 123-1007', licenseNumber: 'TX-CDL-1007', licenseType: 'CLASS_A', status: 'ACTIVE', currentVehicleId: 'veh-shuttle-3', assignedVehicleId: 'veh-shuttle-3', currentHours: 9.6, maxHours: 11 },
+    { id: 'D-1012', firstName: 'Amanda', lastName: 'Lee', email: 'amanda.lee@trovan.com', phone: '(555) 123-1012', licenseNumber: 'TX-CDL-1012', licenseType: 'CLASS_B', status: 'ACTIVE', currentVehicleId: null, assignedVehicleId: null, currentHours: 0, maxHours: 11 },
+    { id: 'D-1011', firstName: 'Kevin', lastName: 'Harris', email: 'kevin.harris@trovan.com', phone: '(555) 123-1011', licenseNumber: 'TX-CDL-1011', licenseType: 'CLASS_A', status: 'OFF_DUTY', currentVehicleId: null, assignedVehicleId: null, currentHours: 0, maxHours: 11 },
   ]),
   vehicles: clonePreview<DispatchVehicle[]>([
     {
@@ -577,7 +591,7 @@ const PREVIEW_STATE_SEED: PreviewState = {
         routeId: 'route-alpha-001',
         versionNumber: 1,
         status: 'DRAFT',
-        snapshot: { note: 'Initial draft generated from simulated planner.' },
+        snapshot: { note: 'Initial draft generated from seeded planner data.' },
         createdByUserId: 'preview-user',
         createdAt: '2026-04-10T09:57:00.000Z',
       },
@@ -633,11 +647,43 @@ const PREVIEW_STATE_SEED: PreviewState = {
       },
     ],
   },
+});
+
+const PREVIEW_STATE_STORAGE_KEY = 'trovan-preview-state-v2';
+
+const readPersistedPreviewState = (): PreviewState | null => {
+  if (typeof window === 'undefined' || !window.localStorage) return null;
+  try {
+    const raw = window.localStorage.getItem(PREVIEW_STATE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return isRecord(parsed) ? (parsed as PreviewState) : null;
+  } catch {
+    return null;
+  }
 };
 
-export const previewState = clonePreview(PREVIEW_STATE_SEED);
+export const previewState = clonePreview(
+  readPersistedPreviewState() || PREVIEW_STATE_SEED,
+);
 
-export const isPreview = () => isAuthBypassed();
+export const persistPreviewState = () => {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    window.localStorage.setItem(
+      PREVIEW_STATE_STORAGE_KEY,
+      JSON.stringify(previewState),
+    );
+  } catch {
+    // Preview persistence is best-effort only.
+  }
+};
+
+export const isPreview = () => usesPreviewDataMode(getTrovanDataMode());
+
+if (typeof window !== 'undefined' && isPreview() && !readPersistedPreviewState()) {
+  persistPreviewState();
+}
 
 export const nowIso = () => new Date().toISOString();
 

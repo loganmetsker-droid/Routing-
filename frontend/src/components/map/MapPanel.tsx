@@ -90,7 +90,7 @@ export default function MapPanel({
                     <div style={{ textAlign: 'center' }}>
                       <strong>{route.vehicle}</strong>
                       <br />
-                      {route.stopCount} stops • {route.totalDistance}km
+                      {route.stopCount} stops • {(Number(route.totalDistance || 0) * 0.621371).toFixed(1)} mi
                     </div>
                   </LeafletTooltip>
                 </Polyline>

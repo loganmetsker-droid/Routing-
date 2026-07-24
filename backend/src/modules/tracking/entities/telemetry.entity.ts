@@ -60,6 +60,7 @@ export class Telemetry {
   odometer?: number;
 
   @Column({
+    name: 'fuel_level',
     type: 'decimal',
     precision: 5,
     scale: 2,
@@ -69,6 +70,7 @@ export class Telemetry {
   fuelLevel?: number;
 
   @Column({
+    name: 'engine_temp',
     type: 'decimal',
     precision: 5,
     scale: 2,

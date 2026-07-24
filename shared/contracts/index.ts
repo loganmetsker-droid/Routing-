@@ -1,6 +1,8 @@
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
+export * from './jobRouting';
+
 export type ApiErrorCode =
   | 'JOB_VALIDATION_ERROR'
   | 'VEHICLE_NOT_AVAILABLE'
@@ -38,6 +40,94 @@ export interface ApiListData<T> {
 }
 
 export interface ApiListResponse<T> extends ApiResponse<ApiListData<T>> {}
+
+export const marketingRequestTypes = [
+  'Route audit',
+  'Book demo',
+  'Implementation planning',
+  'Support',
+  'Security review',
+  'Privacy Rights Request',
+  'Careers',
+] as const;
+
+export type MarketingRequestType = (typeof marketingRequestTypes)[number];
+
+export type AssistedPilotPlanKey = 'starter' | 'professional' | 'enterprise';
+
+export type AssistedPilotPlan = {
+  plan: AssistedPilotPlanKey;
+  label: 'Launch' | 'Scale' | 'Enterprise';
+  monthlyPriceUsd: number | null;
+  billingCadence: 'month' | null;
+  salesAssisted: true;
+  selfServeEnabled: false;
+  dispatcherSeats: number;
+  requestType: MarketingRequestType;
+  cta: string;
+  publicDescription: string;
+  features: string[];
+};
+
+export const assistedPilotPlanCatalog: readonly AssistedPilotPlan[] = [
+  {
+    plan: 'starter',
+    label: 'Launch',
+    monthlyPriceUsd: 399,
+    billingCadence: 'month',
+    salesAssisted: true,
+    selfServeEnabled: false,
+    dispatcherSeats: 3,
+    requestType: 'Implementation planning',
+    cta: 'Request Launch setup',
+    publicDescription:
+      'For local delivery teams proving route discipline with reviewed onboarding.',
+    features: [
+      'Route planning workspace',
+      'Driver mobile flow',
+      'Public tracking links',
+      'Core route analytics',
+    ],
+  },
+  {
+    plan: 'professional',
+    label: 'Scale',
+    monthlyPriceUsd: 899,
+    billingCadence: 'month',
+    salesAssisted: true,
+    selfServeEnabled: false,
+    dispatcherSeats: 15,
+    requestType: 'Book demo',
+    cta: 'Book ROI walkthrough',
+    publicDescription:
+      'For operators that need live dispatch, customer visibility, route history, and exception control.',
+    features: [
+      'Dispatch command center',
+      'Customer and fleet records',
+      'Analytics and route history',
+      'Priority pilot support',
+    ],
+  },
+  {
+    plan: 'enterprise',
+    label: 'Enterprise',
+    monthlyPriceUsd: null,
+    billingCadence: null,
+    salesAssisted: true,
+    selfServeEnabled: false,
+    dispatcherSeats: 999,
+    requestType: 'Security review',
+    cta: 'Review route-day ROI',
+    publicDescription:
+      'For multi-team fleets requiring security review, implementation planning, API access, and custom support terms.',
+    features: [
+      'Security review support',
+      'Webhook and API access',
+      'Implementation readiness plan',
+      'Custom rollout terms',
+    ],
+  },
+] as const;
 
 export type RouteLifecycleState =
   | 'draft'
@@ -141,6 +231,14 @@ export interface Job {
   assignedRouteId?: string | null;
   assignedVehicleId?: string | null;
   stopSequence?: number | null;
+  weight?: number | string | null;
+  volume?: number | string | null;
+  quantity?: number | string | null;
+  estimatedDuration?: number | string | null;
+  notes?: string | null;
+  specialInstructions?: string | null;
+  routingRequirements?: import('./jobRouting').JobRoutingRequirements | null;
+  routingReadiness?: import('./jobRouting').JobRoutingReadiness | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -211,6 +309,9 @@ export interface Route {
   jobCount?: number;
   plannedStart?: string | null;
   actualStart?: string | null;
+  dispatchedAt?: string | null;
+  dispatchedByUserId?: string | null;
+  dispatchNote?: string | null;
   completedAt?: string | null;
   notes?: string | null;
   routeData?: Record<string, unknown> | null;

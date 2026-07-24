@@ -1,4 +1,5 @@
 import { PlanningService } from './planning.service';
+import { BadRequestException } from '@nestjs/common';
 
 describe('PlanningService', () => {
   function createRepo(initial: any[] = [], options: { enforceRoutePlanStopSequence?: boolean } = {}) {
@@ -127,7 +128,7 @@ describe('PlanningService', () => {
     const routePlans = createRepo([{ id: 'plan-1', organizationId: 'org-1', serviceDate: '2026-04-10', status: 'READY', objective: 'distance', warnings: [], metrics: {}, depotId: 'dep-1' }]);
     const routePlanGroups = createRepo([{ id: 'group-1', routePlanId: 'plan-1', groupIndex: 1, label: 'Route 1', vehicleId: 'veh-1', driverId: 'drv-1', totalDistanceKm: 12, totalDurationMinutes: 60 }]);
     const routePlanStops = createRepo([{ id: 'rps-1', routePlanId: 'plan-1', routePlanGroupId: 'group-1', jobId: 'job-1', jobStopId: 'stop-1', stopSequence: 1, isLocked: false, plannedArrival: new Date('2026-04-10T09:00:00Z') }]);
-    const jobs = createRepo([{ id: 'job-1', organizationId: 'org-1', customerName: 'A', deliveryAddress: 'A St', status: 'pending' }]);
+    const jobs = createRepo([{ id: 'job-1', organizationId: 'org-1', customerName: 'A', deliveryAddress: 'A St', status: 'pending', timeWindowStart: new Date('2026-04-10T09:00:00Z'), timeWindowEnd: new Date('2026-04-10T10:00:00Z'), estimatedDuration: 30, routingRequirements: { load: { palletCount: 1, palletLengthIn: 48, palletWidthIn: 40, palletHeightIn: 48, palletWeightLb: 300, stackable: true } } }]);
     const jobStops = createRepo([{ id: 'stop-1', jobId: 'job-1', stopOrder: 1, stopType: 'DROPOFF', address: 'A St', serviceDurationMinutes: 10 }]);
     const vehicles = createRepo([{ id: 'veh-1', organizationId: 'org-1', status: 'available', licensePlate: 'TRK-1' }]);
     const drivers = createRepo([{ id: 'drv-1', organizationId: 'org-1' }]);
@@ -143,6 +144,131 @@ describe('PlanningService', () => {
     expect(result.routeRuns).toHaveLength(1);
     expect(routeRunStops.save).toHaveBeenCalled();
     expect(routeAssignments.save).toHaveBeenCalled();
+  });
+
+  it('recovers a published plan that has no route runs yet', async () => {
+    const routePlans = createRepo([{ id: 'plan-1', organizationId: 'org-1', serviceDate: '2026-04-10', status: 'PUBLISHED', objective: 'distance', warnings: [], metrics: {}, depotId: 'dep-1' }]);
+    const routePlanGroups = createRepo([{ id: 'group-1', routePlanId: 'plan-1', groupIndex: 1, label: 'Route 1', vehicleId: 'veh-1', driverId: 'drv-1', totalDistanceKm: 12, totalDurationMinutes: 60 }]);
+    const routePlanStops = createRepo([{ id: 'rps-1', routePlanId: 'plan-1', routePlanGroupId: 'group-1', jobId: 'job-1', jobStopId: 'stop-1', stopSequence: 1, isLocked: false, plannedArrival: new Date('2026-04-10T09:00:00Z') }]);
+    const jobs = createRepo([{ id: 'job-1', organizationId: 'org-1', customerName: 'A', deliveryAddress: 'A St', status: 'pending', timeWindowStart: new Date('2026-04-10T09:00:00Z'), timeWindowEnd: new Date('2026-04-10T10:00:00Z'), estimatedDuration: 30, routingRequirements: { load: { palletCount: 1, palletLengthIn: 48, palletWidthIn: 40, palletHeightIn: 48, palletWeightLb: 300, stackable: true } } }]);
+    const jobStops = createRepo([{ id: 'stop-1', jobId: 'job-1', stopOrder: 1, stopType: 'DROPOFF', address: 'A St', serviceDurationMinutes: 10 }]);
+    const vehicles = createRepo([{ id: 'veh-1', organizationId: 'org-1', status: 'available', licensePlate: 'TRK-1' }]);
+    const drivers = createRepo([{ id: 'drv-1', organizationId: 'org-1' }]);
+    const depots = createRepo([{ id: 'dep-1', organizationId: 'org-1', isPrimary: true, name: 'Main', address: 'HQ', location: { lat: 39.0997, lng: -94.5786 } }]);
+    const routes = createRepo();
+    const routeRunStops = createRepo();
+    const routeAssignments = createRepo();
+
+    const service = createPlanningService(routePlans, routePlanGroups, routePlanStops, jobs, jobStops, vehicles, drivers, depots, routes, routeRunStops, routeAssignments);
+    const result = await service.publish('plan-1', { userId: 'user-1', organizationId: 'org-1' });
+
+    expect(result.routeRuns).toHaveLength(1);
+    expect(routeRunStops.save).toHaveBeenCalled();
+    expect(routeAssignments.save).toHaveBeenCalled();
+  });
+
+  it('blocks publish readiness when stops reference missing route lanes', async () => {
+    const routePlans = createRepo([{ id: 'plan-1', organizationId: 'org-1', serviceDate: '2026-04-10', status: 'READY', objective: 'distance', warnings: [], metrics: {}, depotId: 'dep-1', publishDecisions: [] }]);
+    const routePlanGroups = createRepo([]);
+    const routePlanStops = createRepo([{ id: 'rps-1', routePlanId: 'plan-1', routePlanGroupId: 'missing-group', jobId: 'job-1', jobStopId: 'stop-1', stopSequence: 1, isLocked: false, plannedArrival: new Date('2026-04-10T09:00:00Z') }]);
+    const jobs = createRepo([{ id: 'job-1', organizationId: 'org-1', customerName: 'A', deliveryAddress: 'A St', status: 'pending', timeWindowStart: new Date('2026-04-10T09:00:00Z'), timeWindowEnd: new Date('2026-04-10T10:00:00Z'), estimatedDuration: 30, routingRequirements: { load: { palletCount: 1, palletLengthIn: 48, palletWidthIn: 40, palletHeightIn: 48, palletWeightLb: 300, stackable: true } } }]);
+    const jobStops = createRepo([{ id: 'stop-1', jobId: 'job-1', stopOrder: 1, stopType: 'DROPOFF', address: 'A St', serviceDurationMinutes: 10 }]);
+    const vehicles = createRepo([{ id: 'veh-1', organizationId: 'org-1', status: 'available', licensePlate: 'TRK-1' }]);
+    const drivers = createRepo([{ id: 'drv-1', organizationId: 'org-1' }]);
+    const depots = createRepo([{ id: 'dep-1', organizationId: 'org-1', isPrimary: true, name: 'Main', address: 'HQ', location: { lat: 39.0997, lng: -94.5786 } }]);
+    const routes = createRepo();
+    const routeRunStops = createRepo();
+    const routeAssignments = createRepo();
+
+    const service = createPlanningService(routePlans, routePlanGroups, routePlanStops, jobs, jobStops, vehicles, drivers, depots, routes, routeRunStops, routeAssignments);
+    const readiness = await service.getPublishReadiness('plan-1', { userId: 'user-1', organizationId: 'org-1' });
+
+    expect(readiness.ready).toBe(false);
+    expect(readiness.blockingBlockers).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'ORPHANED_PLAN_STOPS', canAcceptRisk: false }),
+      ]),
+    );
+  });
+
+  it('blocks publish when a planned route is missing a driver', async () => {
+    const routePlans = createRepo([{ id: 'plan-1', organizationId: 'org-1', serviceDate: '2026-04-10', status: 'READY', objective: 'distance', warnings: [], metrics: {}, depotId: 'dep-1', publishDecisions: [] }]);
+    const routePlanGroups = createRepo([{ id: 'group-1', routePlanId: 'plan-1', groupIndex: 1, label: 'Route 1', vehicleId: 'veh-1', driverId: null, totalDistanceKm: 12, totalDurationMinutes: 60 }]);
+    const routePlanStops = createRepo([{ id: 'rps-1', routePlanId: 'plan-1', routePlanGroupId: 'group-1', jobId: 'job-1', jobStopId: 'stop-1', stopSequence: 1, isLocked: false, plannedArrival: new Date('2026-04-10T09:00:00Z') }]);
+    const jobs = createRepo([{ id: 'job-1', organizationId: 'org-1', customerName: 'A', deliveryAddress: 'A St', status: 'pending', timeWindowStart: new Date('2026-04-10T09:00:00Z'), timeWindowEnd: new Date('2026-04-10T10:00:00Z'), estimatedDuration: 30, routingRequirements: { load: { palletCount: 1, palletLengthIn: 48, palletWidthIn: 40, palletHeightIn: 48, palletWeightLb: 300, stackable: true } } }]);
+    const jobStops = createRepo([{ id: 'stop-1', jobId: 'job-1', stopOrder: 1, stopType: 'DROPOFF', address: 'A St', serviceDurationMinutes: 10 }]);
+    const vehicles = createRepo([{ id: 'veh-1', organizationId: 'org-1', status: 'available', licensePlate: 'TRK-1' }]);
+    const drivers = createRepo([{ id: 'drv-1', organizationId: 'org-1' }]);
+    const depots = createRepo([{ id: 'dep-1', organizationId: 'org-1', isPrimary: true, name: 'Main', address: 'HQ', location: { lat: 39.0997, lng: -94.5786 } }]);
+    const routes = createRepo();
+    const routeRunStops = createRepo();
+    const routeAssignments = createRepo();
+
+    const service = createPlanningService(routePlans, routePlanGroups, routePlanStops, jobs, jobStops, vehicles, drivers, depots, routes, routeRunStops, routeAssignments);
+
+    await expect(service.publish('plan-1', { userId: 'user-1', organizationId: 'org-1' })).rejects.toMatchObject({
+      response: expect.objectContaining({
+        blockers: expect.arrayContaining([
+          expect.objectContaining({ code: 'MISSING_DRIVER', groupId: 'group-1' }),
+        ]),
+      }),
+    });
+  });
+
+  it('blocks publish when a planned job is missing routing-critical load data', async () => {
+    const routePlans = createRepo([{ id: 'plan-1', organizationId: 'org-1', serviceDate: '2026-04-10', status: 'READY', objective: 'distance', warnings: [], metrics: {}, depotId: 'dep-1', publishDecisions: [] }]);
+    const routePlanGroups = createRepo([{ id: 'group-1', routePlanId: 'plan-1', groupIndex: 1, label: 'Route 1', vehicleId: 'veh-1', driverId: 'drv-1', totalDistanceKm: 12, totalDurationMinutes: 60 }]);
+    const routePlanStops = createRepo([{ id: 'rps-1', routePlanId: 'plan-1', routePlanGroupId: 'group-1', jobId: 'job-1', jobStopId: 'stop-1', stopSequence: 1, isLocked: false, plannedArrival: new Date('2026-04-10T09:00:00Z') }]);
+    const jobs = createRepo([{ id: 'job-1', organizationId: 'org-1', customerName: 'A', deliveryAddress: 'A St', status: 'pending', timeWindowStart: new Date('2026-04-10T09:00:00Z'), timeWindowEnd: new Date('2026-04-10T10:00:00Z'), estimatedDuration: 30, routingRequirements: { load: { palletCount: 2, palletWeightLb: 500 } } }]);
+    const jobStops = createRepo([{ id: 'stop-1', jobId: 'job-1', stopOrder: 1, stopType: 'DROPOFF', address: 'A St', serviceDurationMinutes: 10 }]);
+    const vehicles = createRepo([{ id: 'veh-1', organizationId: 'org-1', status: 'available', licensePlate: 'TRK-1' }]);
+    const drivers = createRepo([{ id: 'drv-1', organizationId: 'org-1' }]);
+    const depots = createRepo([{ id: 'dep-1', organizationId: 'org-1', isPrimary: true, name: 'Main', address: 'HQ', location: { lat: 39.0997, lng: -94.5786 } }]);
+    const routes = createRepo();
+    const routeRunStops = createRepo();
+    const routeAssignments = createRepo();
+
+    const service = createPlanningService(routePlans, routePlanGroups, routePlanStops, jobs, jobStops, vehicles, drivers, depots, routes, routeRunStops, routeAssignments);
+
+    await expect(service.publish('plan-1', { userId: 'user-1', organizationId: 'org-1' })).rejects.toMatchObject({
+      response: expect.objectContaining({
+        blockers: expect.arrayContaining([
+          expect.objectContaining({ code: 'JOB_MISSING_DATA', jobId: 'job-1' }),
+        ]),
+      }),
+    });
+  });
+
+  it('allows publish after an operator accepts an overrideable capacity risk with a reason', async () => {
+    const routePlans = createRepo([{ id: 'plan-1', organizationId: 'org-1', serviceDate: '2026-04-10', status: 'READY', objective: 'distance', warnings: [], metrics: {}, depotId: 'dep-1', publishDecisions: [] }]);
+    const routePlanGroups = createRepo([{ id: 'group-1', routePlanId: 'plan-1', groupIndex: 1, label: 'Route 1', vehicleId: 'veh-1', driverId: 'drv-1', totalDistanceKm: 12, totalDurationMinutes: 60 }]);
+    const routePlanStops = createRepo([{ id: 'rps-1', routePlanId: 'plan-1', routePlanGroupId: 'group-1', jobId: 'job-1', jobStopId: 'stop-1', stopSequence: 1, isLocked: false, plannedArrival: new Date('2026-04-10T09:00:00Z') }]);
+    const jobs = createRepo([{ id: 'job-1', organizationId: 'org-1', customerName: 'A', deliveryAddress: 'A St', status: 'pending', timeWindowStart: new Date('2026-04-10T09:00:00Z'), timeWindowEnd: new Date('2026-04-10T10:00:00Z'), estimatedDuration: 30, routingRequirements: { load: { palletCount: 32, palletLengthIn: 48, palletWidthIn: 40, palletHeightIn: 60, palletWeightLb: 500, stackable: false } } }]);
+    const jobStops = createRepo([{ id: 'stop-1', jobId: 'job-1', stopOrder: 1, stopType: 'DROPOFF', address: 'A St', serviceDurationMinutes: 10 }]);
+    const vehicles = createRepo([{ id: 'veh-1', organizationId: 'org-1', status: 'available', licensePlate: 'TRK-1' }]);
+    const drivers = createRepo([{ id: 'drv-1', organizationId: 'org-1' }]);
+    const depots = createRepo([{ id: 'dep-1', organizationId: 'org-1', isPrimary: true, name: 'Main', address: 'HQ', location: { lat: 39.0997, lng: -94.5786 } }]);
+    const routes = createRepo();
+    const routeRunStops = createRepo();
+    const routeAssignments = createRepo();
+
+    const service = createPlanningService(routePlans, routePlanGroups, routePlanStops, jobs, jobStops, vehicles, drivers, depots, routes, routeRunStops, routeAssignments);
+
+    await expect(service.publish('plan-1', { userId: 'user-1', organizationId: 'org-1' })).rejects.toBeInstanceOf(BadRequestException);
+
+    await service.acceptPublishRisk(
+      'plan-1',
+      {
+        blockerCode: 'JOB_CAPACITY_RISK',
+        jobId: 'job-1',
+        reason: 'Operations confirmed this runs on a dedicated trailer.',
+      },
+      { userId: 'user-1', organizationId: 'org-1' },
+    );
+    const result = await service.publish('plan-1', { userId: 'user-1', organizationId: 'org-1' });
+
+    expect(result.routePlan.status).toBe('PUBLISHED');
+    expect(result.routeRuns).toHaveLength(1);
   });
 
   it('preserves locked stops when regenerating an existing draft plan', async () => {

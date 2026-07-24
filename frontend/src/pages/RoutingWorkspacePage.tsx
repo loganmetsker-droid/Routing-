@@ -11,6 +11,7 @@ import {
   Box,
   Button,
   Checkbox,
+  Collapse,
   Dialog,
   DialogActions,
   DialogContent,
@@ -28,13 +29,13 @@ import {
   Typography,
   useMediaQuery,
 } from '@mui/material';
+import { ExpandLess, ExpandMore } from '@mui/icons-material';
 import { alpha, useTheme } from '@mui/material/styles';
 import MultiRouteMap, { type MapDisplayMode } from '../components/maps/MultiRouteMap';
 import { OpsCommandBar } from '../components/ops';
 import { StatusPill } from '../components/StatusPill';
 import { SurfacePanel } from '../components/SurfacePanel';
 import { buildPlannerMapRoutes, type OpsMapRoute } from '../features/dispatch/utils/opsMapData';
-import { isPreview } from '../services/api.preview';
 import {
   getErrorMessage,
   type DriverRecord,
@@ -43,8 +44,11 @@ import {
 import { useDriversQuery, useVehiclesQuery } from '../services/fleetApi';
 import { useJobsQuery } from '../services/jobsApi';
 import {
+  acceptRoutePlanPublishRisk,
   generateDraftRoutePlan,
   publishRoutePlan,
+  type PlannerPublishBlocker,
+  type PublishRoutePlanResult,
   reoptimizeRoutePlan,
   type PlannerRoutePlan,
   type PlannerRoutePlanGroup,
@@ -52,6 +56,7 @@ import {
   updateRoutePlanGroup,
   updateRoutePlanStop,
   usePlannerQuery,
+  useRoutePlanPublishReadinessQuery,
 } from '../services/plannerApi';
 import {
   fetchRoadRoutePolyline,
@@ -59,16 +64,16 @@ import {
   type RoadRoutePoint,
 } from '../services/roadRouteGeometry';
 import {
-  DensityToggle,
   ExceptionResolutionDrawer,
   hasStopException,
   JobSearchFilters,
   jobMatchesQuickFilter,
   jobSearchText,
+  getJobCity,
   getPriorityLabel,
+  getStopCity,
   isHighPriority,
   normalizeText,
-  RouteDaySummaryBar,
   RouteInspector,
   RouteLaneEditorDrawer,
   RouteSearchFilters,
@@ -88,6 +93,7 @@ import {
   type VehicleQuickFilter,
   type ViewDensity,
 } from './routing-workspace/RoutingWorkspaceComponents';
+import { RouteStopTimelineStrip } from './routing-workspace/RouteStopTimelineStrip';
 import {
   buildDense300StopDayScenario,
   buildCleanRouteDayScenario,
@@ -106,20 +112,82 @@ function todayServiceDate() {
 }
 
 const marketingServiceDate = '2026-06-02';
-const routingWorkspacePreferencePrefix = 'trovan-routing-workspace-preferences:v1';
+const routingWorkspacePreferencePrefix = 'trovan-routing-workspace-preferences:v3';
 const previewAuthUserStorageKey = 'trovan-preview-auth-user';
 const authTokenStorageKey = 'authToken';
 
-type RoutingDistanceUnit = 'mi' | 'km';
-type DateDisplayPreference = 'readable' | 'iso';
+type RoutingDistanceUnit = 'mi';
+type RoutingWorkspaceRuntimeMode = 'dev-test' | 'production';
+type RoutingWorkspaceCapabilities = {
+  exceptionDecisionApi: boolean;
+  publishReadinessApi: boolean;
+  routeVersionApi: boolean;
+  dispatchHandoffApi: boolean;
+  saveDraftApi: boolean;
+  autosaveStatus: boolean;
+  structuredPlannerErrors: boolean;
+  rolePermissions: boolean;
+};
 type RoutingWorkspacePreferences = {
   density: ViewDensity;
   laneEditorMode: LaneEditorMode;
   mapDisplayMode: MapDisplayMode;
   leftPanelTab: LeftPanelTab;
   distanceUnit: RoutingDistanceUnit;
-  dateDisplayPreference: DateDisplayPreference;
 };
+
+const disabledRoutingWorkspaceCapabilities: RoutingWorkspaceCapabilities = {
+  exceptionDecisionApi: false,
+  publishReadinessApi: false,
+  routeVersionApi: false,
+  dispatchHandoffApi: false,
+  saveDraftApi: false,
+  autosaveStatus: false,
+  structuredPlannerErrors: false,
+  rolePermissions: false,
+};
+
+const productionRoutingWorkspaceCapabilities: RoutingWorkspaceCapabilities = {
+  exceptionDecisionApi: false,
+  publishReadinessApi: true,
+  routeVersionApi: false,
+  dispatchHandoffApi: true,
+  saveDraftApi: false,
+  autosaveStatus: false,
+  structuredPlannerErrors: true,
+  rolePermissions: false,
+};
+
+const enabledRoutingWorkspaceCapabilities: RoutingWorkspaceCapabilities = {
+  exceptionDecisionApi: true,
+  publishReadinessApi: true,
+  routeVersionApi: true,
+  dispatchHandoffApi: true,
+  saveDraftApi: true,
+  autosaveStatus: true,
+  structuredPlannerErrors: true,
+  rolePermissions: true,
+};
+
+function getRoutingWorkspaceRuntimeMode(searchParams: URLSearchParams): RoutingWorkspaceRuntimeMode {
+  const requestedMode = searchParams.get('workspaceMode');
+  if (requestedMode === 'production') return 'production';
+  if (requestedMode === 'dev' || requestedMode === 'test') return 'dev-test';
+  return import.meta.env.PROD ? 'production' : 'dev-test';
+}
+
+function getRoutingWorkspaceCapabilities(
+  searchParams: URLSearchParams,
+  runtimeMode: RoutingWorkspaceRuntimeMode,
+): RoutingWorkspaceCapabilities {
+  const requestedCapabilities = searchParams.get('capabilities');
+  if (runtimeMode === 'production') {
+    return productionRoutingWorkspaceCapabilities;
+  }
+  if (requestedCapabilities === 'off') return disabledRoutingWorkspaceCapabilities;
+  if (requestedCapabilities === 'on') return enabledRoutingWorkspaceCapabilities;
+  return enabledRoutingWorkspaceCapabilities;
+}
 
 function nextRouteVersion(currentVersion: string | null) {
   const currentNumber = Number(currentVersion?.replace(/^v/i, '') || 0);
@@ -143,11 +211,7 @@ function isLeftPanelTab(value: unknown): value is LeftPanelTab {
 }
 
 function isRoutingDistanceUnit(value: unknown): value is RoutingDistanceUnit {
-  return value === 'mi' || value === 'km';
-}
-
-function isDateDisplayPreference(value: unknown): value is DateDisplayPreference {
-  return value === 'readable' || value === 'iso';
+  return value === 'mi';
 }
 
 function normalizeStorageScopePart(value: unknown) {
@@ -219,13 +283,10 @@ function readRoutingWorkspacePreferences(storageKey: string | null): Partial<Rou
   if (!record) return null;
   return {
     density: isViewDensity(record.density) ? record.density : undefined,
-    laneEditorMode: isLaneEditorMode(record.laneEditorMode) ? record.laneEditorMode : undefined,
+    laneEditorMode: isLaneEditorMode(record.laneEditorMode) ? 'collapsed' : undefined,
     mapDisplayMode: isMapDisplayMode(record.mapDisplayMode) ? record.mapDisplayMode : undefined,
     leftPanelTab: isLeftPanelTab(record.leftPanelTab) ? record.leftPanelTab : undefined,
     distanceUnit: isRoutingDistanceUnit(record.distanceUnit) ? record.distanceUnit : undefined,
-    dateDisplayPreference: isDateDisplayPreference(record.dateDisplayPreference)
-      ? record.dateDisplayPreference
-      : undefined,
   };
 }
 
@@ -248,12 +309,26 @@ function formatPlannerDate(value: string) {
   }).format(date);
 }
 
-function formatRouteDistance(distanceKm?: number | null, unit: 'mi' | 'km' = 'km') {
+function formatRouteDistance(distanceKm?: number | null) {
   const safeDistance = Number(distanceKm || 0);
-  if (unit === 'mi') {
-    return `${(safeDistance * 0.621371).toFixed(1)} mi`;
-  }
-  return `${safeDistance.toFixed(1)} km`;
+  return `${(safeDistance * 0.621371).toFixed(1)} mi`;
+}
+
+function formatPlanningDuration(minutes?: number | null) {
+  const safeMinutes = Math.max(0, Math.round(Number(minutes || 0)));
+  const hours = Math.floor(safeMinutes / 60);
+  const remainingMinutes = safeMinutes % 60;
+  if (!hours) return `${remainingMinutes}m`;
+  if (!remainingMinutes) return `${hours}h`;
+  return `${hours}h ${remainingMinutes}m`;
+}
+
+function formatMoney(value: number) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
 function RoutingWorkspaceSkeleton() {
@@ -463,23 +538,16 @@ function buildMarketingPlannerSeed(serviceDate: string) {
 
 export default function RoutingWorkspacePage() {
   const [searchParams] = useSearchParams();
-  const scenarioParam = searchParams.get('scenario');
+  const routingWorkspaceRuntimeMode = getRoutingWorkspaceRuntimeMode(searchParams);
+  const routingWorkspaceCapabilities = getRoutingWorkspaceCapabilities(
+    searchParams,
+    routingWorkspaceRuntimeMode,
+  );
+  const areRoutingWorkspaceQueryStatesAllowed = routingWorkspaceRuntimeMode !== 'production';
+  const scenarioParam = areRoutingWorkspaceQueryStatesAllowed ? searchParams.get('scenario') : null;
   const captureParam = searchParams.get('capture');
   const frameParam = searchParams.get('frame');
-  const forcedFailure = searchParams.get('failure');
-  const usesDenverScenarioFormatting =
-    captureParam === 'marketing' ||
-    scenarioParam === 'clean-route-day' ||
-    scenarioParam === 'dense-300-stop-day' ||
-    scenarioParam === 'dense-route-day' ||
-    scenarioParam === 'empty-route-day' ||
-    scenarioParam === 'exception-route-day' ||
-    scenarioParam === 'geocode-failure' ||
-    scenarioParam === 'loading-route-day' ||
-    scenarioParam === 'no-drivers' ||
-    scenarioParam === 'no-vehicles' ||
-    scenarioParam === 'stale-route-data' ||
-    scenarioParam === 'setup-route-day';
+  const forcedFailure = areRoutingWorkspaceQueryStatesAllowed ? searchParams.get('failure') : null;
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const [jobs, setJobs] = useState<PlannerJobRecord[]>([]);
@@ -497,10 +565,12 @@ export default function RoutingWorkspacePage() {
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
   const [selectedVehicleIds, setSelectedVehicleIds] = useState<string[]>([]);
   const [objective, setObjective] = useState<OptimizationObjective>('balanced');
-  const [serviceDate, setServiceDate] = useState(() =>
+  const [serviceDate] = useState(() =>
     searchParams.get('serviceDate') || (searchParams.get('capture') === 'marketing' ? marketingServiceDate : todayServiceDate()),
   );
   const [mode, setMode] = useState<'suggested' | 'manual'>('suggested');
+  const [warningsExpanded, setWarningsExpanded] = useState(false);
+  const [routingActionNotice, setRoutingActionNotice] = useState<string | null>(null);
   const [leftPanelTab, setLeftPanelTab] = useState<LeftPanelTab>('jobs');
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('overview');
   const [density, setDensity] = useState<ViewDensity>(
@@ -508,9 +578,8 @@ export default function RoutingWorkspacePage() {
   );
   const [laneEditorMode, setLaneEditorMode] = useState<LaneEditorMode>('collapsed');
   const [distanceUnitPreference, setDistanceUnitPreference] = useState<RoutingDistanceUnit>(
-    () => (usesDenverScenarioFormatting ? 'mi' : 'km'),
+    () => 'mi',
   );
-  const [dateDisplayPreference, setDateDisplayPreference] = useState<DateDisplayPreference>('readable');
   const [stopSearch, setStopSearch] = useState('');
   const [stopQuickFilter, setStopQuickFilter] = useState<StopQuickFilter>('all');
   const [routeFilterId, setRouteFilterId] = useState('all');
@@ -530,16 +599,21 @@ export default function RoutingWorkspacePage() {
   >({});
   const [exceptionRiskReasons, setExceptionRiskReasons] = useState<Record<string, string>>({});
   const [isPublishSummaryOpen, setIsPublishSummaryOpen] = useState(false);
+  const [publishRiskBlocker, setPublishRiskBlocker] =
+    useState<PlannerPublishBlocker | null>(null);
+  const [publishRiskReason, setPublishRiskReason] = useState('');
+  const [acceptingPublishRisk, setAcceptingPublishRisk] = useState(false);
   const [isOffline, setIsOffline] = useState(() =>
     typeof navigator === 'undefined' ? false : !navigator.onLine,
   );
   const [routeVersion, setRouteVersion] = useState<string | null>(null);
+  const [publishedRouteRunCount, setPublishedRouteRunCount] = useState(0);
   const [isRevisionMode, setIsRevisionMode] = useState(false);
   const [preferenceStorageKey, setPreferenceStorageKey] = useState<string | null>(() =>
     getRoutingWorkspacePreferenceStorageKey(),
   );
   const [preferencesHydrated, setPreferencesHydrated] = useState(false);
-  const isDesktopWorkspace = useMediaQuery('(min-width:1200px)');
+  const isDesktopWorkspace = useMediaQuery('(min-width:960px)');
   const isMarketingCapture = captureParam === 'marketing';
   const isHeroMarketingCapture = isMarketingCapture && frameParam === 'hero';
   const isDenseProductScenario = !isMarketingCapture && scenarioParam === 'dense-route-day';
@@ -571,6 +645,9 @@ export default function RoutingWorkspacePage() {
   const vehiclesQuery = useVehiclesQuery();
   const driversQuery = useDriversQuery();
   const plannerQuery = usePlannerQuery(serviceDate);
+  const publishReadinessQuery = useRoutePlanPublishReadinessQuery(
+    routingWorkspaceCapabilities.publishReadinessApi ? plan?.id : null,
+  );
 
   useEffect(() => {
     if (typeof window === 'undefined') return undefined;
@@ -1045,24 +1122,8 @@ export default function RoutingWorkspacePage() {
   const selectedDriver = selectedGroup?.driverId
     ? drivers.find((driver) => driver.id === selectedGroup.driverId)
     : null;
-  const usesDenverDemoFormatting =
-    isMarketingCapture ||
-    isCleanProductScenario ||
-    isDense300ProductScenario ||
-    isDenseProductScenario ||
-    isEmptyRouteDayScenario ||
-    isExceptionProductScenario ||
-    isGeocodeFailureScenario ||
-    isLoadingStateScenario ||
-    isNoDriversScenario ||
-    isNoVehiclesScenario ||
-    isSetupProductScenario ||
-    isStaleRouteDataScenario ||
-    isPreview();
-  const routeDistanceUnit = distanceUnitPreference;
-  const formatDistance = (distanceKm?: number | null) => formatRouteDistance(distanceKm, routeDistanceUnit);
-  const serviceDateDisplayValue =
-    dateDisplayPreference === 'iso' ? serviceDate : formatPlannerDate(serviceDate);
+  const formatDistance = (distanceKm?: number | null) => formatRouteDistance(distanceKm);
+  const serviceDateDisplayValue = formatPlannerDate(serviceDate);
   const selectedRouteDistance = formatDistance(selectedGroup?.totalDistanceKm);
   const selectedDriverName = selectedDriver
     ? [selectedDriver.firstName, selectedDriver.lastName].filter(Boolean).join(' ') || selectedDriver.id
@@ -1173,6 +1234,23 @@ export default function RoutingWorkspacePage() {
     routedStopCount + unassignedJobCount,
     Number(plan?.metrics?.stopCount || 0) + Number(plan?.metrics?.unassignedJobCount || 0),
   );
+  const totalDistanceKm = groups.reduce((sum, group) => sum + Number(group.totalDistanceKm || 0), 0);
+  const totalDistanceMiles = totalDistanceKm * 0.621371;
+  const totalDurationMinutes = groups.reduce((sum, group) => sum + Number(group.totalDurationMinutes || 0), 0);
+  const totalServiceMinutes = groups.reduce((sum, group) => sum + Number(group.serviceTimeMinutes || 0), 0);
+  const averageDistanceKm = groups.length ? totalDistanceKm / groups.length : 0;
+  const maxDistanceSpreadKm = groups.reduce(
+    (spread, group) => Math.max(spread, Math.abs(Number(group.totalDistanceKm || 0) - averageDistanceKm)),
+    0,
+  );
+  const routeBalanceScore = groups.length
+    ? Math.max(0, Math.round(100 - (averageDistanceKm ? (maxDistanceSpreadKm / averageDistanceKm) * 100 : 0)))
+    : 0;
+  const slaCompliance = totalJobCount
+    ? Math.max(0, Math.round(100 - ((unassignedJobCount + openPlanExceptionCount) / totalJobCount) * 100))
+    : 100;
+  const estimatedFuelCost = totalDistanceMiles * 0.68;
+  const estimatedLaborCost = (totalDurationMinutes / 60) * 32;
   const isPlanPublished = plan?.status === 'published';
   const isRouteLanesReadOnly = Boolean(isPlanPublished && !isRevisionMode);
   const acceptedExceptionCount = exceptionRecords.filter((record) => record.status === 'accepted').length;
@@ -1197,14 +1275,22 @@ export default function RoutingWorkspacePage() {
     isStaleRouteDataScenario || normalizeText(plan?.warnings).includes('stale');
   const hasUnassignedBlocker = Boolean(plan?.id) && unassignedJobCount > 0;
   const hasBlockingExceptions = Boolean(plan?.id) && openPlanExceptionCount > 0;
+  const publishReadiness = routingWorkspaceCapabilities.publishReadinessApi
+    ? publishReadinessQuery.data
+    : undefined;
+  const publishBlockingBlockers = publishReadiness?.blockingBlockers || [];
+  const hasPublishReadinessBlockers =
+    Boolean(plan?.id) && publishBlockingBlockers.length > 0;
   const primaryActionLabel = !plan?.id
     ? 'Generate route draft'
     : isPlanPublished && !isRevisionMode
       ? 'Published'
     : hasUnassignedBlocker
       ? 'Resolve unassigned'
-      : hasBlockingExceptions
-        ? 'Review exceptions'
+    : hasBlockingExceptions
+      ? 'Review exceptions'
+      : hasPublishReadinessBlockers
+        ? 'Resolve blockers'
         : 'Publish plan';
   const planStatusLabel = !plan?.id
     ? 'Needs setup'
@@ -1212,27 +1298,42 @@ export default function RoutingWorkspacePage() {
       ? 'Published'
     : hasUnassignedBlocker
       ? 'Resolve unassigned'
-      : hasBlockingExceptions
-        ? 'Review exceptions'
-        : 'Ready to publish';
+    : hasBlockingExceptions
+      ? 'Review exceptions'
+    : hasPublishReadinessBlockers
+      ? 'Warnings'
+      : 'Ready to publish';
   const planStatusTone = !plan?.id
     ? 'default'
     : isPlanPublished && !isRevisionMode
       ? 'success'
-    : hasUnassignedBlocker || hasBlockingExceptions
+    : hasUnassignedBlocker || hasBlockingExceptions || hasPublishReadinessBlockers
       ? 'warning'
       : 'success';
+  const hasDurableDraftSave =
+    routingWorkspaceCapabilities.saveDraftApi || routingWorkspaceCapabilities.autosaveStatus;
+  const draftActionLabel = hasDurableDraftSave ? 'Save draft' : 'Refresh draft';
+  const draftActionFailureMessage = hasDurableDraftSave
+    ? 'Save draft failed. Your route changes were not saved; retry before leaving planning.'
+    : 'Refresh draft failed. The latest planner data could not be loaded.';
+  const hasDispatchHandoffCapability =
+    routingWorkspaceCapabilities.dispatchHandoffApi;
+  const canShowDispatchHandoff =
+    hasDispatchHandoffCapability &&
+    publishedRouteRunCount > 0;
   const effectivePreferenceStorageKey = isMarketingCapture ? null : preferenceStorageKey;
 
   useEffect(() => {
     if (!plan?.id) {
       setLeftPanelTab('jobs');
-      setLaneEditorMode('collapsed');
+      if (!loading) {
+        setLaneEditorMode('collapsed');
+      }
       return;
     }
     setLeftPanelTab((current) => (current === 'jobs' ? 'routes' : current));
-    setLaneEditorMode((current) => (current === 'collapsed' ? 'expanded' : current));
-  }, [plan?.id]);
+    setLaneEditorMode((current) => (current === 'fullscreen' ? 'collapsed' : current));
+  }, [loading, plan?.id]);
 
   useEffect(() => {
     const nextStorageKey = getRoutingWorkspacePreferenceStorageKey();
@@ -1251,7 +1352,6 @@ export default function RoutingWorkspacePage() {
     if (preferences?.mapDisplayMode) setMapDisplayMode(preferences.mapDisplayMode);
     if (preferences?.leftPanelTab) setLeftPanelTab(preferences.leftPanelTab);
     if (preferences?.distanceUnit) setDistanceUnitPreference(preferences.distanceUnit);
-    if (preferences?.dateDisplayPreference) setDateDisplayPreference(preferences.dateDisplayPreference);
     setPreferencesHydrated(true);
   }, [effectivePreferenceStorageKey, isMarketingCapture, loading, plan?.id]);
 
@@ -1263,10 +1363,8 @@ export default function RoutingWorkspacePage() {
       mapDisplayMode,
       leftPanelTab,
       distanceUnit: distanceUnitPreference,
-      dateDisplayPreference,
     });
   }, [
-    dateDisplayPreference,
     density,
     distanceUnitPreference,
     effectivePreferenceStorageKey,
@@ -1442,6 +1540,7 @@ export default function RoutingWorkspacePage() {
     }
     return scopedRoutes;
   }, [isMarketingCapture, mapDisplayMode, mapRoutes, selectedGroupId, unfilteredVisibleGroupedStops]);
+  const selectedMapRoute = selectedGroup ? mapRoutes.find((route) => route.id === selectedGroup.id) : null;
 
   const handleGenerate = async () => {
     setSaving(true);
@@ -1450,10 +1549,15 @@ export default function RoutingWorkspacePage() {
       if (forcedFailure === 'optimizer') {
         throw new Error('Optimizer failed to generate a route draft. Review selected jobs, vehicles, constraints, and address quality before retrying.');
       }
+      const seededJobIds = searchParams.getAll('jobId');
+      const jobIdsForDraft = selectedJobIds.length ? selectedJobIds : seededJobIds;
+      if (!jobIdsForDraft.length) {
+        throw new Error('Select at least one job before optimizing a route draft.');
+      }
       const payload = await generateDraftRoutePlan({
         serviceDate,
         objective,
-        jobIds: selectedJobIds,
+        jobIds: jobIdsForDraft,
         vehicleIds: selectedVehicleIds,
       });
       refreshPlanView(payload);
@@ -1489,26 +1593,69 @@ export default function RoutingWorkspacePage() {
       handleReviewExceptions();
       return;
     }
+    if (hasPublishReadinessBlockers) {
+      setError(null);
+      setWarningsExpanded(true);
+      return;
+    }
+
+    if (routingWorkspaceCapabilities.publishReadinessApi) {
+      setSaving(true);
+      setError(null);
+      try {
+        const latestReadiness = await publishReadinessQuery.refetch();
+        if (!latestReadiness.data) {
+          throw new Error('Publish readiness could not be verified.');
+        }
+        if (!latestReadiness.data.ready) {
+          setWarningsExpanded(true);
+          return;
+        }
+      } catch (err: unknown) {
+        setError(getErrorMessage(err, 'Publish readiness could not be verified. Refresh the route day and retry.'));
+        return;
+      } finally {
+        setSaving(false);
+      }
+    }
+
     setIsPublishSummaryOpen(true);
   };
 
   const handleConfirmPublish = async () => {
     if (!plan?.id) return;
-    const nextVersion = nextRouteVersion(routeVersion);
+    const nextVersion = routingWorkspaceCapabilities.routeVersionApi
+      ? nextRouteVersion(routeVersion)
+      : null;
     setSaving(true);
     setError(null);
     try {
       if (forcedFailure === 'publish') {
         throw new Error('Publish failed. Dispatch handoff was not created; retry before sending routes to drivers.');
       }
+      let publishResult: PublishRoutePlanResult | null = null;
       if (!isLocalPlannerScenario) {
-        await publishRoutePlan(plan.id);
+        if (routingWorkspaceCapabilities.publishReadinessApi) {
+          const latestReadiness = await publishReadinessQuery.refetch();
+          if (latestReadiness.data && !latestReadiness.data.ready) {
+            throw new Error('Route plan is not ready to publish.');
+          }
+        }
+        publishResult = await publishRoutePlan(plan.id);
+      } else if (routingWorkspaceRuntimeMode !== 'production') {
+        publishResult = {
+          ok: true,
+          routePlan: plan,
+          routeRuns: groups,
+        };
       }
       setPlan((current) => (current ? { ...current, status: 'published' } : current));
       setRouteVersion(nextVersion);
+      setPublishedRouteRunCount(Array.isArray(publishResult?.routeRuns) ? publishResult.routeRuns.length : 0);
       setIsRevisionMode(false);
       setIsPublishSummaryOpen(false);
       setLaneEditorMode('expanded');
+      await publishReadinessQuery.refetch();
     } catch (err: unknown) {
       setError(getErrorMessage(err, 'Publish failed. Dispatch handoff was not created; retry before sending routes to drivers.'));
     } finally {
@@ -1545,6 +1692,33 @@ export default function RoutingWorkspacePage() {
     setIsExceptionDrawerOpen(true);
   };
 
+  const handleOpenPublishRisk = (blocker: PlannerPublishBlocker) => {
+    setPublishRiskBlocker(blocker);
+    setPublishRiskReason('');
+  };
+
+  const handleAcceptPublishRisk = async () => {
+    if (!plan?.id || !publishRiskBlocker) return;
+    setAcceptingPublishRisk(true);
+    setError(null);
+    try {
+      await acceptRoutePlanPublishRisk(plan.id, {
+        blockerCode: publishRiskBlocker.code,
+        reason: publishRiskReason,
+        jobId: publishRiskBlocker.jobId,
+        groupId: publishRiskBlocker.groupId,
+        warningIndex: publishRiskBlocker.warningIndex,
+      });
+      await publishReadinessQuery.refetch();
+      setPublishRiskBlocker(null);
+      setPublishRiskReason('');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to accept publish risk.'));
+    } finally {
+      setAcceptingPublishRisk(false);
+    }
+  };
+
   const setExceptionDecision = (
     exceptionId: string,
     status: Exclude<RoutingExceptionStatus, 'open'>,
@@ -1561,10 +1735,12 @@ export default function RoutingWorkspacePage() {
   };
 
   const handleResolveException = (exceptionId: string) => {
+    if (!routingWorkspaceCapabilities.exceptionDecisionApi) return;
     setExceptionDecision(exceptionId, 'resolved');
   };
 
   const handleAcceptExceptionRisk = (exceptionId: string) => {
+    if (!routingWorkspaceCapabilities.exceptionDecisionApi) return;
     const reason = (exceptionRiskReasons[exceptionId] || '').trim();
     if (reason.length < 4) return;
     setExceptionDecision(exceptionId, 'accepted', reason);
@@ -1581,6 +1757,7 @@ export default function RoutingWorkspacePage() {
   };
 
   const handleAssignExceptionDriver = (routeId: string) => {
+    if (!routingWorkspaceCapabilities.exceptionDecisionApi) return;
     const group = groups.find((candidate) => candidate.id === routeId);
     const availableDriver =
       drivers.find((driver) => !groups.some((candidate) => candidate.driverId === driver.id)) ||
@@ -1603,6 +1780,7 @@ export default function RoutingWorkspacePage() {
   };
 
   const handleAssignExceptionVehicle = (routeId: string) => {
+    if (!routingWorkspaceCapabilities.exceptionDecisionApi) return;
     const group = groups.find((candidate) => candidate.id === routeId);
     const availableVehicle =
       vehicles.find((vehicle) => !groups.some((candidate) => candidate.vehicleId === vehicle.id)) ||
@@ -1630,11 +1808,11 @@ export default function RoutingWorkspacePage() {
     setError(null);
     try {
       if (forcedFailure === 'save-draft') {
-        throw new Error('Save draft failed. Your route changes were not saved; retry before leaving planning.');
+        throw new Error(draftActionFailureMessage);
       }
       await plannerQuery.refetch();
     } catch (err: unknown) {
-      setError(getErrorMessage(err, 'Save draft failed. Your route changes were not saved; retry before leaving planning.'));
+      setError(getErrorMessage(err, draftActionFailureMessage));
     } finally {
       setSaving(false);
     }
@@ -1906,162 +2084,427 @@ export default function RoutingWorkspacePage() {
     })
     .slice(0, isMarketingCapture ? 6 : 50);
 
+  const handlePlanningModeChange = (nextMode: 'suggested' | 'manual') => {
+    setMode(nextMode);
+    if (nextMode === 'manual') {
+      setLaneEditorMode('expanded');
+      setLeftPanelTab('routes');
+      setMobilePanel('routes');
+      setRoutingActionNotice('Manual edit mode enabled. Route lanes are open for assignment and stop moves.');
+    } else {
+      setLaneEditorMode('collapsed');
+      setLeftPanelTab('jobs');
+      setMobilePanel('map');
+      setMapDisplayMode('all');
+      setRoutingActionNotice('Auto assign mode enabled. The map is showing all route candidates.');
+    }
+  };
+
   const commandBar = (
-    <OpsCommandBar
-      eyebrow="Planning"
-      title="Routing"
-      subtitle="Plan the route day, resolve blockers, then publish clean lanes."
-      sx={{ p: 1.1, gap: 0.85 }}
-      actions={
-        plan?.id ? (
-          isPlanPublished && !isRevisionMode ? (
-            <StatusPill label="Dispatch handoff ready" tone="success" />
-          ) : (
-            <>
-              <Button
-                variant="contained"
-                onClick={
-                  hasUnassignedBlocker
-                    ? handleResolveUnassigned
-                    : hasBlockingExceptions
-                      ? handleReviewExceptions
-                      : handlePublish
-                }
-                disabled={saving}
-                data-testid={
-                  hasUnassignedBlocker
-                    ? 'routing-resolve-unassigned-button'
-                    : hasBlockingExceptions
-                      ? 'routing-review-exceptions-button'
-                      : 'routing-publish-button'
-                }
-              >
-                {primaryActionLabel}
-              </Button>
-              <Button variant="outlined" onClick={handleReoptimize} disabled={saving}>
-                Reoptimize plan
-              </Button>
-              <Button variant="text" onClick={handleSaveDraft} disabled={saving}>
-                Save draft
-              </Button>
-            </>
-          )
-        ) : (
-          <>
-            <Button
-              variant="contained"
-              onClick={handleGenerate}
-              disabled={saving || selectedJobIds.length === 0 || selectedVehicleIds.length === 0}
-              data-testid="routing-generate-draft-button"
-            >
-              {primaryActionLabel}
-            </Button>
-            <Button variant="outlined" onClick={() => setMode('manual')}>
-              Manual setup
-            </Button>
-          </>
-        )
-      }
-      filters={
-        <>
-          <TextField
-            size="small"
-            label="Service date"
-            type={!usesDenverDemoFormatting && dateDisplayPreference === 'iso' ? 'date' : undefined}
-            value={
-              !usesDenverDemoFormatting && dateDisplayPreference === 'iso'
-                ? serviceDate
-                : serviceDateDisplayValue
-            }
-            onChange={(event) => {
-              if (!usesDenverDemoFormatting && dateDisplayPreference === 'iso') {
-                setServiceDate(event.target.value);
-              }
+    <Stack spacing={1.05} data-testid="routing-planning-toolbar">
+      <Stack
+        direction={{ xs: 'column', xl: 'row' }}
+        spacing={1}
+        justifyContent="space-between"
+        alignItems={{ xs: 'stretch', xl: 'center' }}
+      >
+        <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap">
+          <Button
+            variant="contained"
+            onClick={plan?.id ? handleReoptimize : handleGenerate}
+            disabled={saving || (!plan?.id && (selectedJobIds.length === 0 || selectedVehicleIds.length === 0))}
+            data-testid={plan?.id ? 'routing-optimize-routes-button' : 'routing-generate-draft-button'}
+            sx={{ minWidth: 148 }}
+          >
+            {plan?.id ? 'Optimize Routes' : 'Generate route draft'}
+          </Button>
+          <Button
+            variant={mode === 'suggested' ? 'contained' : 'outlined'}
+            onClick={() => handlePlanningModeChange('suggested')}
+            disabled={saving}
+          >
+            Auto Assign
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={() => {
+              setRoutingActionNotice('Rebalancing routes with the latest job and capacity data.');
+              void handleReoptimize();
             }}
-            InputProps={{
-              readOnly: usesDenverDemoFormatting || dateDisplayPreference === 'readable',
+            disabled={saving || !plan?.id}
+          >
+            Rebalance
+          </Button>
+          <Button
+            variant="outlined"
+            onClick={() => {
+              setMapDisplayMode('density');
+              setDensity('comfortable');
+              setRoutingActionNotice('Scenario compare opened using route density view.');
             }}
-            InputLabelProps={{ shrink: true }}
-            sx={{ minWidth: 142 }}
-          />
+          >
+            Scenario Compare
+          </Button>
+        </Stack>
+        <Stack direction="row" spacing={0.8} useFlexGap flexWrap="wrap" justifyContent={{ xs: 'flex-start', sm: 'flex-end' }}>
           <TextField
             select
             size="small"
-            label="Objective"
+            label="Scenario"
             value={objective}
             onChange={(event) => setObjective(normalizeOptimizationObjective(event.target.value))}
-	            sx={{ minWidth: 136 }}
-	          >
+            sx={{ minWidth: 190 }}
+          >
             {objectives.map((item) => (
               <MenuItem key={item.value} value={item.value}>
-                {item.label}
+                {item.label === 'Balanced' ? 'Baseline' : item.label}
               </MenuItem>
             ))}
           </TextField>
-          <TextField
-            select
-            size="small"
-            label="Units"
-            value={distanceUnitPreference}
-            onChange={(event) => setDistanceUnitPreference(event.target.value as RoutingDistanceUnit)}
-            InputLabelProps={{ shrink: true }}
-            sx={{ minWidth: 116 }}
+          <Button
+            variant="outlined"
+            onClick={handleSaveDraft}
+            disabled={saving}
+            data-testid="routing-draft-refresh-button"
           >
-            <MenuItem value="mi">Miles</MenuItem>
-            <MenuItem value="km">Kilometers</MenuItem>
-          </TextField>
-          <TextField
-            select
-            size="small"
-            label="Date display"
-            value={dateDisplayPreference}
-            onChange={(event) => setDateDisplayPreference(event.target.value as DateDisplayPreference)}
-            InputLabelProps={{ shrink: true }}
-            sx={{ minWidth: 146 }}
+            {draftActionLabel}
+          </Button>
+          {!plan?.id ? null : isPlanPublished && !isRevisionMode ? (
+            <StatusPill
+              label={canShowDispatchHandoff ? 'Dispatch handoff ready' : 'Published'}
+              tone="success"
+            />
+          ) : (
+            <Button
+              variant="contained"
+              onClick={
+                hasUnassignedBlocker
+                  ? handleResolveUnassigned
+                  : hasBlockingExceptions
+                    ? handleReviewExceptions
+                    : handlePublish
+              }
+              disabled={saving || !plan?.id}
+              data-testid={
+                hasUnassignedBlocker
+                  ? 'routing-resolve-unassigned-button'
+                  : hasBlockingExceptions
+                    ? 'routing-review-exceptions-button'
+                    : 'routing-publish-button'
+              }
+            >
+              {primaryActionLabel}
+            </Button>
+          )}
+        </Stack>
+      </Stack>
+    </Stack>
+  );
+
+  const planningKpiCards = (
+    <Box
+      data-testid="routing-planning-kpis"
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: {
+          xs: 'repeat(2, minmax(0, 1fr))',
+          md: 'repeat(5, minmax(0, 1fr))',
+        },
+        gap: 0,
+        border: '1px solid',
+        borderColor: 'divider',
+        borderRadius: 1.4,
+        overflow: 'hidden',
+        bgcolor: 'background.paper',
+      }}
+    >
+      {[
+        ['Total Miles', formatRouteDistance(totalDistanceKm), '+ live plan'],
+        ['Est. Fuel Cost', formatMoney(estimatedFuelCost), '+ derived from miles'],
+        ['Labor Hours', formatPlanningDuration(totalDurationMinutes || totalServiceMinutes), '+ route duration'],
+        ['Route Balance Score', `${routeBalanceScore} / 100`, '+ workload spread'],
+        ['SLA Compliance', `${slaCompliance}%`, '+ routable work'],
+      ].map(([label, value, delta], index) => (
+        <Box
+          key={label}
+          sx={{
+            p: 1.15,
+            minHeight: 70,
+            gridColumn: {
+              xs: index === 4 ? '1 / -1' : 'auto',
+              md: 'auto',
+            },
+            borderRight: {
+              xs: index < 4 && index % 2 === 0 ? '1px solid' : 'none',
+              md: index === 4 ? 'none' : '1px solid',
+            },
+            borderBottom: {
+              xs: index < 4 ? '1px solid' : 'none',
+              md: 'none',
+            },
+            borderColor: 'divider',
+          }}
+        >
+          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 800 }}>
+            {label}
+          </Typography>
+          <Typography sx={{ mt: 0.35, fontSize: { xs: 22, md: 19, xl: 22 }, fontWeight: 900, lineHeight: 1 }}>
+            {value}
+          </Typography>
+          <Typography variant="caption" sx={{ mt: 0.7, display: 'block', color: 'success.main', fontWeight: 750 }}>
+            {delta}
+          </Typography>
+        </Box>
+      ))}
+    </Box>
+  );
+
+  const planningUnassignedPanel = (
+    <SurfacePanel
+      variant="panel"
+      padding={0}
+      data-testid="routing-planning-unassigned-panel"
+      sx={{
+        overflow: 'hidden',
+        minHeight: 0,
+        maxHeight: { md: 'min(64vh, 660px)', xl: 'min(66vh, 720px)' },
+      }}
+    >
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        sx={{ px: 1.2, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}
+      >
+        <Typography variant="h6">Unassigned Jobs ({unassignedJobCount})</Typography>
+        <Button size="small" variant="text" onClick={() => setLeftPanelTab('jobs')}>
+          Filters
+        </Button>
+      </Stack>
+      <Box sx={{ px: 1.2, pt: 1 }}>
+        <TextField select size="small" label="Sort" value="priority" fullWidth>
+          <MenuItem value="priority">Priority</MenuItem>
+        </TextField>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.8 }}>
+          Drag jobs onto routes or select work before optimizing.
+        </Typography>
+      </Box>
+      <List disablePadding sx={{ mt: 0.5, maxHeight: { md: 'clamp(260px, 38vh, 430px)', xl: 'clamp(340px, 42vh, 520px)' }, overflowY: 'auto' }}>
+        {demandJobs.length === 0 ? (
+          <ListItem sx={{ py: 2 }}>
+            <ListItemText primary="No unassigned jobs" secondary="All visible work is already routed." />
+          </ListItem>
+        ) : (
+          demandJobs.slice(0, 8).map((job, index) => {
+            const selected = selectedJobIds.includes(job.id);
+            const priority = getPriorityLabel(job.priority);
+            return (
+              <ListItemButton
+                key={job.id}
+                selected={selected}
+                onClick={() =>
+                  setSelectedJobIds((current) =>
+                    current.includes(job.id)
+                      ? current.filter((id) => id !== job.id)
+                      : [...current, job.id],
+                  )
+                }
+                sx={{
+                  alignItems: 'flex-start',
+                  gap: 1,
+                  borderTop: index === 0 ? 'none' : '1px solid',
+                  borderColor: 'divider',
+                  py: 1,
+                }}
+              >
+                <Box
+                  sx={{
+                    mt: 0.25,
+                    width: 3,
+                    alignSelf: 'stretch',
+                    borderRadius: 99,
+                    bgcolor: isHighPriority(job.priority) ? 'error.main' : index % 3 === 0 ? 'success.main' : 'warning.main',
+                  }}
+                />
+                <Box sx={{ minWidth: 0, flex: 1 }}>
+                  <Stack direction="row" justifyContent="space-between" spacing={1}>
+                    <Typography variant="body2" sx={{ fontWeight: 850 }} noWrap>
+                      {job.customerName || job.id}
+                    </Typography>
+                    <StatusPill label={priority} tone={isHighPriority(job.priority) ? 'danger' : 'warning'} />
+                  </Stack>
+                  <Typography variant="caption" color="text.secondary" display="block" noWrap>
+                    {job.deliveryAddress || job.pickupAddress || 'Address pending'}
+                  </Typography>
+                  <Stack direction="row" spacing={1} sx={{ mt: 0.45 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      {getJobCity(job)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {formatRouteDistance((index + 1) * 4.2)}
+                    </Typography>
+                  </Stack>
+                </Box>
+              </ListItemButton>
+            );
+          })
+        )}
+      </List>
+    </SurfacePanel>
+  );
+
+  const routeSummariesPanel = (
+    <SurfacePanel variant="panel" padding={0} data-testid="routing-route-summaries-panel" sx={{ overflow: 'hidden', minHeight: 0 }}>
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        sx={{ px: 1.2, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}
+      >
+        <Typography variant="h6">Route Summaries</Typography>
+        <Button size="small" variant="text" onClick={() => setMapDisplayMode('all')}>
+          View on map
+        </Button>
+      </Stack>
+      <Stack spacing={0} sx={{ maxHeight: 'calc(100vh - 386px)', overflowY: 'auto' }}>
+        {visibleGroupedStops.map((group, index) => {
+          const mapRoute = mapRoutes.find((route) => route.id === group.id);
+          const driver = group.driverId ? drivers.find((item) => item.id === group.driverId) : null;
+          const vehicle = group.vehicleId ? vehicles.find((item) => item.id === group.vehicleId) : null;
+          const driverName = driver
+            ? [driver.firstName, driver.lastName].filter(Boolean).join(' ') || driver.id
+            : 'Unassigned';
+          const capacity = Math.min(118, Math.max(36, Math.round(52 + group.stops.length * 11 + index * 4)));
+          return (
+            <Box
+              key={group.id}
+              onClick={() => setSelectedGroupId(group.id)}
+              sx={{
+                cursor: 'pointer',
+                px: 1.2,
+                py: 1,
+                borderBottom: '1px solid',
+                borderColor: 'divider',
+                bgcolor: group.id === selectedGroup?.id ? alpha(mapRoute?.color || theme.palette.primary.main, 0.08) : 'transparent',
+              }}
+            >
+              <Stack direction="row" alignItems="center" spacing={0.85}>
+                <Box sx={{ width: 9, height: 9, borderRadius: '50%', bgcolor: mapRoute?.color || 'primary.main' }} />
+                <Typography variant="body2" sx={{ fontWeight: 900 }} noWrap>
+                  {group.label}
+                </Typography>
+                <Typography variant="caption" color="text.secondary" noWrap>
+                  {group.stops[0] ? getStopCity(group.stops[0]) : 'Route'}
+                </Typography>
+              </Stack>
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr repeat(3, auto)', gap: 1, alignItems: 'center', mt: 0.8 }}>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography variant="caption" color="text.secondary" display="block">Driver</Typography>
+                  <Typography variant="caption" sx={{ fontWeight: 800 }} noWrap>{driverName}</Typography>
+                  <Typography variant="caption" color="text.secondary" display="block" noWrap>
+                    {vehicle?.licensePlate || group.vehicleId || 'Vehicle pending'}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" display="block">Stops</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 900 }}>{group.stops.length}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" display="block">Miles</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 900 }}>{formatRouteDistance(group.totalDistanceKm).replace(' mi', '')}</Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary" display="block">Time</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 900 }}>{formatPlanningDuration(group.totalDurationMinutes)}</Typography>
+                </Box>
+              </Box>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 0.8 }}>
+                <Typography variant="caption" color={capacity > 100 ? 'error.main' : 'success.main'} sx={{ fontWeight: 850, minWidth: 34 }}>
+                  {capacity}%
+                </Typography>
+                <Box sx={{ flex: 1, height: 6, borderRadius: 99, bgcolor: alpha(theme.palette.text.primary, 0.1), overflow: 'hidden' }}>
+                  <Box sx={{ width: `${Math.min(capacity, 100)}%`, height: '100%', bgcolor: capacity > 100 ? 'error.main' : 'success.main' }} />
+                </Box>
+              </Stack>
+            </Box>
+          );
+        })}
+      </Stack>
+    </SurfacePanel>
+  );
+
+  const planningAlertsPanel = (
+    <SurfacePanel variant="panel" padding={1.1} data-testid="routing-planning-alerts-panel">
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.8 }}>
+        <Typography variant="h6">Alerts</Typography>
+        <Button size="small" variant="text" onClick={() => setWarningsExpanded((current) => !current)}>
+          View all alerts
+        </Button>
+      </Stack>
+      <Stack spacing={0.75}>
+        {(publishBlockingBlockers.length ? publishBlockingBlockers.slice(0, 3) : exceptionRecords.filter((item) => item.status === 'open').slice(0, 3)).map((alert, index) => (
+          <Stack key={'code' in alert ? `${alert.code}-${index}` : alert.id} direction="row" spacing={0.8} alignItems="flex-start">
+            <Typography sx={{ color: index === 0 ? 'error.main' : 'warning.main', fontWeight: 900, lineHeight: 1 }}>△</Typography>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="body2" sx={{ fontWeight: 850 }} noWrap>
+                {'code' in alert ? alert.code.replace(/_/g, ' ') : alert.type}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" noWrap display="block">
+                {'message' in alert ? alert.message : alert.recommendedAction}
+              </Typography>
+            </Box>
+          </Stack>
+        ))}
+        {!publishBlockingBlockers.length && !exceptionRecords.some((item) => item.status === 'open') ? (
+          <Typography variant="body2" color="text.secondary">No active route alerts.</Typography>
+        ) : null}
+      </Stack>
+    </SurfacePanel>
+  );
+
+  const scenarioCardsPanel = (
+    <SurfacePanel variant="panel" padding={1.1} data-testid="routing-scenario-cards">
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: '160px repeat(4, minmax(0, 1fr))' },
+          gap: 1,
+          alignItems: 'stretch',
+        }}
+      >
+        <Box>
+          <Typography variant="h6">Scenarios</Typography>
+          <Typography variant="caption" color="text.secondary">
+            Compare optimization strategies
+          </Typography>
+        </Box>
+        {[
+          ['Baseline', totalDistanceMiles, estimatedFuelCost, estimatedLaborCost, totalDurationMinutes, true],
+          ['Fastest', totalDistanceMiles * 0.94, estimatedFuelCost * 1.08, estimatedLaborCost * 0.96, totalDurationMinutes * 0.92, false],
+          ['Lowest Cost', totalDistanceMiles * 1.05, estimatedFuelCost * 0.88, estimatedLaborCost * 0.94, totalDurationMinutes * 1.07, false],
+          ['Balanced', totalDistanceMiles * 0.98, estimatedFuelCost * 0.96, estimatedLaborCost * 0.97, totalDurationMinutes * 0.97, false],
+        ].map(([label, miles, fuel, labor, minutes, selected]) => (
+          <Box
+            key={String(label)}
+            sx={{
+              border: '1px solid',
+              borderColor: selected ? 'primary.main' : 'divider',
+              borderRadius: 1,
+              p: 1,
+              bgcolor: selected ? alpha(theme.palette.primary.main, 0.06) : 'background.default',
+            }}
           >
-            <MenuItem value="readable">Readable date</MenuItem>
-            <MenuItem value="iso">ISO date</MenuItem>
-          </TextField>
-	          <SurfacePanel
-	            variant="subtle"
-	            padding={0.35}
-	            data-testid="routing-secondary-controls"
-	            sx={{ display: 'flex', alignItems: 'center', gap: 0.55, borderRadius: 1 }}
-	          >
-	            <ToggleButtonGroup
-	              size="small"
-	              exclusive
-	              value={mode}
-	              onChange={(_, value) => value && setMode(value)}
-	              sx={{
-	                '& .MuiToggleButton-root': {
-	                  px: 0.8,
-	                  py: 0.42,
-	                  textTransform: 'none',
-	                },
-	              }}
-	            >
-	              <ToggleButton value="suggested">Auto plan</ToggleButton>
-	              <ToggleButton value="manual">Manual edit</ToggleButton>
-	            </ToggleButtonGroup>
-	            <DensityToggle density={density} onChange={setDensity} />
-	          </SurfacePanel>
-	        </>
-	      }
-	      meta={
-	        <RouteDaySummaryBar
-	          totalJobCount={totalJobCount}
-	          routedStopCount={routedStopCount}
-	          routeCount={groups.length}
-	          unassignedCount={unassignedJobCount}
-	          openExceptionCount={openPlanExceptionCount}
-	          hasPlan={Boolean(plan)}
-            routeDayStatusLabel={planStatusLabel}
-            routeDayStatusTone={planStatusTone}
-          isPreviewPlanner={isPreview()}
-        />
-      }
-    />
+            <Typography variant="body2" sx={{ fontWeight: 900 }}>{label}</Typography>
+            <Stack spacing={0.25} sx={{ mt: 0.7 }}>
+              <Typography variant="caption">{Number(miles).toFixed(1)} mi</Typography>
+              <Typography variant="caption">{formatMoney(Number(fuel))}</Typography>
+              <Typography variant="caption">{formatMoney(Number(labor))} labor</Typography>
+              <Typography variant="caption">{formatPlanningDuration(Number(minutes))}</Typography>
+            </Stack>
+          </Box>
+        ))}
+      </Box>
+    </SurfacePanel>
   );
 
   const workspaceStateAlerts = (
@@ -2152,6 +2595,81 @@ export default function RoutingWorkspacePage() {
           </Typography>
         </Alert>
       ) : null}
+      {hasPublishReadinessBlockers ? (
+        <Alert
+          severity="warning"
+          data-testid="routing-publish-readiness-alert"
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              endIcon={warningsExpanded ? <ExpandLess /> : <ExpandMore />}
+              onClick={() => setWarningsExpanded((current) => !current)}
+              data-testid="routing-warnings-toggle"
+              sx={{ fontWeight: 850 }}
+            >
+              {warningsExpanded ? 'Hide' : 'Show'}
+            </Button>
+          }
+        >
+          <Stack spacing={warningsExpanded ? 1 : 0.25}>
+            <Box>
+              <Typography variant="subtitle2" sx={{ fontWeight: 850 }}>
+                Warnings
+              </Typography>
+              <Typography variant="body2">
+                {publishBlockingBlockers.length} planner check{publishBlockingBlockers.length === 1 ? '' : 's'} need review before publish.
+              </Typography>
+            </Box>
+            <Collapse in={warningsExpanded} timeout="auto" unmountOnExit>
+              <Stack spacing={0.75} sx={{ pt: 0.75 }}>
+                {publishBlockingBlockers.slice(0, 6).map((blocker, index) => (
+                  <Stack
+                    key={`${blocker.code}-${blocker.jobId || blocker.groupId || blocker.warningIndex || index}`}
+                    direction={{ xs: 'column', md: 'row' }}
+                    justifyContent="space-between"
+                    alignItems={{ md: 'center' }}
+                    spacing={0.75}
+                    sx={{
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      borderRadius: 1,
+                      px: 1,
+                      py: 0.75,
+                      bgcolor: alpha(theme.palette.background.paper, 0.72),
+                    }}
+                  >
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 850 }}>
+                        {blocker.code.replace(/_/g, ' ')}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {blocker.message}
+                      </Typography>
+                    </Box>
+                    {blocker.canAcceptRisk ? (
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        onClick={() => handleOpenPublishRisk(blocker)}
+                      >
+                        Accept risk
+                      </Button>
+                    ) : (
+                      <StatusPill label="Required fix" tone="danger" />
+                    )}
+                  </Stack>
+                ))}
+                {publishBlockingBlockers.length > 6 ? (
+                  <Typography variant="caption" color="text.secondary">
+                    + {publishBlockingBlockers.length - 6} more blockers
+                  </Typography>
+                ) : null}
+              </Stack>
+            </Collapse>
+          </Stack>
+        </Alert>
+      ) : null}
       {isOffline ? (
         <Alert severity="warning" data-testid="routing-offline-warning">
           <Typography variant="subtitle2" sx={{ fontWeight: 850 }}>
@@ -2167,11 +2685,28 @@ export default function RoutingWorkspacePage() {
 
   const jobsPanel = (
     <SurfacePanel variant="panel" padding={0} sx={{ overflow: 'hidden' }}>
-      <Box sx={{ px: 1.5, py: 1.15, borderBottom: '1px solid', borderColor: 'divider' }}>
-        <Typography variant="h6">Unassigned jobs</Typography>
-        <Typography variant="body2" color="text.secondary">
-          Select work for the next draft. Manual moves stay visually tied to route lanes.
-        </Typography>
+      <Box
+        sx={{
+          px: 1.5,
+          py: 1.15,
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 1,
+        }}
+      >
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="h6">Draft job selection</Typography>
+          <Typography variant="body2" color="text.secondary">
+            {selectedJobIds.length} selected for the next optimization draft.
+          </Typography>
+        </Box>
+        <StatusPill
+          label={`${selectedJobIds.length} selected`}
+          tone={selectedJobIds.length > 0 ? 'accent' : 'default'}
+        />
       </Box>
       <List disablePadding sx={{ maxHeight: { xs: 420, xl: '32vh' }, overflowY: 'auto' }}>
         {demandJobs.length === 0 ? (
@@ -2378,6 +2913,13 @@ export default function RoutingWorkspacePage() {
     />
   );
 
+  const mapDisplayModeLabel: Record<MapDisplayMode, string> = {
+    selected: 'Selected route',
+    all: 'All routes',
+    density: 'Route density',
+    exceptions: 'Exceptions only',
+  };
+
   const mapPanel = (
     <SurfacePanel
       variant="canvas"
@@ -2385,8 +2927,9 @@ export default function RoutingWorkspacePage() {
       data-testid="routing-map-panel"
       sx={{
         overflow: 'hidden',
-        minHeight: { xs: 430, md: 540, xl: 0 },
-        height: { xs: 430, md: 540, xl: '100%' },
+        flex: isDesktopWorkspace ? '1 1 0' : undefined,
+        minHeight: isDesktopWorkspace ? '100%' : { xs: 430, md: 540 },
+        height: isDesktopWorkspace ? '100%' : { xs: 430, md: 540 },
         display: 'flex',
         flexDirection: 'column',
       }}
@@ -2399,12 +2942,19 @@ export default function RoutingWorkspacePage() {
         sx={{ px: 1.35, py: 0.95, borderBottom: '1px solid', borderColor: 'divider' }}
       >
         <Box sx={{ minWidth: 0 }}>
-          <Typography variant="h6">Route map</Typography>
-          <Typography variant="body2" color="text.secondary" noWrap>
-            Keep the route picture visible while editing lanes and assignments.
+          <Typography variant="h6" noWrap sx={{ display: { xs: 'none', xl: 'block' }, fontSize: 15 }}>
+            Route map
           </Typography>
         </Box>
         <Stack direction="row" spacing={0.8} alignItems="center" sx={{ flex: '0 0 auto' }}>
+          <Typography
+            data-testid="routing-map-mode-state"
+            variant="caption"
+            color="text.secondary"
+            sx={{ fontWeight: 850, whiteSpace: 'nowrap' }}
+          >
+            {`Map view: ${mapDisplayModeLabel[mapDisplayMode]}`}
+          </Typography>
           <ToggleButtonGroup
             size="small"
             exclusive
@@ -2440,7 +2990,6 @@ export default function RoutingWorkspacePage() {
             showLegend={false}
             selectedRouteId={selectedGroupId}
             displayMode={mapDisplayMode}
-            distanceUnit={routeDistanceUnit}
             onRouteSelect={(routeId) => {
               if (routeId) setSelectedGroupId(routeId);
             }}
@@ -2485,6 +3034,23 @@ export default function RoutingWorkspacePage() {
     />
   );
 
+  const routeTimelinePanel = (
+    <RouteStopTimelineStrip
+      selectedGroup={selectedGroup}
+      timelineGroups={mapDisplayMode === 'all' ? visibleGroupedStops : undefined}
+      selectedStopId={selectedStopId}
+      onStopSelect={(groupId, stopId) => {
+        setSelectedGroupId(groupId);
+        setSelectedStopId(stopId);
+      }}
+      driverName={selectedDriverName}
+      routeColor={selectedMapRoute?.color}
+      routeColorsById={Object.fromEntries(mapRoutes.map((route) => [route.id, route.color]))}
+      onReoptimize={handleReoptimize}
+      isBusy={saving}
+    />
+  );
+
   const inspectorPanel = (
     <RouteInspector
       selectedGroup={selectedGroup}
@@ -2525,9 +3091,19 @@ export default function RoutingWorkspacePage() {
     <Box
       data-testid="routing-workspace-page"
       data-capture-mode={isMarketingCapture ? 'marketing' : undefined}
+      data-runtime-mode={routingWorkspaceRuntimeMode}
+      data-query-states-allowed={String(areRoutingWorkspaceQueryStatesAllowed)}
+      data-capability-exception-decision-api={String(routingWorkspaceCapabilities.exceptionDecisionApi)}
+      data-capability-publish-readiness-api={String(routingWorkspaceCapabilities.publishReadinessApi)}
+      data-capability-route-version-api={String(routingWorkspaceCapabilities.routeVersionApi)}
+      data-capability-dispatch-handoff-api={String(routingWorkspaceCapabilities.dispatchHandoffApi)}
+      data-capability-save-draft-api={String(routingWorkspaceCapabilities.saveDraftApi)}
+      data-capability-autosave-status={String(routingWorkspaceCapabilities.autosaveStatus)}
+      data-capability-structured-planner-errors={String(routingWorkspaceCapabilities.structuredPlannerErrors)}
+      data-capability-role-permissions={String(routingWorkspaceCapabilities.rolePermissions)}
       data-density={density}
       data-selected-route-id={selectedGroupId || undefined}
-      data-route-version={routeVersion || undefined}
+      data-route-version={routingWorkspaceCapabilities.routeVersionApi ? routeVersion || undefined : undefined}
       sx={{
         display: 'grid',
         gap: 1.5,
@@ -2549,9 +3125,29 @@ export default function RoutingWorkspacePage() {
         </Alert>
       ) : null}
 
-      {workspaceStateAlerts}
+      {routingActionNotice ? (
+        <Alert
+          severity="info"
+          data-testid="routing-action-notice"
+          onClose={() => setRoutingActionNotice(null)}
+        >
+          {routingActionNotice}
+        </Alert>
+      ) : null}
 
-      {isPlanPublished ? (
+      {!isDesktopWorkspace ||
+      isEmptyRouteDay ||
+      hasNoVehicles ||
+      hasNoDrivers ||
+      hasAddressGeocodeFailure ||
+      hasStaleRouteDataWarning ||
+      hasPublishReadinessBlockers
+        ? workspaceStateAlerts
+        : null}
+
+      {planningKpiCards}
+
+      {isPlanPublished && canShowDispatchHandoff ? (
         <SurfacePanel
           variant="panel"
           padding={1.25}
@@ -2570,7 +3166,9 @@ export default function RoutingWorkspacePage() {
             <Box>
               <Stack direction="row" spacing={0.75} alignItems="center" useFlexGap flexWrap="wrap">
                 <StatusPill label="Published" tone="success" />
-                <StatusPill label={`Route version ${routeVersion || 'v1'}`} tone="info" />
+                {routingWorkspaceCapabilities.routeVersionApi && routeVersion ? (
+                  <StatusPill label={`Route version ${routeVersion}`} tone="info" />
+                ) : null}
               </Stack>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.55 }}>
                 Dispatch can now pick up this route plan. Lanes are read-only until a revision is started.
@@ -2590,34 +3188,99 @@ export default function RoutingWorkspacePage() {
         </SurfacePanel>
       ) : null}
 
-      {isDesktopWorkspace ? (
-        <Box
+      {isPlanPublished && !canShowDispatchHandoff ? (
+        <SurfacePanel
+          variant="panel"
+          padding={1.25}
+          data-testid="routing-published-summary"
           sx={{
-            display: 'grid',
-            gap: 1.5,
-            gridTemplateColumns: isHeroMarketingCapture
-              ? 'minmax(760px, 1fr) 320px'
-              : isMarketingCapture
-                ? '240px minmax(620px, 1fr) 300px'
-                : '260px minmax(760px, 1fr) 310px',
-            alignItems: 'stretch',
-            height: isHeroMarketingCapture ? '720px' : 'calc(100vh - 176px)',
-            minHeight: 640,
+            borderColor: 'success.main',
+            bgcolor: alpha(isDark ? '#16351f' : '#EAF7EE', isDark ? 0.22 : 0.62),
           }}
         >
-          {isHeroMarketingCapture ? null : leftPanelTabs}
-
-          <Stack spacing={1.2} sx={{ minHeight: 0, overflow: 'hidden' }}>
-            {mapPanel}
-            {isHeroMarketingCapture || laneEditorMode === 'fullscreen' ? null : (
-              <Box sx={{ maxHeight: laneEditorMode === 'collapsed' ? '92px' : isMarketingCapture ? '28vh' : '30vh', overflow: 'hidden' }}>
-                {renderRouteEditorPanel()}
-              </Box>
-            )}
+          <Stack
+            direction={{ xs: 'column', md: 'row' }}
+            spacing={1}
+            justifyContent="space-between"
+            alignItems={{ xs: 'stretch', md: 'center' }}
+          >
+            <Box>
+              <StatusPill label="Published" tone="success" />
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.55 }}>
+                Route lanes are read-only until a revision is started.
+              </Typography>
+            </Box>
+            {!isRevisionMode ? (
+              <Button variant="outlined" onClick={handleStartRevision}>
+                Start revision
+              </Button>
+            ) : null}
           </Stack>
+        </SurfacePanel>
+      ) : null}
 
-          {inspectorPanel}
-        </Box>
+      {isDesktopWorkspace ? (
+        <Stack spacing={1.2} sx={{ minWidth: 0 }}>
+          <Box
+            data-testid="routing-reference-layout"
+            sx={{
+              display: 'grid',
+              gap: 1.2,
+              gridTemplateColumns: isHeroMarketingCapture
+                ? 'minmax(0, 1fr) 320px'
+                : isMarketingCapture
+                  ? {
+                      md: '200px minmax(360px, 1fr) 280px',
+                      xl: 'minmax(218px, 248px) minmax(0, 1fr) minmax(270px, 310px)',
+                    }
+                  : {
+                      md: '190px minmax(360px, 1fr) 280px',
+                      xl: 'minmax(228px, 286px) minmax(0, 1fr) minmax(300px, 360px)',
+                    },
+              alignItems: 'stretch',
+              minHeight: 0,
+              overflow: 'visible',
+            }}
+          >
+            {isHeroMarketingCapture ? null : planningUnassignedPanel}
+
+            <Stack spacing={1.2} sx={{ minHeight: 0, minWidth: 0, overflow: 'visible' }}>
+              <Box
+                sx={{
+                  minHeight: 238,
+                  height: isMarketingCapture ? '41vh' : 'clamp(250px, 31vh, 380px)',
+                  minWidth: 0,
+                }}
+              >
+                {mapPanel}
+              </Box>
+              {isHeroMarketingCapture ? null : (
+                <Box sx={{ minWidth: 0 }}>
+                  {routeTimelinePanel}
+                </Box>
+              )}
+              {isHeroMarketingCapture || laneEditorMode === 'fullscreen' ? null : (
+                <Box
+                  sx={{
+                    minWidth: 0,
+                    maxHeight: laneEditorMode === 'collapsed' ? 96 : 'min(21vh, 220px)',
+                    overflow: 'auto',
+                  }}
+                >
+                  {renderRouteEditorPanel()}
+                </Box>
+              )}
+            </Stack>
+
+            <Stack spacing={1.2} sx={{ minHeight: 0, minWidth: 0, overflow: 'visible' }}>
+              {routeSummariesPanel}
+              {planningAlertsPanel}
+            </Stack>
+          </Box>
+          <Box sx={{ display: { xs: 'none', xl: 'block' } }}>
+            {scenarioCardsPanel}
+          </Box>
+        </Stack>
       ) : (
         <Box sx={{ display: 'grid', gap: 1.2 }}>
           <ToggleButtonGroup
@@ -2631,7 +3294,12 @@ export default function RoutingWorkspacePage() {
             <ToggleButton value="routes">Routes</ToggleButton>
             <ToggleButton value="jobs">Jobs</ToggleButton>
           </ToggleButtonGroup>
-          {mobilePanel === 'map' ? mapPanel : null}
+          {mobilePanel === 'map' ? (
+            <Stack spacing={1.2} sx={{ minWidth: 0 }}>
+              {mapPanel}
+              {routeTimelinePanel}
+            </Stack>
+          ) : null}
           {mobilePanel === 'routes' ? (
             <Stack spacing={1.2}>
               {draftRoutesPanel}
@@ -2641,8 +3309,7 @@ export default function RoutingWorkspacePage() {
           ) : null}
           {mobilePanel === 'jobs' ? (
             <Stack spacing={1.2}>
-              {jobsPanel}
-              {vehiclesPanel}
+              {leftPanelTabs}
             </Stack>
           ) : null}
         </Box>
@@ -2651,10 +3318,13 @@ export default function RoutingWorkspacePage() {
         <Box
           sx={{
             position: 'fixed',
-            inset: { xs: 8, md: 18 },
+            inset: 0,
             zIndex: 1400,
             display: 'flex',
             minHeight: 0,
+            p: { xs: 1, md: 1.5 },
+            bgcolor: (currentTheme) => alpha(currentTheme.palette.background.default, 0.94),
+            backdropFilter: 'blur(8px)',
           }}
         >
           {renderRouteEditorPanel(true)}
@@ -2664,6 +3334,8 @@ export default function RoutingWorkspacePage() {
         open={isExceptionDrawerOpen}
         exceptions={exceptionRecords}
         riskReasons={exceptionRiskReasons}
+        canDecideExceptions={routingWorkspaceCapabilities.exceptionDecisionApi}
+        showCapabilityNotice={routingWorkspaceRuntimeMode !== 'production'}
         saving={saving}
         onClose={() => setIsExceptionDrawerOpen(false)}
         onResolve={handleResolveException}
@@ -2688,8 +3360,9 @@ export default function RoutingWorkspacePage() {
         <DialogContent>
           <Stack spacing={1.2} sx={{ pt: 0.5 }}>
             <Typography variant="body2" color="text.secondary">
-              Confirm the plan is ready for dispatch handoff. Publishing records the current route version
-              and locks route lanes until a revision is started.
+              {hasDispatchHandoffCapability
+                ? 'Confirm the plan is ready for dispatch handoff. Publishing records the current route version and locks route lanes until a revision is started.'
+                : 'Confirm this route plan is ready to publish. Route lanes become read-only until a revision is started.'}
             </Typography>
             <SurfacePanel variant="subtle" padding={1.1}>
               <Stack spacing={0.85}>
@@ -2720,6 +3393,48 @@ export default function RoutingWorkspacePage() {
           </Button>
           <Button variant="contained" onClick={() => void handleConfirmPublish()} disabled={saving}>
             Confirm publish
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={Boolean(publishRiskBlocker)}
+        onClose={() => (acceptingPublishRisk ? undefined : setPublishRiskBlocker(null))}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          'data-testid': 'routing-accept-publish-risk-dialog',
+        } as Record<string, unknown>}
+      >
+        <DialogTitle>Accept publish risk</DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.5} sx={{ pt: 0.5 }}>
+            <Alert severity="warning">
+              {publishRiskBlocker?.message || 'This publish blocker requires a saved reason.'}
+            </Alert>
+            <TextField
+              label="Reason"
+              value={publishRiskReason}
+              onChange={(event) => setPublishRiskReason(event.target.value)}
+              multiline
+              minRows={3}
+              placeholder="Explain who approved this risk and how dispatch should handle it."
+              autoFocus
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setPublishRiskBlocker(null)}
+            disabled={acceptingPublishRisk}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => void handleAcceptPublishRisk()}
+            disabled={acceptingPublishRisk || publishRiskReason.trim().length < 8}
+          >
+            Save reason
           </Button>
         </DialogActions>
       </Dialog>

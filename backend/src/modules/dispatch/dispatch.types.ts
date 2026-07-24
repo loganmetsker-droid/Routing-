@@ -110,6 +110,7 @@ export type RouteRunsBoardResponse = {
   routes: Route[];
   routeRunStops: RouteRunStop[];
   exceptions: DispatchException[];
+  dispatchReadiness?: Record<string, DispatchReadiness>;
 };
 
 export type RouteRunsListResponse = {
@@ -162,6 +163,24 @@ export type RouteRunMessageSummary = {
   lastMessageAt?: string | null;
 };
 
+export type DispatchReadinessBlocker = {
+  code:
+    | 'MISSING_DRIVER'
+    | 'MISSING_VEHICLE'
+    | 'NO_STOPS'
+    | 'OPEN_EXCEPTION'
+    | 'ROUTE_NOT_EDITABLE';
+  message: string;
+  severity: 'blocking';
+  routeId: string;
+  exceptionId?: string | null;
+};
+
+export type DispatchReadiness = {
+  ready: boolean;
+  blockers: DispatchReadinessBlocker[];
+};
+
 export type RouteRunsDetailResponse = {
   ok: true;
   routeRun: Route;
@@ -171,6 +190,7 @@ export type RouteRunsDetailResponse = {
   proofArtifacts: ProofArtifact[];
   notificationDeliveries: NotificationDelivery[];
   messages?: RouteRunMessage[];
+  dispatchReadiness?: DispatchReadiness;
 };
 
 export type RouteRunsExceptionsResponse = {

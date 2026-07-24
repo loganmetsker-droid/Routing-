@@ -29,16 +29,15 @@ export function SurfacePanel({
 }: SurfacePanelProps) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
-  const panelText = isDark ? '#FFF8ED' : '#17110D';
-  const secondaryText = alpha(panelText, isDark ? 0.62 : 0.64);
-  const panelBorder = isDark ? 'rgba(255,246,233,0.14)' : 'rgba(32,24,18,0.13)';
-  const panelBorderStrong = isDark
-    ? 'rgba(255,246,233,0.23)'
-    : 'rgba(32,24,18,0.18)';
-  const panel = isDark ? '#211A16' : '#F8F7F3';
-  const muted = isDark ? '#2A221D' : '#ECE9E3';
-  const elevated = isDark ? '#2D241E' : '#FFFFFF';
-  const inverse = isDark ? '#120E0B' : trovanColors.black[950];
+  const surfaces = isDark ? trovanColors.dark : trovanColors.light;
+  const panelText = surfaces.text;
+  const secondaryText = surfaces.muted;
+  const panelBorder = surfaces.border;
+  const panelBorderStrong = surfaces.borderStrong;
+  const panel = surfaces.surface;
+  const muted = surfaces.surfaceAlt;
+  const elevated = isDark ? trovanColors.dark.surfaceAlt : '#FFFFFF';
+  const inverse = isDark ? trovanColors.dark.sidebar : trovanColors.brand.navy950;
 
   const consoleSurfaceText = {
     color: panelText,
@@ -53,7 +52,7 @@ export function SurfacePanel({
     },
     '& .MuiOutlinedInput-root': {
       color: panelText,
-      backgroundColor: isDark ? alpha('#120E0B', 0.36) : alpha('#FFFFFF', 0.58),
+      backgroundColor: isDark ? alpha('#FFFFFF', 0.025) : alpha('#FFFFFF', 0.72),
       '& fieldset': {
         borderColor: panelBorderStrong,
       },
@@ -111,7 +110,7 @@ export function SurfacePanel({
       bgcolor: inverse,
       border: `1px solid ${panelBorderStrong}`,
       boxShadow: trovanShadows.soft,
-      color: '#FFF8ED',
+      color: trovanColors.dark.text,
     },
     command: {
       bgcolor: panel,
@@ -140,9 +139,11 @@ export function SurfacePanel({
     <Paper
       {...props}
       sx={{
-        p: padding ?? 2.5,
+        p: padding ?? 2,
         borderRadius: `${trovanLayout.panelRadius}px`,
         backgroundImage: 'none',
+        backgroundClip: 'padding-box',
+        transition: 'border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease',
         ...variantSx[variant],
         ...consoleSurfaceText,
         ...props.sx,

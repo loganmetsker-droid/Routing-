@@ -38,6 +38,8 @@ export const queryKeys = {
   routeRunStopProofs: (stopId: string) => ['route-run-stop-proofs', stopId] as const,
   exceptions: ['exceptions'] as const,
   planner: (serviceDate: string) => ['planner', serviceDate] as const,
+  plannerPublishReadiness: (routePlanId: string) =>
+    ['planner-publish-readiness', routePlanId] as const,
   routeVersions: (routeId: string) => ['route-versions', routeId] as const,
   rerouteHistory: (routeId: string) => ['reroute-history', routeId] as const,
 };

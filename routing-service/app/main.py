@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from hmac import compare_digest
-from datetime import datetime
 from typing import Dict, List
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -22,14 +23,9 @@ from app.solver import solve_optimize_request
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 logger = logging.getLogger(__name__)
 
-app = FastAPI(
-    title="Routing Optimization Service",
-    description="Google OR-Tools based route optimization microservice",
-    version="2.0.0",
-)
-
 INTERNAL_AUTH_HEADER = "x-routing-service-token"
 HOSTED_ENVIRONMENTS = {"staging", "production", "prod"}
+DEFAULT_MAX_BODY_BYTES = 1_048_576
 
 
 def is_hosted_environment() -> bool:
@@ -45,6 +41,20 @@ def validate_security_config() -> None:
         raise RuntimeError(
             "ROUTING_SERVICE_INTERNAL_TOKEN is required in hosted routing-service environments"
         )
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    validate_security_config()
+    yield
+
+
+app = FastAPI(
+    title="Routing Optimization Service",
+    description="Google OR-Tools based route optimization microservice",
+    version="2.0.0",
+    lifespan=lifespan,
+)
 
 
 async def require_internal_auth(
@@ -68,21 +78,32 @@ async def require_internal_auth(
         raise HTTPException(status_code=401, detail="routing service authentication required")
 
 
-@app.on_event("startup")
-async def startup_security_check() -> None:
-    validate_security_config()
-
-
 @app.middleware("http")
 async def enforce_optimizer_body_limit(request: Request, call_next):
     if request.method == "POST" and request.url.path in {"/optimize", "/route", "/route/global"}:
-        max_bytes = int(os.getenv("ROUTING_SERVICE_MAX_BODY_BYTES", "1048576"))
-        content_length = request.headers.get("content-length")
-        if content_length and int(content_length) > max_bytes:
-            return JSONResponse(
-                status_code=413,
-                content={"detail": "routing service request body is too large"},
+        raw_max_bytes = os.getenv("ROUTING_SERVICE_MAX_BODY_BYTES", str(DEFAULT_MAX_BODY_BYTES))
+        try:
+            max_bytes = max(1, int(raw_max_bytes))
+        except ValueError:
+            logger.error(
+                "Invalid ROUTING_SERVICE_MAX_BODY_BYTES=%r; using the safe default",
+                raw_max_bytes,
             )
+            max_bytes = DEFAULT_MAX_BODY_BYTES
+        content_length = request.headers.get("content-length")
+        if content_length:
+            try:
+                body_bytes = int(content_length)
+            except ValueError:
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": "invalid content-length header"},
+                )
+            if body_bytes > max_bytes:
+                return JSONResponse(
+                    status_code=413,
+                    content={"detail": "routing service request body is too large"},
+                )
     return await call_next(request)
 
 
@@ -115,7 +136,7 @@ async def root():
 async def health_check():
     return {
         "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -131,7 +152,7 @@ async def optimize(request: OptimizeRequest):
         return solve_optimize_request(request)
     except Exception as exc:  # pragma: no cover - defensive
         logger.error("Optimizer failure: %s", exc, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="route optimization failed") from exc
 
 
 def _priority_to_number(priority: str | None) -> int:

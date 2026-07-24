@@ -6,9 +6,11 @@ import { Box, Chip, Paper, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { trovanColors } from '../../theme/designTokens';
 import {
+  MapStyleToggle,
   MapFilmOverlay,
   mapFloatingPanelSx,
-  trovanMapLayer,
+  trovanMapLayers,
+  usePersistedTrovanMapStyle,
 } from './mapPresentation';
 
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -221,7 +223,6 @@ interface MultiRouteMapProps {
   selectedRouteId?: string | null;
   onRouteSelect?: (routeId: string | null) => void;
   displayMode?: MapDisplayMode;
-  distanceUnit?: 'mi' | 'km';
 }
 
 function FitBounds({ routes }: { routes: RouteData[] }) {
@@ -275,10 +276,11 @@ export default function MultiRouteMap({
   selectedRouteId,
   onRouteSelect,
   displayMode = 'all',
-  distanceUnit = 'km',
 }: MultiRouteMapProps) {
   const [internalSelectedRoute, setInternalSelectedRoute] = useState<string | null>(null);
   const [zoom, setZoom] = useState(12);
+  const [mapStyle, setMapStyle] = usePersistedTrovanMapStyle();
+  const activeMapLayer = trovanMapLayers[mapStyle];
   const selectedRoute = selectedRouteId ?? internalSelectedRoute;
   const defaultCenter: [number, number] = [37.7749, -122.4194];
   const totalStops = useMemo(
@@ -337,9 +339,7 @@ export default function MultiRouteMap({
   const formatDistance = (distanceKm?: number) => {
     if (!Number.isFinite(distanceKm)) return 'N/A';
     const safeDistance = Number(distanceKm);
-    return distanceUnit === 'mi'
-      ? `${(safeDistance * 0.621371).toFixed(1)} mi`
-      : `${safeDistance.toFixed(1)} km`;
+    return `${(safeDistance * 0.621371).toFixed(1)} mi`;
   };
   const routeLabel = (route: RouteData) =>
     route.vehicle?.licensePlate ||
@@ -362,7 +362,35 @@ export default function MultiRouteMap({
   };
 
   return (
-    <Box sx={{ position: 'relative', height }} className="trovan-map">
+    <Box
+      sx={{
+        position: 'relative',
+        height,
+        '& .leaflet-tile-pane': {
+          filter: activeMapLayer.tileFilter,
+        },
+        '& .leaflet-overlay-pane': {
+          filter: 'saturate(1.08) contrast(1.05)',
+        },
+        '& .leaflet-tile': {
+          imageRendering: 'auto',
+        },
+        '& .leaflet-control-zoom': {
+          border: '1px solid rgba(60,64,67,0.18)',
+          boxShadow: '0 1px 4px rgba(60,64,67,0.24)',
+        },
+        '& .leaflet-control-zoom a': {
+          color: '#3C4043',
+          backgroundColor: '#FFFFFF',
+          borderBottomColor: 'rgba(60,64,67,0.14)',
+          fontWeight: 700,
+        },
+        '& .leaflet-control-zoom a:hover': {
+          backgroundColor: '#F8F9FA',
+        },
+      }}
+      className="trovan-map"
+    >
       <Box
         data-testid="routing-map-render-level"
         data-render-level={renderLevel}
@@ -391,6 +419,10 @@ export default function MultiRouteMap({
             {routes.map((route) => (
               <Box
                 key={route.id}
+                role="button"
+                tabIndex={0}
+                aria-pressed={selectedRoute === route.id}
+                aria-label={`Select route ${route.id}`}
                 sx={{
                   p: 1.2,
                   borderRadius: 1.25,
@@ -410,6 +442,12 @@ export default function MultiRouteMap({
                   },
                 }}
                 onClick={() => selectRoute(route.id)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    selectRoute(route.id);
+                  }
+                }}
               >
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.45 }}>
                   <Box
@@ -448,6 +486,8 @@ export default function MultiRouteMap({
         </Paper>
       ) : null}
 
+      <MapStyleToggle value={mapStyle} onChange={setMapStyle} />
+
       <MapContainer
         attributionControl={false}
         center={getMapCenter()}
@@ -455,7 +495,19 @@ export default function MultiRouteMap({
         style={{ height: '100%', width: '100%' }}
         className="z-0"
       >
-        <TileLayer attribution={trovanMapLayer.attribution} url={trovanMapLayer.url} />
+        <TileLayer
+          key={`${mapStyle}-base`}
+          attribution={activeMapLayer.attribution}
+          url={activeMapLayer.url}
+        />
+        {activeMapLayer.labelUrl ? (
+          <TileLayer
+            key={`${mapStyle}-labels`}
+            url={activeMapLayer.labelUrl}
+            opacity={activeMapLayer.labelOpacity ?? 0.82}
+            zIndex={280}
+          />
+        ) : null}
         <MapZoomObserver onZoomChange={setZoom} />
 
         {routes.map((route) => {
@@ -558,6 +610,7 @@ export default function MultiRouteMap({
 
             {route.vehicle && !(shouldClusterRoute && !isRouteSelected) && !routeIsHiddenForExceptions && displayMode !== 'density' ? (
               <Marker
+                title={`${route.vehicle.make} ${route.vehicle.model} on ${routeLabel(route)}`}
                 position={
                   route.vehicle.currentLocation
                     ? [route.vehicle.currentLocation.lat, route.vehicle.currentLocation.lng]
@@ -597,6 +650,7 @@ export default function MultiRouteMap({
 
             {shouldClusterRoute && !routeIsHiddenForExceptions ? (
               <Marker
+                title={`${routeLabel(route)} • ${stops.length} stops`}
                 position={routeCentroid(route)}
                 icon={createClusterIcon({
                   color: route.color,
@@ -633,6 +687,7 @@ export default function MultiRouteMap({
               return (
               <Marker
                 key={`${route.id}-stop-${originalIndex}`}
+                title={`${routeLabel(route)} stop ${originalIndex + 1}`}
                 position={[stop.lat, stop.lng]}
                 icon={createStopIcon({
                   index: originalIndex,
@@ -672,7 +727,7 @@ export default function MultiRouteMap({
         <FitBounds routes={routes} />
       </MapContainer>
 
-      <MapFilmOverlay />
+      <MapFilmOverlay variant={mapStyle} />
 
       {routes.length === 0 ? (
         <Box

@@ -203,6 +203,7 @@ function SettingsSectionButton({
   return (
     <Button
       fullWidth
+      aria-pressed={active}
       onClick={() => onSelect(section.id)}
       startIcon={<Icon fontSize="small" />}
       sx={{
@@ -266,7 +267,7 @@ export default function SettingsPage() {
   const [slug, setSlug] = useState('');
   const [timezone, setTimezone] = useState('UTC');
   const [brandName, setBrandName] = useState('');
-  const [primaryColor, setPrimaryColor] = useState('#1F1A17');
+  const [primaryColor, setPrimaryColor] = useState('#0B1324');
   const [accentColor, setAccentColor] = useState('#C87441');
   const [supportEmail, setSupportEmail] = useState('');
   const [supportPhone, setSupportPhone] = useState('');
@@ -360,7 +361,7 @@ export default function SettingsPage() {
       return;
     }
     setBrandName(branding?.brandName || currentOrganization.name || '');
-    setPrimaryColor(branding?.primaryColor || '#1F1A17');
+    setPrimaryColor(branding?.primaryColor || '#0B1324');
     setAccentColor(branding?.accentColor || '#C87441');
     setSupportEmail(branding?.supportEmail || '');
     setSupportPhone(branding?.supportPhone || '');
@@ -1223,7 +1224,8 @@ export default function SettingsPage() {
                 Billing readiness
               </Typography>
               <Typography variant="body2" component="div" color="text.secondary" sx={{ mt: 1 }}>
-                Billing exposes the truth first: plan catalog, current readiness, and whether Stripe webhooks are actually wired.
+                Trovan is using assisted-pilot billing. Public checkout and automated
+                entitlements stay disabled until a later self-serve release.
               </Typography>
               <Grid container spacing={1.5} sx={{ mt: 0.5 }}>
                 <Grid item xs={12} md={4}>
@@ -1244,7 +1246,9 @@ export default function SettingsPage() {
                       <ListItemText
                         primary="Invoice automation"
                         secondary={
-                          billingOverview?.controls.invoiceAutomationReady ? 'Ready' : 'Blocked'
+                          billingOverview?.controls.invoiceAutomationReady
+                            ? 'Ready'
+                            : 'Intentionally off'
                         }
                       />
                     </ListItem>
@@ -1270,11 +1274,26 @@ export default function SettingsPage() {
                             color="text.secondary"
                             sx={{ mt: 0.75 }}
                           >
-                            ${plan.monthlyPriceUsd}/month •{' '}
+                            {plan.monthlyPriceUsd === null
+                              ? 'Custom terms'
+                              : `$${plan.monthlyPriceUsd}/${plan.billingCadence || 'month'}`}{' '}
+                            •{' '}
                             {plan.dispatcherSeats === 999
                               ? 'Unlimited'
                               : plan.dispatcherSeats}{' '}
                             dispatcher seats
+                          </Typography>
+                          <Typography
+                            variant="caption"
+                            component="div"
+                            color="text.secondary"
+                            sx={{ mt: 0.5, fontWeight: 800 }}
+                          >
+                            {plan.salesAssisted
+                              ? 'Reviewed onboarding • no public checkout'
+                              : plan.selfServeEnabled
+                                ? 'Self-service available'
+                                : 'Sales-assisted'}
                           </Typography>
                           <List dense disablePadding sx={{ mt: 1 }}>
                             {plan.features.slice(0, 4).map((feature) => (
@@ -1290,7 +1309,12 @@ export default function SettingsPage() {
                 </Grid>
               </Grid>
               {(billingOverview?.recommendations ?? []).length > 0 ? (
-                <Alert severity="warning" sx={{ mt: 2 }}>
+                <Alert
+                  severity={
+                    billingOverview?.controls.selfServeEnabled ? 'warning' : 'info'
+                  }
+                  sx={{ mt: 2 }}
+                >
                   {(billingOverview?.recommendations ?? []).join(' ')}
                 </Alert>
               ) : null}

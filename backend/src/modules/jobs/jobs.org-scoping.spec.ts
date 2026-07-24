@@ -97,8 +97,37 @@ describe('JobsService organization scoping', () => {
     );
 
     expect(created.organizationId).toBe('org-1');
+    expect(created.routingRequirements?.load).toMatchObject({
+      palletCount: 1,
+      palletLengthIn: 48,
+      palletWidthIn: 40,
+      palletWeightLb: 600,
+      stackable: true,
+    });
     await expect(service.findOne('job-2', actor)).rejects.toBeInstanceOf(NotFoundException);
     await expect(service.findOne('job-1', actor)).resolves.toMatchObject({ id: 'job-1', organizationId: 'org-1' });
+  });
+
+  it('normalizes incoming GeoJSON job coordinates for route planning', async () => {
+    const jobs = createJobRepo();
+    const customers = createCustomerRepo();
+    const service = new JobsService(jobs, customers);
+
+    const created = await service.create(
+      {
+        customerName: 'Geo Customer',
+        deliveryAddress: '1801 California St, Denver, CO 80202',
+        pickupAddress: '4100 Jackson St, Denver, CO 80216',
+        pickupLocation: { type: 'Point', coordinates: [-104.9432, 39.7745] },
+        deliveryLocation: { type: 'Point', coordinates: [-104.9892, 39.7478] },
+        timeWindowStart: '2026-04-16T09:00:00.000Z',
+        timeWindowEnd: '2026-04-16T10:00:00.000Z',
+      } as any,
+      actor,
+    );
+
+    expect(created.pickupLocation).toEqual({ lat: 39.7745, lng: -104.9432 });
+    expect(created.deliveryLocation).toEqual({ lat: 39.7478, lng: -104.9892 });
   });
 
   it('rejects linking a job to a customer from another organization', async () => {

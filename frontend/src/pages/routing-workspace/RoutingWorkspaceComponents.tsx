@@ -282,6 +282,14 @@ export function DensityToggle({
           px: 1.15,
           py: 0.65,
           textTransform: 'none',
+          fontWeight: 850,
+          '&.Mui-selected': {
+            bgcolor: 'primary.main',
+            color: 'primary.contrastText',
+            '&:hover': {
+              bgcolor: 'primary.dark',
+            },
+          },
         },
       }}
       aria-label="View density"
@@ -1123,6 +1131,7 @@ export function RouteLaneEditorDrawer({
       sx={{
         overflow: 'hidden',
         height: isFullscreen ? '100%' : 'auto',
+        width: isFullscreen ? '100%' : 'auto',
         display: 'flex',
         flexDirection: 'column',
       }}
@@ -1152,7 +1161,7 @@ export function RouteLaneEditorDrawer({
             size="small"
             exclusive
             value={isFullscreen ? 'fullscreen' : laneEditorMode}
-            onChange={(_, value) => value && setLaneEditorMode(value)}
+            onChange={(_, value) => setLaneEditorMode(value || (isFullscreen ? 'expanded' : laneEditorMode))}
             aria-label="Route lane drawer state"
             sx={{
               flex: '0 0 auto',
@@ -1412,6 +1421,8 @@ export function ExceptionResolutionDrawer({
   open,
   exceptions,
   riskReasons,
+  canDecideExceptions,
+  showCapabilityNotice,
   saving,
   onClose,
   onResolve,
@@ -1424,6 +1435,8 @@ export function ExceptionResolutionDrawer({
   open: boolean;
   exceptions: RoutingExceptionRecord[];
   riskReasons: Record<string, string>;
+  canDecideExceptions: boolean;
+  showCapabilityNotice: boolean;
   saving: boolean;
   onClose: () => void;
   onResolve: (exceptionId: string) => void;
@@ -1475,6 +1488,18 @@ export function ExceptionResolutionDrawer({
             <StatusPill label={`${exceptions.filter((item) => item.status === 'resolved').length} resolved`} tone="success" />
             <StatusPill label={`${exceptions.filter((item) => item.status === 'accepted').length} accepted`} tone="info" />
           </Stack>
+          {!canDecideExceptions ? (
+            <Alert
+              severity="info"
+              icon={false}
+              data-testid="routing-exception-capability-notice"
+              sx={{ mt: 1.2 }}
+            >
+              {showCapabilityNotice
+                ? 'Exception decisions are preview-only until the exception decision API is enabled.'
+                : 'Exception decisions are read-only for this workspace.'}
+            </Alert>
+          ) : null}
         </Box>
 
         <Box sx={{ p: 1.5, overflowY: 'auto', flex: 1 }}>
@@ -1549,7 +1574,7 @@ export function ExceptionResolutionDrawer({
                                     label="Risk acceptance reason"
                                     value={riskReason}
                                     onChange={(event) => onRiskReasonChange(exception.id, event.target.value)}
-                                    disabled={!isOpen || saving}
+                                    disabled={!canDecideExceptions || !isOpen || saving}
                                     multiline
                                     minRows={2}
                                   />
@@ -1557,29 +1582,33 @@ export function ExceptionResolutionDrawer({
                                     <Button size="small" variant="outlined" onClick={() => onJumpToAffected(exception)}>
                                       Jump to affected {exception.stopId ? 'stop' : 'route'}
                                     </Button>
-                                    {exception.type === 'Missing driver' ? (
+                                    {canDecideExceptions && exception.type === 'Missing driver' ? (
                                       <Button size="small" variant="contained" onClick={() => onAssignDriver(exception.routeId)} disabled={!isOpen || saving}>
                                         Assign driver
                                       </Button>
                                     ) : null}
-                                    {exception.type === 'Missing vehicle' ? (
+                                    {canDecideExceptions && exception.type === 'Missing vehicle' ? (
                                       <Button size="small" variant="contained" onClick={() => onAssignVehicle(exception.routeId)} disabled={!isOpen || saving}>
                                         Assign vehicle
                                       </Button>
                                     ) : null}
                                     {exception.type !== 'Missing driver' && exception.type !== 'Missing vehicle' ? (
-                                      <Button size="small" variant="contained" onClick={() => onResolve(exception.id)} disabled={!isOpen || saving}>
-                                        Resolve exception
+                                      canDecideExceptions ? (
+                                        <Button size="small" variant="contained" onClick={() => onResolve(exception.id)} disabled={!isOpen || saving}>
+                                          Resolve exception
+                                        </Button>
+                                      ) : null
+                                    ) : null}
+                                    {canDecideExceptions ? (
+                                      <Button
+                                        size="small"
+                                        variant="text"
+                                        onClick={() => onAcceptRisk(exception.id)}
+                                        disabled={!isOpen || saving || riskReason.trim().length < 4}
+                                      >
+                                        Accept risk
                                       </Button>
                                     ) : null}
-                                    <Button
-                                      size="small"
-                                      variant="text"
-                                      onClick={() => onAcceptRisk(exception.id)}
-                                      disabled={!isOpen || saving || riskReason.trim().length < 4}
-                                    >
-                                      Accept risk
-                                    </Button>
                                   </Stack>
                                 </Stack>
                               </SurfacePanel>
@@ -1959,6 +1988,7 @@ export function RouteInspector({
                       key={stop.id}
                       role="button"
                       tabIndex={0}
+                      aria-pressed={isSelectedStop}
                       onClick={() => setSelectedStopId(stop.id)}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {

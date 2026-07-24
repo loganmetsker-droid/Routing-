@@ -68,7 +68,7 @@ export class Customer {
   exceptions?: string;
 
   // Relationship to jobs
-  @OneToMany(() => Job, job => job.customerId)
+  @OneToMany(() => Job, (job) => job.customer)
   jobs?: Job[];
 
   @CreateDateColumn({ name: 'created_at' })

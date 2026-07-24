@@ -16,7 +16,7 @@ import { alpha } from '@mui/material/styles';
 import StatusPill from '../components/ui/StatusPill';
 import { moduleAccents } from '../theme/tokens';
 import { TopoShellBackground } from '../components/TopoShellBackground';
-import { trovanColors } from '../theme/designTokens';
+import { trovanBrandAssets, trovanColors } from '../theme/designTokens';
 import {
   beginWorkosLogin,
   isAuthBypassed,
@@ -101,7 +101,7 @@ export default function LoginPage() {
         overflow: 'hidden',
         bgcolor: trovanColors.black[950],
         background:
-          `radial-gradient(circle at 24% 12%, ${alpha(trovanColors.copper[500], 0.16)}, transparent 28%), linear-gradient(145deg, ${trovanColors.black[950]} 0%, ${trovanColors.black[800]} 48%, ${trovanColors.black[950]} 100%)`,
+          `radial-gradient(circle at 24% 12%, ${alpha(trovanColors.copper[500], 0.16)}, transparent 28%), linear-gradient(145deg, ${trovanColors.brand.navy950} 0%, ${trovanColors.brand.navy850} 48%, ${trovanColors.brand.navy950} 100%)`,
       }}
     >
       <TopoShellBackground active tone="black" />
@@ -118,13 +118,12 @@ export default function LoginPage() {
         }}
       >
         <CardContent sx={{ p: 3, '&:last-child': { pb: 3 } }}>
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ textTransform: 'uppercase', letterSpacing: '0.14em', fontWeight: 800 }}
-          >
-            Trovan Logistics
-          </Typography>
+          <Box
+            component="img"
+            src={trovanBrandAssets.primaryLockupCrop}
+            alt="Trovan Dispatch"
+            sx={{ width: 320, maxWidth: '84%', height: 'auto', display: 'block', mb: 2.2 }}
+          />
           <Typography variant="h4" sx={{ mt: 0.75 }}>
             Welcome back
           </Typography>

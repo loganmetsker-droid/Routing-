@@ -221,6 +221,7 @@ export default function VehicleMap() {
         {vehicles.map((vehicle) => (
           <Marker
             key={vehicle.vehicleId}
+            title={`${vehicle.vehicleInfo?.make || 'Vehicle'} ${vehicle.vehicleInfo?.model || vehicle.vehicleId}`}
             position={[vehicle.latitude, vehicle.longitude]}
             icon={createVehicleIcon(
               vehicle.vehicleInfo?.status || 'available',
@@ -253,7 +254,7 @@ export default function VehicleMap() {
                   </div>
                   {vehicle.speed !== undefined && (
                     <div>
-                      <span className="font-medium">Speed:</span> {vehicle.speed.toFixed(1)} km/h
+                      <span className="font-medium">Speed:</span> {(vehicle.speed * 0.621371).toFixed(1)} mph
                     </div>
                   )}
                   <div className="text-xs text-gray-500 mt-2">

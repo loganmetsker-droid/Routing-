@@ -3,9 +3,15 @@ import { AutoAwesome, Tune, PlayArrow } from '@mui/icons-material';
 
 type AICommandBoxProps = {
   defaultText?: string;
+  onRefine?: () => void;
+  onExecute?: () => void;
 };
 
-export default function AICommandBox({ defaultText = 'Suggest route balancing and dispatch priorities for the next 2 hours.' }: AICommandBoxProps) {
+export default function AICommandBox({
+  defaultText = 'Suggest route balancing and dispatch priorities for the next 2 hours.',
+  onRefine,
+  onExecute,
+}: AICommandBoxProps) {
   return (
     <Box
       sx={{
@@ -31,10 +37,10 @@ export default function AICommandBox({ defaultText = 'Suggest route balancing an
         placeholder="Type dispatch intent..."
       />
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1.25 }}>
-        <Button size="small" variant="outlined" startIcon={<Tune />} sx={{ borderRadius: 2 }}>
+        <Button size="small" variant="outlined" startIcon={<Tune />} onClick={onRefine} disabled={!onRefine} sx={{ borderRadius: 2 }}>
           Refine
         </Button>
-        <Button size="small" variant="contained" startIcon={<PlayArrow />} sx={{ borderRadius: 2 }}>
+        <Button size="small" variant="contained" startIcon={<PlayArrow />} onClick={onExecute} disabled={!onExecute} sx={{ borderRadius: 2 }}>
           Execute
         </Button>
       </Stack>

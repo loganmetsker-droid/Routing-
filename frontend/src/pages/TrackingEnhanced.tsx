@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { Box, Button, Grid, List, ListItem, ListItemText, Stack, Typography } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import { useQueryClient } from '@tanstack/react-query';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import { StatusPill } from '../components/StatusPill';
@@ -19,7 +20,12 @@ import {
   useTrackingLocationsQuery,
 } from '../services/trackingApi';
 import { trovanColors } from '../theme/designTokens';
-import { MapFilmOverlay, trovanMapLayer } from '../components/maps/mapPresentation';
+import {
+  MapFilmOverlay,
+  MapStyleToggle,
+  trovanMapLayers,
+  usePersistedTrovanMapStyle,
+} from '../components/maps/mapPresentation';
 
 const STALE_SIGNAL_MS = 15 * 60 * 1000;
 
@@ -30,6 +36,8 @@ export default function TrackingEnhanced() {
   const driversQuery = useDriversQuery();
   const optimizerHealthQuery = useDispatchOptimizerHealthQuery();
   const trackingQuery = useTrackingLocationsQuery();
+  const [mapStyle, setMapStyle] = usePersistedTrovanMapStyle();
+  const activeMapLayer = trovanMapLayers[mapStyle];
 
   useEffect(() => {
     const unsubscribe = subscribeToTrackingLocations((snapshot) => {
@@ -64,11 +72,8 @@ export default function TrackingEnhanced() {
     [routes],
   );
   const liveLocations = useMemo(
-    () =>
-      trackingSnapshot.vehicles.filter((location) =>
-        liveRoutes.some((route) => route.vehicleId === location.vehicleId),
-      ),
-    [liveRoutes, trackingSnapshot.vehicles],
+    () => trackingSnapshot.vehicles,
+    [trackingSnapshot.vehicles],
   );
   const staleSignals = useMemo(
     () =>
@@ -101,12 +106,22 @@ export default function TrackingEnhanced() {
       <PageHeader
         eyebrow="Live Dispatch"
         title="Telemetry monitoring"
-        subtitle="Persisted vehicle signals, route context, and stale-location pressure without the old toy dashboard treatment."
+        subtitle="Persisted vehicle signals, route context, and stale-location pressure."
         actions={
-          <StatusPill
-            label={optimizerHealth?.status === 'healthy' ? 'System healthy' : 'Needs review'}
-            tone={optimizerHealth?.status === 'healthy' ? 'success' : 'warning'}
-          />
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+            <Button
+              variant="outlined"
+              size="small"
+              aria-pressed
+              onClick={() => queryClient.invalidateQueries({ queryKey: queryKeys.trackingOverview })}
+            >
+              All Routes
+            </Button>
+            <StatusPill
+              label={optimizerHealth?.status === 'healthy' ? 'System healthy' : 'Needs review'}
+              tone={optimizerHealth?.status === 'healthy' ? 'success' : 'warning'}
+            />
+          </Stack>
         }
       />
 
@@ -114,6 +129,12 @@ export default function TrackingEnhanced() {
         <SurfacePanel variant="command" sx={{ py: 5, px: { xs: 2.5, md: 4 } }}>
           <Stack spacing={2.5} alignItems="flex-start" maxWidth={720}>
             <StatusPill label="Telemetry offline" tone="warning" />
+            <Box
+              aria-label="Tracking map style"
+              sx={{ position: 'relative', width: 220, height: 58 }}
+            >
+              <MapStyleToggle value={mapStyle} onChange={setMapStyle} />
+            </Box>
             <Box>
               <Typography variant="h3" sx={{ mb: 1 }}>No live telemetry connected</Typography>
               <Typography variant="body1" color="text.secondary">
@@ -154,10 +175,18 @@ export default function TrackingEnhanced() {
                     borderColor: 'divider',
                     background:
                       'linear-gradient(180deg, rgba(21,18,16,0.96), rgba(30,26,23,0.92))',
+                    '& .MuiTypography-root': {
+                      color: '#FFF8ED',
+                    },
+                    '& .MuiTypography-body2': {
+                      color: alpha('#FFF8ED', 0.72),
+                    },
                   }}
                 >
-                  <Typography variant="h4">Live positioning</Typography>
-                  <Typography variant="body2" color="text.secondary">Latest persisted vehicle telemetry with route context.</Typography>
+                  <Typography variant="h4" sx={{ color: '#FFF8ED' }}>Live positioning</Typography>
+                  <Typography variant="body2" sx={{ color: alpha('#FFF8ED', 0.72) }}>
+                    Latest persisted vehicle telemetry with route context.
+                  </Typography>
                 </Box>
                 <Box
                   sx={{
@@ -165,11 +194,27 @@ export default function TrackingEnhanced() {
                     minHeight: 420,
                     bgcolor: trovanColors.utility.mapCanvas,
                     position: 'relative',
+                    '& .leaflet-tile-pane': {
+                      filter: activeMapLayer.tileFilter,
+                    },
                   }}
                   className="trovan-map"
                 >
+                  <MapStyleToggle value={mapStyle} onChange={setMapStyle} />
                   <MapContainer attributionControl={false} center={mapCenter} zoom={10} style={{ height: '100%', width: '100%' }}>
-                    <TileLayer url={trovanMapLayer.url} attribution={trovanMapLayer.attribution} />
+                    <TileLayer
+                      key={`${mapStyle}-base`}
+                      url={activeMapLayer.url}
+                      attribution={activeMapLayer.attribution}
+                    />
+                    {activeMapLayer.labelUrl ? (
+                      <TileLayer
+                        key={`${mapStyle}-labels`}
+                        url={activeMapLayer.labelUrl}
+                        opacity={activeMapLayer.labelOpacity ?? 0.82}
+                        zIndex={280}
+                      />
+                    ) : null}
                     {liveLocations.map((location) => {
                       const route = liveRoutes.find((item) => item.vehicleId === location.vehicleId);
                       const driver = drivers.find((item) => item.id === route?.driverId);
@@ -199,7 +244,7 @@ export default function TrackingEnhanced() {
                       );
                     })}
                   </MapContainer>
-                  <MapFilmOverlay />
+                  <MapFilmOverlay variant={mapStyle} />
                 </Box>
               </SurfacePanel>
             </Grid>

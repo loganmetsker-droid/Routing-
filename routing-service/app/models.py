@@ -1,6 +1,6 @@
 """SQLAlchemy models matching the PostgreSQL database schema."""
 
-from sqlalchemy import Column, String, Integer, Float, DateTime, JSON, Numeric
+from sqlalchemy import Column, DateTime, Integer, JSON, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
 from geoalchemy2 import Geography
 from app.database import Base

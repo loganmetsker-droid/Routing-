@@ -23,7 +23,7 @@ export function StatusPill({
 }: StatusPillProps) {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
-  const baseText = isDark ? '#FFF8ED' : '#17110D';
+  const baseText = isDark ? trovanColors.dark.text : trovanColors.light.text;
   const toneStyles: Record<StatusPillTone, { color: string; border: string; background: string }> = {
     default: {
       color: alpha(baseText, 0.78),
@@ -31,22 +31,22 @@ export function StatusPill({
       background: alpha(baseText, isDark ? 0.045 : 0.055),
     },
     success: {
-      color: isDark ? '#9BC38F' : '#315F3B',
+      color: isDark ? '#7DE2AD' : '#137C4B',
       border: alpha(trovanColors.semantic.success, isDark ? 0.18 : 0.26),
       background: alpha(trovanColors.semantic.success, isDark ? 0.065 : 0.095),
     },
     warning: {
-      color: isDark ? '#E2B36D' : '#7A4F18',
+      color: isDark ? '#FFD08A' : '#925400',
       border: alpha(trovanColors.semantic.warning, isDark ? 0.18 : 0.26),
       background: alpha(trovanColors.semantic.warning, isDark ? 0.065 : 0.1),
     },
     danger: {
-      color: isDark ? '#D98978' : '#814039',
+      color: isDark ? '#FFA29E' : '#B42318',
       border: alpha(trovanColors.semantic.danger, isDark ? 0.18 : 0.26),
       background: alpha(trovanColors.semantic.danger, isDark ? 0.065 : 0.095),
     },
     info: {
-      color: isDark ? '#9FB1D8' : '#445E83',
+      color: isDark ? '#9DCCFF' : '#175CD3',
       border: alpha(trovanColors.semantic.info, isDark ? 0.18 : 0.25),
       background: alpha(trovanColors.semantic.info, isDark ? 0.065 : 0.09),
     },

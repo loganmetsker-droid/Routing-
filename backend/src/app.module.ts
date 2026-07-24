@@ -28,7 +28,6 @@ import { JobsModule } from './modules/jobs/jobs.module';
 import { CustomersModule } from './modules/customers/customers.module';
 import { DispatchModule } from './modules/dispatch/dispatch.module';
 import { RoutesModule } from './modules/routes/routes.module';
-import { DispatchesModule } from './modules/dispatches/dispatches.module';
 import { TrackingModule } from './modules/tracking/tracking.module';
 import { PlanningModule } from './modules/planning/planning.module';
 import { HealthModule } from './modules/health/health.module';
@@ -37,6 +36,7 @@ import { SubscriptionsModule } from './modules/subscriptions/subscriptions.modul
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { PlatformModule } from './modules/platform/platform.module';
 import { PublicApiModule } from './modules/public-api/public-api.module';
+import { MarketingLeadsModule } from './modules/marketing-leads/marketing-leads.module';
 import { AuditModule } from './common/audit/audit.module';
 import { RuntimeStatusModule } from './common/runtime/runtime-status.module';
 import { WorkosModule } from './common/integrations/workos.module';
@@ -135,13 +135,13 @@ import { WorkosModule } from './common/integrations/workos.module';
     CustomersModule,
     DispatchModule,
     RoutesModule,
-    DispatchesModule,
     TrackingModule,
     PlanningModule,
     SubscriptionsModule,
     NotificationsModule,
     PlatformModule,
     PublicApiModule,
+    MarketingLeadsModule,
   ],
   providers: [
     {

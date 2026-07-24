@@ -1,12 +1,20 @@
 import { Box, Stack, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
+import {
+  getTrovanDataMode,
+  getTrovanDataModeCopy,
+  type TrovanDataMode,
+} from '../services/dataMode';
 import { trovanColors } from '../theme/designTokens';
 
+export function shouldShowDataModeBanner(mode: TrovanDataMode) {
+  return import.meta.env.DEV || mode !== 'live';
+}
+
 export function PreviewBanner() {
-  const showPreviewBanner =
-    import.meta.env.DEV ||
-    import.meta.env.VITE_MOCK_PREVIEW === 'true' ||
-    import.meta.env.VITE_AUTH_BYPASS === 'true';
+  const mode = getTrovanDataMode();
+  const showPreviewBanner = shouldShowDataModeBanner(mode);
+  const copy = getTrovanDataModeCopy(mode);
 
   if (!showPreviewBanner) {
     return null;
@@ -18,12 +26,14 @@ export function PreviewBanner() {
       spacing={0.7}
       alignItems="center"
       sx={{
-        px: 0.85,
+        px: 1.05,
         py: 0.45,
-        borderRadius: 1.1,
-        bgcolor: alpha(trovanColors.utility.panel, 0.84),
-        border: `1px solid ${alpha(trovanColors.copper[500], 0.11)}`,
+        borderRadius: 999,
+        bgcolor: alpha(trovanColors.copper[500], 0.1),
+        border: `1px solid ${alpha(trovanColors.copper[500], 0.24)}`,
         width: 'fit-content',
+        maxWidth: '100%',
+        minWidth: 0,
       }}
     >
       <Box
@@ -36,11 +46,21 @@ export function PreviewBanner() {
           flexShrink: 0,
         }}
       />
-      <Typography variant="caption" sx={{ fontWeight: 700, lineHeight: 1 }}>
-        Preview
+      <Typography variant="caption" sx={{ fontWeight: 800, fontSize: 11.5, lineHeight: 1, whiteSpace: 'nowrap' }}>
+        {copy.label}
       </Typography>
-      <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1 }}>
-        {import.meta.env.VITE_REST_API_URL || 'Mock API'}
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{
+          lineHeight: 1,
+          fontSize: 11.5,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {copy.detail}
       </Typography>
     </Stack>
   );

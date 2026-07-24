@@ -63,7 +63,11 @@ export class NotificationsService {
   }
 
   private getSmsProvider() {
-    return this.configService.get<string>('TWILIO_ACCOUNT_SID') &&
+    const smsEnabled =
+      this.configService.get<string>('SMS_NOTIFICATIONS_ENABLED', 'false') ===
+      'true';
+    return smsEnabled &&
+      this.configService.get<string>('TWILIO_ACCOUNT_SID') &&
       this.configService.get<string>('TWILIO_AUTH_TOKEN') &&
       this.configService.get<string>('TWILIO_FROM_NUMBER')
       ? 'twilio'
@@ -120,9 +124,10 @@ export class NotificationsService {
           ? notifications.emailEnabled
           : true,
       smsEnabled:
-        typeof notifications.smsEnabled === 'boolean'
-          ? notifications.smsEnabled
-          : true,
+        this.configService.get<string>(
+          'SMS_NOTIFICATIONS_ENABLED',
+          'false',
+        ) === 'true' && notifications.smsEnabled === true,
       replyToEmail:
         typeof notifications.replyToEmail === 'string'
           ? notifications.replyToEmail

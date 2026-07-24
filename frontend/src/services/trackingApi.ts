@@ -1,3 +1,4 @@
+import { unwrapApiData } from '@shared/contracts';
 import { getApiBaseUrl } from './apiClient';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from './api.session';
@@ -91,6 +92,40 @@ const normalizeTrackingSnapshot = (
     vehicles,
     timestamp: String(data.timestamp || nowIso()),
     count: Number(data.count ?? vehicles.length),
+  };
+};
+
+export const normalizeTrackingReadiness = (
+  payload: unknown,
+): TrackingReadiness | null => {
+  const data = unwrapApiData<unknown>(payload);
+  const value = isRecord(data) ? data : {};
+  const summary = isRecord(value.summary) ? value.summary : {};
+
+  if (!('ready' in value) && !('summary' in value)) {
+    return null;
+  }
+
+  return {
+    ready: Boolean(value.ready),
+    checkedAt: String(value.checkedAt ?? nowIso()),
+    organizationId:
+      typeof value.organizationId === 'string' ? value.organizationId : undefined,
+    summary: {
+      telemetryRecords: Number.isFinite(Number(summary.telemetryRecords))
+        ? Number(summary.telemetryRecords)
+        : 0,
+      vehiclesTracked: Number.isFinite(Number(summary.vehiclesTracked))
+        ? Number(summary.vehiclesTracked)
+        : 0,
+      activeVehicles: Number.isFinite(Number(summary.activeVehicles))
+        ? Number(summary.activeVehicles)
+        : 0,
+      latestTelemetryAt:
+        typeof summary.latestTelemetryAt === 'string'
+          ? summary.latestTelemetryAt
+          : undefined,
+    },
   };
 };
 
@@ -289,7 +324,7 @@ export const getTrackingReadiness = async (): Promise<TrackingReadiness | null> 
 
   try {
     const response = await apiFetch('/api/tracking/readiness');
-    return await response.json();
+    return normalizeTrackingReadiness(await response.json());
   } catch (error) {
     console.error('Error fetching tracking readiness:', error);
     return null;

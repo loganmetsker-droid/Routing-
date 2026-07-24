@@ -8,7 +8,7 @@ import {
   isDriverOnlyAuthUser,
   isAuthBypassed,
   isAuthenticated,
-  validateSession,
+  validateSessionState,
 } from './services/api';
 import ErrorBoundary from './components/ui/ErrorBoundary';
 
@@ -21,6 +21,7 @@ const TrackingEnhanced = lazy(() => import('./pages/TrackingEnhanced'));
 const DispatchBoardOpsPage = lazy(() => import('./pages/DispatchBoardOpsPage'));
 const RoutingWorkspacePage = lazy(() => import('./pages/RoutingWorkspacePage'));
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
+const ProofOfDeliveryPage = lazy(() => import('./pages/ProofOfDeliveryPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const RouteRunDetailPage = lazy(() => import('./pages/RouteRunDetailPage'));
 const ExceptionsQueuePage = lazy(() => import('./pages/ExceptionsQueuePage'));
@@ -55,8 +56,8 @@ function AuthGate({
         return;
       }
 
-      const ok = await validateSession();
-      if (ok && redirectDriverOnly) {
+      const sessionState = await validateSessionState();
+      if (sessionState.status === 'valid' && redirectDriverOnly) {
         const session = await getSession().catch(() => null);
         if (!cancelled && isDriverOnlyAuthUser(session?.user)) {
           setRedirectTo('/driver');
@@ -66,7 +67,7 @@ function AuthGate({
         }
       }
       if (!cancelled) {
-        setValid(ok);
+        setValid(sessionState.status !== 'invalid');
         setChecking(false);
       }
     };
@@ -201,18 +202,26 @@ function App() {
         </Route>
         <Route path="/" element={<ProtectedLayout />}>
           <Route path="dashboard" element={<Dashboard />} />
+          <Route path="loads" element={<JobsPageEnhancedV2 />} />
           <Route path="jobs" element={<JobsPageEnhancedV2 />} />
           <Route path="routing" element={<RoutingWorkspacePage />} />
+          <Route path="routes" element={<RoutingWorkspacePage />} />
           <Route path="planning" element={<RoutingWorkspacePage />} />
           <Route path="dispatch" element={<DispatchBoardOpsPage />} />
+          <Route path="messages" element={<DispatchBoardOpsPage />} />
           <Route path="route-runs/:id" element={<RouteRunDetailPage />} />
           <Route path="exceptions" element={<ExceptionsQueuePage />} />
           <Route path="tracking" element={<TrackingEnhanced />} />
+          <Route path="depots" element={<TrackingEnhanced />} />
           <Route path="drivers" element={<DriversPage />} />
           <Route path="vehicles" element={<VehiclesPage />} />
+          <Route path="assets" element={<VehiclesPage />} />
           <Route path="customers" element={<CustomersPage />} />
+          <Route path="pod/*" element={<ProofOfDeliveryPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />
+          <Route path="billing" element={<SettingsPage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="integrations" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>

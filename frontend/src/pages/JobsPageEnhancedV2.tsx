@@ -9,6 +9,9 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
+  FormControlLabel,
+  IconButton,
   MenuItem,
   Stack,
   Table,
@@ -20,35 +23,49 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { alpha } from '@mui/material/styles';
-import { PageHeader } from '../components/PageHeader';
+import {
+  Add,
+  ArchiveOutlined,
+  BlockOutlined,
+  FileUploadOutlined,
+  Groups2Outlined,
+  KeyboardArrowDown,
+  MoreHoriz,
+} from '@mui/icons-material';
+import { alpha, useTheme } from '@mui/material/styles';
+import { CircleMarker, MapContainer, Polyline, TileLayer } from 'react-leaflet';
+import 'leaflet/dist/leaflet.css';
 import { StatusPill, type StatusPillTone } from '../components/StatusPill';
 import { SurfacePanel } from '../components/SurfacePanel';
 import LoadingState from '../components/ui/LoadingState';
+import { trovanMapLayers } from '../components/maps/mapPresentation';
 import type { CustomerRecord } from '../services/customersApi';
 import { useCustomersQuery } from '../services/customersApi';
+import { useDriversQuery, useVehiclesQuery } from '../services/fleetApi';
 import {
   useCreateJobMutation,
   useJobsQuery,
   useUpdateJobMutation,
 } from '../services/jobsApi';
-
-interface JobRecord {
-  id?: string;
-  customerId?: string;
-  customerName: string;
-  deliveryAddress: string;
-  pickupAddress?: string;
-  priority?: string;
-  status?: string;
-  createdAt?: string;
-  assignedRouteId?: string | null;
-}
+import type { JobRecord } from '../services/api.types';
+import { usePlannerQuery } from '../services/plannerApi';
+import { trovanColors } from '../theme/designTokens';
+import {
+  formatJobEta,
+  formatJobWindow,
+  formatPersonName,
+  formatVehicleName,
+  getJobDriver,
+  getJobRoute,
+  getJobVehicle,
+} from './jobs/jobPresentation';
 
 type FilterKey = 'all' | 'today' | 'unassigned' | 'high' | 'completed';
 type StatusFilter = 'all' | 'pending' | 'assigned' | 'in_progress' | 'completed';
 type PriorityFilter = 'all' | 'low' | 'normal' | 'high' | 'urgent';
 type AssignmentFilter = 'all' | 'assigned' | 'unassigned';
+type ServiceTypeFilter = 'all' | 'delivery' | 'special';
+type TimeWindowFilter = 'all' | 'set' | 'missing';
 
 type SavedViewRecord = {
   id: string;
@@ -70,6 +87,36 @@ type ImportCandidate = {
   pickupAddress?: string;
   priority: 'low' | 'normal' | 'high' | 'urgent';
   status: string;
+  timeWindowStart?: string;
+  timeWindowEnd?: string;
+  estimatedDuration?: number;
+  routingRequirements?: JobRecord['routingRequirements'];
+};
+
+type JobFormData = {
+  customerId: string;
+  customerName: string;
+  deliveryAddress: string;
+  pickupAddress: string;
+  priority: string;
+  timeWindowStart: string;
+  timeWindowEnd: string;
+  estimatedDuration: string;
+  palletCount: string;
+  palletLengthIn: string;
+  palletWidthIn: string;
+  palletHeightIn: string;
+  palletWeightLb: string;
+  stackable: boolean;
+  requiredEquipment: string;
+  requiredDriverName: string;
+  siteAccessNotes: string;
+  dockAppointment: boolean;
+  liftgateRequired: boolean;
+  insideDelivery: boolean;
+  temperatureRequirement: string;
+  hazmatClass: string;
+  handlingRequirement: string;
 };
 
 const SAVED_VIEWS_STORAGE_KEY = 'trovan.jobs.savedViews';
@@ -152,6 +199,128 @@ const normalizeImportPriority = (value: string | undefined): ImportCandidate['pr
   return 'normal';
 };
 
+const toDateTimeLocal = (date: Date) => {
+  const offset = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+};
+
+const createDefaultFormData = (): JobFormData => {
+  const start = new Date(Date.now() + 60 * 60 * 1000);
+  const end = new Date(Date.now() + 3 * 60 * 60 * 1000);
+  return {
+    customerId: '',
+    customerName: '',
+    deliveryAddress: '',
+    pickupAddress: '',
+    priority: 'normal',
+    timeWindowStart: toDateTimeLocal(start),
+    timeWindowEnd: toDateTimeLocal(end),
+    estimatedDuration: '45',
+    palletCount: '',
+    palletLengthIn: '48',
+    palletWidthIn: '40',
+    palletHeightIn: '',
+    palletWeightLb: '',
+    stackable: true,
+    requiredEquipment: '',
+    requiredDriverName: '',
+    siteAccessNotes: '',
+    dockAppointment: false,
+    liftgateRequired: false,
+    insideDelivery: false,
+    temperatureRequirement: '',
+    hazmatClass: '',
+    handlingRequirement: '',
+  };
+};
+
+const optionalNumber = (value: unknown): number | undefined => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && String(value ?? '').trim() !== ''
+    ? parsed
+    : undefined;
+};
+
+const optionalBoolean = (value: unknown): boolean | undefined => {
+  if (typeof value === 'boolean') return value;
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (['true', 'yes', '1', 'y'].includes(normalized)) return true;
+  if (['false', 'no', '0', 'n'].includes(normalized)) return false;
+  return undefined;
+};
+
+const toIsoFromLocal = (value: string): string | undefined => {
+  if (!value.trim()) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+};
+
+const parseEquipmentList = (value: string): string[] =>
+  value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const buildRoutingRequirements = (
+  formData: JobFormData,
+): JobRecord['routingRequirements'] => ({
+  load: {
+    palletCount: optionalNumber(formData.palletCount),
+    palletLengthIn: optionalNumber(formData.palletLengthIn),
+    palletWidthIn: optionalNumber(formData.palletWidthIn),
+    palletHeightIn: optionalNumber(formData.palletHeightIn),
+    palletWeightLb: optionalNumber(formData.palletWeightLb),
+    stackable: formData.stackable,
+  },
+  requiredEquipment: parseEquipmentList(formData.requiredEquipment),
+  requiredDriverName: formData.requiredDriverName.trim() || undefined,
+  site: {
+    accessNotes: formData.siteAccessNotes.trim() || undefined,
+    dockAppointment: formData.dockAppointment,
+    liftgateRequired: formData.liftgateRequired,
+    insideDelivery: formData.insideDelivery,
+  },
+  temperatureRequirement: formData.temperatureRequirement.trim() || undefined,
+  hazmatClass: formData.hazmatClass.trim() || undefined,
+  handlingRequirement: formData.handlingRequirement.trim() || undefined,
+});
+
+const extractRoutingRequirements = (
+  record: Record<string, unknown>,
+): JobRecord['routingRequirements'] => {
+  const existing = record.routingRequirements;
+  if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
+    return existing as JobRecord['routingRequirements'];
+  }
+
+  return {
+    load: {
+      palletCount: optionalNumber(record.palletCount ?? record.pallet_count),
+      palletLengthIn: optionalNumber(record.palletLengthIn ?? record.pallet_length_in),
+      palletWidthIn: optionalNumber(record.palletWidthIn ?? record.pallet_width_in),
+      palletHeightIn: optionalNumber(record.palletHeightIn ?? record.pallet_height_in),
+      palletWeightLb: optionalNumber(record.palletWeightLb ?? record.pallet_weight_lb),
+      stackable: optionalBoolean(record.stackable ?? record.nonStackable) === undefined
+        ? undefined
+        : optionalBoolean(record.stackable) ?? !optionalBoolean(record.nonStackable),
+    },
+    requiredEquipment: String(record.requiredEquipment || record.required_equipment || '')
+      .split(/[;,]/)
+      .map((item) => item.trim())
+      .filter(Boolean),
+    requiredDriverName: String(record.requiredDriverName || record.required_driver || '').trim() || undefined,
+    site: {
+      accessNotes: String(record.siteAccessNotes || record.site_access || record.accessNotes || '').trim() || undefined,
+      dockAppointment: optionalBoolean(record.dockAppointment ?? record.dock_appointment),
+      liftgateRequired: optionalBoolean(record.liftgateRequired ?? record.liftgate_required),
+      insideDelivery: optionalBoolean(record.insideDelivery ?? record.inside_delivery),
+    },
+    temperatureRequirement: String(record.temperatureRequirement || record.temperature || '').trim() || undefined,
+    hazmatClass: String(record.hazmatClass || record.hazmat || '').trim() || undefined,
+    handlingRequirement: String(record.handlingRequirement || record.handling || '').trim() || undefined,
+  };
+};
+
 const normalizeImportCandidate = (record: Record<string, unknown>): ImportCandidate => ({
   customerId: String(record.customerId || record.customer_id || '').trim() || undefined,
   customerName: String(record.customerName || record.customer_name || record.customer || '').trim() || 'Imported customer',
@@ -159,6 +328,10 @@ const normalizeImportCandidate = (record: Record<string, unknown>): ImportCandid
   pickupAddress: String(record.pickupAddress || record.pickup_address || '').trim() || undefined,
   priority: normalizeImportPriority(String(record.priority || record.jobPriority || 'normal')),
   status: String(record.status || 'pending').trim() || 'pending',
+  timeWindowStart: String(record.timeWindowStart || record.time_window_start || '').trim() || undefined,
+  timeWindowEnd: String(record.timeWindowEnd || record.time_window_end || '').trim() || undefined,
+  estimatedDuration: optionalNumber(record.estimatedDuration ?? record.serviceDuration ?? record.service_duration),
+  routingRequirements: extractRoutingRequirements(record),
 });
 
 const jobStatusTone = (status: string | undefined): StatusPillTone => {
@@ -177,6 +350,106 @@ const priorityTone = (priority: string | undefined): StatusPillTone => {
   if (normalized === 'high') return 'warning';
   return 'default';
 };
+
+const readinessTone = (job: JobRecord): StatusPillTone => {
+  const status = job.routingReadiness?.status;
+  if (status === 'routable') return 'success';
+  if (status === 'access_risk' || status === 'appointment_risk') return 'warning';
+  if (status === 'capacity_risk' || status === 'missing_data') return 'danger';
+  return 'default';
+};
+
+const readinessLabel = (job: JobRecord) =>
+  String(job.routingReadiness?.status || 'missing_data').replace(/_/g, ' ');
+
+const formatLoadSummary = (job: JobRecord) => {
+  const summary = job.routingReadiness?.loadSummary;
+  if (!summary?.palletCount) return 'Load details pending';
+  const parts = [`${summary.palletCount} pallets`];
+  if (summary.totalWeightKg) parts.push(`${Math.round(summary.totalWeightKg * 2.20462).toLocaleString()} lb`);
+  if (summary.totalVolumeM3) parts.push(`${(summary.totalVolumeM3 * 35.3147).toFixed(1)} cu ft`);
+  parts.push(summary.stackable === false ? 'non-stackable' : 'stackable');
+  return parts.join(' • ');
+};
+
+const formatReasonCodes = (job: JobRecord) =>
+  job.routingReadiness?.reasonCodes.length
+    ? job.routingReadiness.reasonCodes.map((code) => code.replace(/_/g, ' ').toLowerCase()).join(', ')
+    : job.routingReadiness?.summary || 'Ready for routing';
+
+const hasSpecialHandling = (job: JobRecord) =>
+  Boolean(
+    job.routingRequirements?.requiredEquipment?.length ||
+      job.routingRequirements?.requiredDriverName ||
+      job.routingRequirements?.site?.dockAppointment ||
+      job.routingRequirements?.site?.liftgateRequired ||
+      job.routingRequirements?.site?.insideDelivery ||
+      job.routingRequirements?.site?.accessNotes ||
+      job.routingRequirements?.temperatureRequirement ||
+      job.routingRequirements?.hazmatClass ||
+      job.routingRequirements?.handlingRequirement,
+  );
+
+const readLocation = (value: unknown): { lat: number; lng: number } | null => {
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as { lat?: unknown; lng?: unknown; latitude?: unknown; longitude?: unknown };
+  const lat = Number(candidate.lat ?? candidate.latitude);
+  const lng = Number(candidate.lng ?? candidate.longitude);
+  return Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+};
+
+function JobMiniMap({ job }: { job: JobRecord }) {
+  const layer = trovanMapLayers.streets;
+  const pickup = readLocation(job.pickupLocation);
+  const delivery = readLocation(job.deliveryLocation);
+  const center = delivery || pickup || { lat: 39.7392, lng: -104.9903 };
+  const line = [pickup, delivery].filter(Boolean) as Array<{ lat: number; lng: number }>;
+
+  return (
+    <Box
+      data-testid="jobs-inspector-map"
+      sx={{
+        height: 170,
+        overflow: 'hidden',
+        borderRadius: 1,
+        border: '1px solid',
+        borderColor: 'divider',
+        position: 'relative',
+        '& .leaflet-container': { height: '100%', width: '100%', bgcolor: 'background.default' },
+        '& .leaflet-tile-pane': { filter: layer.tileFilter },
+        '& .leaflet-control-container': { display: 'none' },
+      }}
+    >
+      <MapContainer
+        attributionControl={false}
+        center={[center.lat, center.lng]}
+        zoom={pickup && delivery ? 12 : 11}
+        scrollWheelZoom={false}
+        dragging={false}
+        doubleClickZoom={false}
+        zoomControl={false}
+        style={{ height: '100%', width: '100%' }}
+      >
+        <TileLayer url={layer.url} attribution={layer.attribution} />
+        {layer.labelUrl ? (
+          <TileLayer url={layer.labelUrl} attribution={layer.attribution} opacity={layer.labelOpacity ?? 0.65} />
+        ) : null}
+        {line.length === 2 ? (
+          <Polyline
+            positions={line.map((point) => [point.lat, point.lng] as [number, number])}
+            pathOptions={{ color: '#B87333', weight: 4, opacity: 0.82 }}
+          />
+        ) : null}
+        {pickup ? (
+          <CircleMarker center={[pickup.lat, pickup.lng]} radius={6} pathOptions={{ color: '#0B1324', fillColor: '#fff', fillOpacity: 1, weight: 3 }} />
+        ) : null}
+        {delivery ? (
+          <CircleMarker center={[delivery.lat, delivery.lng]} radius={7} pathOptions={{ color: '#B87333', fillColor: '#B87333', fillOpacity: 1, weight: 2 }} />
+        ) : null}
+      </MapContainer>
+    </Box>
+  );
+}
 
 const parseImportFile = async (file: File): Promise<ImportCandidate[]> => {
   const contents = await file.text();
@@ -216,6 +489,7 @@ const parseImportFile = async (file: File): Promise<ImportCandidate[]> => {
 };
 
 export default function JobsPageEnhancedV2() {
+  const theme = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -235,10 +509,15 @@ export default function JobsPageEnhancedV2() {
   const importDialogOpen = searchParams.get('import') === 'true';
   const savedViewsOpen = searchParams.get('views') === 'true';
   const todayKey = new Date().toISOString().slice(0, 10);
+  const driversQuery = useDriversQuery();
+  const vehiclesQuery = useVehiclesQuery();
+  const plannerQuery = usePlannerQuery(todayKey);
 
   const [jobs, setJobs] = useState<JobRecord[]>([]);
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [selectedJobIds, setSelectedJobIds] = useState<string[]>([]);
+  const [serviceTypeFilter, setServiceTypeFilter] = useState<ServiceTypeFilter>('all');
+  const [timeWindowFilter, setTimeWindowFilter] = useState<TimeWindowFilter>('all');
   const [savedViews, setSavedViews] = useState<SavedViewRecord[]>(() => parseSavedViews());
   const [savedViewName, setSavedViewName] = useState('');
   const [importCandidates, setImportCandidates] = useState<ImportCandidate[]>([]);
@@ -246,12 +525,8 @@ export default function JobsPageEnhancedV2() {
   const [importError, setImportError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [bannerMessage, setBannerMessage] = useState<string | null>(null);
-  const [formData, setFormData] = useState({
-    customerId: '',
-    customerName: '',
-    deliveryAddress: '',
-    priority: 'normal',
-  });
+  const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
+  const [formData, setFormData] = useState<JobFormData>(() => createDefaultFormData());
 
   const updateUrl = (updates: Record<string, string | null | undefined>, options: { replace?: boolean } = {}) => {
     const nextParams = new URLSearchParams(location.search);
@@ -325,6 +600,16 @@ export default function JobsPageEnhancedV2() {
         return true;
       })
       .filter((job) => {
+        if (serviceTypeFilter === 'special') return hasSpecialHandling(job);
+        return true;
+      })
+      .filter((job) => {
+        const hasWindow = Boolean(job.timeWindow?.start || job.timeWindowStart || job.timeWindow?.end || job.timeWindowEnd);
+        if (timeWindowFilter === 'set') return hasWindow;
+        if (timeWindowFilter === 'missing') return !hasWindow;
+        return true;
+      })
+      .filter((job) => {
         if (!normalizedSearch) return true;
         const haystack = [
           job.id,
@@ -339,15 +624,27 @@ export default function JobsPageEnhancedV2() {
           .toLowerCase();
         return haystack.includes(normalizedSearch);
       });
-  }, [activeFilter, assignmentFilter, jobs, priorityFilter, searchTerm, statusFilter, todayKey]);
+  }, [activeFilter, assignmentFilter, jobs, priorityFilter, searchTerm, serviceTypeFilter, statusFilter, timeWindowFilter, todayKey]);
 
   useEffect(() => {
     setSelectedJobIds((current) => current.filter((id) => visibleJobs.some((job) => job.id === id)));
   }, [visibleJobs]);
 
   const selectedJobs = visibleJobs.filter((job) => job.id && selectedJobIds.includes(job.id));
+  const selectableJobIds = visibleJobs.map((job) => job.id).filter(Boolean) as string[];
+  const allVisibleJobsSelected = selectableJobIds.length > 0 && selectedJobIds.length === selectableJobIds.length;
   const activeView = savedViews.find((view) => view.id === activeViewId) || null;
   const focusedJob = selectedJobs[0] || visibleJobs[0] || null;
+  const routeGroups = plannerQuery.data?.groups ?? [];
+  const routeStops = plannerQuery.data?.stops ?? [];
+  const drivers = driversQuery.data ?? [];
+  const vehicles = vehiclesQuery.data ?? [];
+  const focusedRoute = focusedJob ? getJobRoute(focusedJob, routeGroups, routeStops) : null;
+  const focusedDriver = getJobDriver(focusedRoute, drivers);
+  const focusedVehicle = focusedJob ? getJobVehicle(focusedJob, focusedRoute, vehicles) : null;
+  const focusedCustomer = focusedJob
+    ? customers.find((customer) => customer.id === focusedJob.customerId || customer.name === focusedJob.customerName) || null
+    : null;
   const queueCounts = {
     all: jobs.filter((job) => job.status !== 'archived').length,
     unassigned: jobs.filter((job) => !job.assignedRouteId && job.status !== 'archived').length,
@@ -374,6 +671,13 @@ export default function JobsPageEnhancedV2() {
     setBannerMessage('Selected jobs archived from the operator queue.');
   };
 
+  const handleCancelSelected = async () => {
+    await Promise.all(selectedJobIds.map((id) => updateJobMutation.mutateAsync({ id, updates: { status: 'cancelled' } })));
+    setSelectedJobIds([]);
+    await refreshJobs();
+    setBannerMessage('Selected jobs marked cancelled.');
+  };
+
   const handleExport = () => {
     const blob = new Blob([JSON.stringify(selectedJobs, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -393,13 +697,18 @@ export default function JobsPageEnhancedV2() {
         customerPhone: customer?.phone,
         customerEmail: customer?.email,
         deliveryAddress: formData.deliveryAddress,
+        pickupAddress: formData.pickupAddress,
+        timeWindowStart: toIsoFromLocal(formData.timeWindowStart),
+        timeWindowEnd: toIsoFromLocal(formData.timeWindowEnd),
+        estimatedDuration: optionalNumber(formData.estimatedDuration),
+        routingRequirements: buildRoutingRequirements(formData),
         priority: formData.priority,
         status: 'pending',
       });
-      setFormData({ customerId: '', customerName: '', deliveryAddress: '', priority: 'normal' });
+      setFormData(createDefaultFormData());
       updateUrl({ create: null });
       await refreshJobs();
-      setBannerMessage('Job added to the queue.');
+      setBannerMessage('Job added with routing constraints and readiness context.');
     } catch (error) {
       console.error('Failed to create job', error);
     }
@@ -450,6 +759,10 @@ export default function JobsPageEnhancedV2() {
             customerEmail: matchedCustomer?.email,
             deliveryAddress: candidate.deliveryAddress,
             pickupAddress: candidate.pickupAddress,
+            timeWindowStart: candidate.timeWindowStart,
+            timeWindowEnd: candidate.timeWindowEnd,
+            estimatedDuration: candidate.estimatedDuration,
+            routingRequirements: candidate.routingRequirements,
             priority: candidate.priority,
             status: candidate.status || 'pending',
           });
@@ -524,188 +837,286 @@ export default function JobsPageEnhancedV2() {
   }
 
   return (
-    <Box>
-      <PageHeader
-        eyebrow="Planning"
-        title="Jobs queue"
-        subtitle="A dense intake workspace for triage, routing staging, and dispatch handoff."
-        actions={
-          <>
-            <Button variant="outlined" onClick={() => fileInputRef.current?.click()}>Bulk import</Button>
-            <Button variant="outlined" onClick={() => updateUrl({ views: 'true' })}>Saved views</Button>
-            <Button variant="contained" onClick={() => updateUrl({ create: 'true' })}>New job</Button>
-          </>
-        }
-      />
-
+    <Box
+      data-testid="jobs-page"
+      sx={{
+        display: 'grid',
+        gap: 1.25,
+        minWidth: 0,
+        pb: selectedJobIds.length ? 8 : 0,
+      }}
+    >
       <input ref={fileInputRef} type="file" accept=".json,.csv" hidden onChange={handleImportSelection} />
 
       {bannerMessage ? (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setBannerMessage(null)}>
+        <Alert severity="success" onClose={() => setBannerMessage(null)}>
           {bannerMessage}
         </Alert>
       ) : null}
 
-      <SurfacePanel variant="command" padding={1.45} sx={{ mb: 1.5 }}>
-        <Stack spacing={1.25}>
-          <Stack direction={{ xs: 'column', lg: 'row' }} spacing={1} justifyContent="space-between">
-            <Stack direction="row" spacing={1} flexWrap="wrap">
-              <Button
-                size="small"
-                variant={activeFilter === 'all' ? 'contained' : 'outlined'}
-                sx={{ minHeight: 30, px: 1.15 }}
-                onClick={() => updateQueueParams({ filter: 'all', status: 'all', assignment: 'all' })}
-              >
-                All jobs {queueCounts.all}
-              </Button>
-              <Button
-                size="small"
-                variant={activeFilter === 'unassigned' ? 'contained' : 'outlined'}
-                sx={{ minHeight: 30, px: 1.15 }}
-                onClick={() => updateQueueParams({ filter: 'unassigned', assignment: 'unassigned' })}
-              >
-                Unassigned {queueCounts.unassigned}
-              </Button>
-              <Button
-                size="small"
-                variant={assignmentFilter === 'assigned' ? 'contained' : 'outlined'}
-                sx={{ minHeight: 30, px: 1.15 }}
-                onClick={() => updateQueueParams({ assignment: 'assigned' })}
-              >
-                Assigned {queueCounts.assigned}
-              </Button>
-              <Button
-                size="small"
-                variant={statusFilter === 'in_progress' ? 'contained' : 'outlined'}
-                sx={{ minHeight: 30, px: 1.15 }}
-                onClick={() => updateQueueParams({ status: 'in_progress' })}
-              >
-                In transit {queueCounts.inTransit}
-              </Button>
-              <Button
-                size="small"
-                variant={activeFilter === 'completed' ? 'contained' : 'outlined'}
-                sx={{ minHeight: 30, px: 1.15 }}
-                onClick={() => updateQueueParams({ filter: 'completed', status: 'completed' })}
-              >
-                Delivered {queueCounts.completed}
-              </Button>
-            </Stack>
-            <Stack direction="row" spacing={1} flexWrap="wrap">
-              {activeView ? <StatusPill label={`View: ${activeView.name}`} tone="accent" /> : null}
-              <StatusPill label={`${visibleJobs.length} visible`} />
-              <StatusPill label={`${selectedJobIds.length} selected`} tone={selectedJobIds.length ? 'accent' : 'default'} />
-            </Stack>
-          </Stack>
-
-          <Stack direction={{ xs: 'column', xl: 'row' }} spacing={1.2} alignItems={{ xl: 'center' }}>
-            <TextField
+      <SurfacePanel data-testid="jobs-command-panel" variant="command" padding={0} sx={{ overflow: 'hidden' }}>
+        <Stack
+          direction={{ xs: 'column', xl: 'row' }}
+          spacing={1}
+          justifyContent="space-between"
+          alignItems={{ xl: 'center' }}
+          sx={{ px: 1.2, py: 1.1, borderBottom: '1px solid', borderColor: 'divider' }}
+        >
+          <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+            <Button size="small" variant="contained" startIcon={<Add />} onClick={() => updateUrl({ create: 'true' })}>
+              New Job
+            </Button>
+            <Button
               size="small"
-              label="Search jobs"
-              value={searchTerm}
-              onChange={(event) => updateQueueParams({ q: event.target.value })}
-              placeholder="Customer, address, route, or job ID"
-              fullWidth
-            />
-            <TextField
-              select
-              size="small"
-              label="Status"
-              value={statusFilter}
-              onChange={(event) => updateQueueParams({ status: event.target.value as StatusFilter })}
-              sx={{ minWidth: 150 }}
+              variant="outlined"
+              startIcon={<FileUploadOutlined />}
+              onClick={() => updateUrl({ import: 'true' })}
             >
-              <MenuItem value="all">All statuses</MenuItem>
-              <MenuItem value="pending">Pending</MenuItem>
-              <MenuItem value="assigned">Assigned</MenuItem>
-              <MenuItem value="in_progress">In progress</MenuItem>
-              <MenuItem value="completed">Completed</MenuItem>
-            </TextField>
-            <TextField
-              select
+              Import CSV
+            </Button>
+            <Button
               size="small"
-              label="Priority"
-              value={priorityFilter}
-              onChange={(event) => updateQueueParams({ priority: event.target.value as PriorityFilter })}
-              sx={{ minWidth: 140 }}
+              variant="outlined"
+              startIcon={<Groups2Outlined />}
+              disabled={!selectedJobIds.length}
+              onClick={handleOptimizeSelected}
             >
-              <MenuItem value="all">All priorities</MenuItem>
-              <MenuItem value="low">Low</MenuItem>
-              <MenuItem value="normal">Normal</MenuItem>
-              <MenuItem value="high">High</MenuItem>
-              <MenuItem value="urgent">Urgent</MenuItem>
-            </TextField>
-            <TextField
-              select
+              Batch Assign
+            </Button>
+            <Button
               size="small"
-              label="Assignment"
-              value={assignmentFilter}
-              onChange={(event) => updateQueueParams({ assignment: event.target.value as AssignmentFilter })}
-              sx={{ minWidth: 150 }}
+              variant="outlined"
+              startIcon={<ArchiveOutlined />}
+              disabled={!selectedJobIds.length}
+              onClick={() => void handleArchive()}
             >
-              <MenuItem value="all">All jobs</MenuItem>
-              <MenuItem value="assigned">Assigned</MenuItem>
-              <MenuItem value="unassigned">Unassigned</MenuItem>
-            </TextField>
-            <Button variant="text" onClick={() => updateUrl({ filter: 'all', q: null, status: null, priority: null, assignment: null, view: null })}>
-              Clear
+              Archive
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              color="error"
+              startIcon={<BlockOutlined />}
+              disabled={!selectedJobIds.length}
+              onClick={() => void handleCancelSelected()}
+            >
+              Cancel
             </Button>
           </Stack>
+          <Stack direction="row" spacing={1} flexWrap="wrap" justifyContent={{ xl: 'flex-end' }} useFlexGap>
+            <TextField
+              size="small"
+              value={searchTerm}
+              onChange={(event) => updateQueueParams({ q: event.target.value })}
+              placeholder="Search jobs, customers, addresses..."
+              sx={{ minWidth: { xs: '100%', sm: 240, xl: 300 } }}
+            />
+            <Button variant="outlined" endIcon={<KeyboardArrowDown />} onClick={() => updateUrl({ views: 'true' })}>
+              Saved Views
+            </Button>
+            <StatusPill label={`${queueCounts.all} active`} />
+            {activeView ? <StatusPill label={activeView.name} tone="accent" /> : null}
+          </Stack>
+        </Stack>
+
+        <Stack
+          direction={{ xs: 'column', md: 'row' }}
+          spacing={1}
+          flexWrap="wrap"
+          sx={{ px: 1.2, py: 1.1 }}
+          useFlexGap
+        >
+          <TextField
+            select
+            size="small"
+            label="Status"
+            value={statusFilter}
+            onChange={(event) => updateQueueParams({ status: event.target.value as StatusFilter })}
+            sx={{ width: { xs: '100%', md: 150 } }}
+          >
+            <MenuItem value="all">Status ({queueCounts.all})</MenuItem>
+            <MenuItem value="pending">Pending</MenuItem>
+            <MenuItem value="assigned">Assigned</MenuItem>
+            <MenuItem value="in_progress">In progress</MenuItem>
+            <MenuItem value="completed">Completed</MenuItem>
+          </TextField>
+          <TextField
+            select
+            size="small"
+            label="Priority"
+            value={priorityFilter}
+            onChange={(event) => updateQueueParams({ priority: event.target.value as PriorityFilter })}
+            sx={{ width: { xs: '100%', md: 150 } }}
+          >
+            <MenuItem value="all">Priority (All)</MenuItem>
+            <MenuItem value="low">Low</MenuItem>
+            <MenuItem value="normal">Normal</MenuItem>
+            <MenuItem value="high">High</MenuItem>
+            <MenuItem value="urgent">Urgent</MenuItem>
+          </TextField>
+          <TextField
+            select
+            size="small"
+            label="Date"
+            value={activeFilter === 'today' ? 'today' : 'all'}
+            onChange={(event) => updateQueueParams({ filter: event.target.value === 'today' ? 'today' : 'all' })}
+            sx={{ width: { xs: '100%', md: 180 } }}
+          >
+            <MenuItem value="all">All dates</MenuItem>
+            <MenuItem value="today">Today</MenuItem>
+          </TextField>
+          <TextField
+            select
+            size="small"
+            label="Service Type"
+            value={serviceTypeFilter}
+            onChange={(event) => setServiceTypeFilter(event.target.value as ServiceTypeFilter)}
+            sx={{ width: { xs: '100%', md: 170 } }}
+          >
+            <MenuItem value="all">Service Type (All)</MenuItem>
+            <MenuItem value="delivery">Delivery</MenuItem>
+            <MenuItem value="special">Special handling</MenuItem>
+          </TextField>
+          <TextField
+            select
+            size="small"
+            label="Time Window"
+            value={timeWindowFilter}
+            onChange={(event) => setTimeWindowFilter(event.target.value as TimeWindowFilter)}
+            sx={{ width: { xs: '100%', md: 170 } }}
+          >
+            <MenuItem value="all">Time Window (All)</MenuItem>
+            <MenuItem value="set">Window set</MenuItem>
+            <MenuItem value="missing">Missing window</MenuItem>
+          </TextField>
+          <TextField
+            select
+            size="small"
+            label="Assignment"
+            value={assignmentFilter}
+            onChange={(event) => updateQueueParams({ assignment: event.target.value as AssignmentFilter })}
+            sx={{ width: { xs: '100%', md: 160 } }}
+          >
+            <MenuItem value="all">All jobs</MenuItem>
+            <MenuItem value="assigned">Assigned</MenuItem>
+            <MenuItem value="unassigned">Unassigned</MenuItem>
+          </TextField>
+          <Button variant="outlined" endIcon={<KeyboardArrowDown />} onClick={() => setMoreFiltersOpen(true)}>
+            More Filters
+          </Button>
+          <Button
+            variant="text"
+            onClick={() => {
+              setServiceTypeFilter('all');
+              setTimeWindowFilter('all');
+              updateUrl({ filter: 'all', q: null, status: null, priority: null, assignment: null, view: null });
+            }}
+          >
+            Clear
+          </Button>
         </Stack>
       </SurfacePanel>
 
-      {selectedJobIds.length > 0 ? (
-        <SurfacePanel variant="subtle" padding={1.45} sx={{ mb: 1.5 }}>
-          <Stack direction={{ xs: 'column', lg: 'row' }} justifyContent="space-between" spacing={1.5} alignItems={{ lg: 'center' }}>
-            <Box>
-              <Typography variant="h6">{selectedJobIds.length} jobs selected</Typography>
+      <Box
+        data-testid="jobs-workspace-grid"
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', lg: 'minmax(0, 1fr) minmax(300px, 340px)', xl: 'minmax(0, 1fr) 360px' },
+          gap: 1.25,
+          minWidth: 0,
+          alignItems: 'start',
+        }}
+      >
+        <SurfacePanel data-testid="jobs-table-panel" variant="command" sx={{ p: 0, minWidth: 0, overflow: 'hidden' }}>
+          <Stack
+            direction={{ xs: 'column', md: 'row' }}
+            spacing={1}
+            justifyContent="space-between"
+            alignItems={{ md: 'center' }}
+            sx={{ px: 1.2, py: 0.85, borderBottom: '1px solid', borderColor: 'divider' }}
+          >
+            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+              <Checkbox
+                size="small"
+                checked={allVisibleJobsSelected}
+                indeterminate={selectedJobIds.length > 0 && selectedJobIds.length < selectableJobIds.length}
+                onChange={() => {
+                  if (allVisibleJobsSelected) {
+                    setSelectedJobIds([]);
+                  } else {
+                    setSelectedJobIds(selectableJobIds);
+                  }
+                }}
+              />
+              <Button
+                size="small"
+                variant="outlined"
+                endIcon={<KeyboardArrowDown />}
+                onClick={() => {
+                  if (allVisibleJobsSelected) {
+                    setSelectedJobIds([]);
+                  } else {
+                    setSelectedJobIds(selectableJobIds);
+                  }
+                }}
+              >
+                {selectedJobIds.length || 0} selected
+              </Button>
               <Typography variant="body2" color="text.secondary">
-                This queue stages work before it becomes routing and dispatch.
+                Showing 1 - {visibleJobs.length} of {queueCounts.all} jobs
               </Typography>
-            </Box>
-            <Stack direction="row" spacing={1} flexWrap="wrap">
-              <Button variant="contained" onClick={handleOptimizeSelected}>Send selected to routing</Button>
-              <Button variant="outlined" onClick={() => navigate('/dispatch')}>Open dispatch</Button>
-              <Button variant="outlined" onClick={() => void handleArchive()}>Archive</Button>
-              <Button variant="outlined" onClick={handleExport}>Export</Button>
+            </Stack>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Typography variant="body2" color="text.secondary">
+                Sort by: <Box component="span" sx={{ fontWeight: 800, color: 'text.primary' }}>Promised Window</Box>
+              </Typography>
+              <IconButton
+                size="small"
+                aria-label="Table actions"
+                onClick={() => updateUrl({ views: 'true' })}
+              >
+                <MoreHoriz fontSize="small" />
+              </IconButton>
             </Stack>
           </Stack>
-        </SurfacePanel>
-      ) : null}
 
-      <SurfacePanel variant="command" sx={{ p: 0, overflow: 'hidden' }}>
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', xl: 'minmax(0, 1fr) 320px' }, minHeight: 'calc(100vh - 240px)' }}>
-        <TableContainer sx={{ maxHeight: 'calc(100vh - 240px)' }}>
-          <Table stickyHeader size="small">
-            <TableHead>
+          <TableContainer sx={{ maxHeight: { xs: 'none', lg: 'calc(100vh - 320px)' }, overflowX: 'hidden' }}>
+          <Table stickyHeader size="small" sx={{ width: '100%', tableLayout: 'fixed' }}>
+            <TableHead
+              sx={(theme) => ({
+                '& .MuiTableCell-head': {
+                  bgcolor:
+                    theme.palette.mode === 'dark'
+                      ? trovanColors.dark.surfaceAlt
+                      : trovanColors.light.surfaceAlt,
+                  backgroundImage: 'none',
+                  color: 'text.secondary',
+                  borderBottom: '1px solid',
+                  borderColor: 'divider',
+                  boxShadow: `0 1px 0 ${alpha(theme.palette.common.black, theme.palette.mode === 'dark' ? 0.35 : 0.12)}`,
+                  zIndex: theme.zIndex.appBar - 1,
+                },
+              })}
+            >
               <TableRow>
-                <TableCell padding="checkbox">
-                  <Checkbox
-                    checked={visibleJobs.length > 0 && selectedJobIds.length === visibleJobs.filter((job) => job.id).length}
-                    indeterminate={selectedJobIds.length > 0 && selectedJobIds.length < visibleJobs.filter((job) => job.id).length}
-                    onChange={() => {
-                      const selectableIds = visibleJobs.map((job) => job.id).filter(Boolean) as string[];
-                      if (selectedJobIds.length === selectableIds.length) {
-                        setSelectedJobIds([]);
-                      } else {
-                        setSelectedJobIds(selectableIds);
-                      }
-                    }}
-                  />
-                </TableCell>
-                <TableCell sx={{ width: 118, whiteSpace: 'nowrap' }}>Job ID</TableCell>
-                <TableCell sx={{ width: 146, whiteSpace: 'nowrap' }}>Status</TableCell>
-                <TableCell sx={{ width: 172, whiteSpace: 'nowrap' }}>Pickup</TableCell>
-                <TableCell sx={{ minWidth: 250 }}>Delivery</TableCell>
-                <TableCell sx={{ width: 170, whiteSpace: 'nowrap' }}>Customer</TableCell>
-                <TableCell sx={{ width: 132, whiteSpace: 'nowrap' }}>Date</TableCell>
-                <TableCell sx={{ width: 104, whiteSpace: 'nowrap' }}>Priority</TableCell>
+                <TableCell padding="checkbox" sx={{ width: 38 }} />
+                <TableCell sx={{ width: 82, whiteSpace: 'nowrap' }}>Job ID</TableCell>
+                <TableCell sx={{ width: 132, whiteSpace: 'nowrap' }}>Customer</TableCell>
+                <TableCell sx={{ width: { xs: 160, xl: 190 }, whiteSpace: 'nowrap' }}>Address</TableCell>
+                <TableCell sx={{ width: 118, whiteSpace: 'nowrap' }}>Time Window</TableCell>
+                <TableCell sx={{ width: 76, whiteSpace: 'nowrap' }}>Priority</TableCell>
+                <TableCell sx={{ width: 84, whiteSpace: 'nowrap' }}>Status</TableCell>
+                <TableCell sx={{ width: 108, whiteSpace: 'nowrap', display: { xs: 'none', xl: 'table-cell' } }}>Driver</TableCell>
+                <TableCell sx={{ width: 112, whiteSpace: 'nowrap', display: { xs: 'none', xl: 'table-cell' } }}>Vehicle</TableCell>
+                <TableCell sx={{ width: 76, whiteSpace: 'nowrap', display: { xs: 'none', md: 'table-cell' } }}>Route</TableCell>
+                <TableCell sx={{ width: 76, whiteSpace: 'nowrap', display: { xs: 'none', md: 'table-cell' } }}>ETA</TableCell>
+                <TableCell sx={{ width: 48, whiteSpace: 'nowrap' }}>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {visibleJobs.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8}>
+                  <TableCell colSpan={12}>
                     <Stack spacing={0.75} sx={{ py: 2 }}>
                       <Typography variant="subtitle1">No jobs match this queue view</Typography>
                       <Typography variant="body2" color="text.secondary">
@@ -715,12 +1126,27 @@ export default function JobsPageEnhancedV2() {
                   </TableCell>
                 </TableRow>
               ) : null}
-              {visibleJobs.map((job) => (
+              {visibleJobs.map((job) => {
+                const route = getJobRoute(job, routeGroups, routeStops);
+                const driver = getJobDriver(route, drivers);
+                const vehicle = getJobVehicle(job, route, vehicles);
+                const routeLabel = route?.label || route?.id || job.assignedRouteId || '—';
+                const eta = formatJobEta(route, job, routeStops);
+
+                return (
                 <TableRow
                   key={job.id}
                   hover
                   selected={job.id ? selectedJobIds.includes(job.id) : false}
+                  tabIndex={0}
+                  aria-label={`Select job ${job.id || 'job'}`}
                   onClick={() => job.id && setSelectedJobIds([job.id])}
+                  onKeyDown={(event) => {
+                    if ((event.key === 'Enter' || event.key === ' ') && job.id) {
+                      event.preventDefault();
+                      setSelectedJobIds([job.id]);
+                    }
+                  }}
                   sx={{
                     cursor: 'pointer',
                     '&.Mui-selected': {
@@ -735,8 +1161,11 @@ export default function JobsPageEnhancedV2() {
                 >
                   <TableCell padding="checkbox">
                     <Checkbox
+                      size="small"
                       checked={job.id ? selectedJobIds.includes(job.id) : false}
-                      onChange={() => {
+                      onClick={(event) => event.stopPropagation()}
+                      onChange={(event) => {
+                        event.stopPropagation();
                         if (!job.id) return;
                         setSelectedJobIds((current) => (
                           current.includes(job.id as string)
@@ -746,8 +1175,42 @@ export default function JobsPageEnhancedV2() {
                       }}
                     />
                   </TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap', fontWeight: 700, fontSize: '0.82rem' }}>
+                  <TableCell sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 800 }}>
                     {job.id?.slice(0, 8) || '—'}
+                  </TableCell>
+                  <TableCell sx={{ overflow: 'hidden' }}>
+                    <Typography
+                      variant="body2"
+                      sx={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                    >
+                      {job.customerName || 'Unassigned customer'}
+                    </Typography>
+                    {(job.customerPhone || job.customerEmail) ? (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ whiteSpace: 'nowrap', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                      >
+                        {job.customerPhone || job.customerEmail}
+                      </Typography>
+                    ) : null}
+                  </TableCell>
+                  <TableCell sx={{ overflow: 'hidden' }}>
+                    <Typography variant="body2" sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {job.deliveryAddress || 'Address pending'}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {job.pickupAddress || 'Pickup pending'}
+                    </Typography>
+                  </TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {formatJobWindow(job)}
+                  </TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                    <StatusPill
+                      label={job.priority || 'normal'}
+                      tone={priorityTone(job.priority)}
+                    />
                   </TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>
                     <StatusPill
@@ -755,125 +1218,223 @@ export default function JobsPageEnhancedV2() {
                       tone={jobStatusTone(job.status)}
                     />
                   </TableCell>
-                  <TableCell
-                    sx={{
-                      maxWidth: 172,
-                      color: 'text.secondary',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                  >
-                    {job.pickupAddress || '—'}
+                  <TableCell sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: { xs: 'none', xl: 'table-cell' } }}>
+                    {driver ? formatPersonName(driver) : '—'}
                   </TableCell>
-                  <TableCell sx={{ maxWidth: 258 }}>
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        fontWeight: 600,
-                        mb: 0.15,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
+                  <TableCell sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: { xs: 'none', xl: 'table-cell' } }}>
+                    {vehicle ? formatVehicleName(vehicle) : '—'}
+                  </TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: { xs: 'none', md: 'table-cell' } }}>
+                    {routeLabel}
+                  </TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: { xs: 'none', md: 'table-cell' } }}>
+                    {eta}
+                  </TableCell>
+                  <TableCell>
+                    <IconButton
+                      size="small"
+                      aria-label={`Actions for ${job.id || 'job'}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (!job.id) return;
+                        setSelectedJobIds([job.id]);
+                        setBannerMessage(`${job.id} selected. Review assignment, route staging, or bulk actions from this queue.`);
                       }}
                     >
-                      {job.deliveryAddress || 'Address pending'}
-                    </Typography>
-                    {job.assignedRouteId ? (
-                      <Typography
-                        variant="caption"
-                        color="text.secondary"
-                        sx={{ whiteSpace: 'nowrap', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                      >
-                        Route {job.assignedRouteId.slice(0, 8)}
-                      </Typography>
-                    ) : null}
-                  </TableCell>
-                  <TableCell
-                    sx={{
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      maxWidth: 170,
-                    }}
-                  >
-                    {job.customerName || 'Unassigned customer'}
-                  </TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap', color: 'text.secondary' }}>{job.createdAt ? new Date(job.createdAt).toLocaleDateString() : 'Just now'}</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                    <StatusPill
-                      label={job.priority || 'normal'}
-                      tone={priorityTone(job.priority)}
-                    />
+                      <MoreHoriz fontSize="small" />
+                    </IconButton>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </TableContainer>
-        <Box
-          sx={{
-            display: { xs: 'none', xl: 'block' },
-            borderLeft: '1px solid',
-            borderColor: 'divider',
-            bgcolor: 'background.paper',
-            p: 1.6,
-          }}
-        >
-          <Typography variant="subtitle2" sx={{ mb: 0.55, letterSpacing: '0.08em' }}>SELECTED JOB</Typography>
+        </SurfacePanel>
+
+        <SurfacePanel data-testid="jobs-inspector" variant="command" sx={{ p: 0, minWidth: 0, overflow: 'hidden' }}>
           {focusedJob ? (
-            <Stack spacing={1.2}>
-              <Typography variant="h5">{focusedJob.customerName || 'Queue item'}</Typography>
-              <Stack direction="row" spacing={1} flexWrap="wrap">
-                <StatusPill label={String(focusedJob.status || 'pending').replace(/_/g, ' ')} tone={jobStatusTone(focusedJob.status)} />
-                <StatusPill label={focusedJob.priority || 'normal'} tone={priorityTone(focusedJob.priority)} />
-                {focusedJob.assignedRouteId ? <StatusPill label={`Route ${focusedJob.assignedRouteId.slice(0, 8)}`} tone="accent" /> : null}
+            <Stack spacing={1.25}>
+              <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ px: 1.2, pt: 1.2 }}>
+                <Box sx={{ minWidth: 0 }}>
+                  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                    <Typography variant="h5" sx={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {focusedJob.id?.slice(0, 8) || 'Job'}
+                    </Typography>
+                    <StatusPill label={String(focusedJob.status || 'pending').replace(/_/g, ' ')} tone={jobStatusTone(focusedJob.status)} />
+                    <StatusPill label={readinessLabel(focusedJob)} tone={readinessTone(focusedJob)} />
+                  </Stack>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+                    {readinessLabel(focusedJob)}
+                  </Typography>
+                </Box>
+                <StatusPill label="Selected job" tone="accent" />
               </Stack>
-              <SurfacePanel variant="muted" padding={1.3}>
-                <Stack spacing={1}>
-                  <Box>
-                    <Typography variant="caption" color="text.secondary">Pickup</Typography>
-                    <Typography variant="body2" sx={{ mt: 0.25 }}>
-                      {focusedJob.pickupAddress || 'Pickup address not set'}
+
+              <Box sx={{ px: 1.2 }}>
+                <JobMiniMap job={focusedJob} />
+              </Box>
+
+              <Stack spacing={1.1} sx={{ px: 1.2, pb: 1.2 }}>
+                <Box>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center">
+                    <Typography variant="subtitle2">Customer</Typography>
+                    <Button
+                      size="small"
+                      variant="text"
+                      disabled={!focusedCustomer?.id}
+                      onClick={() => focusedCustomer?.id && navigate(`/customers?customerId=${encodeURIComponent(focusedCustomer.id)}`)}
+                    >
+                      View customer
+                    </Button>
+                  </Stack>
+                  <Typography variant="body2" sx={{ fontWeight: 800 }}>
+                    {focusedCustomer?.name || focusedJob.customerName || 'Unassigned customer'}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                    {focusedCustomer?.phone || focusedJob.customerPhone || 'Phone pending'}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', overflowWrap: 'anywhere' }}>
+                    {focusedCustomer?.email || focusedJob.customerEmail || 'Email pending'}
+                  </Typography>
+                </Box>
+
+                <Divider />
+
+                <Box>
+                  <Typography variant="subtitle2">Address</Typography>
+                  <Typography variant="body2" sx={{ mt: 0.25, fontWeight: 700 }}>
+                    {focusedJob.deliveryAddress || 'Delivery address pending'}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Pickup: {focusedJob.pickupAddress || 'Not set'}
+                  </Typography>
+                </Box>
+
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+                  <SurfacePanel variant="muted" padding={1}>
+                    <Typography variant="subtitle2">Service Details</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                      Service type
                     </Typography>
-                  </Box>
-                  <Box>
-                    <Typography variant="caption" color="text.secondary">Delivery</Typography>
-                    <Typography variant="body2" sx={{ mt: 0.25 }}>
-                      {focusedJob.deliveryAddress || 'Delivery address pending'}
+                    <Typography variant="body2">Delivery</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                      Capacity needed
                     </Typography>
-                  </Box>
-                  <Box>
-                    <Typography variant="caption" color="text.secondary">Queue context</Typography>
-                    <Typography variant="body2" sx={{ mt: 0.25 }}>
-                      {focusedJob.createdAt ? new Date(focusedJob.createdAt).toLocaleString() : 'Created recently'}
+                    <Typography variant="body2">{formatLoadSummary(focusedJob)}</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                      Promised window
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {focusedJob.id || 'ID pending'}
+                    <Typography variant="body2">{formatJobWindow(focusedJob)}</Typography>
+                  </SurfacePanel>
+
+                  <SurfacePanel variant="muted" padding={1}>
+                    <Typography variant="subtitle2">Notes</Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                      Service notes
                     </Typography>
-                  </Box>
-                </Stack>
-              </SurfacePanel>
-              <Button
-                variant="contained"
-                onClick={() =>
-                  focusedJob.id &&
-                  navigate(`/routing?jobId=${encodeURIComponent(focusedJob.id)}`)
-                }
-              >
-                Send to routing
-              </Button>
+                    <Typography variant="body2">
+                      {focusedJob.routingRequirements?.site?.accessNotes || focusedCustomer?.notes || 'No site notes recorded'}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                      Special instructions
+                    </Typography>
+                    <Typography variant="body2">
+                      {formatReasonCodes(focusedJob)}
+                    </Typography>
+                  </SurfacePanel>
+                </Box>
+
+                <SurfacePanel variant="muted" padding={1}>
+                  <Typography variant="subtitle2">Proof of Delivery</Typography>
+                  <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mt: 0.75 }}>
+                    <StatusPill label="Required" tone="success" />
+                    <StatusPill label="Photo" />
+                    <StatusPill label="Signature" />
+                  </Stack>
+                </SurfacePanel>
+
+                <SurfacePanel variant="muted" padding={1}>
+                  <Typography variant="subtitle2">Assignment</Typography>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mt: 0.85 }}>
+                    <TextField
+                      size="small"
+                      label="Driver"
+                      value={focusedDriver ? formatPersonName(focusedDriver) : 'Unassigned'}
+                      InputProps={{ readOnly: true }}
+                      fullWidth
+                    />
+                    <TextField
+                      size="small"
+                      label="Vehicle"
+                      value={focusedVehicle ? formatVehicleName(focusedVehicle) : 'Unassigned'}
+                      InputProps={{ readOnly: true }}
+                      fullWidth
+                    />
+                  </Stack>
+                  <Button
+                    variant="contained"
+                    fullWidth
+                    sx={{ mt: 1 }}
+                    onClick={() => focusedJob.id && navigate(`/routing?jobId=${encodeURIComponent(focusedJob.id)}`)}
+                  >
+                    Update Assignment
+                  </Button>
+                </SurfacePanel>
+              </Stack>
             </Stack>
           ) : (
-            <Typography variant="body2" color="text.secondary">
-              No job is available in the current queue view.
-            </Typography>
+            <Stack spacing={1} sx={{ p: 1.5 }}>
+              <Typography variant="subtitle1">No job selected</Typography>
+              <Typography variant="body2" color="text.secondary">
+                Select a row to review customer, service, POD, and assignment details.
+              </Typography>
+            </Stack>
           )}
-        </Box>
-        </Box>
-      </SurfacePanel>
+        </SurfacePanel>
+      </Box>
 
-      <Dialog open={dialogOpen} onClose={() => updateUrl({ create: null })} fullWidth maxWidth="sm">
+      {selectedJobIds.length > 0 ? (
+        <SurfacePanel
+          data-testid="jobs-bulk-bar"
+          variant="command"
+          sx={{
+            position: 'sticky',
+            bottom: 12,
+            zIndex: theme.zIndex.appBar - 1,
+            px: 1.2,
+            py: 1,
+            boxShadow: `0 18px 44px ${alpha(theme.palette.common.black, theme.palette.mode === 'dark' ? 0.44 : 0.18)}`,
+          }}
+        >
+          <Stack direction={{ xs: 'column', lg: 'row' }} justifyContent="space-between" spacing={1} alignItems={{ lg: 'center' }}>
+            <Box>
+              <Typography variant="subtitle1" sx={{ fontWeight: 800 }}>
+                {selectedJobIds.length} jobs selected
+              </Typography>
+              <Button size="small" variant="text" onClick={() => setSelectedJobIds([])}>
+                Clear selection
+              </Button>
+            </Box>
+            <Stack direction="row" spacing={1} flexWrap="wrap">
+              <Button variant="outlined" startIcon={<Groups2Outlined />} onClick={handleOptimizeSelected}>
+                Batch Assign
+              </Button>
+              <Button variant="outlined" startIcon={<ArchiveOutlined />} onClick={() => void handleArchive()}>
+                Archive
+              </Button>
+              <Button variant="outlined" onClick={handleExport}>
+                Export
+              </Button>
+              <Button variant="outlined" color="error" startIcon={<BlockOutlined />} onClick={() => void handleCancelSelected()}>
+                Cancel Jobs
+              </Button>
+            </Stack>
+          </Stack>
+        </SurfacePanel>
+      ) : null}
+
+      <Dialog open={dialogOpen} onClose={() => updateUrl({ create: null })} fullWidth maxWidth="md">
         <DialogTitle>Create Job</DialogTitle>
         <DialogContent sx={{ display: 'grid', gap: 2, pt: 2 }}>
           <TextField
@@ -899,6 +1460,71 @@ export default function JobsPageEnhancedV2() {
           </TextField>
           <TextField label="Customer name" value={formData.customerName} onChange={(event) => setFormData((current) => ({ ...current, customerName: event.target.value }))} />
           <TextField label="Delivery address" multiline minRows={3} value={formData.deliveryAddress} onChange={(event) => setFormData((current) => ({ ...current, deliveryAddress: event.target.value }))} />
+          <TextField label="Pickup address" value={formData.pickupAddress} onChange={(event) => setFormData((current) => ({ ...current, pickupAddress: event.target.value }))} />
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+            <TextField
+              label="Window start"
+              type="datetime-local"
+              value={formData.timeWindowStart}
+              onChange={(event) => setFormData((current) => ({ ...current, timeWindowStart: event.target.value }))}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+            <TextField
+              label="Window end"
+              type="datetime-local"
+              value={formData.timeWindowEnd}
+              onChange={(event) => setFormData((current) => ({ ...current, timeWindowEnd: event.target.value }))}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+            <TextField
+              label="Service minutes"
+              type="number"
+              value={formData.estimatedDuration}
+              onChange={(event) => setFormData((current) => ({ ...current, estimatedDuration: event.target.value }))}
+              fullWidth
+            />
+          </Stack>
+          <Divider />
+          <Typography variant="subtitle2">Load fit</Typography>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+            <TextField label="Pallet count" type="number" value={formData.palletCount} onChange={(event) => setFormData((current) => ({ ...current, palletCount: event.target.value }))} fullWidth />
+            <TextField label="Length in" type="number" value={formData.palletLengthIn} onChange={(event) => setFormData((current) => ({ ...current, palletLengthIn: event.target.value }))} fullWidth />
+            <TextField label="Width in" type="number" value={formData.palletWidthIn} onChange={(event) => setFormData((current) => ({ ...current, palletWidthIn: event.target.value }))} fullWidth />
+            <TextField label="Height in" type="number" value={formData.palletHeightIn} onChange={(event) => setFormData((current) => ({ ...current, palletHeightIn: event.target.value }))} fullWidth />
+            <TextField label="Weight each lb" type="number" value={formData.palletWeightLb} onChange={(event) => setFormData((current) => ({ ...current, palletWeightLb: event.target.value }))} fullWidth />
+          </Stack>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+            <FormControlLabel
+              control={<Checkbox checked={formData.stackable} onChange={(event) => setFormData((current) => ({ ...current, stackable: event.target.checked }))} />}
+              label="Stackable"
+            />
+            <TextField label="Required equipment" value={formData.requiredEquipment} placeholder="liftgate, reefer" onChange={(event) => setFormData((current) => ({ ...current, requiredEquipment: event.target.value }))} fullWidth />
+            <TextField label="Specific driver" value={formData.requiredDriverName} onChange={(event) => setFormData((current) => ({ ...current, requiredDriverName: event.target.value }))} fullWidth />
+          </Stack>
+          <Divider />
+          <Typography variant="subtitle2">Site and handling</Typography>
+          <TextField label="Site/access rules" multiline minRows={2} value={formData.siteAccessNotes} onChange={(event) => setFormData((current) => ({ ...current, siteAccessNotes: event.target.value }))} />
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+            <FormControlLabel
+              control={<Checkbox checked={formData.dockAppointment} onChange={(event) => setFormData((current) => ({ ...current, dockAppointment: event.target.checked }))} />}
+              label="Dock appointment"
+            />
+            <FormControlLabel
+              control={<Checkbox checked={formData.liftgateRequired} onChange={(event) => setFormData((current) => ({ ...current, liftgateRequired: event.target.checked }))} />}
+              label="Liftgate"
+            />
+            <FormControlLabel
+              control={<Checkbox checked={formData.insideDelivery} onChange={(event) => setFormData((current) => ({ ...current, insideDelivery: event.target.checked }))} />}
+              label="Inside delivery"
+            />
+          </Stack>
+          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5}>
+            <TextField label="Temperature" value={formData.temperatureRequirement} placeholder="ambient, refrigerated, frozen" onChange={(event) => setFormData((current) => ({ ...current, temperatureRequirement: event.target.value }))} fullWidth />
+            <TextField label="Hazmat class" value={formData.hazmatClass} onChange={(event) => setFormData((current) => ({ ...current, hazmatClass: event.target.value }))} fullWidth />
+            <TextField label="Handling" value={formData.handlingRequirement} placeholder="non-stackable, fragile" onChange={(event) => setFormData((current) => ({ ...current, handlingRequirement: event.target.value }))} fullWidth />
+          </Stack>
           <TextField select label="Priority" value={formData.priority} onChange={(event) => setFormData((current) => ({ ...current, priority: event.target.value }))}>
             <MenuItem value="normal">Normal</MenuItem>
             <MenuItem value="high">High</MenuItem>
@@ -915,7 +1541,7 @@ export default function JobsPageEnhancedV2() {
         <DialogTitle>Import Jobs</DialogTitle>
         <DialogContent sx={{ display: 'grid', gap: 2, pt: 2 }}>
           <Alert severity="info">
-            Import JSON arrays or CSV files with `customerName`, `deliveryAddress`, `priority`, `status`, and optional `pickupAddress` columns.
+            Import JSON arrays or CSV files with customerName, deliveryAddress, priority, status, pickupAddress, timeWindowStart, timeWindowEnd, serviceDuration, palletCount, pallet dimensions, palletWeightLb, stackable, requiredEquipment, requiredDriver, siteAccess, temperature, hazmat, and handling columns.
           </Alert>
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems={{ md: 'center' }}>
             <Button variant="outlined" onClick={() => fileInputRef.current?.click()}>Choose file</Button>
@@ -932,7 +1558,7 @@ export default function JobsPageEnhancedV2() {
                   <Box key={`${candidate.customerName}-${candidate.deliveryAddress}-${index}`}>
                     <Typography variant="body2" sx={{ fontWeight: 700 }}>{candidate.customerName}</Typography>
                     <Typography variant="caption" color="text.secondary">
-                      {candidate.deliveryAddress} • {candidate.priority} • {candidate.status}
+                      {candidate.deliveryAddress} • {candidate.priority} • {candidate.status} • {candidate.routingRequirements?.load?.palletCount || 0} pallets
                     </Typography>
                   </Box>
                 ))}
@@ -947,6 +1573,62 @@ export default function JobsPageEnhancedV2() {
           <Button onClick={() => updateUrl({ import: null })}>Cancel</Button>
           <Button variant="contained" onClick={() => void handleImportJobs()} disabled={importing || !importCandidates.length}>
             {importing ? 'Importing...' : 'Import jobs'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={moreFiltersOpen} onClose={() => setMoreFiltersOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>More Filters</DialogTitle>
+        <DialogContent sx={{ display: 'grid', gap: 2, pt: 2 }}>
+          <TextField
+            select
+            label="Service Type"
+            value={serviceTypeFilter}
+            onChange={(event) => setServiceTypeFilter(event.target.value as ServiceTypeFilter)}
+            fullWidth
+          >
+            <MenuItem value="all">All service types</MenuItem>
+            <MenuItem value="delivery">Delivery</MenuItem>
+            <MenuItem value="special">Special handling</MenuItem>
+          </TextField>
+          <TextField
+            select
+            label="Time Window"
+            value={timeWindowFilter}
+            onChange={(event) => setTimeWindowFilter(event.target.value as TimeWindowFilter)}
+            fullWidth
+          >
+            <MenuItem value="all">All time windows</MenuItem>
+            <MenuItem value="set">Window set</MenuItem>
+            <MenuItem value="missing">Missing window</MenuItem>
+          </TextField>
+          <TextField
+            select
+            label="Assignment"
+            value={assignmentFilter}
+            onChange={(event) => updateQueueParams({ assignment: event.target.value as AssignmentFilter })}
+            fullWidth
+          >
+            <MenuItem value="all">All jobs</MenuItem>
+            <MenuItem value="assigned">Assigned</MenuItem>
+            <MenuItem value="unassigned">Unassigned</MenuItem>
+          </TextField>
+          <Alert severity="info">
+            These filters operate on the live jobs query and route-derived assignment data. They do not create a separate static queue.
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setServiceTypeFilter('all');
+              setTimeWindowFilter('all');
+              updateQueueParams({ assignment: 'all' });
+            }}
+          >
+            Clear advanced filters
+          </Button>
+          <Button variant="contained" onClick={() => setMoreFiltersOpen(false)}>
+            Apply
           </Button>
         </DialogActions>
       </Dialog>

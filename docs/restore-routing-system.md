@@ -33,7 +33,7 @@ Optional provider setup for parity with staging/prod:
 - WorkOS: `WORKOS_CLIENT_ID`, `WORKOS_API_KEY`, `WORKOS_REDIRECT_URI`
 - Stripe: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, plan price IDs
 - Postmark: `POSTMARK_SERVER_TOKEN`, `POSTMARK_FROM_EMAIL`
-- Twilio: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`
+- Optional post-pilot SMS only: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`; keep `SMS_NOTIFICATIONS_ENABLED=false` for assisted pilots
 - R2: bucket, endpoint, and access key variables
 
 ## Backup

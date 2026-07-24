@@ -47,6 +47,7 @@ export class RerouteRequest {
   routeId: string;
 
   @Column({
+    name: 'exception_category',
     type: 'varchar',
     length: 64,
     comment: 'Exception category triggering reroute',

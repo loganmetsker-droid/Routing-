@@ -4,6 +4,7 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { GenerateRoutePlanDto } from './dto/generate-route-plan.dto';
 import { UpdateRoutePlanGroupDto } from './dto/update-route-plan-group.dto';
 import { UpdateRoutePlanStopDto } from './dto/update-route-plan-stop.dto';
+import { AcceptPublishRiskDto } from './dto/accept-publish-risk.dto';
 import { PlanningService } from './planning.service';
 
 type AuthenticatedRequest = {
@@ -43,6 +44,25 @@ export class PlanningController {
   @Roles('OWNER', 'ADMIN', 'DISPATCHER')
   reoptimize(@Req() req: AuthenticatedRequest, @Param('id') routePlanId: string) {
     return this.planning.reoptimize(routePlanId, req.user);
+  }
+
+  @Get('route-plans/:id/publish-readiness')
+  @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'VIEWER')
+  getPublishReadiness(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') routePlanId: string,
+  ) {
+    return this.planning.getPublishReadiness(routePlanId, req.user);
+  }
+
+  @Post('route-plans/:id/publish-decisions/accept-risk')
+  @Roles('OWNER', 'ADMIN', 'DISPATCHER')
+  acceptPublishRisk(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') routePlanId: string,
+    @Body() dto: AcceptPublishRiskDto,
+  ) {
+    return this.planning.acceptPublishRisk(routePlanId, dto, req.user);
   }
 
   @Patch('route-plans/:id/groups/:groupId')

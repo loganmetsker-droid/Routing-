@@ -8,6 +8,9 @@ type RouteCardProps = {
 };
 
 export default function RouteCard({ route, selected, onSelect }: RouteCardProps) {
+  const distanceKm = Number(route.totalDistanceKm ?? route.totalDistance ?? 0);
+  const distanceMiles = Number.isFinite(distanceKm) ? distanceKm * 0.621371 : 0;
+
   return (
     <Card
       variant="outlined"
@@ -35,7 +38,7 @@ export default function RouteCard({ route, selected, onSelect }: RouteCardProps)
               Stops: {route.jobIds?.length ?? route.optimizedStops?.length ?? 0}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Distance: {route.totalDistanceKm ?? route.totalDistance ?? 0} km
+              Distance: {distanceMiles.toFixed(1)} mi
             </Typography>
           </Stack>
         </CardContent>

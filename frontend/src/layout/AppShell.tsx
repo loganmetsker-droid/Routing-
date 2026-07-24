@@ -1,24 +1,38 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { Avatar, Box, Button, Chip, IconButton, Tooltip, Typography } from '@mui/material';
+import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
+import {
+  Avatar,
+  Badge,
+  Box,
+  Button,
+  IconButton,
+  InputAdornment,
+  ListItemIcon,
+  Menu,
+  MenuItem,
+  Popover,
+  Stack,
+  TextField,
+  Tooltip,
+  Typography,
+} from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
 import {
-  DarkModeOutlined as DarkModeOutlinedIcon,
-  KeyboardDoubleArrowLeftOutlined as KeyboardDoubleArrowLeftOutlinedIcon,
-  KeyboardDoubleArrowRightOutlined as KeyboardDoubleArrowRightOutlinedIcon,
-  LightModeOutlined as LightModeOutlinedIcon,
-  MenuOutlined as MenuOutlinedIcon,
-  SettingsOutlined as SettingsOutlinedIcon,
+  CalendarTodayOutlined,
+  DarkModeOutlined,
+  KeyboardCommandKeyOutlined,
+  KeyboardDoubleArrowLeftOutlined,
+  LightModeOutlined,
+  MenuOutlined,
+  NotificationsNoneOutlined,
+  SearchOutlined,
+  LogoutOutlined,
 } from '@mui/icons-material';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { getActiveNavItem, navSections } from './navConfig';
-import {
-  trovanColors,
-  trovanLayout,
-  trovanTypography,
-} from '../theme/designTokens';
-import { PreviewBanner } from '../components/PreviewBanner';
-import { TopoShellBackground } from '../components/TopoShellBackground';
+import { trovanBrandAssets, trovanColors, trovanLayout } from '../theme/designTokens';
 import { useTrovanThemeMode } from '../contexts/ThemeContext';
+import { getSession, type AuthUser } from '../services/api';
+import { PreviewBanner } from '../components/PreviewBanner';
 
 type AppShellProps = {
   onLogout: () => void;
@@ -26,102 +40,134 @@ type AppShellProps = {
 };
 
 const SIDEBAR_COLLAPSE_STORAGE_KEY = 'trovan.shell.sidebarCollapsed';
-const COLLAPSED_SIDEBAR_WIDTH = 78;
+const COLLAPSED_SIDEBAR_WIDTH = 72;
+
+const pageCopy: Record<string, [string, string]> = {
+  '/dashboard': ['Operations Dashboard', ''],
+  '/jobs': ['Jobs', 'Create, assign, prioritize, and manage delivery or service jobs'],
+  '/customers': ['Customers', 'Manage accounts, service locations, contacts, and delivery requirements'],
+  '/drivers': ['Drivers', 'Monitor driver availability, compliance, utilization, and performance'],
+  '/vehicles': ['Vehicles', 'Track fleet availability, capacity, maintenance, and assignment readiness'],
+  '/planning': ['Route Planning & Optimization', ''],
+  '/routing': ['Route Planning & Optimization', ''],
+  '/dispatch': ['Dispatch Board', 'Assign, release, and monitor live work across routes and drivers.'],
+  '/tracking': ['Tracking', 'Monitor route progress, driver status, POD, and ETA changes in real time'],
+  '/pod': ['Proof of Delivery', 'Review proof capture, delivery evidence, exceptions, and route-linked records'],
+  '/exceptions': ['Exceptions', 'Resolve route blockers, missed windows, POD gaps, and dispatch risks'],
+  '/analytics': ['Reports', 'Measure service, efficiency, utilization, POD completion, and profitability'],
+  '/settings': ['Settings', 'Configure users, rules, notifications, depots, integrations, and preferences'],
+};
+
+const searchPlaceholders: Record<string, string> = {
+  '/dashboard': 'Search jobs, drivers, vehicles, customers...',
+  '/customers': 'Search customers, locations, contacts...',
+  '/drivers': 'Search jobs, drivers, vehicles, customers...',
+  '/vehicles': 'Search vehicles, drivers, routes...',
+  '/jobs': 'Search jobs, customers, routes...',
+};
+
+function getPageCopy(pathname: string, fallback: string): [string, string] {
+  const match = Object.entries(pageCopy).find(([path]) => pathname === path || pathname.startsWith(`${path}/`));
+  return match?.[1] ?? [fallback, 'Real-time operational workspace'];
+}
+
+function getSearchPlaceholder(pathname: string) {
+  const match = Object.entries(searchPlaceholders).find(([path]) => pathname === path || pathname.startsWith(`${path}/`));
+  return match?.[1] ?? 'Search jobs, drivers, vehicles, customers...';
+}
+
+function TrovanBrand({ collapsed }: { collapsed: boolean }) {
+  return (
+    <Box
+      sx={{
+        position: 'relative',
+        display: 'flex',
+        alignItems: 'center',
+        minWidth: 0,
+      }}
+    >
+      <Box
+        component="img"
+        src={collapsed ? trovanBrandAssets.standaloneIconCrop : trovanBrandAssets.primaryLockupCrop}
+        alt="Trovan Dispatch"
+        sx={{
+          position: 'relative',
+          width: collapsed ? 46 : 194,
+          height: collapsed ? 46 : 50,
+          flex: '0 0 auto',
+          objectFit: 'contain',
+          objectPosition: collapsed ? 'center center' : 'left center',
+          borderRadius: 0,
+          filter: 'none',
+        }}
+      />
+    </Box>
+  );
+}
 
 function NavigationContent({
   pathname,
-  collapsed = false,
+  collapsed,
   onNavigate,
 }: {
   pathname: string;
-  collapsed?: boolean;
+  collapsed: boolean;
   onNavigate?: () => void;
 }) {
-  const navigate = useNavigate();
-  const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
-  const shellFg = '#FFF8ED';
-  const shellMuted = alpha('#FFF8ED', 0.58);
-  const shellLow = alpha('#FFF8ED', 0.38);
-  const shellBg = isDark ? trovanColors.black[950] : trovanColors.utility.shell;
-  const shellBorder = trovanColors.utility.shellLine;
-  const selectedText = trovanColors.copper[300];
-  const idleText = alpha('#FFF8ED', 0.76);
-  const idleBg = alpha('#FFF8ED', 0.045);
+  const shellFg = '#eef6fc';
+  const shellMuted = alpha(shellFg, 0.68);
+  const shellLow = alpha(shellFg, 0.44);
 
   return (
-    <Box sx={{ display: 'flex', height: '100%', flexDirection: 'column', position: 'relative', zIndex: 1 }}>
+    <Box sx={{ display: 'flex', height: '100%', flexDirection: 'column' }}>
       <Box
         sx={{
-          px: collapsed ? 1.25 : 2.75,
-          py: 2.1,
-          borderBottom: `1px solid ${shellBorder}`,
-          bgcolor: shellBg,
-          background:
-            'linear-gradient(180deg, rgba(169,99,33,0.16), rgba(169,99,33,0.02))',
+          height: 72,
+          px: collapsed ? 0 : 1.25,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: collapsed ? 'center' : 'flex-start',
+          bgcolor: '#010C1B',
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Avatar
-            variant="rounded"
-            sx={{
-              width: 38,
-              height: 38,
-              bgcolor: alpha(trovanColors.copper[500], 0.12),
-              color: trovanColors.copper[300],
-              fontWeight: 700,
-              borderRadius: 1.25,
-              boxShadow: 'none',
-              border: `1px solid ${alpha(trovanColors.copper[300], 0.24)}`,
-              fontFamily: trovanTypography.brandFontFamily,
-            }}
-          >
-            T
-          </Avatar>
-          <Box sx={{ minWidth: 0, display: collapsed ? 'none' : 'block' }}>
-            <Typography
-              variant="subtitle2"
-              component="div"
-              sx={{ color: shellMuted, mb: 0.4 }}
-            >
-              Trovan Logistics
-            </Typography>
-            <Typography
-              variant="body2"
-              component="div"
-              noWrap
-              sx={{
-                color: shellFg,
-                fontFamily: trovanTypography.brandFontFamily,
-                fontSize: '1.18rem',
-                letterSpacing: '0.07em',
-              }}
-              className="trovan-wordmark"
-            >
-              Dispatch Console
-            </Typography>
-          </Box>
-        </Box>
+        <TrovanBrand collapsed={collapsed} />
       </Box>
 
-      <Box sx={{ flex: 1, overflowY: 'auto', px: collapsed ? 0.85 : 1.2, py: 1.5, bgcolor: shellBg }}>
+      <Box
+        sx={{
+          flex: 1,
+          overflowY: 'auto',
+          px: 1,
+          pt: 1,
+          scrollbarWidth: 'thin',
+          scrollbarColor: `${alpha('#fff', 0.16)} transparent`,
+          '&::-webkit-scrollbar': { width: 6 },
+          '&::-webkit-scrollbar-thumb': {
+            bgcolor: alpha('#fff', 0.14),
+            borderRadius: 999,
+          },
+        }}
+      >
         {navSections.map((section) => (
-          <Box key={section.label} sx={{ mb: 1.65 }}>
-            <Typography
-              variant="subtitle2"
-              component="div"
-              sx={{
-                px: collapsed ? 0 : 1.25,
-                pb: 0.85,
-                color: shellLow,
-                display: collapsed ? 'none' : 'block',
-              }}
-            >
-              {section.label}
-            </Typography>
-            <Box sx={{ display: 'grid', gap: 0.5 }}>
+          <Box key={section.label}>
+            {!collapsed ? (
+              <Typography
+                sx={{
+                  px: 1.2,
+                  mb: 0.7,
+                  color: shellLow,
+                  fontSize: 11,
+                  fontWeight: 800,
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                {section.label}
+              </Typography>
+            ) : null}
+            <Box sx={{ display: 'grid', gap: 0.35 }}>
               {section.items.map((item) => {
-                const selected = pathname === item.to || (item.to !== '/' && pathname.startsWith(item.to));
+                const selected = pathname === item.to || (item.to !== '/' && pathname.startsWith(`${item.to}/`));
                 const navItem = (
                   <Box
                     key={item.to}
@@ -129,67 +175,46 @@ function NavigationContent({
                     to={item.to}
                     onClick={onNavigate}
                     sx={{
+                      minHeight: 40,
+                      px: collapsed ? 0.6 : 1.25,
+                      py: 0.6,
+                      borderRadius: '9px',
                       display: 'flex',
                       alignItems: 'center',
-                      gap: 1.25,
-                      position: 'relative',
-                      px: collapsed ? 0.4 : 1,
-                      py: 0.72,
-                      minHeight: 38,
-                      borderRadius: '9px',
-                      color: selected ? selectedText : idleText,
-                      textDecoration: 'none',
-                      border: `1px solid ${selected ? alpha(trovanColors.copper[400], 0.26) : 'transparent'}`,
-                      background: selected
-                        ? `linear-gradient(90deg, ${alpha(trovanColors.copper[500], 0.2)}, ${alpha('#FFFFFF', 0.035)})`
-                        : 'transparent',
-                      '&::before': selected
-                        ? {
-                            content: '""',
-                            position: 'absolute',
-                            left: collapsed ? 2 : 0,
-                            top: 8,
-                            bottom: 8,
-                            width: 2,
-                            borderRadius: 999,
-                            backgroundColor: trovanColors.copper[300],
-                          }
-                        : undefined,
-                      '&:hover': {
-                        bgcolor: selected
-                          ? alpha(trovanColors.copper[500], 0.16)
-                          : idleBg,
-                      },
                       justifyContent: collapsed ? 'center' : 'flex-start',
+                      gap: 1.15,
+                      textDecoration: 'none',
+                      color: selected ? trovanColors.copper[100] : shellMuted,
+                      background: selected
+                        ? `linear-gradient(90deg, ${alpha(trovanColors.copper[500], 0.28)} 0%, ${alpha(trovanColors.copper[500], 0.13)} 100%)`
+                        : 'transparent',
+                      border: `1px solid ${selected ? alpha(trovanColors.copper[400], 0.36) : 'transparent'}`,
+                      boxShadow: selected ? `inset 3px 0 0 ${trovanColors.copper[400]}` : 'none',
+                      transition: 'background-color 150ms ease, border-color 150ms ease, color 150ms ease',
+                      '&:hover': {
+                        bgcolor: selected ? undefined : alpha('#fff', 0.055),
+                        color: '#fff',
+                      },
+                      '&:focus-visible': {
+                        outline: 'none',
+                        boxShadow: selected
+                          ? `inset 3px 0 0 ${trovanColors.copper[400]}, 0 0 0 2px ${alpha(trovanColors.copper[300], 0.32)}`
+                          : `0 0 0 2px ${alpha(trovanColors.copper[300], 0.32)}`,
+                      },
+                      '& svg': {
+                        fontSize: 20,
+                        strokeWidth: 2,
+                      },
                     }}
                   >
-                    <Box
-                      sx={{
-                        width: 26,
-                        height: 26,
-                        borderRadius: '7px',
-                        display: 'grid',
-                        placeItems: 'center',
-                        bgcolor: selected
-                          ? alpha(trovanColors.copper[500], 0.12)
-                          : 'transparent',
-                        color: selected ? trovanColors.copper[300] : 'inherit',
-                        flexShrink: 0,
-                        '& svg': {
-                          fontSize: 18,
-                        },
-                      }}
-                    >
-                      <item.icon fontSize="inherit" />
-                    </Box>
-                    <Box sx={{ minWidth: 0, flex: 1, display: collapsed ? 'none' : 'block' }}>
-                      <Typography variant="body2" sx={{ fontWeight: 700, color: 'inherit' }}>
+                    <item.icon />
+                    {!collapsed ? (
+                      <Typography sx={{ fontSize: 13.5, fontWeight: 700, color: 'inherit' }}>
                         {item.label}
                       </Typography>
-                    </Box>
+                    ) : null}
                   </Box>
                 );
-
                 return collapsed ? (
                   <Tooltip key={item.to} title={item.label} placement="right" arrow>
                     {navItem}
@@ -201,119 +226,90 @@ function NavigationContent({
         ))}
       </Box>
 
-      <Box
-        sx={{
-          p: collapsed ? 1.25 : 2.25,
-          borderTop: `1px solid ${shellBorder}`,
-          bgcolor: alpha('#FFF8ED', 0.018),
-          background: 'linear-gradient(180deg, rgba(169,99,33,0.08), rgba(255,255,255,0.018))',
-        }}
-      >
-        {collapsed ? (
-          <Box sx={{ display: 'grid', justifyItems: 'center', gap: 1 }}>
-            <Tooltip title="Local preview active">
-              <Box
-                sx={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 1.4,
-                  border: `1px solid ${alpha(trovanColors.copper[300], 0.22)}`,
-                  bgcolor: alpha(trovanColors.copper[500], 0.11),
-                  display: 'grid',
-                  placeItems: 'center',
-                }}
-              >
-                <Box
-                  sx={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: '999px',
-                    bgcolor: trovanColors.copper[300],
-                    boxShadow: `0 0 0 4px ${alpha(trovanColors.copper[300], 0.12)}`,
-                  }}
-                />
-              </Box>
-            </Tooltip>
-            <Tooltip title="Settings">
-              <IconButton
-                size="small"
-                onClick={() => navigate('/settings')}
-                sx={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 1.4,
-                  border: `1px solid ${alpha('#FFF8ED', 0.12)}`,
-                  bgcolor: alpha('#FFF8ED', 0.035),
-                  color: shellFg,
-                }}
-              >
-                <SettingsOutlinedIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
+      {!collapsed ? (
+        <Box sx={{ p: 1.4 }}>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              px: 1.2,
+              py: 0.9,
+              borderRadius: '9px',
+              border: `1px solid ${alpha('#fff', 0.14)}`,
+              color: shellFg,
+              bgcolor: alpha('#fff', 0.035),
+              fontSize: 12,
+              fontWeight: 750,
+            }}
+          >
+            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: trovanColors.semantic.success }} />
+            All systems operational
+            <Box component="span" sx={{ ml: 'auto', color: shellMuted }}>⌄</Box>
           </Box>
-        ) : (
-          <>
-            <Chip
-              label="Preview mode"
-              sx={{
-                mb: 1.25,
-                justifyContent: 'flex-start',
-                bgcolor: alpha(trovanColors.copper[500], 0.08),
-                color: trovanColors.copper[200],
-                border: `1px solid ${alpha(trovanColors.copper[300], 0.16)}`,
-                width: 'fit-content',
-                borderRadius: 1,
-                height: 24,
-              }}
-            />
-            <Box sx={{ mb: 1.25 }}>
-              <Typography variant="body2" component="div" sx={{ fontWeight: 700, color: shellFg }}>
-                Trovan Admin
-              </Typography>
-              <Typography variant="body2" component="div" sx={{ color: shellMuted }}>
-                Local operations workspace
-              </Typography>
-            </Box>
-            <Button
-              fullWidth
-              variant="outlined"
-              onClick={() => navigate('/settings')}
-              sx={{
-                bgcolor: alpha('#FFF8ED', 0.035),
-                color: shellFg,
-                borderColor: alpha('#FFF8ED', 0.12),
-              }}
-            >
-              Settings
-            </Button>
-          </>
-        )}
-      </Box>
+          <Typography sx={{ mt: 1.55, color: shellMuted, fontSize: 10.5, lineHeight: 1.55 }}>
+            © {new Date().getFullYear()} Trovan Dispatch
+            <br />
+            Live workspace
+          </Typography>
+        </Box>
+      ) : null}
     </Box>
   );
 }
 
 export function AppShell({ onLogout, children }: AppShellProps) {
   const location = useLocation();
-  const navigate = useNavigate();
   const theme = useTheme();
-  const isDark = theme.palette.mode === 'dark';
   const { mode, toggleMode } = useTrovanThemeMode();
+  const isDark = theme.palette.mode === 'dark';
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [desktopCollapsed, setDesktopCollapsed] = useState(true);
+  const [desktopCollapsed, setDesktopCollapsed] = useState(false);
+  const [sessionUser, setSessionUser] = useState<AuthUser | null>(null);
+  const [notificationsAnchorEl, setNotificationsAnchorEl] = useState<HTMLElement | null>(null);
+  const [accountAnchorEl, setAccountAnchorEl] = useState<HTMLElement | null>(null);
   const activeItem = getActiveNavItem(location.pathname);
-  const activeSection = navSections.find((section) => section.items.some((item) => item.to === activeItem.to));
+  const [pageTitle, pageSubtitle] = getPageCopy(location.pathname, activeItem.label);
+  const searchPlaceholder = getSearchPlaceholder(location.pathname);
   const sidebarWidth = desktopCollapsed ? COLLAPSED_SIDEBAR_WIDTH : trovanLayout.sidebarWidth;
-  const showTopoShellBackground = true;
+  const currentDateLabel = new Date().toLocaleDateString([], {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  const userLabel = sessionUser?.email || 'Signed-in operator';
+  const userInitials =
+    userLabel
+      .split('@')[0]
+      .split(/[.\s_-]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join('') || 'TO';
+  const roleLabel = sessionUser?.role
+    ? sessionUser.role.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase())
+    : 'Operator';
 
   useEffect(() => {
     try {
-      const stored = window.localStorage.getItem(SIDEBAR_COLLAPSE_STORAGE_KEY);
-      if (stored === '0') setDesktopCollapsed(false);
-      if (stored === '1') setDesktopCollapsed(true);
+      setDesktopCollapsed(window.localStorage.getItem(SIDEBAR_COLLAPSE_STORAGE_KEY) === '1');
     } catch {
-      // Ignore localStorage access issues and fall back to expanded state.
+      // Ignore localStorage access issues.
     }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getSession()
+      .then((session) => {
+        if (!cancelled) setSessionUser(session.user);
+      })
+      .catch(() => {
+        if (!cancelled) setSessionUser(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const toggleDesktopCollapsed = () => {
@@ -322,32 +318,35 @@ export function AppShell({ onLogout, children }: AppShellProps) {
       try {
         window.localStorage.setItem(SIDEBAR_COLLAPSE_STORAGE_KEY, next ? '1' : '0');
       } catch {
-        // Ignore persistence failures; the UI can still toggle in-memory.
+        // Ignore persistence failures.
       }
       return next;
     });
   };
 
+  const openNotifications = (event: MouseEvent<HTMLButtonElement>) => {
+    setNotificationsAnchorEl(event.currentTarget);
+  };
+
   return (
     <Box
       sx={{
-        display: 'flex',
-        minHeight: '100vh',
-        bgcolor: 'background.default',
-        background:
-          isDark
-            ? 'radial-gradient(circle at top left, rgba(169,99,33,0.22), transparent 24%), linear-gradient(180deg, #16110E 0%, #211914 46%, #120E0B 100%)'
-            : `radial-gradient(circle at top left, ${alpha(trovanColors.copper[500], 0.12)}, transparent 24%), linear-gradient(180deg, #F3F2EF 0%, #E7E5E0 42%, #DAD6CF 100%)`,
+        display: 'grid',
+        gridTemplateColumns: { xs: '1fr', md: `${sidebarWidth}px minmax(0, 1fr)` },
+        height: '100vh',
+        width: '100vw',
+        overflow: 'hidden',
+        bgcolor: isDark ? trovanColors.dark.appBg : trovanColors.light.appBg,
+        color: 'text.primary',
       }}
     >
       <Box
         sx={{
           position: 'fixed',
           inset: 0,
-          bgcolor: 'rgba(9, 13, 18, 0.54)',
+          bgcolor: alpha(trovanColors.brand.navy950, 0.55),
           opacity: mobileOpen ? 1 : 0,
           pointerEvents: mobileOpen ? 'auto' : 'none',
-          transition: 'opacity 160ms ease',
           zIndex: 1198,
           display: { xs: 'block', md: 'none' },
         }}
@@ -358,170 +357,287 @@ export function AppShell({ onLogout, children }: AppShellProps) {
         component="aside"
         sx={{
           width: { xs: trovanLayout.sidebarWidth, md: sidebarWidth },
-          flexShrink: 0,
-          borderRight: `1px solid ${trovanColors.utility.shellLine}`,
-          bgcolor: trovanColors.utility.shell,
-          boxShadow: '18px 0 46px rgba(5, 4, 3, 0.24)',
-          position: { xs: 'fixed', md: 'sticky' },
-          top: 0,
-          left: 0,
-          bottom: 0,
-          zIndex: 1199,
-          transform: {
-            xs: mobileOpen ? 'translateX(0)' : 'translateX(-100%)',
-            md: 'translateX(0)',
-          },
-          transition: 'transform 180ms ease',
-          display: 'flex',
-          flexDirection: 'column',
+          height: '100vh',
+          minHeight: 0,
           overflow: 'hidden',
+          position: { xs: 'fixed', md: 'relative' },
+          left: 0,
+          top: 0,
+          zIndex: 1199,
+          transform: { xs: mobileOpen ? 'translateX(0)' : 'translateX(-100%)', md: 'translateX(0)' },
+          transition: 'transform 180ms ease, width 180ms ease',
+          bgcolor: '#010C1B',
+          background: [
+            'linear-gradient(180deg, #010C1B 0%, #010D1B 42%, #020B16 100%)',
+          ].join(','),
+          color: '#fff',
+          borderRight: `1px solid ${alpha('#fff', 0.08)}`,
+          boxShadow: '10px 0 30px rgba(5, 15, 27, 0.14)',
         }}
       >
-        <TopoShellBackground active tone="black" />
-        <Box sx={{ display: { xs: 'flex', md: 'none' }, justifyContent: 'flex-end', p: 1, position: 'relative', zIndex: 1 }}>
-          <Button variant="text" onClick={() => setMobileOpen(false)}>
-            Close
-          </Button>
-        </Box>
         <NavigationContent
           pathname={location.pathname}
           collapsed={desktopCollapsed}
           onNavigate={() => setMobileOpen(false)}
         />
+        <IconButton
+          aria-label={desktopCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          onClick={toggleDesktopCollapsed}
+          sx={{
+            position: 'absolute',
+            right: 12,
+            bottom: 22,
+            width: 32,
+            height: 32,
+            color: '#fff',
+            bgcolor: alpha('#fff', 0.09),
+            '&:hover': { bgcolor: alpha('#fff', 0.14) },
+            display: { xs: 'none', md: 'inline-flex' },
+          }}
+        >
+          <KeyboardDoubleArrowLeftOutlined sx={{ transform: desktopCollapsed ? 'rotate(180deg)' : 'none' }} />
+        </IconButton>
       </Box>
 
-      <Box component="main" sx={{ flex: 1, minWidth: 0, position: 'relative', overflow: 'hidden' }}>
-        <TopoShellBackground active={showTopoShellBackground} tone={isDark ? 'black' : 'canvas'} />
+      <Box
+        component="main"
+        sx={{
+          minWidth: 0,
+          height: '100vh',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          bgcolor: isDark ? trovanColors.dark.appBg : trovanColors.light.appBg,
+          background: isDark
+            ? `radial-gradient(circle at 78% -10%, ${alpha(trovanColors.copper[500], 0.12)}, transparent 32%), ${trovanColors.dark.appBg}`
+            : trovanColors.light.appBg,
+        }}
+      >
         <Box
+          component="header"
           sx={{
-            position: 'sticky',
-            top: 0,
-            zIndex: 1100,
-            minHeight: trovanLayout.headerHeight,
+            height: trovanLayout.headerHeight,
+            flex: '0 0 auto',
+            borderBottom: `1px solid ${isDark ? trovanColors.dark.border : trovanColors.light.border}`,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 2,
-            px: { xs: 2, md: 3 },
-            py: 0.55,
-            bgcolor: isDark ? alpha('#120E0B', 0.92) : alpha(trovanColors.black[950], 0.9),
-            backdropFilter: 'blur(12px)',
-            borderBottom: `1px solid ${alpha('#FFF8ED', 0.11)}`,
-            color: '#FFF8ED',
+            gap: { xs: 1, md: 1.4 },
+            px: { xs: 1.25, md: 2.25 },
+            bgcolor: isDark ? alpha(trovanColors.dark.surface, 0.86) : alpha('#fff', 0.88),
+            backdropFilter: 'blur(18px) saturate(135%)',
+            boxShadow: isDark ? '0 1px 0 rgba(255,255,255,.018)' : '0 1px 8px rgba(11,19,36,.035)',
+            position: 'relative',
+            zIndex: 10,
           }}
         >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
-            <IconButton
-              aria-label="Open workspace navigation"
-              onClick={() => setMobileOpen(true)}
+          <IconButton
+            aria-label="Open navigation"
+            onClick={() => setMobileOpen(true)}
+            sx={{ display: { xs: 'inline-flex', md: 'none' } }}
+          >
+            <MenuOutlined />
+          </IconButton>
+          <Box sx={{ minWidth: 0, flex: { xs: 1, xl: '0 0 440px' } }}>
+            <Typography
+              component="h1"
               sx={{
-                display: { xs: 'inline-flex', md: 'none' },
-                width: 34,
-                height: 34,
-                borderRadius: 1,
-                border: `1px solid ${alpha('#FFF8ED', 0.12)}`,
-                bgcolor: alpha('#FFF8ED', 0.06),
-                color: '#FFF8ED',
+                m: 0,
+                fontSize: { xs: 18, md: 20 },
+                lineHeight: 1.08,
+                letterSpacing: '-0.025em',
+                fontWeight: 800,
               }}
             >
-              <MenuOutlinedIcon fontSize="small" />
-            </IconButton>
-            <IconButton
-              aria-label={desktopCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              onClick={toggleDesktopCollapsed}
-              sx={{
-                display: { xs: 'none', md: 'inline-flex' },
-                width: 34,
-                height: 34,
-                borderRadius: 1,
-                border: `1px solid ${alpha('#FFF8ED', 0.12)}`,
-                bgcolor: alpha('#FFF8ED', 0.06),
-                color: '#FFF8ED',
-              }}
-              title={desktopCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            >
-              {desktopCollapsed ? (
-                <KeyboardDoubleArrowRightOutlinedIcon fontSize="small" />
-              ) : (
-                <KeyboardDoubleArrowLeftOutlinedIcon fontSize="small" />
-              )}
-            </IconButton>
-            <Box sx={{ minWidth: 0 }}>
-              <Typography variant="subtitle2" component="div" sx={{ mb: 0.2, color: alpha('#FFF8ED', 0.54) }}>
-                {activeSection?.label || 'Operations'}
+              {pageTitle}
+            </Typography>
+            {pageSubtitle ? (
+              <Typography sx={{ mt: 0.25, color: 'text.secondary', fontSize: 12.5, lineHeight: 1.25 }}>
+                {pageSubtitle}
               </Typography>
-              <Typography variant="h6" component="div" noWrap sx={{ color: '#FFF8ED' }}>
-                {activeItem.label}
-              </Typography>
-            </Box>
+            ) : null}
           </Box>
 
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
-            <Box sx={{ display: { xs: 'none', md: 'block' } }}>
-              <PreviewBanner />
-            </Box>
-            <Tooltip title={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
-              <IconButton
-                onClick={toggleMode}
-                aria-label={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-                sx={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 1,
-                  color: '#FFF8ED',
-                  border: `1px solid ${alpha('#FFF8ED', 0.16)}`,
-                  bgcolor: alpha('#FFF8ED', 0.035),
-                  '&:hover': {
-                    borderColor: alpha(trovanColors.copper[300], 0.45),
-                    bgcolor: alpha(trovanColors.copper[500], 0.16),
-                  },
-                }}
-              >
-                {mode === 'dark' ? (
-                  <LightModeOutlinedIcon fontSize="small" />
-                ) : (
-                  <DarkModeOutlinedIcon fontSize="small" />
-                )}
-              </IconButton>
-            </Tooltip>
-            <Button
-              variant="outlined"
-              onClick={() => navigate('/settings')}
-              sx={{
-                color: '#FFF8ED',
-                borderColor: alpha('#FFF8ED', 0.16),
-                bgcolor: alpha('#FFF8ED', 0.035),
-                '&:hover': {
-                  borderColor: alpha(trovanColors.copper[300], 0.45),
-                  bgcolor: alpha(trovanColors.copper[500], 0.16),
-                },
-              }}
-            >
-              Settings
-            </Button>
-            <Button
-              variant="text"
-              onClick={onLogout}
-              sx={{
-                color: alpha('#FFF8ED', 0.78),
-                '&:hover': { bgcolor: alpha('#FFF8ED', 0.06) },
-              }}
-            >
-              Logout
-            </Button>
+          <Box sx={{ display: { xs: 'none', lg: 'block' }, flex: '0 1 300px', minWidth: 0, overflow: 'hidden' }}>
+            <PreviewBanner />
           </Box>
+
+          <TextField
+            size="small"
+            placeholder={searchPlaceholder}
+            aria-label={searchPlaceholder}
+            sx={{
+              display: { xs: 'none', xl: 'block' },
+              flex: '0 1 320px',
+              width: 320,
+              maxWidth: 320,
+              ml: 'auto',
+              '& .MuiOutlinedInput-root': {
+                height: 40,
+                borderRadius: '9px',
+                bgcolor: isDark ? trovanColors.dark.panel : '#fff',
+              },
+            }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchOutlined sx={{ color: 'text.secondary', fontSize: 20 }} />
+                </InputAdornment>
+              ),
+              endAdornment: (
+                <InputAdornment position="end">
+                  <Box
+                    sx={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 0.2,
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      borderRadius: '6px',
+                      px: 0.7,
+                      py: 0.2,
+                      color: 'text.secondary',
+                      fontSize: 11,
+                      fontWeight: 800,
+                      bgcolor: 'background.default',
+                    }}
+                  >
+                    <KeyboardCommandKeyOutlined sx={{ fontSize: 13 }} /> K
+                  </Box>
+                </InputAdornment>
+              ),
+            }}
+          />
+
+          <Box
+            aria-label={`Current operating date: ${currentDateLabel}`}
+            sx={{
+              height: 40,
+              display: { xs: 'none', md: 'inline-flex' },
+              minWidth: 150,
+              px: 1.5,
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 0.9,
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: '8px',
+              bgcolor: 'background.paper',
+              fontSize: 13,
+              fontWeight: 800,
+            }}
+          >
+            <CalendarTodayOutlined sx={{ fontSize: 19 }} />
+            {currentDateLabel}
+          </Box>
+          <Tooltip title={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
+            <IconButton
+              onClick={toggleMode}
+              aria-label={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              sx={{ width: 38, height: 38, border: '1px solid', borderColor: 'divider', borderRadius: '9px' }}
+            >
+              {mode === 'dark' ? <LightModeOutlined /> : <DarkModeOutlined />}
+            </IconButton>
+          </Tooltip>
+          <IconButton
+            aria-label="Notifications"
+            aria-haspopup="dialog"
+            aria-expanded={Boolean(notificationsAnchorEl)}
+            onClick={openNotifications}
+            sx={{ width: 38, height: 38, border: '1px solid', borderColor: 'divider', borderRadius: '9px' }}
+          >
+            <Badge badgeContent={0} color="error">
+              <NotificationsNoneOutlined />
+            </Badge>
+          </IconButton>
+          <Button
+            aria-label={`Open account menu for ${userLabel}`}
+            aria-haspopup="menu"
+            aria-expanded={Boolean(accountAnchorEl)}
+            onClick={(event) => setAccountAnchorEl(event.currentTarget)}
+            sx={{
+              display: 'flex',
+              minWidth: 0,
+              pl: 0.5,
+              pr: 0.75,
+              color: 'text.primary',
+              textTransform: 'none',
+              justifyContent: 'flex-start',
+            }}
+          >
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
+              <Avatar sx={{ width: 36, height: 36, bgcolor: trovanColors.copper[500], fontSize: 13, fontWeight: 800 }}>{userInitials}</Avatar>
+              <Box sx={{ display: { xs: 'none', xl: 'block' }, minWidth: 0, textAlign: 'left' }}>
+                <Typography noWrap sx={{ maxWidth: 180, fontSize: 13, fontWeight: 850 }}>{userLabel}</Typography>
+                <Typography sx={{ fontSize: 11, color: 'text.secondary' }}>{roleLabel}</Typography>
+              </Box>
+              <Typography aria-hidden="true" sx={{ display: { xs: 'none', xl: 'block' }, color: 'text.secondary' }}>⌄</Typography>
+            </Stack>
+          </Button>
         </Box>
+        <Popover
+          open={Boolean(notificationsAnchorEl)}
+          anchorEl={notificationsAnchorEl}
+          onClose={() => setNotificationsAnchorEl(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+          slotProps={{ paper: { sx: { width: 300, mt: 1, p: 1.5 } } }}
+        >
+          <Typography variant="subtitle2" sx={{ fontWeight: 850 }}>
+            Notifications
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            You are all caught up. There are no new operational alerts.
+          </Typography>
+          <Button
+            component={NavLink}
+            to="/settings"
+            size="small"
+            onClick={() => setNotificationsAnchorEl(null)}
+            sx={{ mt: 1, px: 0 }}
+          >
+            Open notification settings
+          </Button>
+        </Popover>
+        <Menu
+          anchorEl={accountAnchorEl}
+          open={Boolean(accountAnchorEl)}
+          onClose={() => setAccountAnchorEl(null)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+          slotProps={{ paper: { sx: { minWidth: 220, mt: 1 } } }}
+        >
+          <MenuItem
+            onClick={() => {
+              setAccountAnchorEl(null);
+              void onLogout();
+            }}
+          >
+            <ListItemIcon>
+              <LogoutOutlined fontSize="small" />
+            </ListItemIcon>
+            Sign out
+          </MenuItem>
+        </Menu>
 
         <Box
           sx={{
-            position: 'relative',
-            zIndex: 1,
-            width: '100%',
-            px: { xs: 2, md: 3 },
-            py: { xs: 1.5, md: 2 },
+            height: `calc(100vh - ${trovanLayout.headerHeight}px)`,
+            overflow: 'auto',
+            px: { xs: 1.25, md: `${trovanLayout.pagePaddingX}px` },
+            py: { xs: 1.25, md: `${trovanLayout.pagePaddingY}px` },
+            scrollbarGutter: 'stable',
+            scrollbarWidth: 'thin',
+            scrollbarColor: `${alpha(isDark ? '#fff' : trovanColors.brand.navy950, 0.18)} transparent`,
+            '&::-webkit-scrollbar': { width: 8, height: 8 },
+            '&::-webkit-scrollbar-thumb': {
+              bgcolor: alpha(isDark ? '#fff' : trovanColors.brand.navy950, 0.16),
+              borderRadius: 999,
+            },
           }}
         >
-          {children}
+          <Box sx={{ width: '100%', maxWidth: trovanLayout.pageMaxWidth, mx: 'auto' }}>
+            {children}
+          </Box>
         </Box>
       </Box>
     </Box>

@@ -13,6 +13,7 @@ describe('subscriptionsApi', () => {
           data: {
             generatedAt: '2026-04-21T18:00:00.000Z',
             stripeConfigured: true,
+            billingMode: 'assisted_pilot',
             billingContactEmail: 'billing@example.com',
             activeSubscription: {
               id: 'sub-1',
@@ -35,15 +36,19 @@ describe('subscriptionsApi', () => {
             plans: [
               {
                 plan: 'starter',
-                label: 'Starter',
-                monthlyPriceUsd: 149,
+                label: 'Launch',
+                monthlyPriceUsd: 399,
+                billingCadence: 'month',
+                salesAssisted: true,
+                selfServeEnabled: false,
                 dispatcherSeats: 3,
                 features: ['Dispatcher workspace'],
                 stripePriceConfigured: true,
               },
             ],
             controls: {
-              invoiceAutomationReady: true,
+              selfServeEnabled: false,
+              invoiceAutomationReady: false,
               failedPaymentHandlingReady: true,
               webhookConfigured: true,
             },
@@ -68,7 +73,10 @@ describe('subscriptionsApi', () => {
 
     expect(overview.stripeConfigured).toBe(true);
     expect(overview.activeSubscription?.plan).toBe('professional');
-    expect(overview.plans[0].monthlyPriceUsd).toBe(149);
+    expect(overview.billingMode).toBe('assisted_pilot');
+    expect(overview.plans[0].label).toBe('Launch');
+    expect(overview.plans[0].monthlyPriceUsd).toBe(399);
+    expect(overview.plans[0].selfServeEnabled).toBe(false);
     expect(overview.controls.webhookConfigured).toBe(true);
   });
 });

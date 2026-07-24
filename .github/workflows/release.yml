@@ -1,0 +1,225 @@
+name: Promote Trovan Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deployment environment
+        type: choice
+        required: true
+        options:
+          - staging
+          - production
+      release_sha:
+        description: Full commit SHA that passed the release gate
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  deployments: read
+
+env:
+  NODE_VERSION: '24'
+
+jobs:
+  promote:
+    name: Promote Immutable SHA
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: ${{ inputs.target }}
+
+    steps:
+      - name: Validate full SHA input
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          if ! printf '%s' "$RELEASE_SHA" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "release_sha must be a full 40-character commit SHA"
+            exit 1
+          fi
+
+      - name: Require successful staging deployment for production
+        if: inputs.target == 'production'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          deployment_id="$(
+            gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=staging&ref=${RELEASE_SHA}" \
+              --jq '.[0].id // empty'
+          )"
+          if [ -z "$deployment_id" ]; then
+            echo "No staging deployment exists for $RELEASE_SHA"
+            exit 1
+          fi
+          state="$(
+            gh api "repos/${GITHUB_REPOSITORY}/deployments/${deployment_id}/statuses" \
+              --jq '.[0].state // empty'
+          )"
+          if [ "$state" != "success" ]; then
+            echo "Staging deployment $deployment_id is not successful: $state"
+            exit 1
+          fi
+
+      - name: Checkout exact release SHA
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.release_sha }}
+
+      - name: Confirm checked-out SHA
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Recheck production dependency gate
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Build exact frontend
+        env:
+          VITE_REST_API_URL: ${{ vars.BACKEND_URL }}
+          VITE_API_URL: ${{ vars.BACKEND_URL }}
+          VITE_WS_URL: ${{ vars.WEBSOCKET_URL }}
+          VITE_ENABLE_SOCKETS: 'true'
+          VITE_API_TIMEOUT_MS: '8000'
+          VITE_RELEASE_SHA: ${{ inputs.release_sha }}
+        run: npm run build --workspace=frontend
+
+      - name: Capture current provider versions
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_BACKEND_SERVICE_ID: ${{ secrets.RENDER_BACKEND_SERVICE_ID }}
+        run: |
+          mkdir -p release-evidence
+          if [ "${{ inputs.target }}" = "staging" ]; then
+            npx wrangler@4.114.0 deployments list --env staging > release-evidence/cloudflare-before.txt
+          else
+            npx wrangler@4.114.0 deployments list > release-evidence/cloudflare-before.txt
+          fi
+          curl -fsS \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_BACKEND_SERVICE_ID/deploys?limit=5" \
+            > release-evidence/render-before.json
+
+      - name: Deploy Render services at exact SHA
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_BACKEND_SERVICE_ID: ${{ secrets.RENDER_BACKEND_SERVICE_ID }}
+          RENDER_ROUTING_SERVICE_ID: ${{ secrets.RENDER_ROUTING_SERVICE_ID }}
+        run: |
+          for service_id in "$RENDER_ROUTING_SERVICE_ID" "$RENDER_BACKEND_SERVICE_ID"; do
+            curl -fsS -X POST \
+              -H "Authorization: Bearer $RENDER_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d "{\"commitId\":\"$RELEASE_SHA\",\"clearCache\":\"do_not_clear\"}" \
+              "https://api.render.com/v1/services/$service_id/deploys"
+          done
+
+      - name: Deploy Cloudflare assets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ "${{ inputs.target }}" = "staging" ]; then
+            npx wrangler@4.114.0 deploy --env staging
+          else
+            npx wrangler@4.114.0 deploy
+          fi
+
+      - name: Wait for immutable release health
+        env:
+          BACKEND_URL: ${{ vars.BACKEND_URL }}
+          FRONTEND_URL: ${{ vars.FRONTEND_URL }}
+          ROUTING_SERVICE_URL: ${{ vars.ROUTING_SERVICE_URL }}
+        run: |
+          curl --fail --show-error --silent --retry 24 --retry-delay 10 --retry-all-errors \
+            "$BACKEND_URL/health/readiness"
+          curl --fail --show-error --silent --retry 12 --retry-delay 5 --retry-all-errors \
+            "$ROUTING_SERVICE_URL/health"
+          curl --fail --show-error --silent --retry 12 --retry-delay 5 --retry-all-errors \
+            "$FRONTEND_URL"
+          curl --fail --show-error --silent --head "$FRONTEND_URL/sitemap.xml" |
+            grep -Eiq '^content-type: (application|text)/xml'
+          curl --fail --show-error --silent "$FRONTEND_URL/sitemap.xml" |
+            grep -q '<urlset'
+
+      - name: Run strict staging smoke
+        if: inputs.target == 'staging'
+        env:
+          STAGING_FRONTEND_URL: ${{ vars.FRONTEND_URL }}
+          STAGING_BACKEND_URL: ${{ vars.BACKEND_URL }}
+          STAGING_ROUTING_SERVICE_URL: ${{ vars.ROUTING_SERVICE_URL }}
+          STAGING_AUTH_TOKEN: ${{ secrets.STAGING_AUTH_TOKEN }}
+          STAGING_DRIVER_AUTH_TOKEN: ${{ secrets.STAGING_DRIVER_AUTH_TOKEN }}
+          METRICS_TOKEN: ${{ secrets.METRICS_TOKEN }}
+          ROUTING_SERVICE_INTERNAL_TOKEN: ${{ secrets.ROUTING_SERVICE_INTERNAL_TOKEN }}
+          WORKOS_TEST_EMAIL: ${{ secrets.WORKOS_TEST_EMAIL }}
+          WORKOS_TEST_PASSWORD: ${{ secrets.WORKOS_TEST_PASSWORD }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_PRICE_LAUNCH: ${{ secrets.STRIPE_PRICE_LAUNCH }}
+          STRIPE_PRICE_SCALE: ${{ secrets.STRIPE_PRICE_SCALE }}
+          STAGING_WEBHOOK_RECEIVER_URL: ${{ secrets.STAGING_WEBHOOK_RECEIVER_URL }}
+          POSTMARK_SERVER_TOKEN: ${{ secrets.POSTMARK_SERVER_TOKEN }}
+          POSTMARK_FROM_EMAIL: ${{ vars.POSTMARK_FROM_EMAIL }}
+          LEAD_INTAKE_EMAIL: ${{ vars.LEAD_INTAKE_EMAIL }}
+          LEAD_INTAKE_FROM_EMAIL: ${{ vars.LEAD_INTAKE_FROM_EMAIL }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+        run: npm run staging:smoke
+
+      - name: Install hosted browser
+        if: inputs.target == 'staging'
+        run: npx playwright install --with-deps chromium
+
+      - name: Run authenticated hosted Playwright gate
+        if: inputs.target == 'staging'
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ vars.FRONTEND_URL }}
+          PLAYWRIGHT_SKIP_WEBSERVER: 'true'
+          LAUNCH_AUDIT_API_URL: ${{ vars.BACKEND_URL }}
+          LAUNCH_AUDIT_AUTH_TOKEN: ${{ secrets.STAGING_AUTH_TOKEN }}
+          STAGING_DRIVER_AUTH_TOKEN: ${{ secrets.STAGING_DRIVER_AUTH_TOKEN }}
+          LAUNCH_AUDIT_STRICT_OPTIMIZER: 'true'
+          LAUNCH_AUDIT_DIR: .tmp/launch-audit/hosted-playwright
+          PLAYWRIGHT_OUTPUT_DIR: .tmp/launch-audit/hosted-results
+        run: npm run test:e2e -- --project=chromium
+
+      - name: Save deployed evidence
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_BACKEND_SERVICE_ID: ${{ secrets.RENDER_BACKEND_SERVICE_ID }}
+        run: |
+          if [ "${{ inputs.target }}" = "staging" ]; then
+            npx wrangler@4.114.0 deployments list --env staging > release-evidence/cloudflare-after.txt
+          else
+            npx wrangler@4.114.0 deployments list > release-evidence/cloudflare-after.txt
+          fi
+          curl -fsS \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            "https://api.render.com/v1/services/$RENDER_BACKEND_SERVICE_ID/deploys?limit=5" \
+            > release-evidence/render-after.json
+          printf '%s\n' "${{ inputs.release_sha }}" > release-evidence/release-sha.txt
+
+      - name: Upload release evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.target }}-release-${{ inputs.release_sha }}
+          path: release-evidence/
+          retention-days: 90

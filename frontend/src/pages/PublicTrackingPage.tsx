@@ -31,9 +31,19 @@ export default function PublicTrackingPage() {
     return (
       <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', p: 3, bgcolor: trovanColors.black[950], position: 'relative', overflow: 'hidden' }}>
         <TopoShellBackground active tone="black" />
-        <SurfacePanel variant="command" sx={{ maxWidth: 720, width: '100%', position: 'relative', zIndex: 1 }}>
-          <Typography variant="h2">Tracking link unavailable</Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mt: 1 }}>
+        <SurfacePanel
+          variant="command"
+          sx={{
+            maxWidth: 720,
+            width: '100%',
+            position: 'relative',
+            zIndex: 1,
+            '& .MuiTypography-root': { color: '#FFF8ED' },
+            '& .MuiTypography-body1': { color: alpha('#FFF8ED', 0.74) },
+          }}
+        >
+          <Typography variant="h2" sx={{ color: '#FFF8ED' }}>Tracking link unavailable</Typography>
+          <Typography variant="body1" sx={{ mt: 1, color: alpha('#FFF8ED', 0.74) }}>
             This tracking link could not be loaded. It may have expired or the route run is no longer available.
           </Typography>
         </SurfacePanel>
@@ -65,16 +75,19 @@ export default function PublicTrackingPage() {
               borderTop: `4px solid ${accent}`,
               background:
                 `radial-gradient(circle at top left, ${alpha(accent, 0.16)}, transparent 24%), linear-gradient(180deg, ${alpha(trovanColors.utility.panel, 0.98)}, ${alpha(trovanColors.utility.panel, 0.94)})`,
+              '& .MuiTypography-root': { color: '#FFF8ED' },
+              '& .MuiTypography-subtitle2': { color: accent },
+              '& .MuiTypography-body1': { color: alpha('#FFF8ED', 0.74) },
             }}
           >
             <Stack spacing={2}>
               <Typography variant="subtitle2" component="div" sx={{ color: accent }}>
                 {brandName}
               </Typography>
-              <Typography variant="h2" component="h1" sx={{ maxWidth: '14ch' }}>
+              <Typography variant="h2" component="h1" sx={{ maxWidth: '14ch', color: '#FFF8ED' }}>
                 {tracking.organization.branding.trackingHeadline || 'Your delivery is on the way'}
               </Typography>
-              <Typography variant="body1" component="p" color="text.secondary" sx={{ maxWidth: 720 }}>
+              <Typography variant="body1" component="p" sx={{ maxWidth: 720, color: alpha('#FFF8ED', 0.74) }}>
                 {tracking.organization.branding.trackingSubtitle ||
                   'Live route visibility, current delivery status, and proof-ready completion details.'}
               </Typography>

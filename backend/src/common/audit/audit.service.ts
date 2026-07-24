@@ -6,6 +6,16 @@ import { DomainEvents } from '../events/event-types';
 import { AuditEntry } from './audit.types';
 import { AuditLog } from './audit-log.entity';
 
+const DEFAULT_AUDIT_LOG_LIMIT = 100;
+const MAX_AUDIT_LOG_LIMIT = 500;
+
+export function normalizeAuditLogLimit(limit = DEFAULT_AUDIT_LOG_LIMIT): number {
+  if (!Number.isFinite(limit)) {
+    return DEFAULT_AUDIT_LOG_LIMIT;
+  }
+  return Math.max(1, Math.min(MAX_AUDIT_LOG_LIMIT, Math.floor(limit)));
+}
+
 @Injectable()
 export class AuditService {
   private readonly logger = new Logger('AuditService');
@@ -51,12 +61,12 @@ export class AuditService {
     return payload;
   }
 
-  list(limit = 100): AuditEntry[] {
-    return this.entries.slice(0, limit);
+  list(limit = DEFAULT_AUDIT_LOG_LIMIT): AuditEntry[] {
+    return this.entries.slice(0, normalizeAuditLogLimit(limit));
   }
 
   async listPersisted({
-    limit = 100,
+    limit = DEFAULT_AUDIT_LOG_LIMIT,
     organizationId,
     action,
     entityType,
@@ -71,7 +81,7 @@ export class AuditService {
     const query = this.auditLogs
       .createQueryBuilder('audit')
       .orderBy('audit.created_at', 'DESC')
-      .limit(limit);
+      .limit(normalizeAuditLogLimit(limit));
     if (organizationId) {
       query.andWhere('audit.organization_id = :organizationId', { organizationId });
     }

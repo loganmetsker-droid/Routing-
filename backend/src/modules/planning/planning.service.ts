@@ -10,6 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, In, IsNull, Repository } from 'typeorm';
 import { firstValueFrom } from 'rxjs';
 import {
+  evaluateJobRoutingReadiness,
   getOptimizationObjectiveLabel,
   normalizeOptimizationObjective,
   type OptimizationObjective,
@@ -27,12 +28,13 @@ import { Route, RouteStatus, RouteWorkflowStatus } from '../dispatch/entities/ro
 import { RouteAssignment } from '../dispatch/entities/route-assignment.entity';
 import { RouteRunStop } from '../dispatch/entities/route-run-stop.entity';
 import { Depot } from '../depots/entities/depot.entity';
-import { RoutePlan } from './entities/route-plan.entity';
+import { RoutePlan, type RoutePlanPublishDecision } from './entities/route-plan.entity';
 import { RoutePlanGroup } from './entities/route-plan-group.entity';
 import { RoutePlanStop } from './entities/route-plan-stop.entity';
 import { GenerateRoutePlanDto } from './dto/generate-route-plan.dto';
 import { UpdateRoutePlanGroupDto } from './dto/update-route-plan-group.dto';
 import { UpdateRoutePlanStopDto } from './dto/update-route-plan-stop.dto';
+import { AcceptPublishRiskDto } from './dto/accept-publish-risk.dto';
 import {
   resolveRoutingServiceUrl,
   routingServiceAuthHeaders,
@@ -75,6 +77,17 @@ type DraftPlanComputation = {
   stops: RoutePlanStop[];
   metrics: Record<string, unknown>;
   warnings: Array<string | Record<string, unknown>>;
+};
+
+type PublishBlocker = {
+  code: string;
+  message: string;
+  severity: 'blocking';
+  canAcceptRisk: boolean;
+  groupId?: string;
+  jobId?: string;
+  warningIndex?: number;
+  acceptedDecision?: RoutePlanPublishDecision;
 };
 
 const ACTIVE_ROUTE_PLAN_STATUSES: RoutePlan['status'][] = [
@@ -799,6 +812,256 @@ export class PlanningService {
     return new Map(locked.map((stop) => [stop.jobStopId, stop]));
   }
 
+  private routePlanPublishDecisions(
+    routePlan: RoutePlan,
+  ): RoutePlanPublishDecision[] {
+    return Array.isArray(routePlan.publishDecisions)
+      ? routePlan.publishDecisions
+      : [];
+  }
+
+  private findAcceptedPublishDecision(
+    blocker: PublishBlocker,
+    routePlan: RoutePlan,
+  ) {
+    if (!blocker.canAcceptRisk) return undefined;
+    return this.routePlanPublishDecisions(routePlan).find((decision) => {
+      if (decision.decision !== 'accepted_risk') return false;
+      if (decision.blockerCode !== blocker.code) return false;
+      if (blocker.jobId && decision.jobId !== blocker.jobId) return false;
+      if (blocker.groupId && decision.groupId !== blocker.groupId) return false;
+      if (
+        blocker.warningIndex !== undefined &&
+        decision.warningIndex !== blocker.warningIndex
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }
+
+  private applyPublishDecisions(
+    routePlan: RoutePlan,
+    blockers: PublishBlocker[],
+  ) {
+    return blockers.map((blocker) => ({
+      ...blocker,
+      acceptedDecision: this.findAcceptedPublishDecision(blocker, routePlan),
+    }));
+  }
+
+  private formatWarning(warning: string | Record<string, unknown>) {
+    if (typeof warning === 'string') return warning;
+    if (typeof warning.message === 'string') return warning.message;
+    if (typeof warning.type === 'string') return warning.type;
+    return 'Planner warning requires review';
+  }
+
+  private async buildPublishReadiness(routePlanId: string, actor?: Actor) {
+    const { routePlan, groups, stops } = await this.getRoutePlan(routePlanId, actor);
+    const plannedJobIds = Array.from(new Set(stops.map((stop) => stop.jobId)));
+    const plannedJobs = plannedJobIds.length
+      ? await this.jobs.find({
+          where: { organizationId: routePlan.organizationId, id: In(plannedJobIds) },
+        })
+      : [];
+    const plannedJobById = new Map(plannedJobs.map((job) => [job.id, job]));
+    const blockers: PublishBlocker[] = [];
+
+    if (!groups.length || !stops.length) {
+      blockers.push({
+        code: 'EMPTY_PLAN',
+        message: 'Generate a route plan with at least one lane and stop before publishing.',
+        severity: 'blocking',
+        canAcceptRisk: false,
+      });
+    }
+
+    const groupIds = new Set(groups.map((group) => group.id));
+    const orphanedGroupIds = Array.from(
+      new Set(
+        stops
+          .map((stop) => stop.routePlanGroupId)
+          .filter((groupId) => !groupIds.has(groupId)),
+      ),
+    );
+    if (orphanedGroupIds.length) {
+      blockers.push({
+        code: 'ORPHANED_PLAN_STOPS',
+        message:
+          'Route plan stops reference lanes that no longer exist. Regenerate the plan before publishing.',
+        severity: 'blocking',
+        canAcceptRisk: false,
+      });
+    }
+
+    for (const group of groups) {
+      const groupStops = stops.filter((stop) => stop.routePlanGroupId === group.id);
+      if (!groupStops.length) continue;
+      if (!group.vehicleId) {
+        blockers.push({
+          code: 'MISSING_VEHICLE',
+          message: `${group.label || 'Route'} needs a vehicle before publish.`,
+          severity: 'blocking',
+          canAcceptRisk: false,
+          groupId: group.id,
+        });
+      }
+      if (!group.driverId) {
+        blockers.push({
+          code: 'MISSING_DRIVER',
+          message: `${group.label || 'Route'} needs a driver before publish.`,
+          severity: 'blocking',
+          canAcceptRisk: false,
+          groupId: group.id,
+        });
+      }
+    }
+
+    routePlan.warnings?.forEach((warning, index) => {
+      blockers.push({
+        code: 'ROUTE_PLAN_WARNING',
+        message: this.formatWarning(warning),
+        severity: 'blocking',
+        canAcceptRisk: true,
+        warningIndex: index,
+      });
+    });
+
+    for (const jobId of plannedJobIds) {
+      const job = plannedJobById.get(jobId);
+      if (!job) {
+        blockers.push({
+          code: 'JOB_NOT_FOUND',
+          message: `Planned job ${jobId} is no longer available.`,
+          severity: 'blocking',
+          canAcceptRisk: false,
+          jobId,
+        });
+        continue;
+      }
+      const readiness = evaluateJobRoutingReadiness({
+        deliveryAddress: job.deliveryAddress,
+        timeWindowStart: job.timeWindowStart,
+        timeWindowEnd: job.timeWindowEnd,
+        estimatedDuration: job.estimatedDuration,
+        weight: job.weight,
+        volume: job.volume,
+        quantity: job.quantity,
+        routingRequirements: job.routingRequirements,
+      });
+      if (readiness.status === 'routable') continue;
+      const code =
+        readiness.status === 'missing_data'
+          ? 'JOB_MISSING_DATA'
+          : readiness.status === 'capacity_risk'
+            ? 'JOB_CAPACITY_RISK'
+            : readiness.status === 'appointment_risk'
+              ? 'JOB_APPOINTMENT_RISK'
+              : 'JOB_ACCESS_RISK';
+      blockers.push({
+        code,
+        message: `${job.customerName || job.id}: ${readiness.summary}`,
+        severity: 'blocking',
+        canAcceptRisk: readiness.status !== 'missing_data',
+        jobId: job.id,
+      });
+    }
+
+    const plannedJobIdSet = new Set(plannedJobIds);
+    const sameOrgJobs = await this.jobs.find({
+      where: { organizationId: routePlan.organizationId },
+      order: { createdAt: 'ASC' },
+    });
+    sameOrgJobs
+      .filter((job) => !plannedJobIdSet.has(job.id))
+      .filter((job) => ![JobStatus.COMPLETED, JobStatus.CANCELLED, JobStatus.ARCHIVED].includes(job.status))
+      .filter((job) => !job.assignedRouteId)
+      .forEach((job) => {
+        blockers.push({
+          code: 'UNASSIGNED_JOB',
+          message: `${job.customerName || job.id} is not assigned to the route plan.`,
+          severity: 'blocking',
+          canAcceptRisk: false,
+          jobId: job.id,
+        });
+      });
+
+    const blockersWithDecisions = this.applyPublishDecisions(routePlan, blockers);
+    const blockingBlockers = blockersWithDecisions.filter(
+      (blocker) => !blocker.acceptedDecision,
+    );
+
+    return {
+      ok: true,
+      routePlanId,
+      ready: blockingBlockers.length === 0,
+      blockers: blockersWithDecisions,
+      blockingBlockers,
+      decisions: this.routePlanPublishDecisions(routePlan),
+      summary: {
+        blockerCount: blockersWithDecisions.length,
+        blockingCount: blockingBlockers.length,
+        acceptedRiskCount: blockersWithDecisions.filter(
+          (blocker) => blocker.acceptedDecision,
+        ).length,
+      },
+    };
+  }
+
+  async getPublishReadiness(routePlanId: string, actor?: Actor) {
+    return this.buildPublishReadiness(routePlanId, actor);
+  }
+
+  async acceptPublishRisk(
+    routePlanId: string,
+    dto: AcceptPublishRiskDto,
+    actor?: Actor,
+  ) {
+    const { routePlan } = await this.getRoutePlan(routePlanId, actor);
+    const reason = String(dto.reason || '').trim();
+    if (reason.length < 8) {
+      throw new BadRequestException('Accepted risk reason is required.');
+    }
+    const decision: RoutePlanPublishDecision = {
+      id: `decision-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      decision: 'accepted_risk',
+      blockerCode: dto.blockerCode,
+      reason,
+      actorId: actor?.userId || null,
+      jobId: dto.jobId || null,
+      groupId: dto.groupId || null,
+      warningIndex: dto.warningIndex ?? null,
+      createdAt: new Date().toISOString(),
+    };
+    routePlan.publishDecisions = [
+      ...this.routePlanPublishDecisions(routePlan).filter(
+        (item) =>
+          !(
+            item.blockerCode === decision.blockerCode &&
+            (decision.jobId ? item.jobId === decision.jobId : true) &&
+            (decision.groupId ? item.groupId === decision.groupId : true) &&
+            (decision.warningIndex !== null
+              ? item.warningIndex === decision.warningIndex
+              : true)
+          ),
+      ),
+      decision,
+    ];
+    await this.routePlans.save(routePlan);
+    this.audit.record({
+      actorId: actor?.userId || 'system',
+      actorType: 'user',
+      entityType: 'route_plan',
+      entityId: routePlanId,
+      action: 'route-plan.publish-risk.accepted',
+      source: 'user',
+      newValue: decision as unknown as Record<string, unknown>,
+      metadata: { organizationId: routePlan.organizationId },
+    });
+    return this.buildPublishReadiness(routePlanId, actor);
+  }
+
   async getPlannerView(serviceDate: string, actor?: Actor) {
     const organizationId = this.requireOrganizationId(actor);
     const plan = await this.routePlans.findOne({
@@ -822,9 +1085,15 @@ export class PlanningService {
     const organizationId = this.requireOrganizationId(actor);
     const depot = await this.ensureDepot(organizationId, dto.depotId);
     const objective = this.resolveOptimizationObjective(dto.objective);
-    let plan = await this.routePlans.findOne({
-      where: { organizationId, serviceDate: dto.serviceDate, status: 'DRAFT' },
+    const reusablePlans = await this.routePlans.find({
+      where: {
+        organizationId,
+        serviceDate: dto.serviceDate,
+        status: In(['DRAFT', 'READY']),
+      },
+      order: { updatedAt: 'DESC' },
     });
+    let plan = reusablePlans[0] || null;
     const lockedStops = plan ? await this.getLockedStops(plan.id) : new Map<string, RoutePlanStop>();
     const previousGroups = plan
       ? await this.routePlanGroups.find({
@@ -832,6 +1101,12 @@ export class PlanningService {
           order: { groupIndex: 'ASC' },
         })
       : [];
+    const supersededPlanUpdates = reusablePlans
+      .filter((candidate) => candidate.id !== plan?.id)
+      .map((candidate) => ({ ...candidate, status: 'ARCHIVED' as const }));
+    if (supersededPlanUpdates.length) {
+      await this.routePlans.save(supersededPlanUpdates);
+    }
     if (!plan) {
       plan = await this.routePlans.save(this.routePlans.create({
         organizationId,
@@ -1067,7 +1342,17 @@ export class PlanningService {
         order: { createdAt: 'ASC' },
       }))
         .filter((route) => route.routeData?.routePlanId === routePlanId);
-      return { ok: true, routePlan, routeRuns: existingRoutes };
+      if (existingRoutes.length) {
+        return { ok: true, routePlan, routeRuns: existingRoutes };
+      }
+    }
+    const readiness = await this.buildPublishReadiness(routePlanId, actor);
+    if (!readiness.ready) {
+      throw new BadRequestException({
+        message: 'Route plan is not ready to publish.',
+        blockers: readiness.blockingBlockers,
+        readiness,
+      });
     }
     const byGroup = new Map<string, RoutePlanStop[]>();
     for (const stop of stops) {

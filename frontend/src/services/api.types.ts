@@ -92,6 +92,8 @@ export type RouteRecord = Omit<SharedRoute, 'routeData' | 'polyline'> & {
   estimatedCapacity?: number;
   optimizedAt?: string;
   dispatchedAt?: string;
+  dispatchedByUserId?: string | null;
+  dispatchNote?: string | null;
   completedAt?: string;
 };
 
@@ -700,7 +702,10 @@ export type BillingSubscriptionRecord = {
 export type BillingPlanRecord = {
   plan: string;
   label: string;
-  monthlyPriceUsd: number;
+  monthlyPriceUsd: number | null;
+  billingCadence: 'month' | null;
+  salesAssisted: boolean;
+  selfServeEnabled: boolean;
   dispatcherSeats: number;
   features: string[];
   stripePriceConfigured: boolean;
@@ -709,12 +714,14 @@ export type BillingPlanRecord = {
 export type BillingOverviewRecord = {
   generatedAt: string;
   stripeConfigured: boolean;
+  billingMode: 'assisted_pilot' | 'self_serve';
   organizationId?: string | null;
   billingContactEmail?: string | null;
   activeSubscription?: BillingSubscriptionRecord | null;
   subscriptions: BillingSubscriptionRecord[];
   plans: BillingPlanRecord[];
   controls: {
+    selfServeEnabled: boolean;
     invoiceAutomationReady: boolean;
     failedPaymentHandlingReady: boolean;
     webhookConfigured: boolean;

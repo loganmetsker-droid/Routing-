@@ -8,6 +8,7 @@ const groups = {
       'STAGING_BACKEND_URL',
       'STAGING_ROUTING_SERVICE_URL',
       'STAGING_AUTH_TOKEN',
+      'STAGING_DRIVER_AUTH_TOKEN',
       'METRICS_TOKEN',
     ],
   },
@@ -18,21 +19,19 @@ const groups = {
     allOf: [
       'STRIPE_SECRET_KEY',
       'STRIPE_WEBHOOK_SECRET',
-      'STRIPE_PRICE_STARTER',
-      'STRIPE_PRICE_PROFESSIONAL',
-      'STRIPE_PRICE_ENTERPRISE',
+      'STRIPE_PRICE_LAUNCH',
+      'STRIPE_PRICE_SCALE',
     ],
   },
   webhookSmoke: {
     allOf: ['STAGING_WEBHOOK_RECEIVER_URL'],
   },
-  emailSmsSmoke: {
+  emailSmoke: {
     allOf: [
       'POSTMARK_SERVER_TOKEN',
       'POSTMARK_FROM_EMAIL',
-      'TWILIO_ACCOUNT_SID',
-      'TWILIO_AUTH_TOKEN',
-      'TWILIO_FROM_NUMBER',
+      'LEAD_INTAKE_EMAIL',
+      'LEAD_INTAKE_FROM_EMAIL',
     ],
   },
   storageSmoke: {

@@ -58,11 +58,21 @@ const defaultOverview = (): AnalyticsOverviewRecord => ({
 
 const getPreviewAnalyticsOverview = (): AnalyticsOverviewRecord => {
   const totalRoutes = previewState.routes.length;
+  const totalStops = previewState.routes.reduce(
+    (sum, route) => sum + (route.optimizedStops?.length || 0),
+    0,
+  );
+  const servicedStops = previewState.routes
+    .filter((route) => String(route.status).toLowerCase() === 'completed')
+    .reduce((sum, route) => sum + (route.optimizedStops?.length || 0), 0);
+  const openExceptionRoutes = previewState.routes.filter((route) =>
+    Array.isArray(route.planningWarnings) && route.planningWarnings.length > 0,
+  ).length;
   const activeRoutes = previewState.routes.filter((route) =>
-    ['assigned', 'in_progress'].includes(String(route.status)),
+    ['assigned', 'in_progress'].includes(String(route.status).toLowerCase()),
   ).length;
   const plannedRoutes = previewState.routes.filter(
-    (route) => String(route.status) === 'planned',
+    (route) => String(route.status).toLowerCase() === 'planned',
   ).length;
   const averageRouteDistanceKm =
     totalRoutes > 0
@@ -92,11 +102,11 @@ const getPreviewAnalyticsOverview = (): AnalyticsOverviewRecord => {
   return {
     generatedAt: new Date().toISOString(),
     serviceLevel: {
-      onTimeRate: 94.5,
-      proofCaptureRate: 88.2,
-      exceptionRate: totalRoutes ? Number(((1 / totalRoutes) * 100).toFixed(1)) : 0,
+      onTimeRate: totalStops ? Number(((servicedStops / totalStops) * 100).toFixed(1)) : 0,
+      proofCaptureRate: 0,
+      exceptionRate: totalRoutes ? Number(((openExceptionRoutes / totalRoutes) * 100).toFixed(1)) : 0,
       completedRouteRunsLast7Days: previewState.routes.filter(
-        (route) => route.status === 'completed',
+        (route) => String(route.status).toLowerCase() === 'completed',
       ).length,
     },
     operations: {
@@ -109,28 +119,25 @@ const getPreviewAnalyticsOverview = (): AnalyticsOverviewRecord => {
     fleet: {
       totalVehicles: previewState.vehicles.length,
       activeVehicles: previewState.vehicles.filter((vehicle) =>
-        ['available', 'in_use', 'active'].includes(String(vehicle.status)),
+        ['available', 'in_use', 'active'].includes(String(vehicle.status).toLowerCase()),
       ).length,
       vehiclesReportingRecently: tracking.count,
       totalDrivers: previewState.drivers.length,
       activeDrivers: previewState.drivers.filter((driver) =>
-        ['active', 'on_duty', 'on_route'].includes(String(driver.status)),
+        ['active', 'on_duty', 'on_route'].includes(String(driver.status).toLowerCase()),
       ).length,
     },
     workload: {
-      totalStops: previewState.routes.reduce(
-        (sum, route) => sum + (route.optimizedStops?.length || 0),
-        0,
-      ),
-      servicedStops: 1,
-      openExceptions: previewState.routes.filter((route) =>
-        Array.isArray(route.planningWarnings) && route.planningWarnings.length > 0,
-      ).length,
+      totalStops,
+      servicedStops,
+      openExceptions: openExceptionRoutes,
     },
     routeStatusBreakdown: ['planned', 'assigned', 'in_progress', 'completed'].map(
       (status) => ({
         status,
-        count: previewState.routes.filter((route) => route.status === status).length,
+        count: previewState.routes.filter(
+          (route) => String(route.status).toLowerCase() === status,
+        ).length,
       }),
     ),
     exceptionStatusBreakdown: [

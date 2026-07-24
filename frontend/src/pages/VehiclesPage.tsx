@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
+  Alert,
   Box,
   Button,
   Chip,
@@ -95,6 +96,7 @@ export default function VehiclesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<VehicleRecord | null>(null);
   const [formData, setFormData] = useState(emptyForm);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const visibleVehicles = useMemo(() => {
     if (filter === 'all') return vehicles;
@@ -173,6 +175,7 @@ export default function VehiclesPage() {
         await createVehicleMutation.mutateAsync(payload);
       }
       setDialogOpen(false);
+      setNotice(editingVehicle ? 'Vehicle updated.' : 'Vehicle added.');
     } catch (error) {
       console.error('Failed to save vehicle', error);
     }
@@ -184,11 +187,19 @@ export default function VehiclesPage() {
 
   return (
     <Box>
-      <PageHeader eyebrow="Resources" title="Vehicles" subtitle="Fleet semantics now reflect actual routing operations, not a tiny generic CRUD grid." actions={<Button variant="contained" onClick={openCreate}>Add Vehicle</Button>} />
+      <PageHeader eyebrow="Resources" title="Vehicles" subtitle="Fleet capacity, readiness, and route eligibility." actions={<Button variant="contained" onClick={openCreate}>Add Vehicle</Button>} />
+      {notice ? (
+        <Alert severity="success" onClose={() => setNotice(null)} sx={{ mb: 1.2 }}>
+          {notice}
+        </Alert>
+      ) : null}
 
       <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 2 }}>
-        <Chip clickable label="All" color={filter === 'all' ? 'primary' : 'default'} onClick={() => setFilter('all')} />
-        {VEHICLE_TYPES.map((type) => <Chip key={type} clickable label={VEHICLE_META[type].label} color={filter === type ? 'primary' : 'default'} onClick={() => setFilter(type)} />)}
+        <Button variant="outlined" onClick={() => setNotice('Use the vehicle-type filters to narrow the current fleet records.')}>
+          Filters
+        </Button>
+        <Chip clickable aria-pressed={filter === 'all'} label="All" color={filter === 'all' ? 'primary' : 'default'} onClick={() => setFilter('all')} />
+        {VEHICLE_TYPES.map((type) => <Chip key={type} clickable aria-pressed={filter === type} label={VEHICLE_META[type].label} color={filter === type ? 'primary' : 'default'} onClick={() => setFilter(type)} />)}
       </Stack>
 
       <Grid container spacing={2.5} sx={{ mb: 2.5 }}>
@@ -208,7 +219,7 @@ export default function VehiclesPage() {
       <SurfacePanel sx={{ p: 0, overflow: 'hidden' }}>
         <Box sx={{ px: 2.5, py: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
           <Typography variant="h5">Fleet Directory</Typography>
-          <Typography variant="body2" color="text.secondary">Vehicle types, capacities, and operational attributes are ready for richer fleet rules.</Typography>
+          <Typography variant="body2" color="text.secondary">Vehicle type, capacity, status, and operational attributes from saved fleet records.</Typography>
         </Box>
         <TableContainer>
           <Table>
@@ -236,8 +247,8 @@ export default function VehiclesPage() {
                     <TableCell>{meta.label}</TableCell>
                     <TableCell>
                       <Stack spacing={0.25}>
-                        <Typography variant="body2">Weight: {vehicle.weightCapacity || meta.weight}</Typography>
-                        <Typography variant="body2">Volume: {vehicle.volumeCapacity || meta.volume}</Typography>
+                        <Typography variant="body2">Weight: {vehicle.weightCapacity ? `${vehicle.weightCapacity} lb` : meta.weight}</Typography>
+                        <Typography variant="body2">Volume: {vehicle.volumeCapacity ? `${vehicle.volumeCapacity} cu ft` : meta.volume}</Typography>
                         <Typography variant="caption" color="text.secondary">{vehicle.territoryRestriction || 'Territory open'} • {vehicle.maxRouteMinutes || 'Route duration ready'}</Typography>
                       </Stack>
                     </TableCell>
@@ -269,8 +280,8 @@ export default function VehiclesPage() {
             <Grid item xs={12} md={4}><TextField select label="Status" value={formData.status} onChange={(event) => setFormData((current) => ({ ...current, status: event.target.value }))} fullWidth><MenuItem value="AVAILABLE">Available</MenuItem><MenuItem value="IN_ROUTE">In route</MenuItem><MenuItem value="MAINTENANCE">Maintenance</MenuItem><MenuItem value="OFF_DUTY">Off duty</MenuItem></TextField></Grid>
             <Grid item xs={12} md={4}><TextField label="Fuel type" value={formData.fuelType} onChange={(event) => setFormData((current) => ({ ...current, fuelType: event.target.value }))} fullWidth /></Grid>
             <Grid item xs={12} md={4}><TextField label="Capacity" type="number" value={formData.capacity} onChange={(event) => setFormData((current) => ({ ...current, capacity: Number(event.target.value) }))} fullWidth /></Grid>
-            <Grid item xs={12} md={4}><TextField label="Volume capacity" value={formData.volumeCapacity} onChange={(event) => setFormData((current) => ({ ...current, volumeCapacity: event.target.value }))} fullWidth /></Grid>
-            <Grid item xs={12} md={4}><TextField label="Weight capacity" value={formData.weightCapacity} onChange={(event) => setFormData((current) => ({ ...current, weightCapacity: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={4}><TextField label="Volume capacity (cu ft)" value={formData.volumeCapacity} onChange={(event) => setFormData((current) => ({ ...current, volumeCapacity: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={4}><TextField label="Weight capacity (lb)" value={formData.weightCapacity} onChange={(event) => setFormData((current) => ({ ...current, weightCapacity: event.target.value }))} fullWidth /></Grid>
             <Grid item xs={12} md={6}><TextField label="Territory restriction" value={formData.territoryRestriction} onChange={(event) => setFormData((current) => ({ ...current, territoryRestriction: event.target.value }))} fullWidth /></Grid>
             <Grid item xs={12} md={6}><TextField label="Max route minutes" value={formData.maxRouteMinutes} onChange={(event) => setFormData((current) => ({ ...current, maxRouteMinutes: event.target.value }))} fullWidth /></Grid>
           </Grid>

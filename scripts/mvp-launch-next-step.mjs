@@ -6,10 +6,10 @@ const secretNames = new Set([
   'STRIPE_SECRET_KEY',
   'STRIPE_WEBHOOK_SECRET',
   'POSTMARK_SERVER_TOKEN',
-  'TWILIO_AUTH_TOKEN',
   'R2_ACCESS_KEY_ID',
   'R2_SECRET_ACCESS_KEY',
   'STAGING_AUTH_TOKEN',
+  'STAGING_DRIVER_AUTH_TOKEN',
   'LAUNCH_AUDIT_AUTH_TOKEN',
 ]);
 
@@ -18,7 +18,7 @@ const steps = [
     id: 'render-staging',
     title: 'Render staging URLs',
     handoff:
-      'Deploy the Render Blueprint from loganmetsker-droid/Routing- on branch codex/route-optimization-objectives or commit eebe751, then provide only the three hosted URLs.',
+      'Provision the Render data/backend/routing Blueprint, deploy an immutable release SHA with the Promote Trovan Release workflow, and provide the Cloudflare frontend plus two Render service URLs.',
     required: [
       'STAGING_FRONTEND_URL',
       'STAGING_BACKEND_URL',
@@ -35,7 +35,7 @@ const steps = [
     id: 'render-env',
     title: 'Render environment values',
     handoff:
-      'Configure Render dashboard env values for backend, frontend, and routing-service. Keep secrets in Render, not chat.',
+      'Configure Render dashboard env values for backend and routing-service, plus protected GitHub environment values for the Cloudflare frontend release. Keep secrets in provider stores, not chat.',
     required: [
       'METRICS_TOKEN',
       'ROUTING_SERVICE_INTERNAL_TOKEN',
@@ -48,7 +48,11 @@ const steps = [
     title: 'WorkOS staging auth',
     handoff:
       'Create a staging WorkOS app/test user and confirm redirect/logout URLs point at the staging frontend/backend.',
-    required: ['WORKOS_TEST_EMAIL', 'WORKOS_TEST_PASSWORD'],
+    required: [
+      'WORKOS_TEST_EMAIL',
+      'WORKOS_TEST_PASSWORD',
+      'STAGING_DRIVER_AUTH_TOKEN',
+    ],
     requiredAnyOf: [['STAGING_AUTH_TOKEN', 'LAUNCH_AUDIT_AUTH_TOKEN']],
     optional: [],
     verify: ['npm run staging:smoke'],
@@ -57,13 +61,12 @@ const steps = [
     id: 'stripe-test',
     title: 'Stripe test billing',
     handoff:
-      'Create Stripe test products/prices for Starter, Professional, and Enterprise, then configure the staging webhook secret.',
+      'Create Stripe test products/prices for Launch and Scale, then configure the staging webhook secret. Enterprise remains custom and sales-assisted.',
     required: [
       'STRIPE_SECRET_KEY',
       'STRIPE_WEBHOOK_SECRET',
-      'STRIPE_PRICE_STARTER',
-      'STRIPE_PRICE_PROFESSIONAL',
-      'STRIPE_PRICE_ENTERPRISE',
+      'STRIPE_PRICE_LAUNCH',
+      'STRIPE_PRICE_SCALE',
       'STAGING_WEBHOOK_RECEIVER_URL',
     ],
     optional: [],
@@ -73,13 +76,12 @@ const steps = [
     id: 'provider-sandboxes',
     title: 'Provider sandboxes',
     handoff:
-      'Configure Postmark, Twilio, and Cloudflare R2 sandbox/test resources for staging proof files and notifications.',
+      'Configure Postmark and Cloudflare R2 sandbox/test resources for staging proof files and email notifications. SMS is intentionally disabled.',
     required: [
       'POSTMARK_SERVER_TOKEN',
       'POSTMARK_FROM_EMAIL',
-      'TWILIO_ACCOUNT_SID',
-      'TWILIO_AUTH_TOKEN',
-      'TWILIO_FROM_NUMBER',
+      'LEAD_INTAKE_EMAIL',
+      'LEAD_INTAKE_FROM_EMAIL',
       'R2_BUCKET',
       'R2_ACCESS_KEY_ID',
       'R2_SECRET_ACCESS_KEY',
@@ -124,10 +126,12 @@ const steps = [
       'ROUTING_SERVICE_INTERNAL_TOKEN',
       'WORKOS_TEST_EMAIL',
       'WORKOS_TEST_PASSWORD',
+      'STAGING_DRIVER_AUTH_TOKEN',
       'STRIPE_SECRET_KEY',
       'STRIPE_WEBHOOK_SECRET',
       'POSTMARK_SERVER_TOKEN',
-      'TWILIO_ACCOUNT_SID',
+      'LEAD_INTAKE_EMAIL',
+      'LEAD_INTAKE_FROM_EMAIL',
       'R2_BUCKET',
     ],
     requiredAnyOf: [['STAGING_AUTH_TOKEN', 'LAUNCH_AUDIT_AUTH_TOKEN']],
@@ -176,7 +180,7 @@ function renderText(statuses) {
   console.log('# Trovan MVP Launch Next Step');
   console.log('');
   console.log(`Progress: ${completed}/${statuses.length} launch handoffs complete`);
-  console.log('Launch posture: all Render, Stripe test mode first, hybrid AI-assisted optimizer wording.');
+  console.log('Launch posture: assisted paid pilots, Launch/Scale monthly pricing, email-first notifications, and self-service disabled.');
   console.log('');
 
   if (!next) {

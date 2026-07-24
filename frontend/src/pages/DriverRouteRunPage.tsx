@@ -730,6 +730,7 @@ export default function DriverRouteRunPage() {
 
   return (
     <Box
+      data-testid="driver-route-run-page"
       sx={{
         minHeight: '100dvh',
         width: '100%',
@@ -861,7 +862,9 @@ export default function DriverRouteRunPage() {
         </SurfacePanel>
 
         {error ? <Alert severity="error">{error}</Alert> : null}
-        {notice ? <Alert severity="success">{notice}</Alert> : null}
+        {notice && !detailsDrawerOpen && !messageDrawerOpen ? (
+          <Alert severity="success">{notice}</Alert>
+        ) : null}
 
         <SurfacePanel variant="command" padding={1.35}>
           {renderStep()}
@@ -982,6 +985,8 @@ export default function DriverRouteRunPage() {
               <Close />
             </IconButton>
           </Stack>
+
+          {notice ? <Alert severity="success">{notice}</Alert> : null}
 
           {nextStop ? (
             <SurfacePanel variant="subtle" padding={1.2}>

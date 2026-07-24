@@ -1,0 +1,20 @@
+User-agent: *
+Allow: /
+Disallow: /dashboard
+Disallow: /dispatch
+Disallow: /routing
+Disallow: /jobs
+Disallow: /customers
+Disallow: /drivers
+Disallow: /vehicles
+Disallow: /tracking
+Disallow: /pod
+Disallow: /exceptions
+Disallow: /reports
+Disallow: /settings
+Disallow: /driver
+Disallow: /route-runs
+Disallow: /login
+Disallow: /auth
+
+Sitemap: https://trytrovan.com/sitemap.xml

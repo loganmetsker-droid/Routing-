@@ -142,6 +142,69 @@ async function probeBackendHealth(backendUrl) {
   );
 }
 
+async function probeLeadIntake(backendUrl, authToken) {
+  const workEmail = `staging-smoke-${Date.now()}@example.com`;
+  const created = await expectStatus(
+    'lead-intake:create-and-persist',
+    `${backendUrl}/api/marketing-leads`,
+    201,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Staging Smoke',
+        workEmail,
+        company: 'Trovan Staging Verification',
+        fleetSize: '5–15',
+        requestType: 'Book demo',
+        notes: 'Automated staging lead-intake verification. Safe to close.',
+        source: 'staging-smoke',
+        pagePath: '/pricing',
+      }),
+    },
+  );
+  if (!created || !authToken) return;
+
+  const leadId = created.json?.data?.id || created.json?.id;
+  if (!leadId) {
+    record('lead-intake:receipt-id', 'fail', {
+      reason: 'lead creation response did not include a durable lead id',
+    });
+    return;
+  }
+  record('lead-intake:receipt-id', 'pass', { leadId });
+
+  const listed = await expectStatus(
+    'lead-intake:operator-queue',
+    `${backendUrl}/api/marketing-leads?status=new`,
+    200,
+    { headers: authHeaders(authToken) },
+  );
+  const leads = listed?.json?.data?.leads || listed?.json?.leads || [];
+  if (!Array.isArray(leads) || !leads.some((lead) => lead.id === leadId && lead.workEmail === workEmail)) {
+    record('lead-intake:durable-readback', 'fail', {
+      reason: 'created lead was not visible in the authenticated operator queue',
+      leadId,
+    });
+    return;
+  }
+  record('lead-intake:durable-readback', 'pass', { leadId });
+
+  await expectStatus(
+    'lead-intake:close-smoke-record',
+    `${backendUrl}/api/marketing-leads/${leadId}`,
+    200,
+    {
+      method: 'PATCH',
+      headers: {
+        ...authHeaders(authToken),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status: 'closed' }),
+    },
+  );
+}
+
 async function probeSecurityBasics(backendUrl, metricsToken) {
   await expectStatus(
     'security:protected-api-rejects-anonymous',
@@ -457,7 +520,9 @@ function probeProviderEnv() {
     'STRIPE_WEBHOOK_SECRET',
     'STAGING_WEBHOOK_RECEIVER_URL',
     'POSTMARK_SERVER_TOKEN',
-    'TWILIO_ACCOUNT_SID',
+    'POSTMARK_FROM_EMAIL',
+    'LEAD_INTAKE_EMAIL',
+    'LEAD_INTAKE_FROM_EMAIL',
     'R2_BUCKET',
   ].forEach(requireEnv);
 }
@@ -482,6 +547,7 @@ async function main() {
   const routingServiceUrl =
     env('STAGING_ROUTING_SERVICE_URL') || env('ROUTING_SERVICE_URL');
   const authToken = env('STAGING_AUTH_TOKEN') || env('LAUNCH_AUDIT_AUTH_TOKEN');
+  requireEnv('STAGING_DRIVER_AUTH_TOKEN');
   const metricsToken = env('METRICS_TOKEN');
 
   probeProviderEnv();
@@ -490,6 +556,7 @@ async function main() {
   if (backendUrl) {
     await probeBackendHealth(backendUrl);
     await probeSecurityBasics(backendUrl, metricsToken);
+    await probeLeadIntake(backendUrl, authToken);
     await probeAuthenticatedApi(backendUrl, authToken);
   }
   await probeRoutingService(routingServiceUrl);

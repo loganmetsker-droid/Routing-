@@ -49,6 +49,7 @@
 ## Known gaps
 - Audit coverage exists for route lifecycle and assignment, but broader cross-module audit coverage is still incomplete.
 - Rate limiting is globally enabled, but endpoint-specific policy tuning still needs production calibration.
-- Dependency audit is clean as of the 2026-05-06 launch-readiness pass, but the repo still needs an explicit production lockfile/pinning strategy before a public launch.
+- React Router 6 remains a controlled pilot exception. Navigation targets must remain application-controlled; migrate to React Router 7 before self-serve GA.
+- Production dependencies must have zero critical/high advisories at every release. The lockfile and scoped overrides are part of the release candidate.
 - Backup/restore automation exists as scripts and runbooks, but restore drills still need scheduled execution evidence.
-- Provider provisioning still depends on real environment credentials for WorkOS, Stripe, Postmark, Twilio, and R2.
+- Provider provisioning still depends on real environment credentials for WorkOS, Stripe, Postmark, and R2. SMS/Twilio is disabled for the pilot.

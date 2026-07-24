@@ -6,8 +6,16 @@ import {
   UpdateDateColumn,
   DeleteDateColumn,
   Index,
+  JoinColumn,
+  ManyToOne,
 } from 'typeorm';
 import { ObjectType, Field, ID, Float, Int } from '@nestjs/graphql';
+import GraphQLJSON from 'graphql-type-json';
+import type {
+  JobRoutingReadiness,
+  JobRoutingRequirements,
+} from '@shared/contracts';
+import { Customer } from '../../customers/entities/customer.entity';
 
 export enum JobStatus {
   UNSCHEDULED = 'unscheduled', // new lifecycle state
@@ -162,6 +170,7 @@ export class Job {
   status: JobStatus;
 
   @Column({
+    name: 'estimated_duration',
     type: 'decimal',
     precision: 10,
     scale: 2,
@@ -172,6 +181,7 @@ export class Job {
   estimatedDuration?: number;
 
   @Column({
+    name: 'actual_duration',
     type: 'decimal',
     precision: 10,
     scale: 2,
@@ -185,9 +195,22 @@ export class Job {
   @Field({ nullable: true })
   notes?: string;
 
-  @Column({ type: 'text', nullable: true, comment: 'Special handling instructions' })
+  @Column({ name: 'special_instructions', type: 'text', nullable: true, comment: 'Special handling instructions' })
   @Field({ nullable: true })
   specialInstructions?: string;
+
+  @Column({
+    name: 'routing_requirements',
+    type: 'jsonb',
+    nullable: true,
+    comment:
+      'Routing-critical constraints: pallet/load dimensions, stackability, required equipment, driver, site, hazmat, and temperature rules',
+  })
+  @Field(() => GraphQLJSON, { nullable: true })
+  routingRequirements?: JobRoutingRequirements;
+
+  @Field(() => GraphQLJSON, { nullable: true })
+  routingReadiness?: JobRoutingReadiness;
 
   @Column({ name: 'assigned_route_id', type: 'uuid', nullable: true })
   @Field({ nullable: true })
@@ -245,6 +268,13 @@ export class Job {
   @Column({ type: 'uuid', nullable: true, name: 'customer_id' })
   @Field({ nullable: true })
   customerId?: string;
+
+  @ManyToOne(() => Customer, (customer) => customer.jobs, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
+  @JoinColumn({ name: 'customer_id' })
+  customer?: Customer;
 
   @Column({ name: 'completed_at', type: 'timestamp with time zone', nullable: true })
   @Field({ nullable: true })
