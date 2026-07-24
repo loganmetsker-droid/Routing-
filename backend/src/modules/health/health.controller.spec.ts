@@ -4,6 +4,7 @@ import { HealthController } from './health.controller';
 function runtimeSummary(overrides: Record<string, unknown> = {}) {
   return {
     startedAt: new Date().toISOString(),
+    releaseSha: 'a'.repeat(40),
     envSource: 'test',
     nodeEnv: 'production',
     authMode: 'workos',

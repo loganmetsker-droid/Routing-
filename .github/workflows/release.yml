@@ -155,9 +155,45 @@ jobs:
           curl --fail --show-error --silent "$FRONTEND_URL/sitemap.xml" |
             grep -q '<urlset'
 
+      - name: Verify every deployed surface reports the exact SHA
+        env:
+          BACKEND_URL: ${{ vars.BACKEND_URL }}
+          FRONTEND_URL: ${{ vars.FRONTEND_URL }}
+          ROUTING_SERVICE_URL: ${{ vars.ROUTING_SERVICE_URL }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          for attempt in $(seq 1 120); do
+            backend_sha="$(
+              curl -fsS --max-time 20 "$BACKEND_URL/health/runtime" 2>/dev/null |
+                jq -r '.runtime.releaseSha // empty'
+            )"
+            routing_sha="$(
+              curl -fsS --max-time 20 "$ROUTING_SERVICE_URL/health" 2>/dev/null |
+                jq -r '.release_sha // empty'
+            )"
+            frontend_sha="$(
+              curl -fsS --max-time 20 "$FRONTEND_URL" 2>/dev/null |
+                sed -n 's/.*<meta name="trovan-release" content="\([0-9a-f]\{40\}\)".*/\1/p' |
+                head -n 1
+            )"
+            if [ "$backend_sha" = "$RELEASE_SHA" ] &&
+               [ "$routing_sha" = "$RELEASE_SHA" ] &&
+               [ "$frontend_sha" = "$RELEASE_SHA" ]; then
+              echo "Frontend, backend, and routing service all report $RELEASE_SHA"
+              exit 0
+            fi
+            if [ "$attempt" -eq 120 ]; then
+              echo "Exact release SHA did not converge before timeout"
+              echo "backend=$backend_sha routing=$routing_sha frontend=$frontend_sha expected=$RELEASE_SHA"
+              exit 1
+            fi
+            sleep 10
+          done
+
       - name: Run strict staging smoke
         if: inputs.target == 'staging'
         env:
+          EXPECTED_RELEASE_SHA: ${{ inputs.release_sha }}
           STAGING_FRONTEND_URL: ${{ vars.FRONTEND_URL }}
           STAGING_BACKEND_URL: ${{ vars.BACKEND_URL }}
           STAGING_ROUTING_SERVICE_URL: ${{ vars.ROUTING_SERVICE_URL }}

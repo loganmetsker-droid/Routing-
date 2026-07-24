@@ -94,6 +94,11 @@ export class RuntimeStatusService {
 
     return {
       startedAt: this.startedAt,
+      releaseSha:
+        process.env.RENDER_GIT_COMMIT ||
+        process.env.TROVAN_RELEASE_SHA ||
+        process.env.RELEASE_SHA ||
+        null,
       envSource: process.env.TROVAN_ENV_SOURCES || 'process-environment',
       nodeEnv: process.env.NODE_ENV || 'development',
       authMode,

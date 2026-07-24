@@ -28,6 +28,15 @@ HOSTED_ENVIRONMENTS = {"staging", "production", "prod"}
 DEFAULT_MAX_BODY_BYTES = 1_048_576
 
 
+def get_release_sha() -> str | None:
+    return (
+        os.getenv("RENDER_GIT_COMMIT")
+        or os.getenv("TROVAN_RELEASE_SHA")
+        or os.getenv("RELEASE_SHA")
+        or None
+    )
+
+
 def is_hosted_environment() -> bool:
     return (os.getenv("ROUTING_SERVICE_ENV") or os.getenv("NODE_ENV") or os.getenv("ENV") or "").lower() in HOSTED_ENVIRONMENTS
 
@@ -136,6 +145,7 @@ async def root():
 async def health_check():
     return {
         "status": "healthy",
+        "release_sha": get_release_sha(),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 

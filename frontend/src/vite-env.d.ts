@@ -11,6 +11,7 @@ interface ImportMetaEnv {
   readonly VITE_DATA_MODE?: 'live' | 'preview' | 'degraded' | 'simulated' | string;
   readonly VITE_LEAD_INTAKE_EMAIL?: string;
   readonly VITE_LEAD_INTAKE_WEBHOOK_URL?: string;
+  readonly VITE_RELEASE_SHA?: string;
 }
 
 interface ImportMeta {

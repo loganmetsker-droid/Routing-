@@ -130,16 +130,47 @@ async function probeFrontend(frontendUrl) {
   } else {
     record('frontend:no-preview-mode-markers', 'pass');
   }
+
+  const expectedReleaseSha = env('EXPECTED_RELEASE_SHA');
+  if (!expectedReleaseSha) return;
+  const releaseMeta = result.body.match(
+    /<meta\s+name=["']trovan-release["']\s+content=["']([0-9a-f]{40})["']\s*\/?>/i,
+  );
+  const reportedReleaseSha = releaseMeta?.[1] || '';
+  if (reportedReleaseSha !== expectedReleaseSha) {
+    record('frontend:exact-release-sha', 'fail', {
+      expectedReleaseSha,
+      reportedReleaseSha: reportedReleaseSha || null,
+    });
+  } else {
+    record('frontend:exact-release-sha', 'pass', { reportedReleaseSha });
+  }
 }
 
 async function probeBackendHealth(backendUrl) {
   await expectStatus('backend:/health', `${backendUrl}/health`, 200);
-  await expectStatus('backend:/health/runtime', `${backendUrl}/health/runtime`, 200);
+  const runtime = await expectStatus(
+    'backend:/health/runtime',
+    `${backendUrl}/health/runtime`,
+    200,
+  );
   await expectStatus(
     'backend:/health/readiness',
     `${backendUrl}/health/readiness`,
     200,
   );
+
+  const expectedReleaseSha = env('EXPECTED_RELEASE_SHA');
+  if (!expectedReleaseSha || !runtime) return;
+  const reportedReleaseSha = runtime.json?.runtime?.releaseSha || '';
+  if (reportedReleaseSha !== expectedReleaseSha) {
+    record('backend:exact-release-sha', 'fail', {
+      expectedReleaseSha,
+      reportedReleaseSha: reportedReleaseSha || null,
+    });
+  } else {
+    record('backend:exact-release-sha', 'pass', { reportedReleaseSha });
+  }
 }
 
 async function probeLeadIntake(backendUrl, authToken) {
@@ -421,7 +452,25 @@ async function probeRoutingService(routingServiceUrl) {
     });
   }
 
-  await expectStatus('routing-service:/health', `${routingUrl}/health`, 200);
+  const health = await expectStatus(
+    'routing-service:/health',
+    `${routingUrl}/health`,
+    200,
+  );
+  const expectedReleaseSha = env('EXPECTED_RELEASE_SHA');
+  if (expectedReleaseSha && health) {
+    const reportedReleaseSha = health.json?.release_sha || '';
+    if (reportedReleaseSha !== expectedReleaseSha) {
+      record('routing-service:exact-release-sha', 'fail', {
+        expectedReleaseSha,
+        reportedReleaseSha: reportedReleaseSha || null,
+      });
+    } else {
+      record('routing-service:exact-release-sha', 'pass', {
+        reportedReleaseSha,
+      });
+    }
+  }
   await expectStatus(
     'routing-service:/optimize-rejects-anonymous',
     `${routingUrl}/optimize`,
@@ -549,6 +598,7 @@ async function main() {
   const authToken = env('STAGING_AUTH_TOKEN') || env('LAUNCH_AUDIT_AUTH_TOKEN');
   requireEnv('STAGING_DRIVER_AUTH_TOKEN');
   const metricsToken = env('METRICS_TOKEN');
+  requireEnv('EXPECTED_RELEASE_SHA');
 
   probeProviderEnv();
 

@@ -37,6 +37,17 @@ def test_optimize_rejects_missing_internal_token(monkeypatch):
     assert response.status_code == 401
 
 
+def test_health_reports_render_release_sha(monkeypatch):
+    release_sha = "a" * 40
+    monkeypatch.setenv("RENDER_GIT_COMMIT", release_sha)
+    client = TestClient(main.app)
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json()["release_sha"] == release_sha
+
+
 def test_optimize_rejects_wrong_internal_token(monkeypatch):
     monkeypatch.setenv("ROUTING_SERVICE_INTERNAL_TOKEN", "configured-token")
     client = TestClient(main.app)

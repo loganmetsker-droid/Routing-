@@ -25,9 +25,28 @@ export default defineConfig(({ mode }) => {
     env.FRONTEND_PORT || env.VITE_FRONTEND_PORT || '5184',
   );
   const productionSourcemaps = isTruthy(env.VITE_ENABLE_PRODUCTION_SOURCEMAPS);
+  const releaseSha = String(env.VITE_RELEASE_SHA || '').trim();
 
   return {
-    plugins: [react()],
+    plugins: [
+      react(),
+      {
+        name: 'trovan-release-metadata',
+        transformIndexHtml() {
+          if (!releaseSha) return [];
+          return [
+            {
+              tag: 'meta',
+              attrs: {
+                name: 'trovan-release',
+                content: releaseSha,
+              },
+              injectTo: 'head',
+            },
+          ];
+        },
+      },
+    ],
     test: {
       include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
       exclude: [],
