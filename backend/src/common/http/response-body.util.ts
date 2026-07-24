@@ -52,4 +52,3 @@ export async function readResponseTextLimited(
 
   return { text, truncated, bytesRead };
 }
-

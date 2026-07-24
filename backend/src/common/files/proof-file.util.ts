@@ -87,4 +87,3 @@ export function resolveProofUploadMimeType(
 export function getSafeProofDownloadContentType() {
   return 'application/octet-stream';
 }
-

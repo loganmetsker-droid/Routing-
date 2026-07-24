@@ -42,4 +42,3 @@ describe('createOutboundWebhookFetchInit', () => {
     expect(init.signal).toBe(controller.signal);
   });
 });
-

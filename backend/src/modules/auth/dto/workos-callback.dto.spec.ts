@@ -39,4 +39,3 @@ describe('WorkosCallbackDto', () => {
     expect(errors[0]?.property).toBe('extra');
   });
 });
-

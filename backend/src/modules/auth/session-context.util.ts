@@ -31,4 +31,3 @@ export function sanitizeSessionContext(sessionContext?: SessionContext) {
     ipAddress: sanitizeOptionalString(sessionContext?.ipAddress, 128),
   };
 }
-

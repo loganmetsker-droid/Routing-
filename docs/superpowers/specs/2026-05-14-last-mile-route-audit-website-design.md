@@ -1,7 +1,7 @@
 # Last-Mile Route Audit Website Design
 
-Date: 2026-05-14  
-Project: Trovan public website  
+Date: 2026-05-14
+Project: Trovan public website
 Primary domain: `trytrovan.com`
 
 ## Goal

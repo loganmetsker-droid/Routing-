@@ -45,4 +45,3 @@ describe('proof-file utilities', () => {
     expect(getSafeProofDownloadContentType()).toBe('application/octet-stream');
   });
 });
-

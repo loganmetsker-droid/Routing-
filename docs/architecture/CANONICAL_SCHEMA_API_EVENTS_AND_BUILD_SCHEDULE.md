@@ -334,4 +334,3 @@ Event envelope:
 - Audit events emitted for all critical transitions.
 - Backup/restore drill completed in non-local environment.
 - Dispatcher core workflow executable without spreadsheet fallback.
-

@@ -34,4 +34,3 @@ describe('readResponseTextLimited', () => {
     expect(result.bytesRead).toBe(3);
   });
 });
-

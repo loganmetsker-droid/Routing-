@@ -31,4 +31,3 @@ export function summarizeBullJobDataForLog(data: unknown): BullJobDataLogSummary
     truncatedKeys: keys.length > MAX_KEYS,
   };
 }
-

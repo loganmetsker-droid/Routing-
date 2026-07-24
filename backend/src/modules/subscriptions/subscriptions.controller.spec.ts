@@ -53,4 +53,3 @@ describe('SubscriptionsController', () => {
     });
   });
 });
-

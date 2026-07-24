@@ -13,4 +13,3 @@ export class WorkosCallbackDto {
   @IsString()
   state?: string;
 }
-

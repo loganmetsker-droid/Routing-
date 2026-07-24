@@ -14,4 +14,3 @@ export class ImportJobsDto {
   @Type(() => CreateJobDto)
   jobs?: CreateJobDto[];
 }
-
