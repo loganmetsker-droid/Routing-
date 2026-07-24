@@ -257,6 +257,11 @@ async function gotoReady(
   }
   await page.goto(routePath, { waitUntil: 'domcontentloaded', timeout: 20_000 });
   await page.locator('#root').waitFor({ state: 'visible', timeout: 10_000 });
+  if (publicMarketingRoutes.some((route) => route.path === routePath)) {
+    await page
+      .getByTestId('public-site-shell')
+      .waitFor({ state: 'visible', timeout: 10_000 });
+  }
   if (options.settle !== false) {
     await page.waitForLoadState('networkidle', { timeout: 12_000 }).catch(() => {});
   }
