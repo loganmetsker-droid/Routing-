@@ -245,6 +245,9 @@ async function gotoReady(
   options: { settle?: boolean } = {},
 ) {
   await page.addInitScript(() => {
+    window.localStorage.removeItem('trovan-preview-state-v2');
+    window.localStorage.removeItem('trovan.shell.sidebarCollapsed');
+    window.localStorage.removeItem('trovan.theme.mode');
     window.localStorage.removeItem('trovan-preview-auth-user');
   });
   if (authToken) {
@@ -1004,6 +1007,31 @@ test.describe('launch UI audit', () => {
       'aria-selected',
       initialSelection === 'true' ? 'false' : 'true',
     );
+  });
+
+  test('audit navigation restores deterministic preview state', async ({ page }) => {
+    await gotoReady(page, '/jobs');
+    const stableActionLabel = await page
+      .getByLabel(/^Actions for /i)
+      .first()
+      .getAttribute('aria-label');
+    expect(stableActionLabel).toBeTruthy();
+
+    await page.evaluate(() => {
+      window.localStorage.setItem(
+        'trovan-preview-state-v2',
+        JSON.stringify({ sentinel: 'stale-audit-state' }),
+      );
+      window.localStorage.setItem('trovan.shell.sidebarCollapsed', '1');
+      window.localStorage.setItem('trovan.theme.mode', 'dark');
+    });
+
+    await gotoReady(page, '/jobs');
+    const restoredState = await page.evaluate(() =>
+      JSON.parse(window.localStorage.getItem('trovan-preview-state-v2') || '{}'),
+    );
+    expect(restoredState.sentinel).toBeUndefined();
+    await expect(page.getByLabel(stableActionLabel || '')).toBeVisible();
   });
 
   test('accounts for visible controls on every primary route', async ({ page }) => {
