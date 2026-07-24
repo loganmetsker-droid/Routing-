@@ -17,6 +17,7 @@ Trovan is not being prepared for self-serve general availability. Launch is $399
 - Authentication configuration uses a bounded request and a visible retry/error state.
 - Pilot readiness live-probes database, Redis/worker, routing, WorkOS, Postmark, and R2 with bounded timeouts; any unavailable critical dependency returns HTTP 503.
 - Render migrations run before deployment, not during application startup.
+- Telemetry migrations normalize legacy camelCase fuel/engine columns to the runtime schema so the Prometheus fuel-efficiency refresh succeeds on both upgraded and empty databases.
 - CI runs build, lint, backend/frontend/routing tests, empty-database migrations, dependency audit, and Playwright.
 - Promotion uses an immutable SHA, protected staging/production environments, Cloudflare frontend deployment, Render service deployment, and captured rollback versions.
 - Sitemap, robots, canonical, Open Graph, and Twitter metadata ship from the same frontend build; the sitemap has an explicit XML content type.
