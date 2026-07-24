@@ -1,6 +1,5 @@
 import { Box, Stack, Typography } from '@mui/material';
 import type { ReactNode } from 'react';
-import { trovanColors } from '../theme/designTokens';
 
 type PageHeaderProps = {
   eyebrow?: string;
@@ -24,7 +23,7 @@ export function PageHeader({ eyebrow, title, subtitle, actions }: PageHeaderProp
             variant="subtitle2"
             component="div"
             sx={{
-              color: trovanColors.copper[500],
+              color: 'primary.main',
               mb: 0.35,
               fontWeight: 800,
               letterSpacing: '0.14em',

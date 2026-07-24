@@ -538,15 +538,17 @@ test.describe('launch calculation and control proof', () => {
 
   test('dispatch selection enables save, send, and a ready route dispatch with visible confirmation', async ({ page }) => {
     await gotoReady(page, '/dispatch');
-    const routeSelectors = page.locator('[role="button"][aria-label^="Select "]');
+    const routeSelectors = page.locator('button[aria-label^="Select "]');
     expect(await routeSelectors.count()).toBeGreaterThan(0);
     const routeCount = await routeSelectors.count();
-    let selectedRoute = page.locator('[role="button"][aria-label^="Select "][aria-pressed="true"]');
+    const selectedRouteLane = () =>
+      page.locator('[role="group"][aria-label$=" dispatch lane"]').filter({
+        has: page.locator('button[aria-label^="Select "][aria-pressed="true"]'),
+      });
     let saved = false;
     for (let index = 0; index < routeCount; index += 1) {
       await routeSelectors.nth(index).click();
-      selectedRoute = page.locator('[role="button"][aria-label^="Select "][aria-pressed="true"]');
-      const save = selectedRoute.getByRole('button', { name: 'Save', exact: true });
+      const save = selectedRouteLane().getByRole('button', { name: 'Save', exact: true });
       if (await save.isEnabled()) {
         await save.click();
         saved = true;
@@ -565,8 +567,7 @@ test.describe('launch calculation and control proof', () => {
     let dispatched = false;
     for (let index = 0; index < routeCount; index += 1) {
       await routeSelectors.nth(index).click();
-      selectedRoute = page.locator('[role="button"][aria-label^="Select "][aria-pressed="true"]');
-      const dispatch = selectedRoute.getByRole('button', { name: 'Dispatch', exact: true });
+      const dispatch = selectedRouteLane().getByRole('button', { name: 'Dispatch', exact: true });
       if (await dispatch.isEnabled()) {
         await dispatch.click();
         await expect(page.getByRole('alert').filter({ hasText: 'sent to the assigned driver.' })).toBeVisible();

@@ -531,16 +531,8 @@ export default function CustomersPage() {
                   return (
                     <Box
                       key={customer.id}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`Review customer ${customer.name}`}
-                      onClick={() => setSelectedCustomerId(customer.id)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault();
-                          setSelectedCustomerId(customer.id);
-                        }
-                      }}
+                      role="group"
+                      aria-label={`${customer.name} customer record`}
                       sx={{
                         p: 1.25,
                         borderRadius: 1.4,
@@ -582,7 +574,15 @@ export default function CustomersPage() {
                           </Box>
                         ))}
                       </Box>
-                      <Stack direction="row" justifyContent="flex-end" sx={{ mt: 0.8 }}>
+                      <Stack direction="row" spacing={0.75} justifyContent="flex-end" sx={{ mt: 0.8 }}>
+                        <Button
+                          size="small"
+                          variant={selected ? 'contained' : 'outlined'}
+                          aria-pressed={selected}
+                          onClick={() => setSelectedCustomerId(customer.id)}
+                        >
+                          {selected ? 'Selected' : 'Select'}
+                        </Button>
                         <Button
                           size="small"
                           variant="text"
@@ -688,7 +688,12 @@ export default function CustomersPage() {
                         <TableCell sx={{ color: openJobs > 8 ? trovanColors.semantic.danger : trovanColors.semantic.blue, fontWeight: 800 }}>{openJobs}</TableCell>
                         <TableCell>
                           <Typography sx={{ fontSize: 12, fontWeight: 800 }}>{customerJobs.length ? `${completionRate}% completed` : 'No jobs'}</Typography>
-                          <LinearProgress variant="determinate" value={completionRate} sx={{ mt: 0.45, height: 5, borderRadius: 99 }} />
+                          <LinearProgress
+                            variant="determinate"
+                            value={completionRate}
+                            aria-label={`${customer.name} job completion`}
+                            sx={{ mt: 0.45, height: 5, borderRadius: 99 }}
+                          />
                         </TableCell>
                         <TableCell>
                           {lastJobDate

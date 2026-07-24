@@ -1014,10 +1014,10 @@ test.describe('launch UI audit', () => {
     const jobRow = page
       .getByRole('button', { name: /Omega Medical.*2100 Santa Fe Dr/i })
       .first();
-    const initialSelection = await jobRow.getAttribute('aria-selected');
+    const initialSelection = await jobRow.getAttribute('aria-pressed');
     await jobRow.click();
     await expect(jobRow).toHaveAttribute(
-      'aria-selected',
+      'aria-pressed',
       initialSelection === 'true' ? 'false' : 'true',
     );
   });

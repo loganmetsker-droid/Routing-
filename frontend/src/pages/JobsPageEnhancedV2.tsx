@@ -1059,6 +1059,7 @@ export default function JobsPageEnhancedV2() {
             <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
               <Checkbox
                 size="small"
+                inputProps={{ 'aria-label': 'Select all visible jobs' }}
                 checked={allVisibleJobsSelected}
                 indeterminate={selectedVisibleJobCount > 0 && !allVisibleJobsSelected}
                 onChange={() => {
@@ -1119,16 +1120,8 @@ export default function JobsPageEnhancedV2() {
                 return (
                   <Box
                     key={job.id}
-                    role="button"
-                    tabIndex={0}
-                    aria-label={`Review job ${job.id || 'job'}`}
-                    onClick={() => job.id && setSelectedJobIds([job.id])}
-                    onKeyDown={(event) => {
-                      if ((event.key === 'Enter' || event.key === ' ') && job.id) {
-                        event.preventDefault();
-                        setSelectedJobIds([job.id]);
-                      }
-                    }}
+                    role="group"
+                    aria-label={`Job ${job.id || 'record'}`}
                     sx={{
                       p: 1.25,
                       borderRadius: 1.4,
@@ -1136,17 +1129,12 @@ export default function JobsPageEnhancedV2() {
                       borderColor: selected ? trovanColors.copper[500] : 'divider',
                       bgcolor: selected ? alpha(trovanColors.copper[500], 0.08) : 'background.paper',
                       boxShadow: selected ? `0 0 0 2px ${alpha(trovanColors.copper[500], 0.12)}` : 'none',
-                      cursor: 'pointer',
-                      '&:focus-visible': {
-                        outline: `3px solid ${alpha(trovanColors.copper[500], 0.28)}`,
-                        outlineOffset: 2,
-                      },
                     }}
                   >
                     <Stack direction="row" spacing={1} alignItems="flex-start">
                       <Checkbox
                         size="small"
-                        aria-label={`Select ${job.id || 'job'}`}
+                        inputProps={{ 'aria-label': `Select ${job.id || 'job'}` }}
                         checked={selected}
                         onClick={(event) => event.stopPropagation()}
                         onChange={(event) => {
@@ -1317,6 +1305,7 @@ export default function JobsPageEnhancedV2() {
                   <TableCell padding="checkbox">
                     <Checkbox
                       size="small"
+                      inputProps={{ 'aria-label': `Select ${job.id || 'job'}` }}
                       checked={job.id ? selectedJobIds.includes(job.id) : false}
                       onClick={(event) => event.stopPropagation()}
                       onChange={(event) => {

@@ -279,6 +279,8 @@ export function RouteStopTimelineStrip({
       )}
 
       <Box
+        tabIndex={0}
+        aria-label="Route summary metrics"
         sx={{
           display: 'grid',
           gridTemplateColumns: 'repeat(7, minmax(92px, 1fr))',

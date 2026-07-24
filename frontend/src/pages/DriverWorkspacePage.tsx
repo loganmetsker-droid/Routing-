@@ -147,6 +147,7 @@ export default function DriverWorkspacePage() {
                       <LinearProgress
                         variant="determinate"
                         value={progress}
+                        aria-label={`${route.routeRun.id} route completion`}
                         sx={{
                           height: 7,
                           borderRadius: 999,

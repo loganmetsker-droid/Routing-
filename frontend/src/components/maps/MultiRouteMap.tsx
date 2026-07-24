@@ -79,12 +79,10 @@ const createClusterIcon = ({
   L.divIcon({
     className: 'custom-route-cluster-marker',
     html: `
-      <button
-        type="button"
+      <span
+        aria-hidden="true"
         data-testid="routing-route-cluster-marker"
         data-route-label="${escapeHtml(label)}"
-        aria-label="${escapeHtml(`${label}, ${count} stops`)}"
-        title="${escapeHtml(`${label}: ${count} stops`)}"
         style="
           min-width: 52px;
           height: 34px;
@@ -107,7 +105,7 @@ const createClusterIcon = ({
       >
         <span style="font-size: 12px; letter-spacing: 0;">${escapeHtml(label)}</span>
         <span style="font-size: 11px; letter-spacing: 0;">${count} stops</span>
-      </button>
+      </span>
     `,
     iconSize: [58, 36],
     iconAnchor: [29, 18],

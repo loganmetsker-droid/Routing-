@@ -2318,7 +2318,12 @@ export default function RoutingWorkspacePage() {
           Drag jobs onto routes or select work before optimizing.
         </Typography>
       </Box>
-      <List disablePadding sx={{ mt: 0.5, maxHeight: { md: 'clamp(260px, 38vh, 430px)', xl: 'clamp(340px, 42vh, 520px)' }, overflowY: 'auto' }}>
+      <List
+        disablePadding
+        tabIndex={0}
+        aria-label="Unassigned jobs"
+        sx={{ mt: 0.5, maxHeight: { md: 'clamp(260px, 38vh, 430px)', xl: 'clamp(340px, 42vh, 520px)' }, overflowY: 'auto' }}
+      >
         {demandJobs.length === 0 ? (
           <ListItem sx={{ py: 2 }}>
             <ListItemText primary="No unassigned jobs" secondary="All visible work is already routed." />
@@ -2328,25 +2333,25 @@ export default function RoutingWorkspacePage() {
             const selected = selectedJobIds.includes(job.id);
             const priority = getPriorityLabel(job.priority);
             return (
-              <ListItemButton
-                key={job.id}
-                selected={selected}
-                aria-selected={selected}
-                onClick={() =>
-                  setSelectedJobIds((current) =>
-                    current.includes(job.id)
-                      ? current.filter((id) => id !== job.id)
-                      : [...current, job.id],
-                  )
-                }
-                sx={{
-                  alignItems: 'flex-start',
-                  gap: 1,
-                  borderTop: index === 0 ? 'none' : '1px solid',
-                  borderColor: 'divider',
-                  py: 1,
-                }}
-              >
+              <ListItem key={job.id} disablePadding>
+                <ListItemButton
+                  selected={selected}
+                  aria-pressed={selected}
+                  onClick={() =>
+                    setSelectedJobIds((current) =>
+                      current.includes(job.id)
+                        ? current.filter((id) => id !== job.id)
+                        : [...current, job.id],
+                    )
+                  }
+                  sx={{
+                    alignItems: 'flex-start',
+                    gap: 1,
+                    borderTop: index === 0 ? 'none' : '1px solid',
+                    borderColor: 'divider',
+                    py: 1,
+                  }}
+                >
                 <Box
                   sx={{
                     mt: 0.25,
@@ -2375,7 +2380,8 @@ export default function RoutingWorkspacePage() {
                     </Typography>
                   </Stack>
                 </Box>
-              </ListItemButton>
+                </ListItemButton>
+              </ListItem>
             );
           })
         )}
@@ -2738,7 +2744,12 @@ export default function RoutingWorkspacePage() {
           tone={selectedJobIds.length > 0 ? 'accent' : 'default'}
         />
       </Box>
-      <List disablePadding sx={{ maxHeight: { xs: 420, xl: '32vh' }, overflowY: 'auto' }}>
+      <List
+        disablePadding
+        tabIndex={0}
+        aria-label="Draft job selection"
+        sx={{ maxHeight: { xs: 420, xl: '32vh' }, overflowY: 'auto' }}
+      >
         {demandJobs.length === 0 ? (
           <ListItem sx={{ py: 2 }}>
             <ListItemText
@@ -2759,7 +2770,7 @@ export default function RoutingWorkspacePage() {
                   )
                 }
                 selected={selected}
-                aria-selected={selected}
+                aria-pressed={selected}
                 data-testid={`routing-job-row-${index}`}
                 sx={{ gap: 1, py: 0.85, px: 1.1 }}
               >
@@ -2797,7 +2808,12 @@ export default function RoutingWorkspacePage() {
           Click a lane to focus the inspector and map.
         </Typography>
       </Box>
-      <List disablePadding sx={{ maxHeight: { xs: 420, xl: '26vh' }, overflowY: 'auto' }}>
+      <List
+        disablePadding
+        tabIndex={0}
+        aria-label="Draft routes"
+        sx={{ maxHeight: { xs: 420, xl: '26vh' }, overflowY: 'auto' }}
+      >
         {groups.length === 0 ? (
           <ListItem sx={{ py: 2 }}>
             <ListItemText

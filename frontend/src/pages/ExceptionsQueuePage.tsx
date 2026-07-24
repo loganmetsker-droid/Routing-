@@ -14,6 +14,7 @@ import {
   Grid,
   LinearProgress,
   List,
+  ListItem,
   ListItemButton,
   MenuItem,
   Stack,
@@ -486,16 +487,18 @@ export default function ExceptionsQueuePage() {
           }}
         >
           <Box sx={{ borderRight: { xl: '1px solid' }, borderColor: 'divider' }}>
-            <List disablePadding>
+            <List disablePadding aria-label="Exceptions queue">
               {visibleItems.length === 0 ? (
-                <Box sx={{ px: 2, py: 2.5 }}>
+                <ListItem sx={{ px: 2, py: 2.5 }}>
+                  <Box>
                   <Typography variant="subtitle1" sx={{ mb: 0.45 }}>
                     No exceptions in this view
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Adjust the filter or create a manual exception to populate the queue.
                   </Typography>
-                </Box>
+                  </Box>
+                </ListItem>
               ) : (
                 visibleItems.map((item) => {
                   const active = item.id === selectedExceptionId;
@@ -504,20 +507,20 @@ export default function ExceptionsQueuePage() {
                   const itemSeverity = detailString(details, 'severity');
                   const itemLoadSummary = formatLoadSummary(details);
                   return (
-                    <ListItemButton
-                      key={item.id}
-                      selected={active}
-                      onClick={() => setSelectedExceptionId(item.id)}
-                      sx={{
-                        px: 1.5,
-                        py: 1.2,
-                        borderBottom: '1px solid',
-                        borderColor: 'divider',
-                        alignItems: 'flex-start',
-                        cursor: 'pointer',
-                        bgcolor: active ? alpha(trovanColors.copper[500], 0.06) : 'transparent',
-                      }}
-                    >
+                    <ListItem key={item.id} disablePadding>
+                      <ListItemButton
+                        selected={active}
+                        onClick={() => setSelectedExceptionId(item.id)}
+                        sx={{
+                          px: 1.5,
+                          py: 1.2,
+                          borderBottom: '1px solid',
+                          borderColor: 'divider',
+                          alignItems: 'flex-start',
+                          cursor: 'pointer',
+                          bgcolor: active ? alpha(trovanColors.copper[500], 0.06) : 'transparent',
+                        }}
+                      >
                       <Stack spacing={0.85} sx={{ width: '100%' }}>
                         <Stack
                           direction="row"
@@ -557,7 +560,8 @@ export default function ExceptionsQueuePage() {
                           {formatDateTime(item.createdAt)}
                         </Typography>
                       </Stack>
-                    </ListItemButton>
+                      </ListItemButton>
+                    </ListItem>
                   );
                 })
               )}

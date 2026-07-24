@@ -796,6 +796,7 @@ export default function DriverRouteRunPage() {
               <LinearProgress
                 variant="determinate"
                 value={progress}
+                aria-label="Route completion"
                 sx={{
                   height: 7,
                   borderRadius: 999,

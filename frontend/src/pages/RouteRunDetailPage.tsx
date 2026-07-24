@@ -354,7 +354,11 @@ export default function RouteRunDetailPage() {
                     <StatusPill label={item.status} tone={statusColor(item.status) === 'error' ? 'danger' : statusColor(item.status) === 'warning' ? 'warning' : statusColor(item.status) === 'success' ? 'success' : statusColor(item.status) === 'info' ? 'info' : 'default'} />
                   </ListItem>
                 ))}
-                {(detail.exceptions || []).length === 0 ? <Typography variant="body2" color="text.secondary">No exceptions on this route run.</Typography> : null}
+                {(detail.exceptions || []).length === 0 ? (
+                  <ListItem disableGutters>
+                    <Typography variant="body2" color="text.secondary">No exceptions on this route run.</Typography>
+                  </ListItem>
+                ) : null}
               </List>
             </SurfacePanel>
             <SurfacePanel>
@@ -385,9 +389,11 @@ export default function RouteRunDetailPage() {
                   </ListItem>
                 ))}
                 {(detail.notificationDeliveries || []).length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">
-                    No customer notifications have been logged for this route run yet.
-                  </Typography>
+                  <ListItem disableGutters>
+                    <Typography variant="body2" color="text.secondary">
+                      No customer notifications have been logged for this route run yet.
+                    </Typography>
+                  </ListItem>
                 ) : null}
               </List>
             </SurfacePanel>
@@ -436,9 +442,11 @@ export default function RouteRunDetailPage() {
                   </ListItem>
                 ))}
                 {routeMessages.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">
-                    No driver-dispatch messages have been sent for this route yet.
-                  </Typography>
+                  <ListItem disableGutters>
+                    <Typography variant="body2" color="text.secondary">
+                      No driver-dispatch messages have been sent for this route yet.
+                    </Typography>
+                  </ListItem>
                 ) : null}
               </List>
               <Stack direction={{ xs: 'column', md: 'row' }} spacing={1} sx={{ mt: 1.5 }}>
@@ -497,7 +505,11 @@ export default function RouteRunDetailPage() {
                                 <ListItemText primary={event.eventType} secondary={event.happenedAt || 'Timestamp pending'} />
                               </ListItem>
                             ))}
-                            {(eventsByStop[stop.id] || []).length === 0 ? <Typography variant="body2" color="text.secondary">No stop events recorded yet.</Typography> : null}
+                            {(eventsByStop[stop.id] || []).length === 0 ? (
+                              <ListItem disableGutters>
+                                <Typography variant="body2" color="text.secondary">No stop events recorded yet.</Typography>
+                              </ListItem>
+                            ) : null}
                           </List>
                         </Grid>
                         <Grid item xs={12} md={6}>
@@ -542,7 +554,11 @@ export default function RouteRunDetailPage() {
                                 ) : null}
                               </ListItem>
                             ))}
-                            {(proofsByStop[stop.id] || []).length === 0 ? <Typography variant="body2" color="text.secondary">No proofs captured yet.</Typography> : null}
+                            {(proofsByStop[stop.id] || []).length === 0 ? (
+                              <ListItem disableGutters>
+                                <Typography variant="body2" color="text.secondary">No proofs captured yet.</Typography>
+                              </ListItem>
+                            ) : null}
                           </List>
                         </Grid>
                       </Grid>

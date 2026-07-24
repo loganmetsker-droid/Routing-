@@ -3139,7 +3139,7 @@ function HomepageProofVisual({ card }: { card: HomepageProofCard }) {
                     py: 0.35,
                     borderRadius: 999,
                     bgcolor: kind === 'alert' ? alpha('#D95C45', 0.12) : kind === 'proof' ? alpha(trovanColors.semantic.success, 0.12) : alpha(card.accent, 0.1),
-                    color: kind === 'alert' ? '#9F3427' : kind === 'proof' ? '#166534' : card.accent,
+                    color: kind === 'alert' ? '#9F3427' : kind === 'proof' ? '#166534' : '#1D4ED8',
                     fontSize: 11,
                     fontWeight: 900,
                     whiteSpace: 'nowrap',

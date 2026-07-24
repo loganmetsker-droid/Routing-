@@ -31,7 +31,7 @@ export function StatusPill({
       background: alpha(baseText, isDark ? 0.045 : 0.055),
     },
     success: {
-      color: isDark ? '#7DE2AD' : '#137C4B',
+      color: isDark ? '#7DE2AD' : '#0F6B3E',
       border: alpha(trovanColors.semantic.success, isDark ? 0.18 : 0.26),
       background: alpha(trovanColors.semantic.success, isDark ? 0.065 : 0.095),
     },

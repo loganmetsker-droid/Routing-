@@ -336,16 +336,8 @@ export default function DriversPage() {
                   return (
                     <Box
                       key={driver.id}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`Select driver ${`${driver.firstName || ''} ${driver.lastName || ''}`.trim() || driver.id}`}
-                      onClick={() => setSelectedDriverId(driver.id)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault();
-                          setSelectedDriverId(driver.id);
-                        }
-                      }}
+                      role="group"
+                      aria-label={`${`${driver.firstName || ''} ${driver.lastName || ''}`.trim() || driver.id} driver record`}
                       sx={{
                         p: 1.5,
                         borderRadius: '11px',
@@ -379,8 +371,21 @@ export default function DriversPage() {
                       <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 1.35 }}>
                         <Box sx={{ flex: 1 }}>
                           <Typography sx={{ mb: 0.5, fontSize: 11, color: 'text.secondary', fontWeight: 800 }}>READINESS {readiness}%</Typography>
-                          <LinearProgress variant="determinate" value={readiness} sx={{ height: 6, borderRadius: 99 }} />
+                          <LinearProgress
+                            variant="determinate"
+                            value={readiness}
+                            aria-label={`${driver.firstName || 'Driver'} ${driver.lastName || ''} readiness`}
+                            sx={{ height: 6, borderRadius: 99 }}
+                          />
                         </Box>
+                        <Button
+                          size="small"
+                          variant={selected ? 'contained' : 'outlined'}
+                          aria-pressed={selected}
+                          onClick={() => setSelectedDriverId(driver.id)}
+                        >
+                          {selected ? 'Selected' : 'Select'}
+                        </Button>
                         <Button size="small" variant="outlined" onClick={(event) => { event.stopPropagation(); openEdit(driver); }}>
                           Edit
                         </Button>
@@ -438,7 +443,12 @@ export default function DriversPage() {
                         <TableCell>—</TableCell>
                         <TableCell>—</TableCell>
                         <TableCell>
-                          <LinearProgress variant="determinate" value={readiness} sx={{ height: 5, borderRadius: 99, width: 94 }} />
+                          <LinearProgress
+                            variant="determinate"
+                            value={readiness}
+                            aria-label={`${driver.firstName || 'Driver'} ${driver.lastName || ''} utilization`}
+                            sx={{ height: 5, borderRadius: 99, width: 94 }}
+                          />
                         </TableCell>
                         <TableCell><Chip size="small" label={readiness} color={readiness < 80 ? 'warning' : 'success'} /></TableCell>
                         <TableCell>
@@ -545,7 +555,12 @@ export default function DriversPage() {
                     {['Drive Time Used', 'Drive Time Left', 'Shift Time Left'].map((label) => (
                       <Box key={label} sx={{ mb: 1.1 }}>
                         <Typography sx={{ fontSize: 11, color: 'text.secondary' }}>{label}</Typography>
-                        <LinearProgress variant="determinate" value={0} sx={{ height: 4, borderRadius: 99 }} />
+                        <LinearProgress
+                          variant="determinate"
+                          value={0}
+                          aria-label={label}
+                          sx={{ height: 4, borderRadius: 99 }}
+                        />
                       </Box>
                     ))}
                     <Typography sx={{ fontSize: 11, color: 'text.secondary' }}>Hours-of-service telemetry is not connected yet.</Typography>

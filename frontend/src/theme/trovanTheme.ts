@@ -70,7 +70,7 @@ export function createTrovanTheme(mode: TrovanThemeMode = 'light') {
     palette: {
       mode,
       primary: {
-        main: trovanColors.copper[500],
+        main: isDark ? trovanColors.copper[300] : trovanColors.copper[700],
         light: trovanColors.copper[300],
         dark: trovanColors.copper[700],
         contrastText: '#FFFFFF',

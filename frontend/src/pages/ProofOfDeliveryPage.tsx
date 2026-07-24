@@ -159,7 +159,13 @@ function FilterSelect({
       <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 850, textTransform: 'uppercase' }}>
         {label}
       </Typography>
-      <Select size="small" value={value} displayEmpty onChange={(event) => onChange(event.target.value)}>
+      <Select
+        size="small"
+        value={value}
+        displayEmpty
+        inputProps={{ 'aria-label': label }}
+        onChange={(event) => onChange(event.target.value)}
+      >
         {options.map((option) => (
           <MenuItem key={option} value={option}>{option}</MenuItem>
         ))}
@@ -412,11 +418,19 @@ export default function ProofOfDeliveryPage() {
                 Auto refresh
               </Typography>
               <Box
-                role="button"
+                role="switch"
                 tabIndex={0}
+                aria-label="Auto refresh proof records"
+                aria-checked={autoRefresh}
                 onClick={() => {
                   setAutoRefresh((current) => !current);
                   setNotice(`POD auto refresh ${autoRefresh ? 'paused' : 'enabled'}.`);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    setAutoRefresh((current) => !current);
+                  }
                 }}
                 sx={{ width: 34, height: 18, borderRadius: 999, bgcolor: autoRefresh ? trovanColors.copper[500] : 'divider', position: 'relative', cursor: 'pointer' }}
               >
@@ -482,7 +496,7 @@ export default function ProofOfDeliveryPage() {
                       </Box>
                     </Box>
                     <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1} sx={{ mt: 1.15 }}>
-                      <Typography variant="body2" sx={{ color: trovanColors.copper[400], fontWeight: 850 }}>
+                      <Typography variant="body2" sx={{ color: 'primary.main', fontWeight: 850 }}>
                         {row.routeLabel} · Stop {row.stopNumber}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">{row.jobLabel}</Typography>
@@ -496,7 +510,13 @@ export default function ProofOfDeliveryPage() {
             <Table stickyHeader size="small" aria-label="Proof of delivery queue">
               <TableHead>
                 <TableRow>
-                  <TableCell padding="checkbox"><Checkbox size="small" disabled /></TableCell>
+                  <TableCell padding="checkbox">
+                    <Checkbox
+                      size="small"
+                      disabled
+                      inputProps={{ 'aria-label': 'Select all proof records' }}
+                    />
+                  </TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell>Delivered</TableCell>
                   <TableCell>Customer</TableCell>
@@ -539,12 +559,17 @@ export default function ProofOfDeliveryPage() {
                       sx={{
                         cursor: 'pointer',
                         '&.Mui-selected td, &.Mui-selected:hover td': {
-                          bgcolor: alpha(trovanColors.copper[500], 0.12),
+                          bgcolor: alpha(trovanColors.copper[500], 0.08),
                         },
                       }}
                     >
                       <TableCell padding="checkbox">
-                        <Checkbox size="small" checked={selectedRow} onChange={() => setSelectedId(row.id)} />
+                        <Checkbox
+                          size="small"
+                          checked={selectedRow}
+                          inputProps={{ 'aria-label': `Select proof record ${row.id}` }}
+                          onChange={() => setSelectedId(row.id)}
+                        />
                       </TableCell>
                       <TableCell><StatusPill label={row.status} tone={row.tone} /></TableCell>
                       <TableCell>
@@ -559,9 +584,9 @@ export default function ProofOfDeliveryPage() {
                         <Typography variant="body2">{row.driverName}</Typography>
                         <Typography variant="caption" color="text.secondary">{row.driverMeta}</Typography>
                       </TableCell>
-                      <TableCell sx={{ color: trovanColors.copper[400], fontWeight: 800 }}>{row.routeLabel}</TableCell>
+                      <TableCell sx={{ color: 'primary.main', fontWeight: 800 }}>{row.routeLabel}</TableCell>
                       <TableCell>{row.stopNumber}</TableCell>
-                      <TableCell sx={{ color: trovanColors.copper[400], fontWeight: 800 }}>{row.jobLabel}</TableCell>
+                      <TableCell sx={{ color: 'primary.main', fontWeight: 800 }}>{row.jobLabel}</TableCell>
                       <TableCell align="right">›</TableCell>
                     </TableRow>
                   );
@@ -577,7 +602,13 @@ export default function ProofOfDeliveryPage() {
                 1
               </Button>
             </Stack>
-            <Select size="small" value="25 per page" sx={{ minWidth: 132 }} onChange={() => setNotice('POD page size is fixed until server pagination is connected.')}>
+            <Select
+              size="small"
+              value="25 per page"
+              inputProps={{ 'aria-label': 'Proof records per page' }}
+              sx={{ minWidth: 132 }}
+              onChange={() => setNotice('POD page size is fixed until server pagination is connected.')}
+            >
               <MenuItem value="25 per page">25 per page</MenuItem>
             </Select>
           </Stack>
@@ -603,7 +634,7 @@ export default function ProofOfDeliveryPage() {
                   <Typography variant="h3" component="h2">{selected.id.replace(/-stop-.*/, '').replace('route-', 'POD-')}</Typography>
                   <StatusPill label={selected.status} tone={selected.tone} />
                 </Stack>
-                <Typography variant="caption" sx={{ color: trovanColors.copper[400], fontWeight: 800 }}>
+                <Typography variant="caption" sx={{ color: 'primary.main', fontWeight: 800 }}>
                   Job {selected.jobLabel} • Customer {selected.customerName} • Route {selected.routeLabel}
                 </Typography>
               </Box>

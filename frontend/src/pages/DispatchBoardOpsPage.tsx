@@ -876,17 +876,8 @@ export default function DispatchBoardOpsPage() {
               return (
                 <Box
                   key={lane.route.id}
-                  role="button"
-                  tabIndex={0}
-                  aria-pressed={selected}
-                  aria-label={`Select ${routeLabel(lane.route)}`}
-                  onClick={() => setSelectedRouteId(lane.route.id)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      setSelectedRouteId(lane.route.id);
-                    }
-                  }}
+                  role="group"
+                  aria-label={`${routeLabel(lane.route)} dispatch lane`}
                   sx={{
                     border: '1px solid',
                     borderColor: selected ? alpha(accent, 0.55) : 'divider',
@@ -894,7 +885,6 @@ export default function DispatchBoardOpsPage() {
                     p: 1.1,
                     bgcolor: selected ? alpha(accent, isDark ? 0.1 : 0.055) : 'background.paper',
                     boxShadow: `inset 4px 0 0 ${accent}`,
-                    cursor: 'pointer',
                   }}
                 >
                   <Stack spacing={1}>
@@ -909,6 +899,16 @@ export default function DispatchBoardOpsPage() {
                         <StatusPill label={routeState.label} tone={routeState.tone} />
                       </Stack>
                       <Stack direction="row" spacing={0.8} alignItems="center">
+                        <Button
+                          variant={selected ? 'contained' : 'outlined'}
+                          size="small"
+                          aria-pressed={selected}
+                          aria-label={`Select ${routeLabel(lane.route)}`}
+                          onClick={() => setSelectedRouteId(lane.route.id)}
+                          sx={{ minWidth: 72, fontWeight: 850 }}
+                        >
+                          {selected ? 'Selected' : 'Select'}
+                        </Button>
                         <Typography variant="subtitle2" sx={{ fontWeight: 950 }}>
                           {progress}%
                         </Typography>
@@ -916,6 +916,7 @@ export default function DispatchBoardOpsPage() {
                           <LinearProgress
                             variant="determinate"
                             value={progress}
+                            aria-label={`${routeLabel(lane.route)} completion`}
                             sx={{
                               height: 6,
                               borderRadius: 999,
@@ -1515,6 +1516,7 @@ function StatusProgress({
         <LinearProgress
           variant="determinate"
           value={percent}
+          aria-label={`${label} progress`}
           sx={{
             height: 6,
             borderRadius: 999,
