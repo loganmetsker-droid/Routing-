@@ -100,6 +100,26 @@ export function createTrovanTheme(mode: TrovanThemeMode = 'light') {
     },
     typography: baseTypography,
     components: {
+      MuiTypography: {
+        defaultProps: {
+          // MUI maps subtitle variants to <h6> by default. Trovan uses those
+          // variants for labels and metadata, so keep them out of the document
+          // outline unless a component explicitly opts into a heading element.
+          variantMapping: {
+            h1: 'h1',
+            h2: 'h2',
+            h3: 'h3',
+            h4: 'h4',
+            h5: 'h5',
+            h6: 'h6',
+            subtitle1: 'p',
+            subtitle2: 'p',
+            body1: 'p',
+            body2: 'p',
+            inherit: 'p',
+          },
+        },
+      },
       MuiCssBaseline: {
         styleOverrides: {
           ':root': {

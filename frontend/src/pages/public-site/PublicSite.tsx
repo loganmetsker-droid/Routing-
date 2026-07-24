@@ -1251,7 +1251,7 @@ function MobileAppProofFrame({ src, alt }: { src: string; alt: string }) {
         <Typography sx={{ color: trovanColors.copper[200], fontWeight: 900, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0 }}>
           Driver mobile app proof
         </Typography>
-        <Typography variant="h4" sx={{ mt: 1, color: '#FFF8ED', fontFamily: trovanTypography.brandFontFamily, fontSize: { xs: 30, md: 38 }, lineHeight: 1 }}>
+        <Typography variant="h4" component="h2" sx={{ mt: 1, color: '#FFF8ED', fontFamily: trovanTypography.brandFontFamily, fontSize: { xs: 30, md: 38 }, lineHeight: 1 }}>
           Built for the phone in the cab
         </Typography>
         <Typography sx={{ mt: 1.2, color: alpha('#FFF8ED', 0.68), lineHeight: 1.55 }}>
@@ -1297,7 +1297,7 @@ function TrackingProofFrame() {
             <Typography sx={{ color: trovanColors.copper[700], fontWeight: 900, fontSize: 12, textTransform: 'uppercase' }}>
               Customer tracking
             </Typography>
-            <Typography variant="h4" sx={{ mt: 0.8, fontWeight: 900, color: trovanColors.black[950], lineHeight: 1.08 }}>
+            <Typography variant="h4" component="p" sx={{ mt: 0.8, fontWeight: 900, color: trovanColors.black[950], lineHeight: 1.08 }}>
               Your delivery is on the way
             </Typography>
             <Typography sx={{ mt: 1, color: alpha(trovanColors.black[900], 0.68), lineHeight: 1.5 }}>
@@ -1804,7 +1804,7 @@ function RouteLinePreview({
           <Typography sx={{ color: dark ? trovanColors.copper[200] : trovanColors.copper[700], fontWeight: 900, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0 }}>
             {copy.label}
           </Typography>
-          <Typography variant="h4" sx={{ mt: 0.8, fontFamily: trovanTypography.brandFontFamily, fontSize: { xs: 28, md: 34 }, lineHeight: 1 }}>
+          <Typography variant="h4" component="p" sx={{ mt: 0.8, fontFamily: trovanTypography.brandFontFamily, fontSize: { xs: 28, md: 34 }, lineHeight: 1 }}>
             {copy.title}
           </Typography>
           <Typography sx={{ mt: 1, color: secondaryText, lineHeight: 1.55 }}>
@@ -1850,7 +1850,7 @@ function RouteLinePreview({
         <Typography sx={{ color: dark ? trovanColors.copper[200] : trovanColors.copper[700], fontWeight: 900, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0 }}>
           {copy.label}
         </Typography>
-        <Typography variant="h4" sx={{ mt: 0.8, fontFamily: trovanTypography.brandFontFamily, fontSize: { xs: 28, md: 34 }, lineHeight: 1 }}>
+        <Typography variant="h4" component="p" sx={{ mt: 0.8, fontFamily: trovanTypography.brandFontFamily, fontSize: { xs: 28, md: 34 }, lineHeight: 1 }}>
           {copy.title}
         </Typography>
         <Typography sx={{ mt: 1, color: secondaryText, lineHeight: 1.55 }}>
@@ -2749,7 +2749,7 @@ function formatCurrency(value: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Math.max(0, value));
 }
 
-function RoiCalculator() {
+function RoiCalculator({ titleComponent = 'h3' }: { titleComponent?: ElementType }) {
   const [inputs, setInputs] = useState<RoiInputs>(defaultRoiInputs);
   const updateInput = (key: keyof RoiInputs, value: string) => {
     const nextValue = Number(value);
@@ -2802,7 +2802,7 @@ function RoiCalculator() {
       }}
     >
       <Box sx={{ p: 2.4, borderRadius: 1.6, bgcolor: '#FFFFFF', border: `1px solid ${alpha(trovanColors.black[900], 0.1)}` }}>
-        <Typography variant="h3" sx={{ fontFamily: trovanTypography.brandFontFamily, fontSize: { xs: 32, md: 42 }, lineHeight: 1 }}>
+        <Typography variant="h3" component={titleComponent} sx={{ fontFamily: trovanTypography.brandFontFamily, fontSize: { xs: 32, md: 42 }, lineHeight: 1 }}>
           See what one route day costs you.
         </Typography>
         <Typography sx={{ mt: 1, color: alpha(trovanColors.black[900], 0.68), lineHeight: 1.55 }}>
@@ -2910,11 +2910,11 @@ function PricingSection({
             : 'Start with the cost of the route day: planning time, miles, failed deliveries, dispatcher follow-up, and proof gaps. Then pick the rollout package that fits.'}
           titleComponent={titleComponent}
         />
-        {showCalculator ? <RoiCalculator /> : null}
+        {showCalculator ? <RoiCalculator titleComponent={titleComponent === 'h1' ? 'h2' : 'h3'} /> : null}
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2 }}>
           {pricingPlans.map((plan) => (
             <Box key={plan.name} sx={{ p: 2.4, borderRadius: 1.6, border: `1px solid ${plan.featured ? alpha(trovanColors.copper[500], 0.48) : alpha(trovanColors.black[900], 0.13)}`, bgcolor: plan.featured ? alpha(trovanColors.copper[50], 0.8) : '#FFFFFF', boxShadow: plan.featured ? '0 24px 64px rgba(169,99,33,0.16)' : 'none' }}>
-              <Typography variant="h5" component="h3" sx={{ fontWeight: 900 }}>{plan.name}</Typography>
+              <Typography variant="h5" component={titleComponent === 'h1' ? 'h2' : 'h3'} sx={{ fontWeight: 900 }}>{plan.name}</Typography>
               <Stack direction="row" alignItems="baseline" spacing={0.5} sx={{ mt: 1 }}>
                 <Typography sx={{ fontSize: 40, fontWeight: 900 }}>{plan.price}</Typography>
                 {plan.cadence ? (
@@ -3674,7 +3674,7 @@ function WorkflowPageView({ onOpenRequest }: { onOpenRequest: (requestType: Requ
             {workflow.capabilities.map((capability, index) => (
               <Box key={capability} sx={{ p: 2, borderRadius: 1.4, border: `1px solid ${alpha(trovanColors.black[900], 0.1)}`, bgcolor: index === 0 ? alpha(trovanColors.copper[50], 0.76) : '#FFFFFF' }}>
                 <Typography sx={{ color: trovanColors.copper[700], fontWeight: 900 }}>0{index + 1}</Typography>
-                <Typography variant="h6" sx={{ mt: 0.5, fontWeight: 900 }}>{capability}</Typography>
+                <Typography variant="h6" component="h3" sx={{ mt: 0.5, fontWeight: 900 }}>{capability}</Typography>
               </Box>
             ))}
           </Box>
@@ -3718,7 +3718,7 @@ function DemoVideoSection() {
           <Typography sx={{ color: trovanColors.copper[700], fontWeight: 900, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0 }}>
             Walkthrough chapters
           </Typography>
-          <Typography variant="h3" sx={{ mt: 1, fontFamily: trovanTypography.brandFontFamily, fontSize: { xs: 34, md: 44 }, lineHeight: 1 }}>
+          <Typography variant="h3" component="h2" sx={{ mt: 1, fontFamily: trovanTypography.brandFontFamily, fontSize: { xs: 34, md: 44 }, lineHeight: 1 }}>
             A complete route day, not a generic dashboard loop.
           </Typography>
           <List sx={{ mt: 1.6 }}>
@@ -3788,7 +3788,7 @@ function DemoPage({ onOpenRequest }: { onOpenRequest: (requestType: RequestType)
           </Box>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '0.8fr 1.2fr' }, gap: 3, alignItems: 'stretch' }}>
             <Box sx={{ p: 2.5, borderRadius: 1.6, bgcolor: '#FFFFFF', border: `1px solid ${alpha(trovanColors.black[900], 0.1)}` }}>
-              <Typography variant="h3" sx={{ fontFamily: trovanTypography.brandFontFamily, fontSize: { xs: 34, md: 44 }, lineHeight: 1 }}>
+              <Typography variant="h3" component="h2" sx={{ fontFamily: trovanTypography.brandFontFamily, fontSize: { xs: 34, md: 44 }, lineHeight: 1 }}>
                 {active.key === 'dispatch' ? 'Dispatch board walkthrough' : active.heading}
               </Typography>
               <Typography sx={{ mt: 1.5, color: alpha(trovanColors.black[900], 0.68), fontSize: 18 }}>{active.outcome}</Typography>
@@ -3853,14 +3853,14 @@ function SecurityPage({ onOpenRequest }: { onOpenRequest: (requestType: RequestT
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(4, 1fr)' }, gap: 1.5 }}>
             {securityControls.map((item) => (
               <Box key={item.title} sx={{ p: 2.2, borderRadius: 1.5, bgcolor: '#FFFFFF', border: `1px solid ${alpha(trovanColors.black[900], 0.1)}` }}>
-                <Typography variant="h6" sx={{ fontWeight: 900 }}>{item.title}</Typography>
+                <Typography variant="h6" component="h3" sx={{ fontWeight: 900 }}>{item.title}</Typography>
                 <Typography sx={{ mt: 0.8, color: alpha(trovanColors.black[900], 0.68) }}>{item.body}</Typography>
               </Box>
             ))}
           </Box>
           <Box sx={{ mt: 3, display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '0.88fr 1.12fr' }, gap: 2 }}>
             <Box sx={{ p: 2.5, borderRadius: 1.5, bgcolor: '#FFFFFF', border: `1px solid ${alpha(trovanColors.black[900], 0.1)}` }}>
-              <Typography variant="h5" sx={{ fontWeight: 900 }}>Controls described plainly</Typography>
+              <Typography variant="h5" component="h3" sx={{ fontWeight: 900 }}>Controls described plainly</Typography>
               <List>
                 {securityControlCopy.map((item) => (
                   <ListItem key={item} disableGutters alignItems="flex-start">
@@ -3884,7 +3884,7 @@ function SecurityPage({ onOpenRequest }: { onOpenRequest: (requestType: RequestT
             </Box>
           </Box>
           <Box sx={{ mt: 2, p: 2.5, borderRadius: 1.5, bgcolor: '#FFFFFF', border: `1px solid ${alpha(trovanColors.black[900], 0.1)}` }}>
-            <Typography variant="h5" sx={{ fontWeight: 900 }}>Security review topics</Typography>
+            <Typography variant="h5" component="h3" sx={{ fontWeight: 900 }}>Security review topics</Typography>
             <List>
               {[
                 'Role-based access control',
@@ -3946,7 +3946,7 @@ function CardGrid({ items }: { items: Array<{ icon: ElementType; title: string; 
         {items.map((item) => (
           <Box key={item.title} component={item.href ? RouterLink : 'div'} to={item.href || undefined} sx={{ p: 2.4, borderRadius: 1.6, bgcolor: '#FFFFFF', border: `1px solid ${alpha(trovanColors.black[900], 0.1)}`, color: trovanColors.black[950], textDecoration: 'none' }}>
             <item.icon sx={{ color: trovanColors.copper[700] }} />
-            <Typography variant="h5" sx={{ mt: 1.2, fontWeight: 900 }}>{item.title}</Typography>
+            <Typography variant="h5" component="h2" sx={{ mt: 1.2, fontWeight: 900 }}>{item.title}</Typography>
             <Typography sx={{ mt: 1, color: alpha(trovanColors.black[900], 0.68) }}>{item.body}</Typography>
           </Box>
         ))}
@@ -3964,7 +3964,7 @@ function SupportPage({ onOpenRequest }: { onOpenRequest: (requestType: RequestTy
           {supportTopics.map((topic) => (
             <Box key={topic.title} sx={{ p: 2.4, borderRadius: 1.6, bgcolor: '#FFFFFF', border: `1px solid ${alpha(trovanColors.black[900], 0.1)}` }}>
               <topic.icon sx={{ color: trovanColors.copper[700] }} />
-              <Typography variant="h5" sx={{ mt: 1.2, fontWeight: 900 }}>{topic.title}</Typography>
+              <Typography variant="h5" component="h2" sx={{ mt: 1.2, fontWeight: 900 }}>{topic.title}</Typography>
               <Typography sx={{ mt: 1, color: alpha(trovanColors.black[900], 0.68) }}>{topic.body}</Typography>
             </Box>
           ))}
@@ -3996,7 +3996,7 @@ function CompanyPage({ onOpenRequest }: { onOpenRequest: (requestType: RequestTy
           <Box sx={{ display: 'grid', gap: 1.3 }}>
             {missionGoals.map((item) => (
               <Box key={item.title} sx={{ p: 2, borderRadius: 1.4, bgcolor: '#FFFFFF', border: `1px solid ${alpha(trovanColors.black[900], 0.1)}` }}>
-                <Typography variant="h6" sx={{ fontWeight: 900 }}>{item.title}</Typography>
+                <Typography variant="h6" component="h3" sx={{ fontWeight: 900 }}>{item.title}</Typography>
                 <Typography sx={{ mt: 0.7, color: alpha(trovanColors.black[900], 0.68) }}>{item.body}</Typography>
               </Box>
             ))}
@@ -4015,7 +4015,7 @@ function MissionPage() {
         <Box sx={{ width: sectionWidth, mx: 'auto', display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(4, 1fr)' }, gap: 1.5 }}>
           {missionGoals.map((goal) => (
             <Box key={goal.title} sx={{ p: 2, borderRadius: 1.5, bgcolor: '#FFFFFF', border: `1px solid ${alpha(trovanColors.black[900], 0.1)}` }}>
-              <Typography variant="h6" sx={{ fontWeight: 900 }}>{goal.title}</Typography>
+              <Typography variant="h6" component="h2" sx={{ fontWeight: 900 }}>{goal.title}</Typography>
               <Typography sx={{ mt: 0.8, color: alpha(trovanColors.black[900], 0.68) }}>{goal.body}</Typography>
             </Box>
           ))}
@@ -4031,7 +4031,7 @@ function CareersPage({ onOpenRequest }: { onOpenRequest: (requestType: RequestTy
       <SimpleHero kicker="Careers" title="Careers at Trovan" body="Open roles are coming later. For now, Trovan is collecting thoughtful general interest from people who care about route operations." />
       <Box sx={{ py: { xs: 7, md: 9 }, bgcolor: trovanColors.stone[25] }}>
         <Box sx={{ width: 'min(850px, calc(100% - 32px))', mx: 'auto', textAlign: 'center' }}>
-          <Typography variant="h3" sx={{ fontFamily: trovanTypography.brandFontFamily, fontSize: { xs: 34, md: 46 }, lineHeight: 1 }}>
+          <Typography variant="h3" component="h2" sx={{ fontFamily: trovanTypography.brandFontFamily, fontSize: { xs: 34, md: 46 }, lineHeight: 1 }}>
             No open jobs are posted yet
           </Typography>
           <Typography sx={{ mt: 1.4, color: alpha(trovanColors.black[900], 0.68), fontSize: 18 }}>
@@ -4053,7 +4053,7 @@ function LegalPage({ kind, onCookiePreferences }: { kind: keyof typeof legalPage
         <Box sx={{ width: 'min(920px, calc(100% - 32px))', mx: 'auto', display: 'grid', gap: 1.5 }}>
           {page.sections.map(([title, body]) => (
             <Box key={title} sx={{ p: 2.4, borderRadius: 1.5, bgcolor: '#FFFFFF', border: `1px solid ${alpha(trovanColors.black[900], 0.1)}` }}>
-              <Typography variant="h5" sx={{ fontWeight: 900 }}>{title}</Typography>
+              <Typography variant="h5" component="h2" sx={{ fontWeight: 900 }}>{title}</Typography>
               <Typography sx={{ mt: 1, color: alpha(trovanColors.black[900], 0.68) }}>{body}</Typography>
             </Box>
           ))}

@@ -46,10 +46,33 @@ export const navSections: NavSection[] = [
   },
 ];
 
+const navigationPathAliases: Record<string, string> = {
+  '/messages': '/dispatch',
+  '/routes': '/routing',
+  '/planning': '/routing',
+  '/loads': '/jobs',
+  '/assets': '/vehicles',
+  '/depots': '/tracking',
+  '/billing': '/settings',
+  '/integrations': '/settings',
+};
+
+export function normalizeAppNavigationPath(pathname: string) {
+  if (pathname === '/route-runs' || pathname.startsWith('/route-runs/')) {
+    return '/dispatch';
+  }
+
+  const alias = Object.entries(navigationPathAliases).find(
+    ([path]) => pathname === path || pathname.startsWith(`${path}/`),
+  );
+  return alias?.[1] ?? pathname;
+}
+
 export function getActiveNavItem(pathname: string) {
+  const navigationPath = normalizeAppNavigationPath(pathname);
   for (const section of navSections) {
     for (const item of section.items) {
-      if (pathname === item.to || pathname.startsWith(item.to + '/')) {
+      if (navigationPath === item.to || navigationPath.startsWith(item.to + '/')) {
         return item;
       }
     }

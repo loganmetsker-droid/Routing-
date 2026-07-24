@@ -240,8 +240,22 @@ async function installPageGuards(page, errors) {
   }).catch(() => {});
 }
 
+async function waitForMarketingContent(page, errors = null) {
+  try {
+    await page.locator('#root').waitFor({ state: 'visible', timeout: 10_000 });
+    await page.locator('h1').first().waitFor({ state: 'visible', timeout: 10_000 });
+  } catch (error) {
+    if (errors) {
+      errors.push({ type: 'content', text: error.message });
+      return;
+    }
+    throw error;
+  }
+}
+
 async function collectDiscoveredLinks(page) {
-  await page.goto(absoluteUrl('/'), { waitUntil: 'networkidle' });
+  await page.goto(absoluteUrl('/'), { waitUntil: 'domcontentloaded', timeout: 20_000 });
+  await waitForMarketingContent(page);
   for (const label of ['Product', 'Solutions', 'Resources', 'Company']) {
     const button = page.getByRole('button', { name: new RegExp(`^${label}$`, 'i') });
     if (await button.count()) {
@@ -289,13 +303,14 @@ async function inspectRoute(routePath) {
   });
   const page = await browserContext.newPage();
   await installPageGuards(page, errors);
-  const response = await page.goto(absoluteUrl(routePath), { waitUntil: 'networkidle' }).catch((error) => {
+  const response = await page.goto(absoluteUrl(routePath), {
+    waitUntil: 'domcontentloaded',
+    timeout: 20_000,
+  }).catch((error) => {
     errors.push({ type: 'navigation', text: error.message });
     return null;
   });
-  await page.locator('#root').waitFor({ state: 'visible', timeout: 10_000 }).catch((error) => {
-    errors.push({ type: 'root', text: error.message });
-  });
+  await waitForMarketingContent(page, errors);
   await loadLazyImages(page);
 
   const data = await page.evaluate(() => {
@@ -305,6 +320,38 @@ async function inspectRoute(routePath) {
       return style.display !== 'none' && style.visibility !== 'hidden' && htmlElement.getBoundingClientRect().width > 0;
     };
     const h1 = Array.from(document.querySelectorAll('h1')).map((node) => node.textContent?.trim()).find(Boolean) || '';
+    const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,h6'))
+      .filter((node) => visibleText(node))
+      .map((node) => ({
+        level: Number(node.tagName.slice(1)),
+        text: (node.textContent || '').trim().replace(/\s+/g, ' '),
+      }));
+    const headingFindings = [];
+    if (headings[0]?.level !== 1) {
+      headingFindings.push('the first visible heading must be H1');
+    }
+    if (headings.filter((heading) => heading.level === 1).length !== 1) {
+      headingFindings.push(
+        `expected one visible H1, found ${headings.filter((heading) => heading.level === 1).length}`,
+      );
+    }
+    for (let index = 1; index < headings.length; index += 1) {
+      const previous = headings[index - 1];
+      const current = headings[index];
+      if (current.level > previous.level + 1) {
+        headingFindings.push(
+          `heading level jumps from H${previous.level} to H${current.level} at "${current.text}"`,
+        );
+      }
+    }
+    const nonDescriptiveHeading = headings.find(
+      (heading) => !heading.text || /^[\d\s$%.,/+-]+$/.test(heading.text),
+    );
+    if (nonDescriptiveHeading) {
+      headingFindings.push(
+        `heading must contain descriptive text: "${nonDescriptiveHeading.text || '(empty)'}"`,
+      );
+    }
     const ctas = Array.from(document.querySelectorAll('a, button'))
       .filter((node) => visibleText(node))
       .map((node) => node.textContent?.trim().replace(/\s+/g, ' ') || node.getAttribute('aria-label') || '')
@@ -332,6 +379,8 @@ async function inspectRoute(routePath) {
     return {
       title: document.title,
       h1,
+      headings,
+      headingFindings,
       primaryCta: ctas[0] || '',
       visibleCtas: ctas,
       imageCount: images.length,
@@ -386,7 +435,11 @@ async function captureResponsiveScreenshots(routePath) {
     const page = await context.newPage();
     const errors = [];
     await installPageGuards(page, errors);
-    await page.goto(absoluteUrl(routePath), { waitUntil: 'networkidle' }).catch(() => {});
+    await page.goto(absoluteUrl(routePath), {
+      waitUntil: 'domcontentloaded',
+      timeout: 20_000,
+    }).catch(() => {});
+    await waitForMarketingContent(page, errors);
     await loadLazyImages(page);
     const layout = await page.evaluate(() => ({
       scrollHeight: document.documentElement.scrollHeight,
@@ -406,7 +459,7 @@ async function captureResponsiveScreenshots(routePath) {
 }
 
 function writeMarkdownReport(results, crossSiteScreenshotUsage, crossSiteScreenshotFindings) {
-  const broken = results.filter((item) => item.status !== 200 || item.consoleErrors.length || item.brokenImages.length || item.brokenLinks.length || item.missingAlt.length || item.screenshotFindings.length || item.responsiveFindings.length);
+  const broken = results.filter((item) => item.status !== 200 || item.consoleErrors.length || item.brokenImages.length || item.brokenLinks.length || item.missingAlt.length || item.headingFindings.length || item.screenshotFindings.length || item.responsiveFindings.length);
   const lines = [
     '# TryTrovan Marketing Site Audit',
     '',
@@ -428,6 +481,7 @@ function writeMarkdownReport(results, crossSiteScreenshotUsage, crossSiteScreens
         item.missingAlt.length ? `${item.missingAlt.length} missing screenshot alt` : '',
         item.brokenLinks.length ? `${item.brokenLinks.length} broken links` : '',
         item.buttonsWithoutNames ? `${item.buttonsWithoutNames} unnamed buttons` : '',
+        item.headingFindings.length ? `${item.headingFindings.length} heading outline findings` : '',
         item.screenshotFindings.length ? `${item.screenshotFindings.length} screenshot repetition findings` : '',
         item.responsiveFindings.length ? `${item.responsiveFindings.length} responsive findings` : '',
       ].filter(Boolean).join(', ') || 'none';
@@ -509,7 +563,7 @@ try {
   }, null, 2), 'utf8');
   writeMarkdownReport(results, crossSiteScreenshotUsage, crossSiteScreenshotFindings);
 
-  const failureCount = results.filter((item) => item.status !== 200 || item.consoleErrors.length || item.brokenImages.length || item.brokenLinks.length || item.missingAlt.length || item.screenshotFindings.length || item.responsiveFindings.length).length;
+  const failureCount = results.filter((item) => item.status !== 200 || item.consoleErrors.length || item.brokenImages.length || item.brokenLinks.length || item.missingAlt.length || item.headingFindings.length || item.screenshotFindings.length || item.responsiveFindings.length).length;
   console.log(`Marketing audit complete: ${results.length} routes, ${failureCount} routes with findings, ${crossSiteScreenshotFindings.length} cross-site screenshot findings.`);
   if (failureCount || crossSiteScreenshotFindings.length) {
     process.exitCode = 1;

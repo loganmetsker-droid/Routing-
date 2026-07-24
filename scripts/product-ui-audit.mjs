@@ -6,7 +6,7 @@ const baseUrl = (
   process.env.PRODUCT_UI_BASE_URL ||
   process.env.AUDIT_BASE_URL ||
   process.env.PLAYWRIGHT_BASE_URL ||
-  'http://127.0.0.1:5194'
+  'http://127.0.0.1:5185'
 ).replace(/\/+$/, '');
 const outDir = path.join(process.cwd(), 'audit');
 const rawPath = path.join(outDir, 'product-ui-audit.json');
@@ -15,23 +15,35 @@ const screenshotDir = path.join(outDir, 'product-screenshots');
 const apiBaseUrl = (
   process.env.PRODUCT_UI_API_BASE_URL ||
   process.env.AUDIT_API_BASE_URL ||
-  baseUrl
+  (baseUrl === 'http://127.0.0.1:5185'
+    ? 'http://127.0.0.1:3001'
+    : baseUrl)
 ).replace(/\/+$/, '');
 
 const routes = [
   ['Dashboard', '/dashboard'],
   ['Dispatch', '/dispatch'],
+  ['Messages alias', '/messages'],
   ['Routing', '/routing'],
+  ['Routes alias', '/routes'],
+  ['Planning alias', '/planning'],
   ['Jobs', '/jobs'],
+  ['Loads alias', '/loads'],
   ['Customers', '/customers'],
   ['Drivers', '/drivers'],
   ['Vehicles', '/vehicles'],
+  ['Assets alias', '/assets'],
   ['Tracking', '/tracking'],
+  ['Depots alias', '/depots'],
   ['Proof of Delivery', '/pod'],
   ['Exceptions', '/exceptions'],
   ['Reports', '/analytics'],
   ['Settings', '/settings'],
+  ['Billing alias', '/billing'],
+  ['Integrations alias', '/integrations'],
+  ['Route Run Detail', '/route-runs/route-alpha-001'],
   ['Driver Workspace', '/driver'],
+  ['Driver Route Run', '/driver/route-runs/route-beta-002'],
   ['Public Tracking', '/track/demo-token'],
 ];
 
@@ -39,22 +51,32 @@ const unsafeButton = /\b(delete|remove|logout|archive|cancel jobs|dispatch all|d
 const expectedTextByPath = {
   '/dashboard': [/Operations Dashboard/i, /Live Operations Map/i],
   '/dispatch': [/Dispatch Board/i, /Unassigned Jobs/i, /Active Routes/i],
+  '/messages': [/Dispatch Board/i, /Unassigned Jobs/i, /Active Routes/i],
   '/routing': [/Route Planning & Optimization/i, /Unassigned Jobs/i, /Route Summaries/i],
+  '/routes': [/Route Planning & Optimization/i, /Unassigned Jobs/i, /Route Summaries/i],
+  '/planning': [/Route Planning & Optimization/i, /Unassigned Jobs/i, /Route Summaries/i],
   '/jobs': [/Jobs/i, /New Job/i],
+  '/loads': [/Jobs/i, /New Job/i],
   '/customers': [/Customers/i],
   '/drivers': [/Drivers/i],
   '/vehicles': [/Vehicles/i],
+  '/assets': [/Vehicles/i],
   '/tracking': [/Live Tracking|Tracking/i],
+  '/depots': [/Live Tracking|Tracking/i],
   '/pod': [/Proof of Delivery/i],
   '/exceptions': [/Exceptions/i],
   '/analytics': [/Reports|Analytics/i],
   '/settings': [/Settings/i],
+  '/billing': [/Settings/i],
+  '/integrations': [/Settings/i],
+  '/route-runs/route-alpha-001': [/Route Run/i, /Execution/i],
   '/driver': [/Driver|Route/i],
+  '/driver/route-runs/route-beta-002': [/Today route|Route/i, /Stop/i],
   '/track/demo-token': [/Tracking|Route/i],
 };
 
 function expectedTextFor(routePath, viewportName) {
-  if (routePath === '/routing' && viewportName === 'mobile') {
+  if (['/routing', '/routes', '/planning'].includes(routePath) && viewportName === 'mobile') {
     return [/Route Planning & Optimization/i];
   }
   return expectedTextByPath[routePath] || [];
@@ -121,6 +143,50 @@ function viewportOverflow() {
     wideTables,
     clippedControls,
   };
+}
+
+function headingOutline() {
+  const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,h6'))
+    .filter((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return (
+        rect.width > 0 &&
+        rect.height > 0 &&
+        style.display !== 'none' &&
+        style.visibility !== 'hidden'
+      );
+    })
+    .map((element) => ({
+      level: Number(element.tagName.slice(1)),
+      text: (element.textContent || '').trim().replace(/\s+/g, ' '),
+    }));
+  const findings = [];
+  if (headings[0]?.level !== 1) {
+    findings.push('the first visible heading must be H1');
+  }
+  const h1Count = headings.filter((heading) => heading.level === 1).length;
+  if (h1Count !== 1) {
+    findings.push(`expected one visible H1, found ${h1Count}`);
+  }
+  for (let index = 1; index < headings.length; index += 1) {
+    const previous = headings[index - 1];
+    const current = headings[index];
+    if (current.level > previous.level + 1) {
+      findings.push(
+        `heading level jumps from H${previous.level} to H${current.level} at "${current.text}"`,
+      );
+    }
+  }
+  const nonDescriptiveHeading = headings.find(
+    (heading) => !heading.text || /^[\d\s$%.,/+-]+$/.test(heading.text),
+  );
+  if (nonDescriptiveHeading) {
+    findings.push(
+      `heading must contain descriptive text: "${nonDescriptiveHeading.text || '(empty)'}"`,
+    );
+  }
+  return { headings, findings };
 }
 
 function routeSlug(routePath) {
@@ -266,6 +332,7 @@ async function run() {
         staleCopyHits: [],
         buttonCount: 0,
         visibleH1Count: 0,
+        headingOutline: null,
         workflowFindings: [],
         screenshotPath: path.join(
           screenshotDir,
@@ -304,7 +371,9 @@ async function run() {
             `expected one visible H1, found ${routeResult.visibleH1Count}`,
           );
         }
-        if (routePath === '/settings') {
+        routeResult.headingOutline = await page.evaluate(headingOutline);
+        routeResult.workflowFindings.push(...routeResult.headingOutline.findings);
+        if (['/settings', '/billing', '/integrations'].includes(routePath)) {
           const mobileSelectorVisible = await page
             .getByTestId('settings-mobile-section-selector')
             .isVisible()
@@ -362,9 +431,11 @@ async function run() {
       results.api[apiPath] = { error: String(response.error) };
     } else {
       const text = await response.text();
+      const contentType = response.headers.get('content-type') || '';
       results.api[apiPath] = {
         status: response.status,
-        ok: response.ok,
+        ok: response.ok && contentType.toLowerCase().includes('application/json'),
+        contentType,
         bodySample: text.slice(0, 300),
       };
     }

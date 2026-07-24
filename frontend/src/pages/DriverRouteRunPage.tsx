@@ -541,7 +541,7 @@ export default function DriverRouteRunPage() {
       return (
         <Stack spacing={1.2} alignItems="stretch">
           <CheckCircle color="success" sx={{ fontSize: 42 }} />
-          <Typography variant="h5">Route complete</Typography>
+          <Typography variant="h5" component="h3">Route complete</Typography>
           <Typography variant="body2" color="text.secondary">
             All stops are closed for this route run.
           </Typography>
@@ -555,7 +555,7 @@ export default function DriverRouteRunPage() {
           <Typography variant="overline" color="text.secondary">
             Step 1
           </Typography>
-          <Typography variant="h5">Arrive</Typography>
+          <Typography variant="h5" component="h3">Arrive</Typography>
           <Typography variant="body2" color="text.secondary">
             Tap once parked at the customer stop.
           </Typography>
@@ -578,7 +578,7 @@ export default function DriverRouteRunPage() {
         <Stack spacing={1.2}>
           <Stack direction="row" alignItems="center" spacing={1}>
             <Draw sx={{ color: trovanColors.copper[500] }} />
-            <Typography variant="h5">Capture signature</Typography>
+            <Typography variant="h5" component="h3">Capture signature</Typography>
           </Stack>
           <Typography variant="body2" color="text.secondary">
             This customer requires a signature before departure.
@@ -602,7 +602,7 @@ export default function DriverRouteRunPage() {
         <Stack spacing={1.2}>
           <Stack direction="row" alignItems="center" spacing={1}>
             <Description sx={{ color: trovanColors.copper[500] }} />
-            <Typography variant="h5">BOL</Typography>
+            <Typography variant="h5" component="h3">BOL</Typography>
           </Stack>
           <Typography variant="body2" color="text.secondary">
             Upload the BOL or mark that one is not needed for this stop.
@@ -647,7 +647,7 @@ export default function DriverRouteRunPage() {
         <Stack spacing={1.2}>
           <Stack direction="row" alignItems="center" spacing={1}>
             <FactCheck sx={{ color: trovanColors.copper[500] }} />
-            <Typography variant="h5">Extra documents</Typography>
+            <Typography variant="h5" component="h3">Extra documents</Typography>
           </Stack>
           <Typography variant="body2" color="text.secondary">
             Upload any extra documents or mark that none are needed.
@@ -691,7 +691,7 @@ export default function DriverRouteRunPage() {
       <Stack spacing={1.2}>
         <Stack direction="row" alignItems="center" spacing={1}>
           <CheckCircle color="success" />
-          <Typography variant="h5">Ready to depart</Typography>
+          <Typography variant="h5" component="h3">Ready to depart</Typography>
         </Stack>
         <Stack direction="row" spacing={0.8} flexWrap="wrap" useFlexGap>
           <Chip size="small" color={signatureCaptured ? 'success' : 'default'} label="Signature" />
@@ -720,7 +720,7 @@ export default function DriverRouteRunPage() {
   if (!routeRun) {
     return (
       <SurfacePanel>
-        <Typography variant="h5">Route run unavailable</Typography>
+        <Typography variant="h5" component="h1">Route run unavailable</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
           The requested route run could not be loaded for this driver.
         </Typography>
@@ -807,7 +807,7 @@ export default function DriverRouteRunPage() {
 
             {nextStop ? (
               <Stack spacing={0.75}>
-                <Typography variant="h5" sx={{ lineHeight: 1.1, overflowWrap: 'anywhere' }}>
+                <Typography variant="h5" component="h2" sx={{ lineHeight: 1.1, overflowWrap: 'anywhere' }}>
                   {nextStop.presentation?.customerName || 'Customer pending'}
                 </Typography>
                 <Stack direction="row" spacing={0.75} alignItems="flex-start">
@@ -907,7 +907,7 @@ export default function DriverRouteRunPage() {
       >
         <Stack spacing={1.2} sx={{ p: 1.5, pb: 'max(14px, env(safe-area-inset-bottom))' }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Typography variant="h6">Dispatch messages</Typography>
+            <Typography variant="h6" component="h2">Dispatch messages</Typography>
             <IconButton aria-label="Close messages" onClick={() => setMessageDrawerOpen(false)}>
               <Close />
             </IconButton>
@@ -980,7 +980,7 @@ export default function DriverRouteRunPage() {
       >
         <Stack spacing={1.4} sx={{ p: 1.5, pb: 'max(14px, env(safe-area-inset-bottom))', overflowY: 'auto' }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Typography variant="h6">Stop details</Typography>
+            <Typography variant="h6" component="h2">Stop details</Typography>
             <IconButton aria-label="Close stop details" onClick={() => setDetailsDrawerOpen(false)}>
               <Close />
             </IconButton>

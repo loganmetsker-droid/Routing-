@@ -168,6 +168,7 @@ export default function DriversPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingDriver, setEditingDriver] = useState<DriverRecord | null>(null);
   const [formData, setFormData] = useState(emptyForm);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const selectedDriver = useMemo(
     () => drivers.find((driver) => driver.id === selectedDriverId) || drivers[0] || null,
@@ -205,12 +206,14 @@ export default function DriversPage() {
   }, [drivers, filter, search]);
 
   const openCreate = () => {
+    setSaveError(null);
     setEditingDriver(null);
     setFormData(emptyForm);
     setDialogOpen(true);
   };
 
   const openEdit = (driver: DriverRecord) => {
+    setSaveError(null);
     setEditingDriver(driver);
     setFormData({
       firstName: driver.firstName || '',
@@ -228,14 +231,16 @@ export default function DriversPage() {
 
   const handleSubmit = async () => {
     try {
+      setSaveError(null);
       if (editingDriver) {
         await updateDriverMutation.mutateAsync({ id: editingDriver.id, updates: formData });
       } else {
         await createDriverMutation.mutateAsync(formData);
       }
       setDialogOpen(false);
+      setNotice(editingDriver ? 'Driver updated.' : 'Driver added.');
     } catch (error) {
-      console.error('Failed to save driver', error);
+      setSaveError('Driver could not be saved. Check the required fields and try again.');
     }
   };
 
@@ -594,9 +599,10 @@ export default function DriversPage() {
         </Panel>
       </Box>
 
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="sm">
+      <Dialog open={dialogOpen} onClose={() => { setDialogOpen(false); setSaveError(null); }} fullWidth maxWidth="sm">
         <DialogTitle>{editingDriver ? 'Edit Driver' : 'Add Driver'}</DialogTitle>
         <DialogContent sx={{ display: 'grid', gap: 2, pt: 2 }}>
+          {saveError ? <Alert severity="error">{saveError}</Alert> : null}
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
             <TextField label="First name" value={formData.firstName} onChange={(event) => setFormData((current) => ({ ...current, firstName: event.target.value }))} fullWidth />
             <TextField label="Last name" value={formData.lastName} onChange={(event) => setFormData((current) => ({ ...current, lastName: event.target.value }))} fullWidth />
@@ -623,8 +629,10 @@ export default function DriversPage() {
           <TextField label="Notes" multiline minRows={3} value={formData.notes} onChange={(event) => setFormData((current) => ({ ...current, notes: event.target.value }))} />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={() => void handleSubmit()}>Save Driver</Button>
+          <Button onClick={() => { setDialogOpen(false); setSaveError(null); }}>Cancel</Button>
+          <Button variant="contained" disabled={createDriverMutation.isPending || updateDriverMutation.isPending} onClick={() => void handleSubmit()}>
+            {createDriverMutation.isPending || updateDriverMutation.isPending ? 'Saving…' : 'Save Driver'}
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

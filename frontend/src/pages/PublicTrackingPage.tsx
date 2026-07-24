@@ -109,7 +109,7 @@ export default function PublicTrackingPage() {
                   <Stack spacing={1.5}>
                     <Stack direction="row" spacing={1} alignItems="center">
                       <AccessTime fontSize="small" />
-                      <Typography variant="h4">Delivery status</Typography>
+                      <Typography variant="h4" component="h2">Delivery status</Typography>
                     </Stack>
                     <Typography variant="body2" color="text.secondary">
                       Planned start: {tracking.routeRun.plannedStart || 'Pending'}
@@ -131,7 +131,7 @@ export default function PublicTrackingPage() {
                   <Stack spacing={1.5}>
                     <Stack direction="row" spacing={1} alignItems="center">
                       <LocalShipping fontSize="small" />
-                      <Typography variant="h4">Vehicle</Typography>
+                      <Typography variant="h4" component="h2">Vehicle</Typography>
                     </Stack>
                     <Typography variant="body2" color="text.secondary">
                       {tracking.vehicle
@@ -155,7 +155,7 @@ export default function PublicTrackingPage() {
                   <Stack spacing={1.5}>
                     <Stack direction="row" spacing={1} alignItems="center">
                       <SupportAgent fontSize="small" />
-                      <Typography variant="h4">Support</Typography>
+                      <Typography variant="h4" component="h2">Support</Typography>
                     </Stack>
                     <Typography variant="body2" color="text.secondary">
                       {tracking.organization.branding.supportEmail || 'dispatch@trovan.app'}
@@ -171,7 +171,7 @@ export default function PublicTrackingPage() {
             <Grid item xs={12} lg={8}>
               <SurfacePanel variant="command">
                 <Stack spacing={1.5}>
-                  <Typography variant="h3">Stop progress</Typography>
+                  <Typography variant="h3" component="h2">Stop progress</Typography>
                   <Typography variant="body2" color="text.secondary">
                     A clear delivery timeline built for trust and readability, not marketing gradients.
                   </Typography>
@@ -190,7 +190,7 @@ export default function PublicTrackingPage() {
                           spacing={1}
                         >
                           <Box>
-                            <Typography variant="subtitle1" sx={{ mb: 0.35 }}>
+                            <Typography variant="subtitle1" component="h3" sx={{ mb: 0.35 }}>
                               Stop {stop.stopSequence}
                             </Typography>
                             <Typography variant="body2" color="text.secondary">

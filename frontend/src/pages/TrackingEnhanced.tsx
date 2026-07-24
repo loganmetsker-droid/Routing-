@@ -149,7 +149,7 @@ export default function TrackingEnhanced() {
             </Stack>
             {showHowItWorks ? (
               <SurfacePanel variant="muted">
-                <Typography variant="subtitle1">Tracking rollout</Typography>
+                <Typography variant="subtitle1" component="h3">Tracking rollout</Typography>
                 <Typography variant="body2" color="text.secondary">
                   1. Make sure vehicles and drivers are active. 2. Post GPS pings to `/api/tracking/ingest` from your mobile or device middleware using the assigned vehicle ID. 3. Dispatch published routes. 4. Review stale signals and route adherence here.
                 </Typography>
@@ -183,7 +183,7 @@ export default function TrackingEnhanced() {
                     },
                   }}
                 >
-                  <Typography variant="h4" sx={{ color: '#FFF8ED' }}>Live positioning</Typography>
+                  <Typography variant="h4" component="h3" sx={{ color: '#FFF8ED' }}>Live positioning</Typography>
                   <Typography variant="body2" sx={{ color: alpha('#FFF8ED', 0.72) }}>
                     Latest persisted vehicle telemetry with route context.
                   </Typography>
@@ -253,7 +253,7 @@ export default function TrackingEnhanced() {
             <Grid item xs={12} lg={4}>
               <Stack spacing={2.5}>
                 <SurfacePanel>
-                  <Typography variant="h4" sx={{ mb: 1.2 }}>Live routes</Typography>
+                  <Typography variant="h4" component="h3" sx={{ mb: 1.2 }}>Live routes</Typography>
                   <List disablePadding>
                     {liveLocations.map((location) => {
                       const route = liveRoutes.find((item) => item.vehicleId === location.vehicleId);
@@ -274,7 +274,7 @@ export default function TrackingEnhanced() {
                   </List>
                 </SurfacePanel>
                 <SurfacePanel variant="subtle">
-                  <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>Signal quality</Typography>
+                  <Typography variant="subtitle2" component="h3" color="text.secondary" sx={{ mb: 1 }}>Signal quality</Typography>
                   <Stack direction="row" spacing={1} flexWrap="wrap">
                     <StatusPill label={String(staleSignals) + ' stale'} tone={staleSignals ? 'warning' : 'success'} />
                     <StatusPill label={String(Math.max(liveLocations.length - staleSignals, 0)) + ' healthy'} tone="success" />

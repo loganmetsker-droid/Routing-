@@ -42,14 +42,6 @@ export const getTrackingSocket = (): Socket => {
     });
 
     if (SOCKETS_ENABLED) {
-      trackingSocket.on('connect', () => {
-        console.log('✅ Connected to tracking socket');
-      });
-
-      trackingSocket.on('disconnect', (reason) => {
-        console.log('❌ Disconnected from tracking socket:', reason);
-      });
-
       trackingSocket.on('error', (error) => {
         console.error('Socket error:', error);
       });
@@ -86,15 +78,7 @@ export const getDispatchSocket = (): Socket => {
       auth: buildSocketAuth,
     });
 
-    if (SOCKETS_ENABLED) {
-      dispatchSocket.on('connect', () => {
-        console.log('✅ Connected to dispatch socket');
-      });
-
-      dispatchSocket.on('disconnect', (reason) => {
-        console.log('❌ Disconnected from dispatch socket:', reason);
-      });
-    } else if (!previewSocketsDisabledLogged) {
+    if (!SOCKETS_ENABLED && !previewSocketsDisabledLogged) {
       console.info('ℹ️ Sockets disabled via env; running in mock/preview mode.');
       previewSocketsDisabledLogged = true;
     }

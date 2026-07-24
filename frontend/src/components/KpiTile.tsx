@@ -29,6 +29,7 @@ export function KpiTile({ label, value, meta, tone = 'default' }: KpiTileProps) 
         </Typography>
         <Typography
           variant="h4"
+          component="p"
           sx={{
             lineHeight: 1,
             overflowWrap: 'normal',

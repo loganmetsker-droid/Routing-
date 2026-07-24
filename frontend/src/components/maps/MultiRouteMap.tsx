@@ -412,7 +412,7 @@ export default function MultiRouteMap({
             minWidth: '280px',
           }}
         >
-          <Typography variant="h6" gutterBottom>
+          <Typography variant="h6" component="p" gutterBottom>
             Active Routes ({routes.length})
           </Typography>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.9 }}>
@@ -746,7 +746,7 @@ export default function MultiRouteMap({
             backdropFilter: 'blur(18px)',
           }}
         >
-          <Typography variant="h6" color="text.secondary">
+          <Typography variant="h6" component="p" color="text.secondary">
             No routes to display
           </Typography>
           <Typography variant="body2" color="text.secondary">

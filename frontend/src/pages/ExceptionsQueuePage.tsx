@@ -581,7 +581,7 @@ export default function ExceptionsQueuePage() {
                     >
                       SELECTED EXCEPTION
                     </Typography>
-                    <Typography variant="h4" sx={{ mt: 0.35 }}>
+                    <Typography variant="h4" component="h3" sx={{ mt: 0.35 }}>
                       {selectedException.message}
                     </Typography>
                   </Box>
@@ -873,7 +873,7 @@ export default function ExceptionsQueuePage() {
                   >
                     ROUTE CONTEXT
                   </Typography>
-                  <Typography variant="h5" sx={{ mt: 0.35 }}>
+                  <Typography variant="h5" component="h3" sx={{ mt: 0.35 }}>
                     {selectedRouteRun ? `Route ${selectedRouteRun.id.slice(0, 8)}` : 'No route linked'}
                   </Typography>
                 </Box>

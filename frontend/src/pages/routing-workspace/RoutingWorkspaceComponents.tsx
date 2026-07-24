@@ -1149,7 +1149,7 @@ export function RouteLaneEditorDrawer({
         }}
       >
         <Box sx={{ minWidth: 0 }}>
-          <Typography variant="h6">Route lanes</Typography>
+          <Typography variant="h6" component="h2">Route lanes</Typography>
           <Typography variant="body2" color="text.secondary" noWrap>
             Drag stops between lanes, reorder stops, or protect route order.
           </Typography>
@@ -1472,7 +1472,7 @@ export function ExceptionResolutionDrawer({
         <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
           <Stack direction="row" justifyContent="space-between" gap={1.5} alignItems="flex-start">
             <Box sx={{ minWidth: 0 }}>
-              <Typography id="routing-exception-drawer-title" variant="h6">
+              <Typography id="routing-exception-drawer-title" variant="h6" component="h2">
                 Exception resolution
               </Typography>
               <Typography variant="body2" color="text.secondary">

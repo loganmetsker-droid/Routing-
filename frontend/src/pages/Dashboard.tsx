@@ -81,7 +81,7 @@ function DashboardPanel({
         justifyContent="space-between"
         sx={{ minHeight: 46, px: 1.4, py: 0.9, borderBottom: '1px solid', borderColor: 'divider' }}
       >
-        <Typography variant="subtitle1" sx={{ fontWeight: 800, fontSize: 15 }}>
+        <Typography variant="subtitle1" component="h2" sx={{ fontWeight: 800, fontSize: 15 }}>
           {title}
         </Typography>
         {action ? (
@@ -137,7 +137,7 @@ function MetricTile({ card }: { card: MetricCard }) {
           <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 750, fontSize: 11.5 }}>
             {card.label}
           </Typography>
-          <Typography variant="h2" sx={{ mt: 0.15, fontSize: 25, lineHeight: 1.05, color: danger ? trovanColors.semantic.danger : 'text.primary' }}>
+          <Typography variant="h2" component="p" sx={{ mt: 0.15, fontSize: 25, lineHeight: 1.05, color: danger ? trovanColors.semantic.danger : 'text.primary' }}>
             {card.value}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.15, fontSize: 11.5 }}>{card.note}</Typography>
@@ -475,7 +475,7 @@ export default function Dashboard() {
                   }}
                 >
                   <Box sx={{ position: 'relative', zIndex: 1, textAlign: 'center' }}>
-                    <Typography variant="h4">{jobs.length || 0}</Typography>
+                    <Typography variant="h4" component="p">{jobs.length || 0}</Typography>
                     <Typography variant="caption" color="text.secondary">Total</Typography>
                   </Box>
                 </Box>
@@ -609,7 +609,7 @@ export default function Dashboard() {
               <Box sx={{ width: 92, height: 92, borderRadius: '50%', border: `8px solid ${trovanColors.copper[700]}`, display: 'grid', placeItems: 'center', textAlign: 'center', justifySelf: 'end' }}>
                 <Box>
                   <Typography variant="caption" color="text.secondary">ROI</Typography>
-                  <Typography variant="h5">{state.efficiencyMetrics.roiLabel}</Typography>
+                  <Typography variant="h5" component="p">{state.efficiencyMetrics.roiLabel}</Typography>
                 </Box>
               </Box>
             </Box>

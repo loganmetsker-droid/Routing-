@@ -104,7 +104,7 @@ export default function DriverWorkspacePage() {
 
         {routes.length === 0 ? (
           <SurfacePanel variant="command" padding={1.6}>
-            <Typography variant="h5" sx={{ mb: 0.7 }}>
+            <Typography variant="h5" component="h2" sx={{ mb: 0.7 }}>
               No assigned routes
             </Typography>
             <Typography variant="body2" color="text.secondary">
@@ -122,10 +122,10 @@ export default function DriverWorkspacePage() {
                   <Stack spacing={1.2}>
                     <Stack direction="row" spacing={1} justifyContent="space-between" alignItems="flex-start">
                       <Box sx={{ minWidth: 0 }}>
-                        <Typography variant="subtitle2" color="text.secondary">
+                        <Typography variant="subtitle2" component="h2" color="text.secondary">
                           Today route
                         </Typography>
-                        <Typography variant="h6" sx={{ overflowWrap: 'anywhere' }}>
+                        <Typography variant="h6" component="h3" sx={{ overflowWrap: 'anywhere' }}>
                           {route.nextStop?.presentation?.customerName || 'Next stop pending'}
                         </Typography>
                       </Box>

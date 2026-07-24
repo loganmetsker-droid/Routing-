@@ -99,6 +99,7 @@ export default function VehiclesPage() {
   const [editingVehicle, setEditingVehicle] = useState<VehicleRecord | null>(null);
   const [formData, setFormData] = useState(emptyForm);
   const [notice, setNotice] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const visibleVehicles = useMemo(() => {
     if (filter === 'all') return vehicles;
@@ -108,12 +109,14 @@ export default function VehiclesPage() {
   }, [filter, vehicles]);
 
   const openCreate = () => {
+    setSaveError(null);
     setEditingVehicle(null);
     setFormData(emptyForm);
     setDialogOpen(true);
   };
 
   const openEdit = (vehicle: VehicleRecord) => {
+    setSaveError(null);
     setEditingVehicle(vehicle);
     setFormData({
       make: vehicle.make || '',
@@ -168,6 +171,7 @@ export default function VehiclesPage() {
     };
 
     try {
+      setSaveError(null);
       if (editingVehicle) {
         await updateVehicleMutation.mutateAsync({
           id: editingVehicle.id,
@@ -179,7 +183,7 @@ export default function VehiclesPage() {
       setDialogOpen(false);
       setNotice(editingVehicle ? 'Vehicle updated.' : 'Vehicle added.');
     } catch (error) {
-      console.error('Failed to save vehicle', error);
+      setSaveError('Vehicle could not be saved. Check the required fields and try again.');
     }
   };
 
@@ -209,7 +213,7 @@ export default function VehiclesPage() {
           <Grid item xs={12} md={6} xl={3} key={type}>
             <SurfacePanel>
               <Typography variant="subtitle2" color="text.secondary">{VEHICLE_META[type].label}</Typography>
-              <Typography variant="h4" sx={{ mt: 1 }}>
+              <Typography variant="h4" component="p" sx={{ mt: 1 }}>
                 {vehicles.filter((vehicle) => normalizeVehicleType(vehicle.vehicleType || vehicle.type) === type).length}
               </Typography>
               <Typography variant="body2" color="text.secondary">{VEHICLE_META[type].weight} • {VEHICLE_META[type].volume}</Typography>
@@ -220,7 +224,7 @@ export default function VehiclesPage() {
 
       <SurfacePanel sx={{ p: 0, overflow: 'hidden' }}>
         <Box sx={{ px: 2.5, py: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
-          <Typography variant="h5">Fleet Directory</Typography>
+          <Typography variant="h5" component="h3">Fleet Directory</Typography>
           <Typography variant="body2" color="text.secondary">Vehicle type, capacity, status, and operational attributes from saved fleet records.</Typography>
         </Box>
         {isMobile ? (
@@ -300,9 +304,10 @@ export default function VehiclesPage() {
         )}
       </SurfacePanel>
 
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="md">
+      <Dialog open={dialogOpen} onClose={() => { setDialogOpen(false); setSaveError(null); }} fullWidth maxWidth="md">
         <DialogTitle>{editingVehicle ? 'Edit Vehicle' : 'Add Vehicle'}</DialogTitle>
         <DialogContent sx={{ display: 'grid', gap: 2, pt: 2 }}>
+          {saveError ? <Alert severity="error">{saveError}</Alert> : null}
           <Grid container spacing={2}>
             <Grid item xs={12} md={6}><TextField label="Make" value={formData.make} onChange={(event) => setFormData((current) => ({ ...current, make: event.target.value }))} fullWidth /></Grid>
             <Grid item xs={12} md={6}><TextField label="Model" value={formData.model} onChange={(event) => setFormData((current) => ({ ...current, model: event.target.value }))} fullWidth /></Grid>
@@ -320,8 +325,10 @@ export default function VehiclesPage() {
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={() => void handleSubmit()}>Save Vehicle</Button>
+          <Button onClick={() => { setDialogOpen(false); setSaveError(null); }}>Cancel</Button>
+          <Button variant="contained" disabled={createVehicleMutation.isPending || updateVehicleMutation.isPending} onClick={() => void handleSubmit()}>
+            {createVehicleMutation.isPending || updateVehicleMutation.isPending ? 'Saving…' : 'Save Vehicle'}
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

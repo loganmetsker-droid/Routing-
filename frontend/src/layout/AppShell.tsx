@@ -28,7 +28,7 @@ import {
   LogoutOutlined,
 } from '@mui/icons-material';
 import { NavLink, useLocation } from 'react-router-dom';
-import { getActiveNavItem, navSections } from './navConfig';
+import { getActiveNavItem, navSections, normalizeAppNavigationPath } from './navConfig';
 import { trovanBrandAssets, trovanColors, trovanLayout } from '../theme/designTokens';
 import { useTrovanThemeMode } from '../contexts/ThemeContext';
 import { getSession, type AuthUser } from '../services/api';
@@ -46,17 +46,25 @@ const COLLAPSED_SIDEBAR_WIDTH = 72;
 const pageCopy: Record<string, [string, string]> = {
   '/dashboard': ['Operations Dashboard', ''],
   '/jobs': ['Jobs', 'Create, assign, prioritize, and manage delivery or service jobs'],
+  '/loads': ['Jobs', 'Create, assign, prioritize, and manage delivery or service jobs'],
   '/customers': ['Customers', 'Manage accounts, service locations, contacts, and delivery requirements'],
   '/drivers': ['Drivers', 'Monitor driver availability, compliance, utilization, and performance'],
   '/vehicles': ['Vehicles', 'Track fleet availability, capacity, maintenance, and assignment readiness'],
+  '/assets': ['Vehicles', 'Track fleet availability, capacity, maintenance, and assignment readiness'],
   '/planning': ['Route Planning & Optimization', ''],
   '/routing': ['Route Planning & Optimization', ''],
+  '/routes': ['Route Planning & Optimization', ''],
   '/dispatch': ['Dispatch Board', 'Assign, release, and monitor live work across routes and drivers.'],
+  '/messages': ['Dispatch Board', 'Assign, release, and monitor live work across routes and drivers.'],
+  '/route-runs': ['Route Execution', 'Monitor stop progress, proof capture, exceptions, and driver communication.'],
   '/tracking': ['Tracking', 'Monitor route progress, driver status, POD, and ETA changes in real time'],
+  '/depots': ['Tracking', 'Monitor route progress, driver status, POD, and ETA changes in real time'],
   '/pod': ['Proof of Delivery', 'Review proof capture, delivery evidence, exceptions, and route-linked records'],
   '/exceptions': ['Exceptions', 'Resolve route blockers, missed windows, POD gaps, and dispatch risks'],
   '/analytics': ['Reports', 'Measure service, efficiency, utilization, POD completion, and profitability'],
   '/settings': ['Settings', 'Configure users, rules, notifications, depots, integrations, and preferences'],
+  '/billing': ['Settings', 'Configure users, rules, notifications, depots, integrations, and preferences'],
+  '/integrations': ['Settings', 'Configure users, rules, notifications, depots, integrations, and preferences'],
 };
 
 const searchPlaceholders: Record<string, string> = {
@@ -118,6 +126,7 @@ function NavigationContent({
   const shellFg = '#eef6fc';
   const shellMuted = alpha(shellFg, 0.68);
   const shellLow = alpha(shellFg, 0.44);
+  const navigationPath = normalizeAppNavigationPath(pathname);
 
   return (
     <Box sx={{ display: 'flex', height: '100%', flexDirection: 'column' }}>
@@ -168,7 +177,9 @@ function NavigationContent({
             ) : null}
             <Box sx={{ display: 'grid', gap: 0.35 }}>
               {section.items.map((item) => {
-                const selected = pathname === item.to || (item.to !== '/' && pathname.startsWith(`${item.to}/`));
+                const selected =
+                  navigationPath === item.to ||
+                  (item.to !== '/' && navigationPath.startsWith(`${item.to}/`));
                 const navItem = (
                   <Box
                     key={item.to}

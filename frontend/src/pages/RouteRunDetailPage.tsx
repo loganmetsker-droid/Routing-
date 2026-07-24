@@ -334,7 +334,7 @@ export default function RouteRunDetailPage() {
         <Grid item xs={12} xl={4}>
           <Stack spacing={2.5}>
             <SurfacePanel>
-              <Typography variant="h6" sx={{ mb: 1 }}>Route Summary</Typography>
+              <Typography variant="h6" component="h3" sx={{ mb: 1 }}>Route Summary</Typography>
               <Stack spacing={1}>
                 <Chip label={detail.routeRun.status} color={statusColor(detail.routeRun.status)} data-testid="route-run-status-chip" />
                 <Typography variant="body2" color="text.secondary">Distance: {(Number(detail.routeRun.totalDistanceKm || 0) * 0.621371).toFixed(1)} mi</Typography>
@@ -346,7 +346,7 @@ export default function RouteRunDetailPage() {
               </Stack>
             </SurfacePanel>
             <SurfacePanel>
-              <Typography variant="h6" sx={{ mb: 1 }}>Exceptions</Typography>
+              <Typography variant="h6" component="h3" sx={{ mb: 1 }}>Exceptions</Typography>
               <List disablePadding>
                 {(detail.exceptions || []).map((item) => (
                   <ListItem key={item.id} disableGutters sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
@@ -358,7 +358,7 @@ export default function RouteRunDetailPage() {
               </List>
             </SurfacePanel>
             <SurfacePanel>
-              <Typography variant="h6" sx={{ mb: 1 }}>
+              <Typography variant="h6" component="h3" sx={{ mb: 1 }}>
                 Customer Communications
               </Typography>
               <List disablePadding>
@@ -392,7 +392,7 @@ export default function RouteRunDetailPage() {
               </List>
             </SurfacePanel>
             <SurfacePanel>
-              <Typography variant="h6" sx={{ mb: 1 }}>
+              <Typography variant="h6" component="h3" sx={{ mb: 1 }}>
                 Driver Messages
               </Typography>
               <List disablePadding>
@@ -464,14 +464,14 @@ export default function RouteRunDetailPage() {
         <Grid item xs={12} xl={8}>
           <Stack spacing={2.5}>
             <SurfacePanel>
-              <Typography variant="h5" sx={{ mb: 1.5 }}>Stops</Typography>
+              <Typography variant="h5" component="h3" sx={{ mb: 1.5 }}>Stops</Typography>
               <Stack spacing={2}>
                 {(detail.stops || []).map((stop: RouteRunStopRecord, index: number) => (
                   <SurfacePanel key={stop.id} sx={{ bgcolor: 'rgba(30,26,23,1)' }} data-testid={`route-run-stop-card-${index}`}>
                     <Stack spacing={1.25}>
                       <Stack direction="row" justifyContent="space-between" alignItems="center">
                         <Box>
-                          <Typography variant="h6">Stop {stop.stopSequence}</Typography>
+                          <Typography variant="h6" component="h4">Stop {stop.stopSequence}</Typography>
                           <Typography variant="body2" color="text.secondary">Job {stop.jobId.slice(0, 8)}</Typography>
                         </Box>
                         <Chip label={stop.status} color={statusColor(stop.status)} />

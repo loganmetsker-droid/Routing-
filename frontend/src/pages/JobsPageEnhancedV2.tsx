@@ -527,6 +527,7 @@ export default function JobsPageEnhancedV2() {
   const [importError, setImportError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [bannerMessage, setBannerMessage] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
   const [formData, setFormData] = useState<JobFormData>(() => createDefaultFormData());
   const [mobilePage, setMobilePage] = useState(1);
@@ -709,6 +710,7 @@ export default function JobsPageEnhancedV2() {
 
   const handleSubmit = async () => {
     try {
+      setCreateError(null);
       const customer = customers.find((item) => item.id === formData.customerId);
       await createJobMutation.mutateAsync({
         customerId: customer?.id,
@@ -729,7 +731,7 @@ export default function JobsPageEnhancedV2() {
       await refreshJobs();
       setBannerMessage('Job added with routing constraints and readiness context.');
     } catch (error) {
-      console.error('Failed to create job', error);
+      setCreateError('Job could not be created. Check the customer, addresses, and service window, then try again.');
     }
   };
 
@@ -882,7 +884,7 @@ export default function JobsPageEnhancedV2() {
           sx={{ px: 1.2, py: 1.1, borderBottom: '1px solid', borderColor: 'divider' }}
         >
           <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
-            <Button size="small" variant="contained" startIcon={<Add />} onClick={() => updateUrl({ create: 'true' })}>
+            <Button size="small" variant="contained" startIcon={<Add />} onClick={() => { setCreateError(null); updateUrl({ create: 'true' }); }}>
               New Job
             </Button>
             <Button
@@ -1412,7 +1414,7 @@ export default function JobsPageEnhancedV2() {
               <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ px: 1.2, pt: 1.2 }}>
                 <Box sx={{ minWidth: 0 }}>
                   <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                    <Typography variant="h5" sx={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <Typography variant="h5" component="h2" sx={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {focusedJob.id?.slice(0, 8) || 'Job'}
                     </Typography>
                     <StatusPill label={String(focusedJob.status || 'pending').replace(/_/g, ' ')} tone={jobStatusTone(focusedJob.status)} />
@@ -1588,9 +1590,10 @@ export default function JobsPageEnhancedV2() {
         </SurfacePanel>
       ) : null}
 
-      <Dialog open={dialogOpen} onClose={() => updateUrl({ create: null })} fullWidth maxWidth="md">
+      <Dialog open={dialogOpen} onClose={() => { setCreateError(null); updateUrl({ create: null }); }} fullWidth maxWidth="md">
         <DialogTitle>Create Job</DialogTitle>
         <DialogContent sx={{ display: 'grid', gap: 2, pt: 2 }}>
+          {createError ? <Alert severity="error">{createError}</Alert> : null}
           <TextField
             select
             label="Customer"
@@ -1686,8 +1689,10 @@ export default function JobsPageEnhancedV2() {
           </TextField>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => updateUrl({ create: null })}>Cancel</Button>
-          <Button variant="contained" onClick={() => void handleSubmit()}>Create Job</Button>
+          <Button onClick={() => { setCreateError(null); updateUrl({ create: null }); }}>Cancel</Button>
+          <Button variant="contained" disabled={createJobMutation.isPending} onClick={() => void handleSubmit()}>
+            {createJobMutation.isPending ? 'Creating…' : 'Create Job'}
+          </Button>
         </DialogActions>
       </Dialog>
 

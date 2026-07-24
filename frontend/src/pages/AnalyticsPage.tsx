@@ -74,7 +74,7 @@ function ModuleHeader({
   return (
     <Stack direction="row" justifyContent="space-between" spacing={1.5} alignItems="flex-start">
       <Box>
-        <Typography variant="h6">{title}</Typography>
+        <Typography variant="h6" component="h3">{title}</Typography>
         {subtitle ? (
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35 }}>
             {subtitle}
@@ -234,7 +234,7 @@ export default function AnalyticsPage() {
                 <Grid item xs={12} md={4}>
                   <SurfacePanel variant="subtle" padding={1.35}>
                     <Typography variant="subtitle2">On-time signal</Typography>
-                    <Typography variant="h4" sx={{ mt: 0.55 }}>
+                    <Typography variant="h4" component="p" sx={{ mt: 0.55 }}>
                       {analytics?.serviceLevel.onTimeRate ?? 0}%
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35 }}>
@@ -247,7 +247,7 @@ export default function AnalyticsPage() {
                 <Grid item xs={12} md={4}>
                   <SurfacePanel variant="subtle" padding={1.35}>
                     <Typography variant="subtitle2">Proof discipline</Typography>
-                    <Typography variant="h4" sx={{ mt: 0.55 }}>
+                    <Typography variant="h4" component="p" sx={{ mt: 0.55 }}>
                       {analytics?.serviceLevel.proofCaptureRate ?? 0}%
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35 }}>
@@ -260,7 +260,7 @@ export default function AnalyticsPage() {
                 <Grid item xs={12} md={4}>
                   <SurfacePanel variant="subtle" padding={1.35}>
                     <Typography variant="subtitle2">Exception pressure</Typography>
-                    <Typography variant="h4" sx={{ mt: 0.55 }}>
+                    <Typography variant="h4" component="p" sx={{ mt: 0.55 }}>
                       {analytics?.serviceLevel.exceptionRate ?? 0}%
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35 }}>
@@ -317,7 +317,7 @@ export default function AnalyticsPage() {
                 <Grid item xs={12} sm={6}>
                   <SurfacePanel variant="subtle" padding={1.35}>
                     <Typography variant="subtitle2">Dispatch posture</Typography>
-                    <Typography variant="h4" sx={{ mt: 0.55 }}>
+                    <Typography variant="h4" component="p" sx={{ mt: 0.55 }}>
                       {analytics?.operations.activeRouteRuns ?? 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35 }}>
@@ -328,7 +328,7 @@ export default function AnalyticsPage() {
                 <Grid item xs={12} sm={6}>
                   <SurfacePanel variant="subtle" padding={1.35}>
                     <Typography variant="subtitle2">Planning backlog</Typography>
-                    <Typography variant="h4" sx={{ mt: 0.55 }}>
+                    <Typography variant="h4" component="p" sx={{ mt: 0.55 }}>
                       {analytics?.operations.plannedRouteRuns ?? 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35 }}>
@@ -385,7 +385,7 @@ export default function AnalyticsPage() {
                 <Grid item xs={12} sm={6}>
                   <SurfacePanel variant="muted" padding={1.35}>
                     <Typography variant="subtitle2">Workload</Typography>
-                    <Typography variant="h4" sx={{ mt: 0.55 }}>
+                    <Typography variant="h4" component="p" sx={{ mt: 0.55 }}>
                       {analytics?.workload.totalStops ?? 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35 }}>
@@ -396,7 +396,7 @@ export default function AnalyticsPage() {
                 <Grid item xs={12} sm={6}>
                   <SurfacePanel variant="muted" padding={1.35}>
                     <Typography variant="subtitle2">Serviced</Typography>
-                    <Typography variant="h4" sx={{ mt: 0.55 }}>
+                    <Typography variant="h4" component="p" sx={{ mt: 0.55 }}>
                       {analytics?.workload.servicedStops ?? 0}
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35 }}>

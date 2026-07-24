@@ -2298,7 +2298,7 @@ export default function RoutingWorkspacePage() {
         justifyContent="space-between"
         sx={{ px: 1.2, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}
       >
-        <Typography variant="h6">Unassigned Jobs ({unassignedJobCount})</Typography>
+        <Typography variant="h6" component="h2">Unassigned Jobs ({unassignedJobCount})</Typography>
         <Button
           size="small"
           variant="text"
@@ -2391,7 +2391,7 @@ export default function RoutingWorkspacePage() {
         justifyContent="space-between"
         sx={{ px: 1.2, py: 1, borderBottom: '1px solid', borderColor: 'divider' }}
       >
-        <Typography variant="h6">Route Summaries</Typography>
+        <Typography variant="h6" component="h2">Route Summaries</Typography>
         <Button size="small" variant="text" onClick={() => setMapDisplayMode('all')}>
           View on map
         </Button>
@@ -2466,7 +2466,7 @@ export default function RoutingWorkspacePage() {
   const planningAlertsPanel = (
     <SurfacePanel variant="panel" padding={1.1} data-testid="routing-planning-alerts-panel">
       <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.8 }}>
-        <Typography variant="h6">Alerts</Typography>
+        <Typography variant="h6" component="h2">Alerts</Typography>
         <Button size="small" variant="text" onClick={() => setWarningsExpanded((current) => !current)}>
           View all alerts
         </Button>
@@ -2503,7 +2503,7 @@ export default function RoutingWorkspacePage() {
         }}
       >
         <Box>
-          <Typography variant="h6">Scenarios</Typography>
+          <Typography variant="h6" component="h2">Scenarios</Typography>
           <Typography variant="caption" color="text.secondary">
             Compare optimization strategies
           </Typography>
@@ -2728,7 +2728,7 @@ export default function RoutingWorkspacePage() {
         }}
       >
         <Box sx={{ minWidth: 0 }}>
-          <Typography variant="h6">Draft job selection</Typography>
+          <Typography variant="h6" component="h2">Draft job selection</Typography>
           <Typography variant="body2" color="text.secondary">
             {selectedJobIds.length} selected for the next optimization draft.
           </Typography>
@@ -2792,7 +2792,7 @@ export default function RoutingWorkspacePage() {
   const draftRoutesPanel = (
     <SurfacePanel variant="panel" padding={0} sx={{ overflow: 'hidden' }}>
       <Box sx={{ px: 1.5, py: 1.15, borderBottom: '1px solid', borderColor: 'divider' }}>
-        <Typography variant="h6">Routes</Typography>
+        <Typography variant="h6" component="h2">Routes</Typography>
         <Typography variant="body2" color="text.secondary">
           Click a lane to focus the inspector and map.
         </Typography>
@@ -2844,7 +2844,7 @@ export default function RoutingWorkspacePage() {
 
   const vehiclesPanel = (
     <SurfacePanel variant="subtle" padding={1.4} data-testid="routing-vehicle-list-panel">
-      <Typography variant="h6" sx={{ mb: 1 }}>
+      <Typography variant="h6" component="h2" sx={{ mb: 1 }}>
         Vehicle list
       </Typography>
       <Stack spacing={0.55} sx={{ maxHeight: { xl: '19vh' }, overflowY: 'auto' }}>

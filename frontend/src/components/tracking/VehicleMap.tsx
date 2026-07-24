@@ -106,7 +106,6 @@ export default function VehicleMap() {
 
     // Handle connection
     socket.on('connect', () => {
-      console.log('🚗 Connected to vehicle tracking');
       setIsConnected(true);
       // Subscribe to location updates
       socket.emit('subscribe:locations');
@@ -114,20 +113,18 @@ export default function VehicleMap() {
 
     // Handle disconnection
     socket.on('disconnect', () => {
-      console.log('Disconnected from vehicle tracking');
       setIsConnected(false);
     });
 
     // Handle vehicle location updates
     socket.on('vehicle:locations', (data: VehicleLocationsPayload) => {
-      console.log(`📍 Received ${data.count} vehicle locations`);
       setVehicles(data.vehicles);
       setLastUpdate(data.timestamp);
     });
 
     // Handle errors
-    socket.on('error', (error: any) => {
-      console.error('Socket error:', error);
+    socket.on('error', () => {
+      setIsConnected(false);
     });
 
     // Cleanup on unmount

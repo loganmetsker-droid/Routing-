@@ -900,7 +900,7 @@ export default function DispatchBoardOpsPage() {
                   <Stack spacing={1}>
                     <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
                       <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
-                        <Typography variant="h6" noWrap sx={{ fontWeight: 950, minWidth: 76 }}>
+                        <Typography variant="h6" component="p" noWrap sx={{ fontWeight: 950, minWidth: 76 }}>
                           {routeLabel(lane.route)}
                         </Typography>
                         <Typography variant="body2" color="text.secondary" noWrap>
@@ -1464,7 +1464,7 @@ function PanelHeader({
       sx={{ px: 1.25, py: 1.05, borderBottom: '1px solid', borderColor: 'divider' }}
     >
       <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0 }}>
-        <Typography variant="h6" noWrap sx={{ fontWeight: 950 }}>
+        <Typography variant="h6" component="h2" noWrap sx={{ fontWeight: 950 }}>
           {title}
         </Typography>
         <StatusPill label={String(count)} tone={count ? 'info' : 'default'} />

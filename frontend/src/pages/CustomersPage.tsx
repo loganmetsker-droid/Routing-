@@ -275,6 +275,7 @@ export default function CustomersPage() {
   const [selectedSegment, setSelectedSegment] = useState('All');
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [mobilePage, setMobilePage] = useState(1);
   const requestedCustomerId = searchParams.get('customerId') || '';
@@ -357,12 +358,14 @@ export default function CustomersPage() {
   ).length;
 
   const openCreate = () => {
+    setSaveError(null);
     setEditingCustomer(null);
     setFormData(emptyForm);
     setDialogOpen(true);
   };
 
   const openEdit = (customer: CustomerRecord) => {
+    setSaveError(null);
     setEditingCustomer(customer);
     setFormData({
       ...emptyForm,
@@ -411,6 +414,7 @@ export default function CustomersPage() {
     };
 
     try {
+      setSaveError(null);
       if (editingCustomer) {
         await updateCustomerMutation.mutateAsync({ id: editingCustomer.id, updates: payload });
       } else {
@@ -419,7 +423,7 @@ export default function CustomersPage() {
       setDialogOpen(false);
       setNotice(editingCustomer ? 'Customer updated.' : 'Customer created.');
     } catch (error) {
-      console.error('Failed to save customer', getCustomerErrorMessage(error));
+      setSaveError(getCustomerErrorMessage(error));
     }
   };
 
@@ -843,9 +847,10 @@ export default function CustomersPage() {
         </PrototypePanel>
       </Box>
 
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="md">
+      <Dialog open={dialogOpen} onClose={() => { setDialogOpen(false); setSaveError(null); }} fullWidth maxWidth="md">
         <DialogTitle>{editingCustomer ? 'Edit Customer' : 'Add Customer'}</DialogTitle>
         <DialogContent sx={{ display: 'grid', gap: 2, pt: 2 }}>
+          {saveError ? <Alert severity="error">{saveError}</Alert> : null}
           <Grid container spacing={2}>
             <Grid item xs={12} md={6}><TextField label="Customer name" value={formData.name} onChange={(event) => setFormData((current) => ({ ...current, name: event.target.value }))} fullWidth /></Grid>
             <Grid item xs={12} md={6}><TextField label="Business name" value={formData.businessName} onChange={(event) => setFormData((current) => ({ ...current, businessName: event.target.value }))} fullWidth /></Grid>
@@ -859,8 +864,10 @@ export default function CustomersPage() {
           </Grid>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={() => void handleSubmit()}>Save Customer</Button>
+          <Button onClick={() => { setDialogOpen(false); setSaveError(null); }}>Cancel</Button>
+          <Button variant="contained" disabled={createCustomerMutation.isPending || updateCustomerMutation.isPending} onClick={() => void handleSubmit()}>
+            {createCustomerMutation.isPending || updateCustomerMutation.isPending ? 'Saving…' : 'Save Customer'}
+          </Button>
         </DialogActions>
       </Dialog>
 

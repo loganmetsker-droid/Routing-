@@ -600,7 +600,7 @@ export default function ProofOfDeliveryPage() {
             <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
               <Box>
                 <Stack direction="row" spacing={1} alignItems="center">
-                  <Typography variant="h3">{selected.id.replace(/-stop-.*/, '').replace('route-', 'POD-')}</Typography>
+                  <Typography variant="h3" component="h2">{selected.id.replace(/-stop-.*/, '').replace('route-', 'POD-')}</Typography>
                   <StatusPill label={selected.status} tone={selected.tone} />
                 </Stack>
                 <Typography variant="caption" sx={{ color: trovanColors.copper[400], fontWeight: 800 }}>
