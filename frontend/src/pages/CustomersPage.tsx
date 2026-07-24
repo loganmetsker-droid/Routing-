@@ -511,7 +511,7 @@ export default function CustomersPage() {
                       .map((job) => job.updatedAt || job.createdAt)
                       .filter(Boolean)
                       .sort()
-                      .at(-1);
+                      .slice(-1)[0];
                     return (
                       <TableRow
                         key={customer.id}
