@@ -68,8 +68,30 @@ function createController(summary = runtimeSummary()) {
         },
       }),
     } as never,
-    { getOverview: vi.fn().mockResolvedValue({ controls: { emailReady: true } }) } as never,
+    {
+      getOverview: vi.fn().mockResolvedValue({ controls: { emailReady: true } }),
+      checkReadiness: vi.fn().mockResolvedValue({
+        configured: true,
+        status: 'up',
+        providerStatus: 200,
+      }),
+    } as never,
     { getOverview: vi.fn().mockResolvedValue({ controls: {} }) } as never,
+    {
+      checkReadiness: vi.fn().mockResolvedValue({
+        configured: true,
+        status: 'up',
+        providerStatus: 200,
+      }),
+    } as never,
+    {
+      checkReadiness: vi.fn().mockResolvedValue({
+        configured: true,
+        mode: 'r2',
+        status: 'up',
+        providerStatus: 404,
+      }),
+    } as never,
   );
 }
 
@@ -107,5 +129,23 @@ describe('HealthController readiness', () => {
     expect(response.status).toHaveBeenCalledWith(503);
     expect(result.status).toBe('error');
     expect(result.missingCritical).toContain('worker');
+  });
+
+  it('returns 503 when a configured pilot provider is unreachable', async () => {
+    const controller = createController();
+    (
+      controller as unknown as {
+        workosService: { checkReadiness: ReturnType<typeof vi.fn> };
+      }
+    ).workosService.checkReadiness = vi.fn().mockResolvedValue({
+      configured: true,
+      status: 'down',
+      providerStatus: 401,
+    });
+    const response = { status: vi.fn() };
+    const result = await controller.readiness(response as never);
+
+    expect(response.status).toHaveBeenCalledWith(503);
+    expect(result.missingCritical).toContain('workos');
   });
 });

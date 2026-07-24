@@ -108,6 +108,42 @@ export class WorkosService {
     return this.getAuthProvider() === 'workos' && this.isConfigured();
   }
 
+  async checkReadiness() {
+    if (!this.isConfigured()) {
+      return {
+        configured: false,
+        status: 'missing' as const,
+      };
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4_000);
+    try {
+      const response = await fetch(
+        'https://api.workos.com/user_management/users?limit=1',
+        {
+          headers: {
+            authorization: `Bearer ${this.configService.getOrThrow<string>('WORKOS_API_KEY')}`,
+          },
+          signal: controller.signal,
+        },
+      );
+
+      return {
+        configured: true,
+        status: response.ok ? ('up' as const) : ('down' as const),
+        providerStatus: response.status,
+      };
+    } catch {
+      return {
+        configured: true,
+        status: 'down' as const,
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   getConfiguration(): WorkosConfiguration {
     return {
       enabled: this.isEnabled(),

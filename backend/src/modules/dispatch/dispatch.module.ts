@@ -84,6 +84,6 @@ const scheduleImports = process.env.ENABLE_SCHEDULER === '1' ? [ScheduleModule.f
     RouteVersioningService,
     RouteRunsService,
   ],
-  exports: [DispatchService, DispatchGateway],
+  exports: [DispatchService, DispatchGateway, ProofStorageService],
 })
 export class DispatchModule {}

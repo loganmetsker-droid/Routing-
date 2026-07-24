@@ -353,6 +353,44 @@ export class NotificationsService {
     };
   }
 
+  async checkReadiness() {
+    const token = this.configService.get<string>('POSTMARK_SERVER_TOKEN');
+    const fromEmail =
+      this.configService.get<string>('POSTMARK_FROM_EMAIL') ||
+      this.configService.get<string>('NOTIFICATION_FROM_EMAIL');
+    if (!token || !fromEmail) {
+      return {
+        configured: false,
+        status: 'missing' as const,
+      };
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4_000);
+    try {
+      const response = await fetch('https://api.postmarkapp.com/server', {
+        headers: {
+          accept: 'application/json',
+          'x-postmark-server-token': token,
+        },
+        signal: controller.signal,
+      });
+
+      return {
+        configured: true,
+        status: response.ok ? ('up' as const) : ('down' as const),
+        providerStatus: response.status,
+      };
+    } catch {
+      return {
+        configured: true,
+        status: 'down' as const,
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async list(organizationId?: string, routeId?: string) {
     return this.deliveries.find({
       where: {

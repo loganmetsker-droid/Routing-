@@ -15,7 +15,7 @@ Trovan is not being prepared for self-serve general availability. Launch is $399
 - Lead request types are shared between frontend and backend, the primary action posts to `VITE_REST_API_URL`, and email is an error fallback.
 - Driver preview sessions clear auth/data/route state and seed an explicit dispatcher or driver identity.
 - Authentication configuration uses a bounded request and a visible retry/error state.
-- Pilot readiness treats database, Redis/worker, routing, WorkOS, Postmark, and R2 as critical; degraded readiness returns HTTP 503.
+- Pilot readiness live-probes database, Redis/worker, routing, WorkOS, Postmark, and R2 with bounded timeouts; any unavailable critical dependency returns HTTP 503.
 - Render migrations run before deployment, not during application startup.
 - CI runs build, lint, backend/frontend/routing tests, empty-database migrations, dependency audit, and Playwright.
 - Promotion uses an immutable SHA, protected staging/production environments, Cloudflare frontend deployment, Render service deployment, and captured rollback versions.
@@ -29,7 +29,7 @@ Trovan is not being prepared for self-serve general availability. Launch is $399
 
 - [x] Reproducible `npm ci` and workspace production build.
 - [x] Frontend lint with zero warnings.
-- [x] Backend: 233 tests; frontend: 52 tests; routing service: 12 tests.
+- [x] Backend: 240 tests; frontend: 52 tests; routing service: 12 tests.
 - [x] Driver workflow: three consecutive isolated runs, two tests per run.
 - [x] Complete Chromium Playwright suite: 75 passed, one hosted-only persistence test skipped, zero failures.
 - [x] Production dependency audit: zero critical/high findings. Two accepted React Router 6 moderate advisories remain documented for the pilot.
@@ -63,6 +63,7 @@ These items do not change the assisted-pilot commercial boundary, but they shoul
 - Move from React Router 6 to Router 7 and remove the two accepted moderate advisories.
 - Replace the remaining local-only route exception decisions, route-version display, draft save, autosave status, and route-order locking with durable backend transactions before exposing those controls in production.
 - Split the large public-site and routing-workspace bundles further to improve first-load and route-change performance.
+- Replace the stale external Vercel repository checks with Cloudflare/Render checks so a retired frontend provider cannot leave unrelated red statuses on release PRs.
 - Add production analytics funnels only after consent, retention, and event ownership are approved.
 - Move DMARC from monitoring to quarantine after at least two weeks of clean delivery reports.
 - Publish deletion, export, and backup-retention timing only after the hosted restore drill provides measured values.

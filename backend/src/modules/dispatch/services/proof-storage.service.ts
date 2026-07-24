@@ -115,6 +115,64 @@ export class ProofStorageService {
     };
   }
 
+  async checkReadiness() {
+    const storageMode = process.env.STORAGE_MODE || 'local';
+    if (storageMode === 'local') {
+      return {
+        configured: true,
+        mode: 'local' as const,
+        status: 'up' as const,
+      };
+    }
+
+    const r2Config = this.r2Config;
+    if (!r2Config) {
+      return {
+        configured: false,
+        mode: 'r2' as const,
+        status: 'missing' as const,
+      };
+    }
+
+    const url = buildR2Url(
+      r2Config.endpoint,
+      r2Config.bucket,
+      '.trovan-readiness-probe',
+    );
+    const headers = this.signR2Request(
+      r2Config,
+      'HEAD',
+      url,
+      sha256(Buffer.alloc(0)),
+    );
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4_000);
+    try {
+      const response = await fetch(url, {
+        method: 'HEAD',
+        headers,
+        signal: controller.signal,
+      });
+      return {
+        configured: true,
+        mode: 'r2' as const,
+        status:
+          response.ok || response.status === 404
+            ? ('up' as const)
+            : ('down' as const),
+        providerStatus: response.status,
+      };
+    } catch {
+      return {
+        configured: true,
+        mode: 'r2' as const,
+        status: 'down' as const,
+      };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async readProofFile(
     uri: string,
     metadata: Record<string, unknown> = {},
@@ -208,7 +266,7 @@ export class ProofStorageService {
 
   private signR2Request(
     config: R2StorageConfig,
-    method: 'GET' | 'PUT',
+    method: 'GET' | 'HEAD' | 'PUT',
     url: URL,
     payloadHash: string,
     extraHeaders: Record<string, string> = {},

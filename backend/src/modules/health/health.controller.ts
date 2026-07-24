@@ -14,6 +14,8 @@ import { JobsService } from '../jobs/jobs.service';
 import { RuntimeStatusService } from '../../common/runtime/runtime-status.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PlatformService } from '../platform/platform.service';
+import { ProofStorageService } from '../dispatch/services/proof-storage.service';
+import { WorkosService } from '../../common/integrations/workos.service';
 import type { Response } from 'express';
 import {
   resolveRoutingServiceUrl,
@@ -33,6 +35,8 @@ export class HealthController {
     @Optional() private readonly jobsService?: JobsService,
     @Optional() private readonly notificationsService?: NotificationsService,
     @Optional() private readonly platformService?: PlatformService,
+    @Optional() private readonly workosService?: WorkosService,
+    @Optional() private readonly proofStorageService?: ProofStorageService,
   ) {}
 
   private getDiskThresholdPercent() {
@@ -281,12 +285,48 @@ export class HealthController {
           status: 'unknown',
         });
 
+    const workosProbe =
+      typeof this.workosService?.checkReadiness === 'function'
+        ? this.workosService.checkReadiness()
+        : Promise.resolve({
+            configured: runtime.integrations.workos.configured,
+            status: runtime.integrations.workos.configured
+              ? ('unknown' as const)
+              : ('missing' as const),
+          });
+    const postmarkProbe =
+      typeof this.notificationsService?.checkReadiness === 'function'
+        ? this.notificationsService.checkReadiness()
+        : Promise.resolve({
+            configured:
+              runtime.integrations.postmark.configured &&
+              runtime.integrations.leadIntake.operatorNotificationConfigured,
+            status:
+              runtime.integrations.postmark.configured &&
+              runtime.integrations.leadIntake.operatorNotificationConfigured
+                ? ('unknown' as const)
+                : ('missing' as const),
+          });
+    const storageProbe =
+      typeof this.proofStorageService?.checkReadiness === 'function'
+        ? this.proofStorageService.checkReadiness()
+        : Promise.resolve({
+            configured: runtime.integrations.storage.configured,
+            mode: runtime.integrations.storage.mode,
+            status: runtime.integrations.storage.configured
+              ? ('unknown' as const)
+              : ('missing' as const),
+          });
+
     const [
       notificationsOverview,
       platformOverview,
       database,
       redis,
       routingService,
+      workos,
+      postmark,
+      storage,
     ] = await Promise.all([
       this.notificationsService?.getOverview().catch(() => null) || null,
       this.platformService?.getOverview(
@@ -295,6 +335,9 @@ export class HealthController {
       databaseProbe,
       queueProbe,
       routingProbe,
+      workosProbe,
+      postmarkProbe,
+      storageProbe,
     ]);
 
     const dependencies = {
@@ -315,25 +358,16 @@ export class HealthController {
       },
       routingService,
       workos: {
-        ...runtime.integrations.workos,
+        ...workos,
         required: hostedEnvironment,
-        status: runtime.integrations.workos.configured ? 'up' : 'missing',
       },
       postmark: {
-        configured:
-          runtime.integrations.postmark.configured &&
-          runtime.integrations.leadIntake.operatorNotificationConfigured,
+        ...postmark,
         required: hostedEnvironment,
-        status:
-          runtime.integrations.postmark.configured &&
-          runtime.integrations.leadIntake.operatorNotificationConfigured
-            ? 'up'
-            : 'missing',
       },
       storage: {
-        ...runtime.integrations.storage,
+        ...storage,
         required: hostedEnvironment,
-        status: runtime.integrations.storage.configured ? 'up' : 'missing',
       },
       stripe: {
         ...runtime.integrations.stripe,
