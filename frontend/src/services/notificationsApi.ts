@@ -56,12 +56,12 @@ export async function getNotificationsOverview(): Promise<NotificationsOverviewR
     return {
       generatedAt: new Date().toISOString(),
       emailProvider: 'postmark-preview',
-      smsProvider: 'twilio-preview',
+      smsProvider: 'disabled',
       sentLast24Hours: 18,
       failedLast24Hours: 2,
       controls: {
         emailReady: true,
-        smsReady: true,
+        smsReady: false,
       },
     };
   }

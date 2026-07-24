@@ -18,6 +18,7 @@ describe('DispatchService route versioning', () => {
   function createServiceHarness() {
     const route = {
       id: 'route-1',
+      organizationId: 'org-1',
       vehicleId: 'vehicle-1',
       driverId: 'driver-1',
       jobIds: ['job-1', 'job-2'],
@@ -124,6 +125,16 @@ describe('DispatchService route versioning', () => {
     };
   }
 
+  it('rejects route reads without an organization context', async () => {
+    const harness = createServiceHarness();
+
+    await expect(harness.service.findOne('route-1')).rejects.toThrow(
+      'Organization scope required',
+    );
+
+    expect(harness.routeRepository.findOne).not.toHaveBeenCalled();
+  });
+
   it('backfills a published route version when an existing route has no versions', async () => {
     const harness = createServiceHarness();
     harness.routeVersionRepository.findOne
@@ -140,7 +151,9 @@ describe('DispatchService route versioning', () => {
       },
     ]);
 
-    const versions = await harness.service.listRouteVersions('route-1');
+    const versions = await harness.service.listRouteVersions('route-1', {
+      organizationId: 'org-1',
+    });
 
     expect(versions).toHaveLength(1);
     expect(harness.routeVersionRepository.save).toHaveBeenCalledWith(
@@ -183,6 +196,7 @@ describe('DispatchService route versioning', () => {
     const version = await harness.service.createRouteVersionSnapshot('route-1', {
       userId: 'user-1',
       email: 'dispatcher@example.com',
+      organizationId: 'org-1',
       roles: ['DISPATCHER'],
     });
 
@@ -228,12 +242,17 @@ describe('DispatchService route versioning', () => {
     const version = await harness.service.publishRouteVersion('route-1', 'version-2', {
       userId: 'admin-1',
       email: 'admin@example.com',
+      organizationId: 'org-1',
       roles: ['ADMIN'],
     });
 
     expect(version.status).toBe('PUBLISHED');
     expect(harness.routeVersionRepository.update).toHaveBeenCalledWith(
-      { routeId: 'route-1', status: 'PUBLISHED' },
+      {
+        routeId: 'route-1',
+        status: 'PUBLISHED',
+        organizationId: 'org-1',
+      },
       { status: 'SUPERSEDED' },
     );
     expect(harness.routeRepository.save).toHaveBeenCalledWith(
@@ -279,6 +298,7 @@ describe('DispatchService route versioning', () => {
     const updatedRoute = await harness.service.assignDriver('route-1', 'driver-9', {
       userId: 'dispatcher-1',
       email: 'dispatcher@example.com',
+      organizationId: 'org-1',
       roles: ['DISPATCHER'],
     });
 

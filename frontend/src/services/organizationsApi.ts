@@ -230,9 +230,9 @@ let previewOrganizationStore: OrganizationRecord = {
     },
     notifications: {
       emailEnabled: true,
-      smsEnabled: true,
+      smsEnabled: false,
       replyToEmail: 'dispatch@trovan.local',
-      defaultChannel: 'both',
+      defaultChannel: 'email',
     },
     retention: {
       auditDays: 365,
@@ -412,9 +412,9 @@ export const updateCurrentOrganizationSettings = async (payload: {
         notifications: {
           ...(current.notifications || {}),
           emailEnabled: payload.notificationEmailEnabled,
-          smsEnabled: payload.notificationSmsEnabled,
+          smsEnabled: false,
           replyToEmail: payload.notificationReplyToEmail,
-          defaultChannel: payload.defaultNotificationChannel,
+          defaultChannel: 'email',
         },
         retention: {
           ...(current.retention || {}),

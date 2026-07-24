@@ -26,6 +26,9 @@ export default defineConfig(({ mode }) => {
   );
   const productionSourcemaps = isTruthy(env.VITE_ENABLE_PRODUCTION_SOURCEMAPS);
   const releaseSha = String(env.VITE_RELEASE_SHA || '').trim();
+  const buildOutDir = String(
+    env.PLAYWRIGHT_FRONTEND_OUT_DIR || 'dist',
+  ).trim();
 
   return {
     plugins: [
@@ -80,6 +83,7 @@ export default defineConfig(({ mode }) => {
       strictPort: true,
     },
     build: {
+      outDir: buildOutDir,
       sourcemap: mode === 'production' ? productionSourcemaps : true,
       chunkSizeWarningLimit: 650,
       rollupOptions: {

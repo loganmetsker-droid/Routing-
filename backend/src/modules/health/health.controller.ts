@@ -39,6 +39,30 @@ export class HealthController {
     @Optional() private readonly proofStorageService?: ProofStorageService,
   ) {}
 
+  private presentPublicRuntime(
+    runtime: ReturnType<RuntimeStatusService['getSummary']>,
+  ) {
+    return {
+      startedAt: runtime.startedAt,
+      releaseSha: runtime.releaseSha,
+      nodeEnv: runtime.nodeEnv,
+      authMode: runtime.authMode,
+      queue: runtime.queue,
+      worker: {
+        ...runtime.worker,
+        lastFailure: runtime.worker.lastFailure
+          ? 'Worker run failed'
+          : null,
+      },
+      optimization: runtime.optimization,
+      storage: runtime.storage,
+      database: {
+        configured: runtime.database.host !== 'invalid',
+      },
+      integrations: runtime.integrations,
+    };
+  }
+
   private getDiskThresholdPercent() {
     const configured = Number(
       this.configService.get('DISK_HEALTH_THRESHOLD_PERCENT'),
@@ -174,7 +198,7 @@ export class HealthController {
 
     return {
       status: hardFailure ? 'error' : degraded ? 'degraded' : 'ok',
-      runtime,
+      runtime: this.presentPublicRuntime(runtime),
       queue,
       worker: {
         mode: runtime.worker.mode,
@@ -186,7 +210,7 @@ export class HealthController {
         lastRunStartedAt: runtime.worker.lastRunStartedAt,
         lastRunCompletedAt: runtime.worker.lastRunCompletedAt,
         lastRunDurationMs: runtime.worker.lastRunDurationMs,
-        lastFailure: runtime.worker.lastFailure,
+        lastFailure: runtime.worker.lastFailure ? 'Worker run failed' : null,
       },
       optimization: runtime.optimization,
       auth: {
@@ -319,8 +343,6 @@ export class HealthController {
           });
 
     const [
-      notificationsOverview,
-      platformOverview,
       database,
       redis,
       routingService,
@@ -328,10 +350,6 @@ export class HealthController {
       postmark,
       storage,
     ] = await Promise.all([
-      this.notificationsService?.getOverview().catch(() => null) || null,
-      this.platformService?.getOverview(
-        this.configService.get('DEFAULT_ORGANIZATION_ID', 'default'),
-      ).catch(() => null) || null,
       databaseProbe,
       queueProbe,
       routingProbe,
@@ -405,10 +423,15 @@ export class HealthController {
 
     return {
       status,
-      runtime,
+      runtime: this.presentPublicRuntime(runtime),
       dependencies,
-      notifications: notificationsOverview,
-      platform: platformOverview,
+      notifications: {
+        configured: postmark.configured,
+        status: postmark.status,
+      },
+      platform: {
+        enabled: Boolean(this.platformService),
+      },
       missingCritical,
       launchWarnings,
     };

@@ -265,6 +265,8 @@ async function run() {
         apiResponses,
         staleCopyHits: [],
         buttonCount: 0,
+        visibleH1Count: 0,
+        workflowFindings: [],
         screenshotPath: path.join(
           screenshotDir,
           `${routeSlug(routePath)}-${viewport.name}.png`,
@@ -296,6 +298,38 @@ async function run() {
           ),
         );
         routeResult.buttonCount = (await visibleButtons(page)).length;
+        routeResult.visibleH1Count = await page.locator('h1:visible').count();
+        if (routeResult.visibleH1Count !== 1) {
+          routeResult.workflowFindings.push(
+            `expected one visible H1, found ${routeResult.visibleH1Count}`,
+          );
+        }
+        if (routePath === '/settings') {
+          const mobileSelectorVisible = await page
+            .getByTestId('settings-mobile-section-selector')
+            .isVisible()
+            .catch(() => false);
+          const desktopRailVisible = await page
+            .getByTestId('settings-desktop-section-rail')
+            .isVisible()
+            .catch(() => false);
+          if (
+            viewport.name === 'mobile' &&
+            (!mobileSelectorVisible || desktopRailVisible)
+          ) {
+            routeResult.workflowFindings.push(
+              'mobile settings must show the compact section selector and hide the desktop rail',
+            );
+          }
+          if (
+            viewport.name === 'desktop' &&
+            (mobileSelectorVisible || !desktopRailVisible)
+          ) {
+            routeResult.workflowFindings.push(
+              'desktop settings must show the section rail and hide the mobile selector',
+            );
+          }
+        }
         await page.screenshot({
           path: routeResult.screenshotPath,
           fullPage: false,
@@ -345,6 +379,7 @@ async function run() {
       route.consoleErrors.length ||
       route.pageErrors.length ||
       route.badResponses.length ||
+      route.workflowFindings.length ||
       route.overflow?.horizontalOverflow ||
       route.overflow?.clippedControls?.length,
   );
@@ -385,6 +420,9 @@ async function run() {
                 route.consoleErrors.length ? `${route.consoleErrors.length} console errors` : null,
                 route.pageErrors.length ? `${route.pageErrors.length} page errors` : null,
                 route.badResponses.length ? `${route.badResponses.length} bad responses` : null,
+                route.workflowFindings.length
+                  ? route.workflowFindings.join(', ')
+                  : null,
                 route.overflow?.horizontalOverflow ? 'horizontal overflow' : null,
                 route.overflow?.clippedControls?.length
                   ? `${route.overflow.clippedControls.length} visible clipped controls`

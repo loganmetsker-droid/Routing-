@@ -32,6 +32,7 @@ import { getActiveNavItem, navSections } from './navConfig';
 import { trovanBrandAssets, trovanColors, trovanLayout } from '../theme/designTokens';
 import { useTrovanThemeMode } from '../contexts/ThemeContext';
 import { getSession, type AuthUser } from '../services/api';
+import { useNotificationsOverviewQuery } from '../services/notificationsApi';
 import { PreviewBanner } from '../components/PreviewBanner';
 
 type AppShellProps = {
@@ -244,7 +245,7 @@ function NavigationContent({
             }}
           >
             <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: trovanColors.semantic.success }} />
-            All systems operational
+            Operations workspace
             <Box component="span" sx={{ ml: 'auto', color: shellMuted }}>⌄</Box>
           </Box>
           <Typography sx={{ mt: 1.55, color: shellMuted, fontSize: 10.5, lineHeight: 1.55 }}>
@@ -268,6 +269,7 @@ export function AppShell({ onLogout, children }: AppShellProps) {
   const [sessionUser, setSessionUser] = useState<AuthUser | null>(null);
   const [notificationsAnchorEl, setNotificationsAnchorEl] = useState<HTMLElement | null>(null);
   const [accountAnchorEl, setAccountAnchorEl] = useState<HTMLElement | null>(null);
+  const notificationsOverviewQuery = useNotificationsOverviewQuery();
   const activeItem = getActiveNavItem(location.pathname);
   const [pageTitle, pageSubtitle] = getPageCopy(location.pathname, activeItem.label);
   const searchPlaceholder = getSearchPlaceholder(location.pathname);
@@ -289,6 +291,17 @@ export function AppShell({ onLogout, children }: AppShellProps) {
   const roleLabel = sessionUser?.role
     ? sessionUser.role.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (char) => char.toUpperCase())
     : 'Operator';
+  const notificationOverview = notificationsOverviewQuery.data;
+  const failedNotificationCount = notificationOverview?.failedLast24Hours ?? 0;
+  const notificationSummary = notificationsOverviewQuery.isLoading
+    ? 'Checking customer notification delivery status…'
+    : notificationsOverviewQuery.isError
+      ? 'Notification delivery status is temporarily unavailable.'
+      : failedNotificationCount > 0
+        ? `${failedNotificationCount} customer notification ${failedNotificationCount === 1 ? 'delivery has' : 'deliveries have'} failed in the last 24 hours. Review delivery settings and affected routes.`
+        : notificationOverview?.controls.emailReady
+          ? `No failed customer notification deliveries in the last 24 hours. ${notificationOverview.sentLast24Hours} sent.`
+          : 'Customer email delivery is not configured. Notifications are logged for operator review but are not sent.';
 
   useEffect(() => {
     try {
@@ -451,7 +464,15 @@ export function AppShell({ onLogout, children }: AppShellProps) {
               {pageTitle}
             </Typography>
             {pageSubtitle ? (
-              <Typography sx={{ mt: 0.25, color: 'text.secondary', fontSize: 12.5, lineHeight: 1.25 }}>
+              <Typography
+                sx={{
+                  display: { xs: 'none', md: 'block' },
+                  mt: 0.25,
+                  color: 'text.secondary',
+                  fontSize: 12.5,
+                  lineHeight: 1.25,
+                }}
+              >
                 {pageSubtitle}
               </Typography>
             ) : null}
@@ -545,7 +566,12 @@ export function AppShell({ onLogout, children }: AppShellProps) {
             onClick={openNotifications}
             sx={{ width: 38, height: 38, border: '1px solid', borderColor: 'divider', borderRadius: '9px' }}
           >
-            <Badge badgeContent={0} color="error">
+            <Badge
+              badgeContent={failedNotificationCount}
+              color="error"
+              max={99}
+              invisible={failedNotificationCount === 0}
+            >
               <NotificationsNoneOutlined />
             </Badge>
           </IconButton>
@@ -586,7 +612,7 @@ export function AppShell({ onLogout, children }: AppShellProps) {
             Notifications
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            You are all caught up. There are no new operational alerts.
+            {notificationSummary}
           </Typography>
           <Button
             component={NavLink}

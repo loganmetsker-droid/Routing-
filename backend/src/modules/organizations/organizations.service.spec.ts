@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OrganizationsService } from './organizations.service';
 
@@ -18,6 +19,7 @@ describe('OrganizationsService', () => {
   let memberships: ReturnType<typeof repositoryMock>;
   let invitations: ReturnType<typeof repositoryMock>;
   let workos: { isConfigured: ReturnType<typeof vi.fn>; sendInvitation: ReturnType<typeof vi.fn> };
+  let config: ConfigService;
   let service: OrganizationsService;
 
   beforeEach(() => {
@@ -29,12 +31,16 @@ describe('OrganizationsService', () => {
       isConfigured: vi.fn().mockReturnValue(false),
       sendInvitation: vi.fn(),
     };
+    config = {
+      get: vi.fn((_key: string, fallback?: string) => fallback),
+    } as unknown as ConfigService;
     service = new OrganizationsService(
       organizations as never,
       users as never,
       memberships as never,
       invitations as never,
       workos as never,
+      config,
     );
   });
 
@@ -133,7 +139,8 @@ describe('OrganizationsService', () => {
 
     await service.updateCurrentSettings('org-a', 'owner-a', {
       notificationEmailEnabled: true,
-      notificationSmsEnabled: false,
+      notificationSmsEnabled: true,
+      defaultNotificationChannel: 'both',
       notificationReplyToEmail: ' OPS@EXAMPLE.COM ',
       primaryColor: '#ab7722',
     });
@@ -145,6 +152,7 @@ describe('OrganizationsService', () => {
       notifications: {
         emailEnabled: true,
         smsEnabled: false,
+        defaultChannel: 'email',
         replyToEmail: 'ops@example.com',
       },
     });

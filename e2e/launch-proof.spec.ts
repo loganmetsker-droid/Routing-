@@ -77,7 +77,7 @@ async function gotoReady(page: Page, path: string) {
   } else if (path === '/pricing') {
     await page.getByRole('heading', { name: /pricing/i }).first().waitFor({ state: 'visible' });
   } else {
-    await page.getByRole('button', { name: /^(Collapse|Expand) sidebar$/ }).waitFor({ state: 'visible' });
+    await page.locator('main').waitFor({ state: 'visible' });
   }
   await expect(page.getByText(/Workspace Failed To Render/i)).toHaveCount(0);
 }
@@ -126,13 +126,36 @@ test.describe('launch calculation and control proof', () => {
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
 
     await page.getByRole('button', { name: 'Notifications' }).click();
-    await expect(page.getByText('You are all caught up. There are no new operational alerts.')).toBeVisible();
+    await expect(page.getByText(/2 customer notification deliveries have failed in the last 24 hours/i)).toBeVisible();
     await page.getByRole('link', { name: 'Open notification settings' }).click();
     await expect(page).toHaveURL(/\/settings$/);
 
     await gotoReady(page, '/dashboard');
     await page.getByRole('button', { name: 'Open full-screen map' }).click();
     await expect(page).toHaveURL(/\/tracking$/);
+  });
+
+  test('mobile settings uses one compact section selector without horizontal overflow', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await gotoReady(page, '/settings');
+
+    const sectionSelector = page.getByRole('combobox', {
+      name: /Settings section/i,
+    });
+    await expect(sectionSelector).toBeVisible();
+    await expect(page.locator('h1')).toHaveCount(1);
+    await sectionSelector.click();
+    await page.getByRole('option', { name: 'Brand & Notifications' }).click();
+    await expect(page.getByText('Customer notifications', { exact: true })).toBeVisible();
+    await expect(
+      page.getByLabel('SMS notifications (not included in assisted pilots)'),
+    ).toBeDisabled();
+
+    const layout = await page.evaluate(() => ({
+      viewportWidth: window.innerWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }));
+    expect(layout.scrollWidth).toBeLessThanOrEqual(layout.viewportWidth + 1);
   });
 
   test('public ROI calculator reconciles every displayed output and caps impossible mileage savings', async ({ page }) => {
@@ -718,6 +741,14 @@ test.describe('launch calculation and control proof', () => {
     await createOrganization.click();
     await expect(page.getByRole('alert').filter({ hasText: 'Organization created.' })).toBeVisible();
     conditionalControlProof.push({ area: 'settings', control: 'Create organization', status: 'passed' });
+
+    await page.getByRole('button', { name: /^Brand & Notifications/i }).click();
+    await expect(
+      page.getByLabel('SMS notifications (not included in assisted pilots)'),
+    ).toBeDisabled();
+    await expect(
+      page.getByText(/Email and in-app route messaging are the launch channels/i),
+    ).toBeVisible();
 
     await page.getByRole('button', { name: /^Platform API keys/i }).click();
     await expect(page.getByText('API keys', { exact: true })).toBeVisible();

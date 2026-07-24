@@ -17,7 +17,7 @@ type NotificationEventType =
   | 'eta_updated';
 
 type NotifyCustomerInput = {
-  organizationId?: string | null;
+  organizationId: string;
   routeId?: string | null;
   routeRunStopId?: string | null;
   jobId?: string | null;
@@ -204,6 +204,8 @@ export class NotificationsService {
       };
     }
 
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8_000);
     try {
       const response = await fetch('https://api.postmarkapp.com/email', {
         method: 'POST',
@@ -219,6 +221,7 @@ export class NotificationsService {
           TextBody: message,
           ReplyTo: config.replyToEmail || branding.supportEmail || undefined,
         }),
+        signal: controller.signal,
       });
       const payload = (await response.json().catch(() => ({}))) as Record<
         string,
@@ -244,8 +247,15 @@ export class NotificationsService {
       return {
         provider: 'postmark',
         status: 'FAILED' as const,
-        failureReason: error instanceof Error ? error.message : String(error),
+        failureReason:
+          error instanceof Error && error.name === 'AbortError'
+            ? 'Postmark request timed out'
+            : error instanceof Error
+              ? error.message
+              : String(error),
       };
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -310,25 +320,25 @@ export class NotificationsService {
     }
   }
 
-  async getOverview(organizationId?: string) {
+  async getOverview(organizationId: string) {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const [sent24h, failed24h, recent] = await Promise.all([
       this.deliveries.count({
         where: {
-          ...(organizationId ? { organizationId } : {}),
+          organizationId,
           status: 'SENT',
           createdAt: MoreThan(since),
         },
       }),
       this.deliveries.count({
         where: {
-          ...(organizationId ? { organizationId } : {}),
+          organizationId,
           status: 'FAILED',
           createdAt: MoreThan(since),
         },
       }),
       this.deliveries.find({
-        where: organizationId ? { organizationId } : {},
+        where: { organizationId },
         order: { createdAt: 'DESC' },
         take: 10,
       }),
@@ -391,10 +401,10 @@ export class NotificationsService {
     }
   }
 
-  async list(organizationId?: string, routeId?: string) {
+  async list(organizationId: string, routeId?: string) {
     return this.deliveries.find({
       where: {
-        ...(organizationId ? { organizationId } : {}),
+        organizationId,
         ...(routeId ? { routeId } : {}),
       },
       order: { createdAt: 'DESC' },
@@ -404,15 +414,30 @@ export class NotificationsService {
 
   async notifyCustomer(input: NotifyCustomerInput) {
     const [job, organization] = await Promise.all([
-      input.jobId ? this.jobs.findOne({ where: { id: input.jobId } }) : null,
-      input.organizationId
-        ? this.organizations.findOne({ where: { id: input.organizationId } })
+      input.jobId
+        ? this.jobs.findOne({
+            where: {
+              id: input.jobId,
+              organizationId: input.organizationId,
+            },
+          })
         : null,
+      this.organizations.findOne({ where: { id: input.organizationId } }),
     ]);
     const customer = input.customerId
-      ? await this.customers.findOne({ where: { id: input.customerId } })
+      ? await this.customers.findOne({
+          where: {
+            id: input.customerId,
+            organizationId: input.organizationId,
+          },
+        })
       : job?.customerId
-        ? await this.customers.findOne({ where: { id: job.customerId } })
+        ? await this.customers.findOne({
+            where: {
+              id: job.customerId,
+              organizationId: input.organizationId,
+            },
+          })
         : null;
 
     const branding = this.getOrganizationBranding(organization);
@@ -442,7 +467,7 @@ export class NotificationsService {
     const saved = await Promise.all(
       recipients.map(async ({ channel, enabled, recipient }) => {
         const delivery = this.deliveries.create({
-          organizationId: input.organizationId || null,
+          organizationId: input.organizationId,
           routeId: input.routeId || null,
           routeRunStopId: input.routeRunStopId || null,
           jobId: input.jobId || null,

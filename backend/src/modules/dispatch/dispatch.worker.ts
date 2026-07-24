@@ -12,6 +12,26 @@ import {
   normalizeOptimizationObjective,
   type OptimizationObjective,
 } from '../../../../shared/contracts';
+import type { DispatchActorContext } from './dispatch.types';
+
+type AutoDispatchFailure = {
+  organizationId: string | null;
+  vehicleId: string | null;
+  jobIds: string[];
+  errorType: string;
+  errorMessage: string;
+};
+
+type AutoDispatchResult = {
+  success: boolean;
+  message?: string;
+  error?: string;
+  routesCreated?: number;
+  routeIds?: string[];
+  failedVehicles?: AutoDispatchFailure[];
+  durationMs?: number;
+  pendingJobCount?: number;
+};
 
 @Injectable()
 export class DispatchWorker implements OnModuleInit {
@@ -59,7 +79,10 @@ export class DispatchWorker implements OnModuleInit {
     return this.runAutoDispatch(this.resolveOptimizationObjective());
   }
 
-  private async runAutoDispatch(objective: OptimizationObjective) {
+  private async runAutoDispatch(
+    objective: OptimizationObjective,
+    organizationId?: string | null,
+  ) {
     const startTime = Date.now();
     this.runtimeStatusService.markWorkerRunStarted();
     this.logger.log('🔄 [DISPATCH:START] Auto-dispatch worker initiated');
@@ -67,10 +90,16 @@ export class DispatchWorker implements OnModuleInit {
     try {
       // Step 1: Query pending jobs
       this.logger.log('[DISPATCH:STEP1] Querying pending jobs from database...');
-      const pendingJobs = await this.jobRepository
+      const pendingJobsQuery = this.jobRepository
         .createQueryBuilder('job')
         .where('job.status = :status', { status: JobStatus.PENDING })
-        .andWhere('job.assigned_route_id IS NULL')
+        .andWhere('job.assigned_route_id IS NULL');
+      if (organizationId) {
+        pendingJobsQuery.andWhere('job.organization_id = :organizationId', {
+          organizationId,
+        });
+      }
+      const pendingJobs = await pendingJobsQuery
         .orderBy(
           `CASE
             WHEN job.priority = '${JobPriority.URGENT}' THEN 1
@@ -85,172 +114,187 @@ export class DispatchWorker implements OnModuleInit {
 
       if (pendingJobs.length === 0) {
         this.logger.debug('[DISPATCH:STEP1] No pending jobs found - skipping dispatch cycle');
-        return { success: true, message: 'No pending jobs to dispatch', routesCreated: 0 };
+        const duration = Date.now() - startTime;
+        this.runtimeStatusService.markWorkerRunCompleted(duration);
+        return {
+          success: true,
+          message: 'No pending jobs to dispatch',
+          routesCreated: 0,
+          durationMs: duration,
+        };
       }
 
       this.logger.log(
         `[DISPATCH:STEP1] Found ${pendingJobs.length} pending jobs: [${pendingJobs.map(j => j.id.substring(0, 8)).join(', ')}]`,
       );
 
-      // Step 2: Query available vehicles
-      this.logger.log('[DISPATCH:STEP2] Querying available vehicles...');
-      const availableVehicles = await this.vehicleRepository.find({
-        where: { status: 'available' },
-        take: 10,
-      });
-
-      if (availableVehicles.length === 0) {
-        this.logger.warn('[DISPATCH:STEP2] No available vehicles found - cannot dispatch');
-        return {
-          success: false,
-          error: 'NO_AVAILABLE_VEHICLES',
-          message: 'No vehicles with status "available" found for dispatch',
-          pendingJobCount: pendingJobs.length,
-        };
+      // Step 2: Distribute jobs within strict organization boundaries.
+      // Tenantless legacy rows are never assigned automatically because doing so
+      // could attach customer work to the wrong fleet.
+      this.logger.log('[DISPATCH:STEP2] Distributing jobs across tenant-scoped vehicles...');
+      const dispatchedRoutes = [];
+      const failures: AutoDispatchFailure[] = [];
+      const tenantJobs = pendingJobs.filter((job) => Boolean(job.organizationId));
+      const orphanJobs = pendingJobs.filter((job) => !job.organizationId);
+      if (orphanJobs.length > 0) {
+        failures.push({
+          organizationId: null,
+          vehicleId: null,
+          jobIds: orphanJobs.map((job) => job.id),
+          errorType: 'ORPHANED_PENDING_JOBS',
+          errorMessage:
+            'Pending jobs without an organization were skipped to prevent cross-tenant assignment.',
+        });
       }
 
-      this.logger.log(
-        `[DISPATCH:STEP2] Found ${availableVehicles.length} available vehicles: [${availableVehicles.map(v => v.id.substring(0, 8)).join(', ')}]`,
+      const organizationIds = Array.from(
+        new Set(tenantJobs.map((job) => job.organizationId as string)),
       );
+      for (const tenantId of organizationIds) {
+        const organizationJobs = tenantJobs.filter(
+          (job) => job.organizationId === tenantId,
+        );
+        const organizationVehicles = await this.vehicleRepository.find({
+          where: {
+            status: 'available',
+            organizationId: tenantId,
+          },
+          take: 10,
+        });
 
-      // Step 3: Distribute jobs across vehicles
-      this.logger.log('[DISPATCH:STEP3] Distributing jobs across vehicles...');
-      const jobsPerVehicle = Math.ceil(pendingJobs.length / availableVehicles.length);
-      this.logger.log(`[DISPATCH:STEP3] Jobs per vehicle (target): ${jobsPerVehicle}`);
-
-      let jobIndex = 0;
-      const dispatchedRoutes = [];
-      const failedVehicles = [];
-
-      for (const vehicle of availableVehicles) {
-        const vehicleJobs = pendingJobs.slice(jobIndex, jobIndex + jobsPerVehicle);
-
-        if (vehicleJobs.length === 0) {
-          this.logger.debug(`[DISPATCH:STEP3] No more jobs to assign to vehicle ${vehicle.id.substring(0, 8)}`);
-          break;
+        if (organizationVehicles.length === 0) {
+          failures.push({
+            organizationId: tenantId,
+            vehicleId: null,
+            jobIds: organizationJobs.map((job) => job.id),
+            errorType: 'NO_AVAILABLE_VEHICLES',
+            errorMessage:
+              'No available vehicles were found in the pending jobs organization.',
+          });
+          continue;
         }
 
-        this.logger.log(
-          `[DISPATCH:STEP4] Creating route for vehicle ${vehicle.id.substring(0, 8)} with ${vehicleJobs.length} jobs`,
+        const jobsPerVehicle = Math.ceil(
+          organizationJobs.length / organizationVehicles.length,
         );
+        let jobIndex = 0;
+        const actor: DispatchActorContext = {
+          userId: 'system:auto-dispatch',
+          organizationId: tenantId,
+          roles: ['SYSTEM'],
+        };
 
-        try {
-          // Step 4: Create optimized route via routing service
+        for (const vehicle of organizationVehicles) {
+          const vehicleJobs = organizationJobs.slice(
+            jobIndex,
+            jobIndex + jobsPerVehicle,
+          );
+          if (vehicleJobs.length === 0) break;
+
           this.logger.log(
-            `[DISPATCH:STEP4] Invoking DispatchService.create() for vehicle ${vehicle.id.substring(0, 8)}...`,
-          );
-          const route = await this.dispatchService.create({
-            vehicleId: vehicle.id,
-            jobIds: vehicleJobs.map((j) => j.id),
-            objective,
-          });
-          this.logger.log(
-            `[DISPATCH:STEP4] Route ${route.id.substring(0, 8)} created successfully`,
+            `[DISPATCH:STEP3] Creating route for organization ${tenantId.substring(0, 8)} and vehicle ${vehicle.id.substring(0, 8)} with ${vehicleJobs.length} jobs`,
           );
 
-          // Step 5: Start the route
-          this.logger.log(`[DISPATCH:STEP5] Starting route ${route.id.substring(0, 8)}...`);
-          const startedRoute = await this.dispatchService.startRoute(route.id);
-          this.logger.log(
-            `[DISPATCH:STEP5] Route ${startedRoute.id.substring(0, 8)} started - vehicle status updated to "in_route"`,
-          );
-
-          dispatchedRoutes.push(startedRoute);
-
-          // Step 6: Emit WebSocket events
-          this.logger.log(`[DISPATCH:STEP6] Emitting WebSocket events for route ${startedRoute.id.substring(0, 8)}...`);
-          this.dispatchGateway.emitRouteCreated(startedRoute);
-          this.dispatchGateway.emitVehicleStatusUpdate({
-            vehicleId: vehicle.id,
-            status: 'in_route',
-            routeId: startedRoute.id,
-            organizationId: startedRoute.organizationId,
-          });
-          this.logger.log(`[DISPATCH:STEP6] WebSocket events emitted successfully`);
-
-          jobIndex += vehicleJobs.length;
-        } catch (error) {
-          const errorDetails = {
-            vehicleId: vehicle.id,
-            jobIds: vehicleJobs.map((j) => j.id),
-            errorType: error.constructor.name,
-            errorMessage: error.message,
-          };
-          this.logger.error(
-            `[DISPATCH:ERROR] Failed to create route for vehicle ${vehicle.id.substring(0, 8)}: ${error.message}`,
-            JSON.stringify(errorDetails),
-          );
-          failedVehicles.push(errorDetails);
-          // Continue with next vehicle
+          try {
+            const route = await this.dispatchService.create(
+              {
+                vehicleId: vehicle.id,
+                jobIds: vehicleJobs.map((job) => job.id),
+                objective,
+              },
+              actor,
+            );
+            const startedRoute = await this.dispatchService.startRoute(
+              route.id,
+              actor,
+            );
+            dispatchedRoutes.push(startedRoute);
+            this.dispatchGateway.emitRouteCreated(startedRoute);
+            this.dispatchGateway.emitVehicleStatusUpdate({
+              vehicleId: vehicle.id,
+              status: 'in_route',
+              routeId: startedRoute.id,
+              organizationId: tenantId,
+            });
+            jobIndex += vehicleJobs.length;
+          } catch (error: unknown) {
+            const errorType =
+              error instanceof Error ? error.constructor.name : 'UnknownError';
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
+            const errorDetails: AutoDispatchFailure = {
+              organizationId: tenantId,
+              vehicleId: vehicle.id,
+              jobIds: vehicleJobs.map((job) => job.id),
+              errorType,
+              errorMessage,
+            };
+            this.logger.error(
+              `[DISPATCH:ERROR] Failed to create route for organization ${tenantId.substring(0, 8)} and vehicle ${vehicle.id.substring(0, 8)}: ${errorMessage}`,
+              JSON.stringify(errorDetails),
+            );
+            failures.push(errorDetails);
+          }
         }
       }
 
       const duration = Date.now() - startTime;
       this.logger.log(
-        `[DISPATCH:COMPLETE] Auto-dispatch finished in ${duration}ms. Routes created: ${dispatchedRoutes.length}, Failed: ${failedVehicles.length}`,
+        `[DISPATCH:COMPLETE] Auto-dispatch finished in ${duration}ms. Routes created: ${dispatchedRoutes.length}, Failed: ${failures.length}`,
       );
-      this.runtimeStatusService.markWorkerRunCompleted(duration);
+      if (failures.length > 0) {
+        this.runtimeStatusService.markWorkerRunFailed(
+          `${failures.length} tenant-scoped dispatch batch${failures.length === 1 ? '' : 'es'} failed`,
+          duration,
+        );
+      } else {
+        this.runtimeStatusService.markWorkerRunCompleted(duration);
+      }
 
       return {
-        success: true,
+        success: failures.length === 0,
+        error: failures.length > 0 ? 'AUTO_DISPATCH_PARTIAL_FAILURE' : undefined,
         routesCreated: dispatchedRoutes.length,
         routeIds: dispatchedRoutes.map((r) => r.id),
-        failedVehicles: failedVehicles.length > 0 ? failedVehicles : undefined,
+        failedVehicles: failures.length > 0 ? failures : undefined,
         durationMs: duration,
+        pendingJobCount: pendingJobs.length,
       };
-    } catch (error) {
+    } catch (error: unknown) {
       const duration = Date.now() - startTime;
-      this.runtimeStatusService.markWorkerRunFailed(error.message, duration);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      this.runtimeStatusService.markWorkerRunFailed(errorMessage, duration);
       this.logger.error(
-        `[DISPATCH:FATAL] Auto-dispatch worker failed after ${duration}ms: ${error.message}`,
-        error.stack,
+        `[DISPATCH:FATAL] Auto-dispatch worker failed after ${duration}ms: ${errorMessage}`,
+        error instanceof Error ? error.stack : undefined,
       );
-      throw new Error(`Auto-dispatch failed: ${error.message}`);
+      throw new Error(`Auto-dispatch failed: ${errorMessage}`);
     }
   }
 
   /**
    * Manual trigger for testing - returns dispatch result
    */
-  async manualDispatch(): Promise<{
-    success: boolean;
-    message?: string;
-    error?: string;
-    routesCreated?: number;
-    routeIds?: string[];
-    failedVehicles?: any[];
-    durationMs?: number;
-    pendingJobCount?: number;
-  }>;
   async manualDispatch(
     objective?: string | null,
-  ): Promise<{
-    success: boolean;
-    message?: string;
-    error?: string;
-    routesCreated?: number;
-    routeIds?: string[];
-    failedVehicles?: any[];
-    durationMs?: number;
-    pendingJobCount?: number;
-  }>;
-  async manualDispatch(
-    objective?: string | null,
-  ): Promise<{
-    success: boolean;
-    message?: string;
-    error?: string;
-    routesCreated?: number;
-    routeIds?: string[];
-    failedVehicles?: any[];
-    durationMs?: number;
-    pendingJobCount?: number;
-  }> {
+    organizationId?: string | null,
+  ): Promise<AutoDispatchResult> {
     this.logger.log('🔧 [DISPATCH:MANUAL] Manual dispatch triggered via API');
+    if (!organizationId) {
+      throw new Error('Manual dispatch requires an organization context');
+    }
     this.runtimeStatusService.touchWorkerHeartbeat();
     const result = await this.runAutoDispatch(
       this.resolveOptimizationObjective(objective),
+      organizationId,
     );
-    return result || { success: true, message: 'Dispatch completed', routesCreated: 0 };
+    return (
+      result || {
+        success: true,
+        message: 'Dispatch completed',
+        routesCreated: 0,
+      }
+    );
   }
 }

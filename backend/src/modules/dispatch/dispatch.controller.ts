@@ -432,12 +432,14 @@ export class DispatchController {
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiResponse({ status: 200, description: 'Optimization job lifecycle records' })
   getOptimizationJobs(
+    @Req() req: AuthenticatedRequest,
     @Query('limit') limit?: string,
   ): DispatchOptimizationJobsResponse {
     const parsedLimit = limit ? Number(limit) : 100;
     return {
       jobs: this.dispatchService.getOptimizationJobs(
         parsedLimit,
+        req.user,
       ) as OptimizationJobRecord[],
     };
   }
@@ -748,8 +750,14 @@ export class DispatchController {
     },
   })
   @ApiResponse({ status: 500, description: 'Auto-dispatch failed' })
-  async manualDispatch(@Body() payload: ManualDispatchDto = {}) {
-    const result = await this.dispatchWorker.manualDispatch(payload.objective);
+  async manualDispatch(
+    @Req() req: AuthenticatedRequest,
+    @Body() payload: ManualDispatchDto = {},
+  ) {
+    const result = await this.dispatchWorker.manualDispatch(
+      payload.objective,
+      req.user?.organizationId,
+    );
     return {
       ...result,
       timestamp: new Date(),

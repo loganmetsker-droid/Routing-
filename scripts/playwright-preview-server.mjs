@@ -8,6 +8,13 @@ const frontendPort = process.env.PLAYWRIGHT_FRONTEND_PORT || '5185';
 const mockApiPort = process.env.PLAYWRIGHT_MOCK_API_PORT || '3001';
 const mockApiUrl = `http://${host}:${mockApiPort}`;
 const frontendUrl = `http://${host}:${frontendPort}`;
+const frontendOutDir = resolve(
+  rootDir,
+  'frontend',
+  '.tmp',
+  'playwright',
+  'frontend-dist',
+);
 
 const children = new Set();
 
@@ -122,6 +129,7 @@ if (!(await isReachable(frontendUrl))) {
     VITE_REST_API_URL: mockApiUrl,
     VITE_GRAPHQL_URL: `${mockApiUrl}/graphql`,
     VITE_WS_URL: `ws://${host}:${mockApiPort}`,
+    PLAYWRIGHT_FRONTEND_OUT_DIR: frontendOutDir,
   };
 
   await run(

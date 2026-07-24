@@ -76,8 +76,12 @@ export class OptimizationJobLifecycleService {
     return next;
   }
 
-  list(limit = 100): OptimizationJobRecord[] {
+  list(limit = 100, organizationId?: string): OptimizationJobRecord[] {
     return Array.from(this.jobs.values())
+      .filter(
+        (record) =>
+          !organizationId || record.organizationId === organizationId,
+      )
       .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
       .slice(0, limit);
   }

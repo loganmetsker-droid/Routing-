@@ -1,4 +1,10 @@
-import { Controller, Get, Query, Req } from '@nestjs/common';
+import {
+  Controller,
+  ForbiddenException,
+  Get,
+  Query,
+  Req,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { NotificationsService } from './notifications.service';
@@ -15,12 +21,20 @@ type AuthenticatedRequest = {
 export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
+  private requireOrganizationId(req: AuthenticatedRequest): string {
+    const organizationId = req.user.organizationId;
+    if (!organizationId) {
+      throw new ForbiddenException('Organization scope required');
+    }
+    return organizationId;
+  }
+
   @Get('overview')
   @Roles('OWNER', 'ADMIN', 'DISPATCHER', 'VIEWER')
   async overview(@Req() req: AuthenticatedRequest) {
     return {
       overview: await this.notificationsService.getOverview(
-        req.user.organizationId,
+        this.requireOrganizationId(req),
       ),
     };
   }
@@ -33,7 +47,7 @@ export class NotificationsController {
   ) {
     return {
       deliveries: await this.notificationsService.list(
-        req.user.organizationId,
+        this.requireOrganizationId(req),
         routeId,
       ),
     };

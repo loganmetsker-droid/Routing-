@@ -35,7 +35,7 @@ export function PageHeader({ eyebrow, title, subtitle, actions }: PageHeaderProp
         ) : null}
         <Typography
           variant="h2"
-          component="h1"
+          component="h2"
           sx={{
             mb: subtitle ? 0.45 : 0,
             maxWidth: 'none',

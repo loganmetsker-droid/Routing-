@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { WorkosService } from '../../common/integrations/workos.service';
@@ -34,6 +35,7 @@ export class OrganizationsService {
     @InjectRepository(OrganizationInvitation)
     private readonly invitations: Repository<OrganizationInvitation>,
     private readonly workosService: WorkosService,
+    private readonly configService: ConfigService,
   ) {}
 
   private getSettingsRecord(organization?: Organization | null) {
@@ -549,6 +551,9 @@ export class OrganizationsService {
       !Array.isArray(currentSettings.identity)
         ? (currentSettings.identity as Record<string, unknown>)
         : {};
+    const smsNotificationsEnabled =
+      this.configService.get<string>('SMS_NOTIFICATIONS_ENABLED', 'false') ===
+      'true';
 
     organization.settings = {
       ...currentSettings,
@@ -581,9 +586,8 @@ export class OrganizationsService {
         ...(dto.notificationEmailEnabled !== undefined
           ? { emailEnabled: dto.notificationEmailEnabled }
           : {}),
-        ...(dto.notificationSmsEnabled !== undefined
-          ? { smsEnabled: dto.notificationSmsEnabled }
-          : {}),
+        smsEnabled:
+          smsNotificationsEnabled && dto.notificationSmsEnabled === true,
         ...(dto.notificationReplyToEmail !== undefined
           ? {
               replyToEmail: dto.notificationReplyToEmail
@@ -591,9 +595,11 @@ export class OrganizationsService {
                 .toLowerCase(),
             }
           : {}),
-        ...(dto.defaultNotificationChannel !== undefined
-          ? { defaultChannel: dto.defaultNotificationChannel }
-          : {}),
+        defaultChannel: smsNotificationsEnabled
+          ? dto.defaultNotificationChannel ||
+            currentNotifications.defaultChannel ||
+            'email'
+          : 'email',
       },
       retention: {
         ...currentRetention,

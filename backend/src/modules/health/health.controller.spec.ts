@@ -115,6 +115,14 @@ describe('HealthController readiness', () => {
     expect(response.status).toHaveBeenCalledWith(200);
     expect(result.status).toBe('ok');
     expect(result.missingCritical).toEqual([]);
+    expect(result.runtime.database).toEqual({ configured: true });
+    expect(result.runtime.database).not.toHaveProperty('host');
+    expect(result.notifications).toEqual({
+      configured: true,
+      status: 'up',
+    });
+    expect(result.notifications).not.toHaveProperty('recentDeliveries');
+    expect(result.platform).toEqual({ enabled: true });
   });
 
   it('returns 503 when the hosted worker has no current heartbeat', async () => {

@@ -274,11 +274,7 @@ export default function SettingsPage() {
   const [trackingHeadline, setTrackingHeadline] = useState('');
   const [trackingSubtitle, setTrackingSubtitle] = useState('');
   const [notificationEmailEnabled, setNotificationEmailEnabled] = useState(true);
-  const [notificationSmsEnabled, setNotificationSmsEnabled] = useState(true);
   const [notificationReplyToEmail, setNotificationReplyToEmail] = useState('');
-  const [defaultNotificationChannel, setDefaultNotificationChannel] = useState<
-    'email' | 'sms' | 'both'
-  >('both');
   const [auditRetentionDays, setAuditRetentionDays] = useState('365');
   const [operationalRetentionDays, setOperationalRetentionDays] = useState('365');
   const [workosOrganizationId, setWorkosOrganizationId] = useState('');
@@ -371,9 +367,7 @@ export default function SettingsPage() {
         'Follow the route live, monitor stop progress, and review delivery proof once the run completes.',
     );
     setNotificationEmailEnabled(notifications?.emailEnabled ?? true);
-    setNotificationSmsEnabled(notifications?.smsEnabled ?? true);
     setNotificationReplyToEmail(notifications?.replyToEmail || '');
-    setDefaultNotificationChannel(notifications?.defaultChannel || 'both');
     setAuditRetentionDays(String(retention?.auditDays ?? 365));
     setOperationalRetentionDays(String(retention?.operationalDays ?? 365));
     setWorkosOrganizationId(identity?.workosOrganizationId || '');
@@ -471,9 +465,9 @@ export default function SettingsPage() {
         trackingHeadline,
         trackingSubtitle,
         notificationEmailEnabled,
-        notificationSmsEnabled,
+        notificationSmsEnabled: false,
         notificationReplyToEmail,
-        defaultNotificationChannel,
+        defaultNotificationChannel: 'email',
         auditRetentionDays: Number(auditRetentionDays),
         operationalRetentionDays: Number(operationalRetentionDays),
         workosOrganizationId,
@@ -941,11 +935,11 @@ export default function SettingsPage() {
                     <FormControlLabel
                       control={
                         <Switch
-                          checked={notificationSmsEnabled}
-                          onChange={(event) => setNotificationSmsEnabled(event.target.checked)}
+                          checked={false}
+                          disabled
                         />
                       }
-                      label="SMS notifications"
+                      label="SMS notifications (not included in assisted pilots)"
                     />
                     <TextField
                       fullWidth
@@ -953,21 +947,10 @@ export default function SettingsPage() {
                       value={notificationReplyToEmail}
                       onChange={(event) => setNotificationReplyToEmail(event.target.value)}
                     />
-                    <TextField
-                      select
-                      fullWidth
-                      label="Default channel"
-                      value={defaultNotificationChannel}
-                      onChange={(event) =>
-                        setDefaultNotificationChannel(
-                          event.target.value as 'email' | 'sms' | 'both',
-                        )
-                      }
-                    >
-                      <MenuItem value="both">Both</MenuItem>
-                      <MenuItem value="email">Email</MenuItem>
-                      <MenuItem value="sms">SMS</MenuItem>
-                    </TextField>
+                    <Alert severity="info" icon={false}>
+                      Email and in-app route messaging are the launch channels. SMS remains
+                      disabled until a post-pilot release.
+                    </Alert>
                   </Stack>
                 </SurfacePanel>
               </Grid>
@@ -1369,7 +1352,7 @@ export default function SettingsPage() {
                     {notificationsOverview?.controls.emailReady ||
                     notificationsOverview?.controls.smsReady
                       ? 'At least one outbound notification channel is configured.'
-                      : 'Outbound email and SMS providers are still unconfigured, so customer comms will be logged but not delivered.'}
+                      : 'Outbound email is still unconfigured, so customer notifications will be logged but not delivered. SMS is intentionally disabled for assisted pilots.'}
                   </Alert>
                 </SurfacePanel>
               </Grid>
@@ -1721,7 +1704,39 @@ export default function SettingsPage() {
         </Alert>
       ) : null}
 
-      <Grid container spacing={1.5}>
+      <SurfacePanel
+        variant="command"
+        data-testid="settings-mobile-section-selector"
+        sx={{ display: { xs: 'block', md: 'none' } }}
+      >
+        <TextField
+          select
+          fullWidth
+          label="Settings section"
+          value={activeSection}
+          onChange={(event) =>
+            setActiveSection(event.target.value as SettingsSectionId)
+          }
+          helperText={currentSection.description}
+        >
+          {settingsSections.map((section) => (
+            <MenuItem key={section.id} value={section.id}>
+              {section.label}
+            </MenuItem>
+          ))}
+        </TextField>
+      </SurfacePanel>
+
+      <Grid
+        container
+        spacing={1.5}
+        sx={{
+          display: {
+            xs: activeSection === 'overview' ? 'flex' : 'none',
+            sm: 'flex',
+          },
+        }}
+      >
         {summaryCards.map((card) => (
           <Grid item xs={12} sm={6} xl={3} key={card.label}>
             <SettingsSummaryCard
@@ -1735,12 +1750,13 @@ export default function SettingsPage() {
       </Grid>
 
       <Grid container spacing={2}>
-        <Grid item xs={12} lg={3}>
+        <Grid item xs={12} md={3} sx={{ display: { xs: 'none', md: 'block' } }}>
           <SurfacePanel
             variant="command"
+            data-testid="settings-desktop-section-rail"
             sx={{
-              position: { lg: 'sticky' },
-              top: { lg: 88 },
+              position: { md: 'sticky' },
+              top: { md: 88 },
             }}
           >
             <Stack spacing={1.5}>
@@ -1770,7 +1786,7 @@ export default function SettingsPage() {
           </SurfacePanel>
         </Grid>
 
-        <Grid item xs={12} lg={9}>
+        <Grid item xs={12} md={9}>
           <Stack spacing={2}>
             <SurfacePanel variant="panel" padding={1.75}>
               <Stack
@@ -1781,7 +1797,7 @@ export default function SettingsPage() {
               >
                 <Box>
                   <Typography variant="subtitle2" component="div" sx={{ color: trovanColors.copper[600] }}>
-                    {currentSection.label}
+                    Settings workspace
                   </Typography>
                   <Typography variant="h4" component="div" sx={{ mt: 0.35 }}>
                     {currentSection.label}
@@ -1793,6 +1809,7 @@ export default function SettingsPage() {
                 <StatusPill
                   label={currentSection.label}
                   tone={activeSection === 'security' ? 'info' : activeSection === 'billing' ? 'accent' : 'default'}
+                  sx={{ display: { xs: 'none', md: 'inline-flex' } }}
                 />
               </Stack>
             </SurfacePanel>

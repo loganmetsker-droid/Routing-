@@ -130,15 +130,19 @@ export class DispatchService {
     this.routingServiceUrl = resolveRoutingServiceUrl(this.configService);
   }
 
+  private requireOrganizationId(actor?: DispatchActorContext): string {
+    const organizationId = actor?.organizationId;
+    if (!organizationId) {
+      throw new ForbiddenException('Organization scope required');
+    }
+    return organizationId;
+  }
+
   private async ensureOrganizationScope(
-    organizationId: string | null | undefined,
+    organizationId: string,
     vehicles: Vehicle[],
     jobs: Job[],
   ) {
-    if (!organizationId) {
-      return;
-    }
-
     const mismatchedVehicles = vehicles.filter(
       (vehicle) => vehicle.organizationId && vehicle.organizationId !== organizationId,
     );
@@ -288,8 +292,11 @@ export class DispatchService {
     return this.optimizerState.getHealth();
   }
 
-  getOptimizationJobs(limit = 100) {
-    return this.optimizationJobs.list(limit);
+  getOptimizationJobs(limit = 100, actor?: DispatchActorContext) {
+    return this.optimizationJobs.list(
+      limit,
+      this.requireOrganizationId(actor),
+    );
   }
 
   async getOptimizerEvents(limit = 50): Promise<OptimizerEvent[]> {
@@ -965,6 +972,7 @@ export class DispatchService {
     warnings: string[];
     optimizerHealth: OptimizerHealth;
   }> {
+    const organizationId = this.requireOrganizationId(actor);
     const objectiveUsed = this.resolveOptimizationObjective(dto.objective);
     const startTime = Date.now();
     this.logger.log(`[ROUTE:CREATE_GLOBAL] Starting global route creation for ${dto.vehicleIds.length} vehicles and ${dto.jobIds.length} jobs`);
@@ -989,11 +997,6 @@ export class DispatchService {
     }
 
     // Step 3: Call global routing service
-    const organizationId =
-      actor?.organizationId ||
-      vehicles[0]?.organizationId ||
-      jobs[0]?.organizationId ||
-      null;
     await this.ensureOrganizationScope(organizationId, vehicles, jobs);
 
     const optimizationJob = this.optimizationJobs.create({
@@ -1135,11 +1138,12 @@ export class DispatchService {
     createRouteDto: CreateRouteDto,
     actor?: DispatchActorContext,
   ): Promise<Route> {
+    const organizationId = this.requireOrganizationId(actor);
     const objectiveUsed = this.resolveOptimizationObjective(createRouteDto.objective);
     const optimizationJob = this.optimizationJobs.create({
       kind: 'single-route',
       objective: objectiveUsed,
-      organizationId: actor?.organizationId || undefined,
+      organizationId,
       vehicleIds: [createRouteDto.vehicleId],
       jobIds: createRouteDto.jobIds,
       metrics: {
@@ -1187,11 +1191,6 @@ export class DispatchService {
       );
     }
     this.logger.log(`[ROUTE:CREATE:STEP2] All ${jobs.length} jobs validated successfully`);
-    const organizationId =
-      actor?.organizationId ||
-      vehicle.organizationId ||
-      jobs[0]?.organizationId ||
-      null;
     await this.ensureOrganizationScope(organizationId, [vehicle], jobs);
 
     // Step 3: Call routing service for optimization
@@ -1331,16 +1330,17 @@ export class DispatchService {
    * Find all routes
    */
   async findAll(status?: RouteStatus, actor?: DispatchActorContext): Promise<Route[]> {
+    const organizationId = this.requireOrganizationId(actor);
     if (status) {
       return this.routeRepository.find({
-        where: { status, ...(actor?.organizationId ? { organizationId: actor.organizationId } : {}) } as any,
+        where: { status, organizationId },
         relations: ['vehicle'],
         order: { createdAt: 'DESC' },
       });
     }
 
     return this.routeRepository.find({
-      where: actor?.organizationId ? ({ organizationId: actor.organizationId } as any) : undefined,
+      where: { organizationId },
       relations: ['vehicle'],
       order: { createdAt: 'DESC' },
     });
@@ -1350,8 +1350,9 @@ export class DispatchService {
    * Find one route by ID
    */
   async findOne(id: string, actor?: DispatchActorContext): Promise<Route> {
+    const organizationId = this.requireOrganizationId(actor);
     const route = await this.routeRepository.findOne({
-      where: { id, ...(actor?.organizationId ? { organizationId: actor.organizationId } : {}) } as any,
+      where: { id, organizationId },
       relations: ['vehicle'],
     });
 

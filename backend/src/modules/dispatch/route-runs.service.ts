@@ -615,6 +615,12 @@ export class RouteRunsService {
       return;
     }
 
+    const organizationId = route.organizationId || actor?.organizationId;
+    if (!organizationId) {
+      throw new BadRequestException(
+        'Notification delivery requires an organization context',
+      );
+    }
     const tracking = await this.issueTrackingLink(route, actor);
     const jobIds = options.jobId
       ? [options.jobId]
@@ -625,7 +631,7 @@ export class RouteRunsService {
     await Promise.all(
       jobIds.map((jobId) =>
         this.notificationsService!.notifyCustomer({
-          organizationId: route.organizationId || actor?.organizationId || null,
+          organizationId,
           routeId: route.id,
           routeRunStopId: options.routeRunStopId || null,
           jobId,
@@ -740,9 +746,15 @@ export class RouteRunsService {
           order: { createdAt: 'ASC' },
         })
       : [];
+    const organizationId = route.organizationId || actor?.organizationId;
+    if (!organizationId) {
+      throw new BadRequestException(
+        'Route detail requires an organization context',
+      );
+    }
     const notificationDeliveries: NotificationDelivery[] =
       this.notificationsService
-        ? await this.notificationsService.list(route.organizationId || actor?.organizationId, route.id)
+        ? await this.notificationsService.list(organizationId, route.id)
         : [];
     const messages = this.routeRunMessages
       ? await this.routeRunMessages.find({
