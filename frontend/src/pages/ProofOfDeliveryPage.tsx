@@ -19,6 +19,7 @@ import {
   TableHead,
   TableRow,
   Typography,
+  useMediaQuery,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import {
@@ -254,6 +255,7 @@ function DeliveryPhoto({ uri }: { uri?: string | null }) {
 }
 
 export default function ProofOfDeliveryPage() {
+  const isMobile = useMediaQuery('(max-width:599.95px)');
   const boardQuery = useDispatchBoardQuery();
   const driversQuery = useDriversQuery();
   const vehiclesQuery = useVehiclesQuery();
@@ -427,6 +429,69 @@ export default function ProofOfDeliveryPage() {
             </Stack>
           </Stack>
 
+          {isMobile ? (
+            <Stack data-testid="pod-mobile-list" spacing={1.1} sx={{ p: 1.2 }}>
+              {filteredRows.length === 0 ? (
+                <Stack spacing={0.75} sx={{ py: 3, textAlign: 'center' }}>
+                  <Typography variant="subtitle1">No proof records found</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Route runs are loaded, but no stops match the current POD filters.
+                  </Typography>
+                </Stack>
+              ) : null}
+              {filteredRows.map((row) => {
+                const selectedRow = selected?.id === row.id;
+                return (
+                  <Box
+                    key={row.id}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Select proof record ${row.id}`}
+                    onClick={() => setSelectedId(row.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        setSelectedId(row.id);
+                      }
+                    }}
+                    sx={{
+                      p: 1.45,
+                      borderRadius: '11px',
+                      border: '1px solid',
+                      borderColor: selectedRow ? alpha(trovanColors.copper[500], 0.58) : 'divider',
+                      bgcolor: selectedRow ? alpha(trovanColors.copper[500], 0.08) : 'background.paper',
+                    }}
+                  >
+                    <Stack direction="row" justifyContent="space-between" alignItems="flex-start" gap={1}>
+                      <Box>
+                        <Typography variant="body2" fontWeight={900}>{row.customerName}</Typography>
+                        <Typography variant="caption" color="text.secondary">{row.customerLocation}</Typography>
+                      </Box>
+                      <StatusPill label={row.status} tone={row.tone} />
+                    </Stack>
+                    <Box sx={{ mt: 1.15, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+                      <Box>
+                        <Typography variant="caption" color="text.secondary" fontWeight={800}>DELIVERED</Typography>
+                        <Typography variant="body2">{row.deliveredDate}</Typography>
+                        <Typography variant="caption" color="text.secondary">{row.deliveredTime}</Typography>
+                      </Box>
+                      <Box>
+                        <Typography variant="caption" color="text.secondary" fontWeight={800}>DRIVER</Typography>
+                        <Typography variant="body2">{row.driverName}</Typography>
+                        <Typography variant="caption" color="text.secondary">{row.driverMeta}</Typography>
+                      </Box>
+                    </Box>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1} sx={{ mt: 1.15 }}>
+                      <Typography variant="body2" sx={{ color: trovanColors.copper[400], fontWeight: 850 }}>
+                        {row.routeLabel} · Stop {row.stopNumber}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">{row.jobLabel}</Typography>
+                    </Stack>
+                  </Box>
+                );
+              })}
+            </Stack>
+          ) : (
           <TableContainer sx={{ maxHeight: 'calc(100vh - 250px)' }}>
             <Table stickyHeader size="small" aria-label="Proof of delivery queue">
               <TableHead>
@@ -504,6 +569,7 @@ export default function ProofOfDeliveryPage() {
               </TableBody>
             </Table>
           </TableContainer>
+          )}
 
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 1.6, py: 1.4, borderTop: '1px solid', borderColor: 'divider' }}>
             <Stack direction="row" spacing={0.75}>

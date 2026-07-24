@@ -35,6 +35,7 @@ import {
   TableRow,
   TextField,
   Typography,
+  useMediaQuery,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import LoadingState from '../components/ui/LoadingState';
@@ -152,6 +153,7 @@ function statusColor(label: string) {
 }
 
 export default function DriversPage() {
+  const isMobile = useMediaQuery('(max-width:599.95px)');
   const driversQuery = useDriversQuery();
   const vehiclesQuery = useVehiclesQuery();
   const createDriverMutation = useCreateDriverMutation();
@@ -283,15 +285,15 @@ export default function DriversPage() {
           </Box>
 
           <Panel>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 1.7, py: 1.35, borderBottom: '1px solid #e3e8ef' }}>
+            <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'stretch', sm: 'center' }} justifyContent="space-between" gap={1.2} sx={{ px: 1.7, py: 1.35, borderBottom: '1px solid #e3e8ef' }}>
               <Typography sx={{ fontSize: 16, fontWeight: 900 }}>Driver Roster</Typography>
-              <Stack direction="row" spacing={1}>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
                 <TextField
                   size="small"
                   placeholder="Search drivers..."
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  sx={{ width: 260, '& .MuiOutlinedInput-root': { height: 36, borderRadius: '9px' } }}
+                  sx={{ width: { xs: '100%', sm: 260 }, '& .MuiOutlinedInput-root': { height: 36, borderRadius: '9px' } }}
                   InputProps={{ startAdornment: <SearchOutlined sx={{ mr: 1, color: 'text.secondary', fontSize: 18 }} /> }}
                 />
                 <Button variant="outlined" size="small" onClick={openCreate}>Add Driver</Button>
@@ -299,7 +301,7 @@ export default function DriversPage() {
               </Stack>
             </Stack>
 
-            <Stack direction="row" spacing={1} sx={{ px: 1.7, py: 1, borderBottom: '1px solid #e3e8ef' }}>
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ px: 1.7, py: 1, borderBottom: '1px solid #e3e8ef' }}>
               {[
                 ['all', 'All Statuses'],
                 ['available', 'Available'],
@@ -319,6 +321,70 @@ export default function DriversPage() {
               ))}
             </Stack>
 
+            {isMobile ? (
+              <Stack data-testid="drivers-mobile-list" spacing={1.1} sx={{ p: 1.2 }}>
+                {visibleDrivers.map((driver, index) => {
+                  const vehicle = vehicles.find((item) => item.id === driver.assignedVehicleId);
+                  const label = statusLabel(driver, Boolean(vehicle));
+                  const readiness = driverReadinessScore(driver);
+                  const selected = driver.id === selectedDriver?.id;
+                  return (
+                    <Box
+                      key={driver.id}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Select driver ${`${driver.firstName || ''} ${driver.lastName || ''}`.trim() || driver.id}`}
+                      onClick={() => setSelectedDriverId(driver.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setSelectedDriverId(driver.id);
+                        }
+                      }}
+                      sx={{
+                        p: 1.5,
+                        borderRadius: '11px',
+                        border: '1px solid',
+                        borderColor: selected ? alpha(trovanColors.copper[500], 0.58) : 'divider',
+                        bgcolor: selected ? alpha(trovanColors.copper[500], 0.07) : 'background.paper',
+                      }}
+                    >
+                      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" gap={1}>
+                        <Stack direction="row" spacing={1.1} alignItems="center" sx={{ minWidth: 0 }}>
+                          <Avatar sx={{ width: 36, height: 36, bgcolor: index % 2 ? trovanColors.copper[500] : trovanColors.semantic.blue }}>
+                            {(driver.firstName || 'D').slice(0, 1)}
+                          </Avatar>
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography sx={{ fontSize: 14, fontWeight: 900 }}>{driver.firstName} {driver.lastName}</Typography>
+                            <Typography sx={{ fontSize: 11, color: 'text.secondary' }}>{driver.id}</Typography>
+                          </Box>
+                        </Stack>
+                        <Chip size="small" label={label} color={statusColor(label)} />
+                      </Stack>
+                      <Box sx={{ mt: 1.35, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.1 }}>
+                        <Box>
+                          <Typography sx={{ fontSize: 11, color: 'text.secondary', fontWeight: 800 }}>VEHICLE</Typography>
+                          <Typography sx={{ mt: 0.2, fontSize: 13, fontWeight: 750 }}>{vehicle ? `${vehicle.make || ''} ${vehicle.model || ''}`.trim() || vehicle.id : 'Unassigned'}</Typography>
+                        </Box>
+                        <Box>
+                          <Typography sx={{ fontSize: 11, color: 'text.secondary', fontWeight: 800 }}>SHIFT</Typography>
+                          <Typography sx={{ mt: 0.2, fontSize: 13, fontWeight: 750 }}>{String(driver.status || 'ACTIVE').replace(/_/g, ' ')}</Typography>
+                        </Box>
+                      </Box>
+                      <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 1.35 }}>
+                        <Box sx={{ flex: 1 }}>
+                          <Typography sx={{ mb: 0.5, fontSize: 11, color: 'text.secondary', fontWeight: 800 }}>READINESS {readiness}%</Typography>
+                          <LinearProgress variant="determinate" value={readiness} sx={{ height: 6, borderRadius: 99 }} />
+                        </Box>
+                        <Button size="small" variant="outlined" onClick={(event) => { event.stopPropagation(); openEdit(driver); }}>
+                          Edit
+                        </Button>
+                      </Stack>
+                    </Box>
+                  );
+                })}
+              </Stack>
+            ) : (
             <TableContainer>
               <Table size="small">
                 <TableHead>
@@ -381,6 +447,7 @@ export default function DriversPage() {
                 </TableBody>
               </Table>
             </TableContainer>
+            )}
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ px: 1.5, py: 1.15, borderTop: '1px solid #e3e8ef' }}>
               <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>Showing 1 to {visibleDrivers.length} of {drivers.length} drivers</Typography>
               <Stack direction="row" spacing={1}>{[1, 2, 3].map((page) => <Button key={page} variant={page === 1 ? 'outlined' : 'text'} size="small" sx={{ minWidth: 31 }} onClick={() => setNotice(page === 1 ? 'Already on the current driver page.' : 'Additional driver pages appear when the roster exceeds this page size.')}>{page}</Button>)}</Stack>

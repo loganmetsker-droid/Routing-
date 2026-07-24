@@ -39,6 +39,7 @@ import {
   Tabs,
   TextField,
   Typography,
+  useMediaQuery,
 } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
 import LoadingState from '../components/ui/LoadingState';
@@ -241,6 +242,7 @@ function CustomerBadge({ name, index }: { name: string; index: number }) {
 export default function CustomersPage() {
   const [searchParams] = useSearchParams();
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isDark = theme.palette.mode === 'dark';
   const softSurface = isDark ? alpha(trovanColors.dark.surfaceAlt, 0.72) : '#fff';
   const selectedSurface = alpha(trovanColors.copper[500], isDark ? 0.18 : 0.09);
@@ -274,6 +276,7 @@ export default function CustomersPage() {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [mobilePage, setMobilePage] = useState(1);
   const requestedCustomerId = searchParams.get('customerId') || '';
 
   useEffect(() => {
@@ -304,6 +307,21 @@ export default function CustomersPage() {
         .toLowerCase()
         .includes(normalized));
   }, [customers, search, selectedSegment]);
+  const mobilePageSize = 8;
+  const mobilePageCount = Math.max(1, Math.ceil(visibleCustomers.length / mobilePageSize));
+  const mobilePageStart = (mobilePage - 1) * mobilePageSize;
+  const mobileCustomers = visibleCustomers.slice(
+    mobilePageStart,
+    mobilePageStart + mobilePageSize,
+  );
+
+  useEffect(() => {
+    setMobilePage((current) => Math.min(current, mobilePageCount));
+  }, [mobilePageCount]);
+
+  useEffect(() => {
+    setMobilePage(1);
+  }, [search, selectedSegment]);
 
   const segmentLabels = useMemo(() => {
     const labels = Array.from(new Set(customers.map((customer) => customer.businessName || 'Uncategorized'))).sort();
@@ -484,6 +502,123 @@ export default function CustomersPage() {
               <Button variant="outlined" size="small" onClick={() => setNotice('All loaded customer records are active in this workspace.')}>Status ▾</Button>
               <Button variant="outlined" size="small" startIcon={<FilterListOutlined />} onClick={() => setNotice('Use search plus segment chips for the current customer data fields.')}>More Filters</Button>
             </Stack>
+            {isMobile ? (
+              <Stack data-testid="customers-mobile-list" spacing={1} sx={{ p: 1.1 }}>
+                {visibleCustomers.length === 0 ? (
+                  <Stack spacing={0.75} sx={{ py: 2 }}>
+                    <Typography variant="subtitle1">No customers match this view</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Adjust the search or choose a different segment.
+                    </Typography>
+                  </Stack>
+                ) : null}
+                {mobileCustomers.map((customer, index) => {
+                  const selected = customer.id === selectedCustomer?.id;
+                  const customerJobs = jobsByCustomer.get(customer.id) ?? [];
+                  const openJobs = customerJobs.filter((job) =>
+                    !['completed', 'delivered', 'cancelled'].includes(String(job.status || '').toLowerCase()),
+                  ).length;
+                  const completedJobs = customerJobs.filter((job) =>
+                    ['completed', 'delivered'].includes(String(job.status || '').toLowerCase()),
+                  ).length;
+                  const completionRate = customerJobs.length
+                    ? Math.round((completedJobs / customerJobs.length) * 100)
+                    : 0;
+                  return (
+                    <Box
+                      key={customer.id}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Review customer ${customer.name}`}
+                      onClick={() => setSelectedCustomerId(customer.id)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setSelectedCustomerId(customer.id);
+                        }
+                      }}
+                      sx={{
+                        p: 1.25,
+                        borderRadius: 1.4,
+                        border: '1px solid',
+                        borderColor: selected ? trovanColors.copper[500] : 'divider',
+                        bgcolor: selected ? selectedSurface : 'background.paper',
+                        boxShadow: selected ? `0 0 0 2px ${alpha(trovanColors.copper[500], 0.12)}` : 'none',
+                        cursor: 'pointer',
+                        '&:focus-visible': {
+                          outline: `3px solid ${alpha(trovanColors.copper[500], 0.28)}`,
+                          outlineOffset: 2,
+                        },
+                      }}
+                    >
+                      <Stack direction="row" spacing={1} alignItems="flex-start">
+                        <CustomerBadge name={customer.name} index={mobilePageStart + index} />
+                        <Box sx={{ minWidth: 0, flex: 1 }}>
+                          <Typography sx={{ fontWeight: 850, lineHeight: 1.25 }}>{customer.name}</Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {customer.id} • {customer.businessName || 'Uncategorized'}
+                          </Typography>
+                        </Box>
+                        <Box component="span" sx={{ color: trovanColors.semantic.success, fontWeight: 850, fontSize: 12 }}>
+                          Active
+                        </Box>
+                      </Stack>
+                      <Typography variant="body2" sx={{ mt: 1, fontWeight: 700, overflowWrap: 'anywhere' }}>
+                        {customer.defaultAddress || customer.address || 'No service address saved'}
+                      </Typography>
+                      <Box sx={{ mt: 1, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0.8 }}>
+                        {[
+                          ['Locations', customer.defaultAddress || customer.address ? 1 : 0],
+                          ['Open jobs', openJobs],
+                          ['Complete', `${completionRate}%`],
+                        ].map(([label, value]) => (
+                          <Box key={label} sx={{ p: 0.8, borderRadius: 1, bgcolor: softSurface, border: '1px solid', borderColor: 'divider' }}>
+                            <Typography variant="caption" color="text.secondary">{label}</Typography>
+                            <Typography sx={{ fontWeight: 850 }}>{value}</Typography>
+                          </Box>
+                        ))}
+                      </Box>
+                      <Stack direction="row" justifyContent="flex-end" sx={{ mt: 0.8 }}>
+                        <Button
+                          size="small"
+                          variant="text"
+                          startIcon={<EditOutlined />}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openEdit(customer);
+                          }}
+                        >
+                          Edit customer
+                        </Button>
+                      </Stack>
+                    </Box>
+                  );
+                })}
+                {visibleCustomers.length > mobilePageSize ? (
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pt: 0.5 }}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      disabled={mobilePage === 1}
+                      onClick={() => setMobilePage((current) => Math.max(1, current - 1))}
+                    >
+                      Previous
+                    </Button>
+                    <Typography variant="body2" color="text.secondary">
+                      Page {mobilePage} of {mobilePageCount}
+                    </Typography>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      disabled={mobilePage === mobilePageCount}
+                      onClick={() => setMobilePage((current) => Math.min(mobilePageCount, current + 1))}
+                    >
+                      Next
+                    </Button>
+                  </Stack>
+                ) : null}
+              </Stack>
+            ) : (
             <TableContainer>
               <Table size="small">
                 <TableHead>
@@ -576,11 +711,14 @@ export default function CustomersPage() {
                 </TableBody>
               </Table>
             </TableContainer>
+            )}
             <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 1.5, py: 1.15, borderTop: '1px solid', borderColor: 'divider' }}>
               <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
-                Showing 1 to {visibleCustomers.length} of {Math.max(customers.length, visibleCustomers.length)} customers
+                {isMobile
+                  ? `Showing ${visibleCustomers.length ? mobilePageStart + 1 : 0} to ${Math.min(mobilePageStart + mobilePageSize, visibleCustomers.length)} of ${visibleCustomers.length} matching customers`
+                  : `Showing 1 to ${visibleCustomers.length} of ${Math.max(customers.length, visibleCustomers.length)} customers`}
               </Typography>
-              <Stack direction="row" spacing={1} alignItems="center">
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ display: { xs: 'none', md: 'flex' } }}>
                 {[1, 2, 3].map((page) => (
                   <Button
                     key={page}

@@ -340,6 +340,16 @@ async function inspectRoute(routePath) {
       brokenImages,
       brokenLinks,
       buttonsWithoutNames,
+      layout: {
+        scrollHeight: document.documentElement.scrollHeight,
+        viewportHeight: window.innerHeight,
+        screenfuls: Number(
+          (document.documentElement.scrollHeight / window.innerHeight).toFixed(1),
+        ),
+        horizontalOverflow:
+          document.documentElement.scrollWidth >
+          document.documentElement.clientWidth + 2,
+      },
     };
   });
 
@@ -367,6 +377,7 @@ async function inspectRoute(routePath) {
 }
 
 async function captureResponsiveScreenshots(routePath) {
+  const captures = [];
   for (const spec of viewportSpecs.slice(1)) {
     const context = await browser.newContext({
       viewport: { width: spec.width, height: spec.height },
@@ -377,13 +388,25 @@ async function captureResponsiveScreenshots(routePath) {
     await installPageGuards(page, errors);
     await page.goto(absoluteUrl(routePath), { waitUntil: 'networkidle' }).catch(() => {});
     await loadLazyImages(page);
+    const layout = await page.evaluate(() => ({
+      scrollHeight: document.documentElement.scrollHeight,
+      viewportHeight: window.innerHeight,
+      screenfuls: Number(
+        (document.documentElement.scrollHeight / window.innerHeight).toFixed(1),
+      ),
+      horizontalOverflow:
+        document.documentElement.scrollWidth >
+        document.documentElement.clientWidth + 2,
+    }));
     await page.screenshot({ path: path.join(screenshotRoot, `${routeSlug(routePath)}-${spec.label}.png`), fullPage: true });
+    captures.push({ viewport: spec.label, ...layout, consoleErrors: errors });
     await context.close();
   }
+  return captures;
 }
 
 function writeMarkdownReport(results, crossSiteScreenshotUsage, crossSiteScreenshotFindings) {
-  const broken = results.filter((item) => item.status !== 200 || item.consoleErrors.length || item.brokenImages.length || item.brokenLinks.length || item.missingAlt.length || item.screenshotFindings.length);
+  const broken = results.filter((item) => item.status !== 200 || item.consoleErrors.length || item.brokenImages.length || item.brokenLinks.length || item.missingAlt.length || item.screenshotFindings.length || item.responsiveFindings.length);
   const lines = [
     '# TryTrovan Marketing Site Audit',
     '',
@@ -406,6 +429,7 @@ function writeMarkdownReport(results, crossSiteScreenshotUsage, crossSiteScreens
         item.brokenLinks.length ? `${item.brokenLinks.length} broken links` : '',
         item.buttonsWithoutNames ? `${item.buttonsWithoutNames} unnamed buttons` : '',
         item.screenshotFindings.length ? `${item.screenshotFindings.length} screenshot repetition findings` : '',
+        item.responsiveFindings.length ? `${item.responsiveFindings.length} responsive findings` : '',
       ].filter(Boolean).join(', ') || 'none';
       return `| ${item.route} | ${item.status ?? 'n/a'} | ${item.h1.replace(/\|/g, '/')} | ${item.primaryCta.replace(/\|/g, '/')} | ${item.imageCount} | ${findings} |`;
     }),
@@ -455,8 +479,23 @@ try {
 
   const results = [];
   for (const routePath of routes) {
-    results.push(await inspectRoute(routePath));
-    await captureResponsiveScreenshots(routePath);
+    const result = await inspectRoute(routePath);
+    result.responsive = await captureResponsiveScreenshots(routePath);
+    result.responsiveFindings = [];
+    const mobile = result.responsive.find((capture) => capture.viewport === 'mobile');
+    if (routePath === '/' && mobile?.screenfuls > 12) {
+      result.responsiveFindings.push({
+        type: 'homepage-mobile-content-density',
+        screenfuls: mobile.screenfuls,
+        maximum: 12,
+      });
+    }
+    if (result.layout.horizontalOverflow || result.responsive.some((capture) => capture.horizontalOverflow)) {
+      result.responsiveFindings.push({
+        type: 'horizontal-overflow',
+      });
+    }
+    results.push(result);
   }
 
   const { report: crossSiteScreenshotUsage, findings: crossSiteScreenshotFindings } = buildCrossSiteScreenshotUsage(results);
@@ -470,7 +509,7 @@ try {
   }, null, 2), 'utf8');
   writeMarkdownReport(results, crossSiteScreenshotUsage, crossSiteScreenshotFindings);
 
-  const failureCount = results.filter((item) => item.status !== 200 || item.consoleErrors.length || item.brokenImages.length || item.brokenLinks.length || item.missingAlt.length || item.screenshotFindings.length).length;
+  const failureCount = results.filter((item) => item.status !== 200 || item.consoleErrors.length || item.brokenImages.length || item.brokenLinks.length || item.missingAlt.length || item.screenshotFindings.length || item.responsiveFindings.length).length;
   console.log(`Marketing audit complete: ${results.length} routes, ${failureCount} routes with findings, ${crossSiteScreenshotFindings.length} cross-site screenshot findings.`);
   if (failureCount || crossSiteScreenshotFindings.length) {
     process.exitCode = 1;

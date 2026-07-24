@@ -876,7 +876,7 @@ test.describe('launch UI audit', () => {
     expect(sitemapBody).not.toContain('/dashboard');
   });
 
-  test('homepage defers the full product-tour download until the recording approaches the viewport', async ({ page }) => {
+  test('homepage excludes the full product-tour download and the dedicated demo loads it', async ({ page }) => {
     const productTourRequests: string[] = [];
     page.on('request', (request) => {
       if (request.url().endsWith('/marketing/trovan-product-tour.mp4')) {
@@ -888,6 +888,7 @@ test.describe('launch UI audit', () => {
     await page.waitForTimeout(700);
     expect(productTourRequests).toHaveLength(0);
 
+    await gotoReady(page, '/demo', { settle: false });
     const recording = page.getByLabel(/Trovan product tour recording from dashboard through customer tracking/i);
     await recording.scrollIntoViewIfNeeded();
     await expect.poll(() => productTourRequests.length).toBeGreaterThan(0);

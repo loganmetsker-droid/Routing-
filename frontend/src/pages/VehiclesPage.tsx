@@ -19,6 +19,7 @@ import {
   TableRow,
   TextField,
   Typography,
+  useMediaQuery,
 } from '@mui/material';
 import { PageHeader } from '../components/PageHeader';
 import { SurfacePanel } from '../components/SurfacePanel';
@@ -87,6 +88,7 @@ const emptyForm = {
 };
 
 export default function VehiclesPage() {
+  const isMobile = useMediaQuery('(max-width:599.95px)');
   const vehiclesQuery = useVehiclesQuery();
   const createVehicleMutation = useCreateVehicleMutation();
   const updateVehicleMutation = useUpdateVehicleMutation();
@@ -221,6 +223,36 @@ export default function VehiclesPage() {
           <Typography variant="h5">Fleet Directory</Typography>
           <Typography variant="body2" color="text.secondary">Vehicle type, capacity, status, and operational attributes from saved fleet records.</Typography>
         </Box>
+        {isMobile ? (
+          <Stack data-testid="vehicles-mobile-list" spacing={1.1} sx={{ p: 1.25 }}>
+            {visibleVehicles.map((vehicle) => {
+              const key = normalizeVehicleType(vehicle.vehicleType || vehicle.type);
+              const meta = VEHICLE_META[key];
+              return (
+                <Box key={vehicle.id} sx={{ p: 1.5, borderRadius: '11px', border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
+                  <Stack direction="row" justifyContent="space-between" alignItems="flex-start" gap={1}>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 900 }}>{vehicle.make} {vehicle.model}</Typography>
+                      <Typography variant="caption" color="text.secondary">{vehicle.licensePlate || 'Plate pending'} • {vehicle.year || 'Year pending'}</Typography>
+                    </Box>
+                    <Chip size="small" label={vehicle.status || 'AVAILABLE'} color={String(vehicle.status).toUpperCase() === 'AVAILABLE' ? 'success' : 'default'} />
+                  </Stack>
+                  <Typography sx={{ mt: 1.1, color: 'text.secondary', fontSize: 12, fontWeight: 850, textTransform: 'uppercase' }}>{meta.label}</Typography>
+                  <Box sx={{ mt: 0.7, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+                    <Typography variant="body2">Weight: {vehicle.weightCapacity ? `${vehicle.weightCapacity} lb` : meta.weight}</Typography>
+                    <Typography variant="body2">Volume: {vehicle.volumeCapacity ? `${vehicle.volumeCapacity} cu ft` : meta.volume}</Typography>
+                  </Box>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1} sx={{ mt: 1.2 }}>
+                    <Stack direction="row" spacing={0.7} flexWrap="wrap" useFlexGap>
+                      {meta.extras.map((extra) => <Chip key={extra} size="small" variant="outlined" label={extra} />)}
+                    </Stack>
+                    <Button size="small" variant="outlined" onClick={() => openEdit(vehicle)}>Edit</Button>
+                  </Stack>
+                </Box>
+              );
+            })}
+          </Stack>
+        ) : (
         <TableContainer>
           <Table>
             <TableHead>
@@ -265,6 +297,7 @@ export default function VehiclesPage() {
             </TableBody>
           </Table>
         </TableContainer>
+        )}
       </SurfacePanel>
 
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="md">

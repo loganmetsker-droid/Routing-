@@ -11,6 +11,12 @@ const baseUrl = (
 const outDir = path.join(process.cwd(), 'audit');
 const rawPath = path.join(outDir, 'product-ui-audit.json');
 const mdPath = path.join(outDir, 'product-ui-audit.md');
+const screenshotDir = path.join(outDir, 'product-screenshots');
+const apiBaseUrl = (
+  process.env.PRODUCT_UI_API_BASE_URL ||
+  process.env.AUDIT_API_BASE_URL ||
+  baseUrl
+).replace(/\/+$/, '');
 
 const routes = [
   ['Dashboard', '/dashboard'],
@@ -66,13 +72,61 @@ const previewUser = {
 
 function viewportOverflow() {
   const doc = document.documentElement;
+  const wideTables = Array.from(document.querySelectorAll('table'))
+    .map((table) => {
+      const container = table.parentElement;
+      if (!container) return null;
+      const containerStyle = getComputedStyle(container);
+      return {
+        tableWidth: table.scrollWidth,
+        containerWidth: container.clientWidth,
+        overflowX: containerStyle.overflowX,
+        widerThanContainer: table.scrollWidth > container.clientWidth + 2,
+      };
+    })
+    .filter(Boolean);
+  const clippedControls = Array.from(
+    document.querySelectorAll('button, a[href], input, select, textarea'),
+  )
+    .map((element) => {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      const label =
+        element.getAttribute('aria-label') ||
+        element.textContent?.trim().replace(/\s+/g, ' ') ||
+        element.getAttribute('name') ||
+        element.tagName.toLowerCase();
+      return {
+        label: label.slice(0, 80),
+        visible:
+          rect.width > 0 &&
+          rect.height > 0 &&
+          rect.right > 0 &&
+          rect.left < doc.clientWidth &&
+          rect.bottom > 0 &&
+          rect.top < window.innerHeight &&
+          style.display !== 'none' &&
+          style.visibility !== 'hidden',
+        clipped: rect.left < -2 || rect.right > doc.clientWidth + 2,
+      };
+    })
+    .filter((item) => item.visible && item.clipped)
+    .slice(0, 12);
   return {
     scrollWidth: doc.scrollWidth,
     clientWidth: doc.clientWidth,
     scrollHeight: doc.scrollHeight,
     clientHeight: doc.clientHeight,
     horizontalOverflow: doc.scrollWidth > doc.clientWidth + 2,
+    wideTables,
+    clippedControls,
   };
+}
+
+function routeSlug(routePath) {
+  return routePath === '/'
+    ? 'home'
+    : routePath.replace(/^\/+/, '').replace(/[^\w]+/g, '-').replace(/-$/, '');
 }
 
 async function setupPage(browser, viewport) {
@@ -177,10 +231,12 @@ async function safeClickProbe(browser, routePath) {
 
 async function run() {
   mkdirSync(outDir, { recursive: true });
+  mkdirSync(screenshotDir, { recursive: true });
   const browser = await chromium.launch({ headless: true });
   const results = {
     generatedAt: new Date().toISOString(),
     baseUrl,
+    apiBaseUrl,
     routes: [],
     buttonProbes: {},
     api: {},
@@ -209,6 +265,10 @@ async function run() {
         apiResponses,
         staleCopyHits: [],
         buttonCount: 0,
+        screenshotPath: path.join(
+          screenshotDir,
+          `${routeSlug(routePath)}-${viewport.name}.png`,
+        ),
       };
       try {
         await page.goto(`${baseUrl}${routePath}`, {
@@ -236,6 +296,10 @@ async function run() {
           ),
         );
         routeResult.buttonCount = (await visibleButtons(page)).length;
+        await page.screenshot({
+          path: routeResult.screenshotPath,
+          fullPage: false,
+        });
       } catch (error) {
         routeResult.error = error instanceof Error ? error.message : String(error);
       }
@@ -249,16 +313,15 @@ async function run() {
   }
 
   const apiChecks = [
-    '/api/auth/config',
+    '/health',
     '/api/jobs',
     '/api/customers',
     '/api/drivers',
     '/api/vehicles',
-    '/api/route-runs',
-    '/api/tracking/readiness',
+    '/api/dispatch/optimizer/health',
   ];
   for (const apiPath of apiChecks) {
-    const response = await fetch(`${baseUrl}${apiPath}`, {
+    const response = await fetch(`${apiBaseUrl}${apiPath}`, {
       headers: { Authorization: 'Bearer preview-auth-bypass' },
     }).catch((error) => ({ error }));
     if ('error' in response) {
@@ -282,22 +345,32 @@ async function run() {
       route.consoleErrors.length ||
       route.pageErrors.length ||
       route.badResponses.length ||
-      route.overflow?.horizontalOverflow,
+      route.overflow?.horizontalOverflow ||
+      route.overflow?.clippedControls?.length,
+  );
+  const layoutWarnings = results.routes.filter(
+    (route) => route.overflow?.wideTables?.some((table) => table.widerThanContainer),
   );
   const failedClicks = Object.entries(results.buttonProbes).flatMap(([routePath, probes]) =>
     probes
       .filter((probe) => probe.result === 'failed')
       .map((probe) => ({ routePath, label: probe.label, reason: probe.reason })),
   );
+  const failedApiChecks = Object.entries(results.api)
+    .filter(([, result]) => result.error || !result.ok)
+    .map(([apiPath, result]) => ({ apiPath, ...result }));
   const markdown = [
     '# Product UI Audit',
     '',
     `Base URL: ${baseUrl}`,
+    `API base URL: ${apiBaseUrl}`,
     `Generated: ${results.generatedAt}`,
     '',
     `Route checks: ${results.routes.length}`,
     `Routes needing attention: ${failedRoutes.length}`,
+    `Layout warnings: ${layoutWarnings.length}`,
     `Safe button probe failures: ${failedClicks.length}`,
+    `API probe failures: ${failedApiChecks.length}`,
     '',
     '## Routes Needing Attention',
     '',
@@ -313,9 +386,23 @@ async function run() {
                 route.pageErrors.length ? `${route.pageErrors.length} page errors` : null,
                 route.badResponses.length ? `${route.badResponses.length} bad responses` : null,
                 route.overflow?.horizontalOverflow ? 'horizontal overflow' : null,
+                route.overflow?.clippedControls?.length
+                  ? `${route.overflow.clippedControls.length} visible clipped controls`
+                  : null,
               ]
                 .filter(Boolean)
                 .join('; '),
+          )
+          .join('\n')
+      : '- None',
+    '',
+    '## Layout Warnings',
+    '',
+    layoutWarnings.length
+      ? layoutWarnings
+          .map((route) =>
+            `- ${route.name} ${route.path} (${route.viewport}): ` +
+            `${route.overflow.wideTables.filter((table) => table.widerThanContainer).length} table(s) wider than their container`,
           )
           .join('\n')
       : '- None',
@@ -326,7 +413,18 @@ async function run() {
       ? failedClicks.map((probe) => `- ${probe.routePath}: ${probe.label} - ${probe.reason}`).join('\n')
       : '- None',
     '',
+    '## API Probe Failures',
+    '',
+    failedApiChecks.length
+      ? failedApiChecks
+          .map((result) =>
+            `- ${result.apiPath}: ${result.error || `HTTP ${result.status}`}`,
+          )
+          .join('\n')
+      : '- None',
+    '',
     `Raw JSON: ${rawPath}`,
+    `Screenshots: ${screenshotDir}`,
     '',
   ].join('\n');
   writeFileSync(mdPath, markdown);
@@ -335,7 +433,14 @@ async function run() {
     mdPath,
     routeChecks: results.routes.length,
     buttonProbeRoutes: Object.keys(results.buttonProbes).length,
+    failedRoutes: failedRoutes.length,
+    layoutWarnings: layoutWarnings.length,
+    failedClicks: failedClicks.length,
+    failedApiChecks: failedApiChecks.length,
   }, null, 2));
+  if (failedRoutes.length || failedClicks.length || failedApiChecks.length) {
+    process.exitCode = 1;
+  }
 }
 
 run().catch((error) => {

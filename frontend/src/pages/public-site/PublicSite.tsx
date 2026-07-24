@@ -2891,22 +2891,26 @@ function RoiCalculator() {
 function PricingSection({
   onOpenRequest,
   compact = false,
+  showCalculator = true,
   titleComponent,
 }: {
   onOpenRequest: (requestType: RequestType) => void;
   compact?: boolean;
+  showCalculator?: boolean;
   titleComponent?: ElementType;
 }) {
   return (
-    <Box id="pricing" sx={{ py: { xs: 7, md: compact ? 7 : 9 }, bgcolor: trovanColors.stone[25], color: trovanColors.black[950] }}>
+    <Box id="pricing" sx={{ py: { xs: compact ? 6 : 7, md: compact ? 7 : 9 }, bgcolor: trovanColors.stone[25], color: trovanColors.black[950] }}>
       <Box sx={{ width: sectionWidth, mx: 'auto' }}>
         <SectionHeader
           kicker="Pricing"
-          title="Pricing built around route volume and operational impact"
-          body="Start with the cost of the route day: planning time, miles, failed deliveries, dispatcher follow-up, and proof gaps. Then pick the rollout package that fits."
+          title={compact ? 'Assisted-pilot pricing' : 'Pricing built around route volume and operational impact'}
+          body={compact
+            ? 'Launch at $399/month, Scale at $899/month, or a custom Enterprise rollout. Activation follows onboarding approval.'
+            : 'Start with the cost of the route day: planning time, miles, failed deliveries, dispatcher follow-up, and proof gaps. Then pick the rollout package that fits.'}
           titleComponent={titleComponent}
         />
-        <RoiCalculator />
+        {showCalculator ? <RoiCalculator /> : null}
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2 }}>
           {pricingPlans.map((plan) => (
             <Box key={plan.name} sx={{ p: 2.4, borderRadius: 1.6, border: `1px solid ${plan.featured ? alpha(trovanColors.copper[500], 0.48) : alpha(trovanColors.black[900], 0.13)}`, bgcolor: plan.featured ? alpha(trovanColors.copper[50], 0.8) : '#FFFFFF', boxShadow: plan.featured ? '0 24px 64px rgba(169,99,33,0.16)' : 'none' }}>
@@ -2920,16 +2924,20 @@ function PricingSection({
                 ) : null}
               </Stack>
               <Typography sx={{ color: alpha(trovanColors.black[900], 0.66), minHeight: 48 }}>{plan.body}</Typography>
-              <Divider sx={{ my: 2 }} />
-              <Stack spacing={1}>
-                {plan.features.map((feature) => (
-                  <Stack key={feature} direction="row" spacing={1} alignItems="center">
-                    <CheckRoundedIcon sx={{ color: trovanColors.semantic.success, fontSize: 19 }} />
-                    <Typography>{feature}</Typography>
+              {!compact ? (
+                <>
+                  <Divider sx={{ my: 2 }} />
+                  <Stack spacing={1}>
+                    {plan.features.map((feature) => (
+                      <Stack key={feature} direction="row" spacing={1} alignItems="center">
+                        <CheckRoundedIcon sx={{ color: trovanColors.semantic.success, fontSize: 19 }} />
+                        <Typography>{feature}</Typography>
+                      </Stack>
+                    ))}
                   </Stack>
-                ))}
-              </Stack>
-              <Button fullWidth variant={plan.featured ? 'contained' : 'outlined'} onClick={() => onOpenRequest(plan.requestType)} sx={{ mt: 2.4, color: plan.featured ? '#FFFFFF' : trovanColors.copper[700], borderColor: alpha(trovanColors.copper[500], 0.5) }}>
+                </>
+              ) : null}
+              <Button fullWidth variant={plan.featured ? 'contained' : 'outlined'} onClick={() => onOpenRequest(plan.requestType)} sx={{ mt: compact ? 1.5 : 2.4, color: plan.featured ? '#FFFFFF' : trovanColors.copper[700], borderColor: alpha(trovanColors.copper[500], 0.5) }}>
                 {plan.cta}
               </Button>
             </Box>
@@ -3470,9 +3478,9 @@ function HomePage({ onOpenRequest }: { onOpenRequest: (requestType: RequestType,
             title="One flow from plan to proof"
             body="Plan the work, dispatch the routes, guide drivers in the mobile app, keep customers updated, and review proof without rebuilding the day across separate tools."
           />
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(5, 1fr)' }, gap: 1.4 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: 'repeat(5, 1fr)' }, gap: 1.4 }}>
             {workflowPages.map((item) => (
-              <Box key={item.path} component={RouterLink} to={item.path} sx={{ minHeight: 188, p: 2, borderRadius: 1, bgcolor: '#FFFFFF', border: `1px solid ${alpha(trovanColors.black[900], 0.1)}`, color: trovanColors.black[950], textDecoration: 'none', display: 'grid', alignContent: 'space-between', transition: 'transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease', '&:hover': { transform: 'translateY(-3px)', borderColor: alpha(trovanColors.copper[500], 0.5), boxShadow: '0 18px 40px rgba(31,26,23,0.08)' } }}>
+              <Box key={item.path} component={RouterLink} to={item.path} sx={{ minHeight: { xs: 166, md: 188 }, p: { xs: 1.5, sm: 2 }, borderRadius: 1, bgcolor: '#FFFFFF', border: `1px solid ${alpha(trovanColors.black[900], 0.1)}`, color: trovanColors.black[950], textDecoration: 'none', display: 'grid', alignContent: 'space-between', transition: 'transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease', '&:hover': { transform: 'translateY(-3px)', borderColor: alpha(trovanColors.copper[500], 0.5), boxShadow: '0 18px 40px rgba(31,26,23,0.08)' } }}>
                 <Box>
                   <item.icon sx={{ color: trovanColors.copper[700] }} />
                   <Typography variant="h6" component="h3" sx={{ mt: 1.2, fontWeight: 900 }}>{item.navLabel}</Typography>
@@ -3487,10 +3495,8 @@ function HomePage({ onOpenRequest }: { onOpenRequest: (requestType: RequestType,
         </Box>
       </Box>
 
-      <RouteMotionVideo />
-      <ScenarioPreview />
       <SecurityStrip />
-      <PricingSection onOpenRequest={(requestType) => onOpenRequest(requestType)} compact />
+      <PricingSection onOpenRequest={(requestType) => onOpenRequest(requestType)} compact showCalculator={false} />
       <FinalCta onOpenRequest={(requestType) => onOpenRequest(requestType)} />
     </>
   );
@@ -3498,7 +3504,7 @@ function HomePage({ onOpenRequest }: { onOpenRequest: (requestType: RequestType,
 
 function SecurityStrip() {
   return (
-    <Box sx={{ bgcolor: trovanColors.black[950], color: '#FFF8ED', py: { xs: 6, md: 7 }, position: 'relative', overflow: 'hidden' }}>
+    <Box sx={{ bgcolor: trovanColors.black[950], color: '#FFF8ED', py: { xs: 5, md: 7 }, position: 'relative', overflow: 'hidden' }}>
       <TopoShellBackground active tone="black" quiet />
       <Box sx={{ position: 'relative', zIndex: 1, width: sectionWidth, mx: 'auto', display: 'grid', gridTemplateColumns: { xs: '1fr', md: '0.75fr 1.25fr' }, gap: 3 }}>
         <Box>
@@ -3510,11 +3516,11 @@ function SecurityStrip() {
             Trovan keeps route-day access, operational records, and proof workflows controlled with role-based permissions, audit trails, data handling practices, and review-ready operational logs.
           </Typography>
         </Box>
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.4 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: '1fr 1fr' }, gap: 1.2 }}>
           {securityControls.map((item) => (
-            <Box key={item.title} sx={{ p: 2, borderRadius: 1.4, border: `1px solid ${alpha('#FFF8ED', 0.12)}`, bgcolor: alpha('#FFF8ED', 0.045) }}>
-              <Typography variant="h6" component="h3" sx={{ color: '#FFF8ED', fontWeight: 850 }}>{item.title}</Typography>
-              <Typography sx={{ mt: 0.7, color: alpha('#FFF8ED', 0.68) }}>{item.body}</Typography>
+            <Box key={item.title} sx={{ p: { xs: 1.35, sm: 2 }, borderRadius: 1.4, border: `1px solid ${alpha('#FFF8ED', 0.12)}`, bgcolor: alpha('#FFF8ED', 0.045) }}>
+              <Typography variant="h6" component="h3" sx={{ color: '#FFF8ED', fontWeight: 850, fontSize: { xs: 15, sm: 20 } }}>{item.title}</Typography>
+              <Typography sx={{ mt: 0.7, color: alpha('#FFF8ED', 0.68), fontSize: { xs: 12.5, sm: 16 }, lineHeight: 1.45 }}>{item.body}</Typography>
             </Box>
           ))}
         </Box>
@@ -3530,7 +3536,7 @@ function ScenarioPreview() {
         <SectionHeader
           kicker="Buyer clarity"
           title="What buyers usually want to confirm before rollout."
-          body="Keep this section simple: what the team sees before the route leaves, what dispatch sees during the day, and what proof exists after completion."
+          body="What the team sees before the route leaves, what dispatch sees during the day, and what proof exists after completion."
         />
         <Box sx={{ p: 2.6, borderRadius: 1.6, bgcolor: '#FFFFFF', border: `1px solid ${alpha(trovanColors.black[900], 0.1)}` }}>
           <Stack spacing={1.2}>

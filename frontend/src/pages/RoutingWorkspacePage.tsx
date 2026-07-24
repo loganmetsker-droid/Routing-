@@ -2967,9 +2967,9 @@ export default function RoutingWorkspacePage() {
       }}
     >
       <Stack
-        direction="row"
+        direction={{ xs: 'column', md: 'row' }}
         justifyContent="space-between"
-        alignItems="center"
+        alignItems={{ xs: 'stretch', md: 'center' }}
         gap={1}
         sx={{ px: 1.35, py: 0.95, borderBottom: '1px solid', borderColor: 'divider' }}
       >
@@ -2978,36 +2978,54 @@ export default function RoutingWorkspacePage() {
             Route map
           </Typography>
         </Box>
-        <Stack direction="row" spacing={0.8} alignItems="center" sx={{ flex: '0 0 auto' }}>
+        <Stack direction="row" spacing={0.8} alignItems="center" sx={{ flex: '0 0 auto', width: { xs: '100%', md: 'auto' } }}>
           <Typography
             data-testid="routing-map-mode-state"
             variant="caption"
             color="text.secondary"
-            sx={{ fontWeight: 850, whiteSpace: 'nowrap' }}
+            sx={{ display: { xs: 'none', md: 'block' }, fontWeight: 850, whiteSpace: 'nowrap' }}
           >
             {`Map view: ${mapDisplayModeLabel[mapDisplayMode]}`}
           </Typography>
-          <ToggleButtonGroup
-            size="small"
-            exclusive
-            value={mapDisplayMode}
-            onChange={(_, value) => value && setMapDisplayMode(value)}
-            aria-label="Map display mode"
-            data-testid="routing-map-mode-toggle"
-            sx={{
-              '& .MuiToggleButton-root': {
-                textTransform: 'none',
-                fontWeight: 800,
-                px: 0.8,
-                py: 0.45,
-              },
-            }}
-          >
-            <ToggleButton value="selected">Selected route</ToggleButton>
-            <ToggleButton value="all">All routes</ToggleButton>
-            <ToggleButton value="density">Route density</ToggleButton>
-            <ToggleButton value="exceptions">Exceptions only</ToggleButton>
-          </ToggleButtonGroup>
+          {isDesktopWorkspace ? (
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              value={mapDisplayMode}
+              onChange={(_, value) => value && setMapDisplayMode(value)}
+              aria-label="Map display mode"
+              data-testid="routing-map-mode-toggle"
+              sx={{
+                '& .MuiToggleButton-root': {
+                  textTransform: 'none',
+                  fontWeight: 800,
+                  px: 0.8,
+                  py: 0.45,
+                },
+              }}
+            >
+              <ToggleButton value="selected">Selected route</ToggleButton>
+              <ToggleButton value="all">All routes</ToggleButton>
+              <ToggleButton value="density">Route density</ToggleButton>
+              <ToggleButton value="exceptions">Exceptions only</ToggleButton>
+            </ToggleButtonGroup>
+          ) : (
+            <TextField
+              select
+              size="small"
+              label="Map view"
+              value={mapDisplayMode}
+              onChange={(event) => setMapDisplayMode(event.target.value as MapDisplayMode)}
+              inputProps={{ 'aria-label': 'Map display mode' }}
+              data-testid="routing-map-mode-select"
+              sx={{ flex: 1, minWidth: 0 }}
+            >
+              <MenuItem value="selected">Selected route</MenuItem>
+              <MenuItem value="all">All routes</MenuItem>
+              <MenuItem value="density">Route density</MenuItem>
+              <MenuItem value="exceptions">Exceptions only</MenuItem>
+            </TextField>
+          )}
           <StatusPill
             label={selectedGroup ? selectedGroup.label : 'No lane selected'}
             tone={selectedGroup ? 'accent' : 'default'}

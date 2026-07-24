@@ -22,6 +22,7 @@ import {
   TableRow,
   TextField,
   Typography,
+  useMediaQuery,
 } from '@mui/material';
 import {
   Add,
@@ -490,6 +491,7 @@ const parseImportFile = async (file: File): Promise<ImportCandidate[]> => {
 
 export default function JobsPageEnhancedV2() {
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const navigate = useNavigate();
   const location = useLocation();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -527,6 +529,7 @@ export default function JobsPageEnhancedV2() {
   const [bannerMessage, setBannerMessage] = useState<string | null>(null);
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
   const [formData, setFormData] = useState<JobFormData>(() => createDefaultFormData());
+  const [mobilePage, setMobilePage] = useState(1);
 
   const updateUrl = (updates: Record<string, string | null | undefined>, options: { replace?: boolean } = {}) => {
     const nextParams = new URLSearchParams(location.search);
@@ -626,15 +629,31 @@ export default function JobsPageEnhancedV2() {
       });
   }, [activeFilter, assignmentFilter, jobs, priorityFilter, searchTerm, serviceTypeFilter, statusFilter, timeWindowFilter, todayKey]);
 
+  const mobilePageSize = 10;
+  const mobilePageCount = Math.max(1, Math.ceil(visibleJobs.length / mobilePageSize));
+  const mobilePageStart = (mobilePage - 1) * mobilePageSize;
+  const mobileJobs = visibleJobs.slice(mobilePageStart, mobilePageStart + mobilePageSize);
+
+  useEffect(() => {
+    setMobilePage((current) => Math.min(current, mobilePageCount));
+  }, [mobilePageCount]);
+
+  useEffect(() => {
+    setMobilePage(1);
+  }, [activeFilter, assignmentFilter, priorityFilter, searchTerm, serviceTypeFilter, statusFilter, timeWindowFilter]);
+
   useEffect(() => {
     setSelectedJobIds((current) => current.filter((id) => visibleJobs.some((job) => job.id === id)));
   }, [visibleJobs]);
 
   const selectedJobs = visibleJobs.filter((job) => job.id && selectedJobIds.includes(job.id));
-  const selectableJobIds = visibleJobs.map((job) => job.id).filter(Boolean) as string[];
-  const allVisibleJobsSelected = selectableJobIds.length > 0 && selectedJobIds.length === selectableJobIds.length;
+  const jobsOnCurrentSurface = isMobile ? mobileJobs : visibleJobs;
+  const selectableJobIds = jobsOnCurrentSurface.map((job) => job.id).filter(Boolean) as string[];
+  const selectedVisibleJobCount = selectableJobIds.filter((id) => selectedJobIds.includes(id)).length;
+  const allVisibleJobsSelected =
+    selectableJobIds.length > 0 && selectedVisibleJobCount === selectableJobIds.length;
   const activeView = savedViews.find((view) => view.id === activeViewId) || null;
-  const focusedJob = selectedJobs[0] || visibleJobs[0] || null;
+  const focusedJob = selectedJobs[0] || jobsOnCurrentSurface[0] || visibleJobs[0] || null;
   const routeGroups = plannerQuery.data?.groups ?? [];
   const routeStops = plannerQuery.data?.stops ?? [];
   const drivers = driversQuery.data ?? [];
@@ -1039,7 +1058,7 @@ export default function JobsPageEnhancedV2() {
               <Checkbox
                 size="small"
                 checked={allVisibleJobsSelected}
-                indeterminate={selectedJobIds.length > 0 && selectedJobIds.length < selectableJobIds.length}
+                indeterminate={selectedVisibleJobCount > 0 && !allVisibleJobsSelected}
                 onChange={() => {
                   if (allVisibleJobsSelected) {
                     setSelectedJobIds([]);
@@ -1063,7 +1082,9 @@ export default function JobsPageEnhancedV2() {
                 {selectedJobIds.length || 0} selected
               </Button>
               <Typography variant="body2" color="text.secondary">
-                Showing 1 - {visibleJobs.length} of {queueCounts.all} jobs
+                {isMobile
+                  ? `Showing ${visibleJobs.length ? mobilePageStart + 1 : 0} - ${Math.min(mobilePageStart + mobilePageSize, visibleJobs.length)} of ${visibleJobs.length} matching jobs`
+                  : `Showing 1 - ${visibleJobs.length} of ${queueCounts.all} jobs`}
               </Typography>
             </Stack>
             <Stack direction="row" spacing={1} alignItems="center">
@@ -1080,8 +1101,140 @@ export default function JobsPageEnhancedV2() {
             </Stack>
           </Stack>
 
-          <TableContainer sx={{ maxHeight: { xs: 'none', lg: 'calc(100vh - 320px)' }, overflowX: 'hidden' }}>
-          <Table stickyHeader size="small" sx={{ width: '100%', tableLayout: 'fixed' }}>
+          {isMobile ? (
+            <Stack data-testid="jobs-mobile-list" spacing={1} sx={{ p: 1.1 }}>
+              {visibleJobs.length === 0 ? (
+                <Stack spacing={0.75} sx={{ py: 2 }}>
+                  <Typography variant="subtitle1">No jobs match this queue view</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Adjust search, filter chips, or apply a different saved view.
+                  </Typography>
+                </Stack>
+              ) : null}
+              {mobileJobs.map((job) => {
+                const route = getJobRoute(job, routeGroups, routeStops);
+                const selected = Boolean(job.id && selectedJobIds.includes(job.id));
+                return (
+                  <Box
+                    key={job.id}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Review job ${job.id || 'job'}`}
+                    onClick={() => job.id && setSelectedJobIds([job.id])}
+                    onKeyDown={(event) => {
+                      if ((event.key === 'Enter' || event.key === ' ') && job.id) {
+                        event.preventDefault();
+                        setSelectedJobIds([job.id]);
+                      }
+                    }}
+                    sx={{
+                      p: 1.25,
+                      borderRadius: 1.4,
+                      border: '1px solid',
+                      borderColor: selected ? trovanColors.copper[500] : 'divider',
+                      bgcolor: selected ? alpha(trovanColors.copper[500], 0.08) : 'background.paper',
+                      boxShadow: selected ? `0 0 0 2px ${alpha(trovanColors.copper[500], 0.12)}` : 'none',
+                      cursor: 'pointer',
+                      '&:focus-visible': {
+                        outline: `3px solid ${alpha(trovanColors.copper[500], 0.28)}`,
+                        outlineOffset: 2,
+                      },
+                    }}
+                  >
+                    <Stack direction="row" spacing={1} alignItems="flex-start">
+                      <Checkbox
+                        size="small"
+                        aria-label={`Select ${job.id || 'job'}`}
+                        checked={selected}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={(event) => {
+                          event.stopPropagation();
+                          if (!job.id) return;
+                          setSelectedJobIds((current) => (
+                            current.includes(job.id as string)
+                              ? current.filter((id) => id !== job.id)
+                              : [...current, job.id as string]
+                          ));
+                        }}
+                        sx={{ mt: -0.5, ml: -0.5 }}
+                      />
+                      <Box sx={{ minWidth: 0, flex: 1 }}>
+                        <Typography sx={{ fontWeight: 850, lineHeight: 1.25 }}>
+                          {job.customerName || 'Unassigned customer'}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {job.id?.slice(0, 12) || 'Job ID pending'}
+                        </Typography>
+                      </Box>
+                      <StatusPill
+                        label={String(job.status || 'pending').replace(/_/g, ' ')}
+                        tone={jobStatusTone(job.status)}
+                      />
+                    </Stack>
+                    <Typography variant="body2" sx={{ mt: 1, fontWeight: 700, overflowWrap: 'anywhere' }}>
+                      {job.deliveryAddress || 'Delivery address pending'}
+                    </Typography>
+                    <Stack direction="row" justifyContent="space-between" spacing={1} sx={{ mt: 0.9 }}>
+                      <Box>
+                        <Typography variant="caption" color="text.secondary">Window</Typography>
+                        <Typography variant="body2">{formatJobWindow(job)}</Typography>
+                      </Box>
+                      <Box sx={{ textAlign: 'right' }}>
+                        <Typography variant="caption" color="text.secondary">Route</Typography>
+                        <Typography variant="body2">{route?.label || route?.id || 'Unassigned'}</Typography>
+                      </Box>
+                    </Stack>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 1 }}>
+                      <StatusPill label={job.priority || 'normal'} tone={priorityTone(job.priority)} />
+                      <Button
+                        size="small"
+                        variant="text"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (job.id) setSelectedJobIds([job.id]);
+                        }}
+                      >
+                        View details
+                      </Button>
+                    </Stack>
+                  </Box>
+                );
+              })}
+              {visibleJobs.length > mobilePageSize ? (
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ pt: 0.5 }}>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    disabled={mobilePage === 1}
+                    onClick={() => setMobilePage((current) => Math.max(1, current - 1))}
+                  >
+                    Previous
+                  </Button>
+                  <Typography variant="body2" color="text.secondary">
+                    Page {mobilePage} of {mobilePageCount}
+                  </Typography>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    disabled={mobilePage === mobilePageCount}
+                    onClick={() => setMobilePage((current) => Math.min(mobilePageCount, current + 1))}
+                  >
+                    Next
+                  </Button>
+                </Stack>
+              ) : null}
+            </Stack>
+          ) : (
+          <TableContainer sx={{ maxHeight: { lg: 'calc(100vh - 320px)' }, overflowX: 'hidden' }}>
+          <Table
+            stickyHeader
+            size="small"
+            sx={{
+              width: '100%',
+              tableLayout: 'fixed',
+              '& .MuiTableCell-root': { px: 1 },
+            }}
+          >
             <TableHead
               sx={(theme) => ({
                 '& .MuiTableCell-head': {
@@ -1102,7 +1255,7 @@ export default function JobsPageEnhancedV2() {
                 <TableCell padding="checkbox" sx={{ width: 38 }} />
                 <TableCell sx={{ width: 82, whiteSpace: 'nowrap' }}>Job ID</TableCell>
                 <TableCell sx={{ width: 132, whiteSpace: 'nowrap' }}>Customer</TableCell>
-                <TableCell sx={{ width: { xs: 160, xl: 190 }, whiteSpace: 'nowrap' }}>Address</TableCell>
+                <TableCell sx={{ width: { xs: 135, xl: 190 }, whiteSpace: 'nowrap' }}>Address</TableCell>
                 <TableCell sx={{ width: 118, whiteSpace: 'nowrap' }}>Time Window</TableCell>
                 <TableCell sx={{ width: 76, whiteSpace: 'nowrap' }}>Priority</TableCell>
                 <TableCell sx={{ width: 84, whiteSpace: 'nowrap' }}>Status</TableCell>
@@ -1250,6 +1403,7 @@ export default function JobsPageEnhancedV2() {
             </TableBody>
           </Table>
         </TableContainer>
+          )}
         </SurfacePanel>
 
         <SurfacePanel data-testid="jobs-inspector" variant="command" sx={{ p: 0, minWidth: 0, overflow: 'hidden' }}>
