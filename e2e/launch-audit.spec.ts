@@ -301,7 +301,6 @@ async function clickAuditableControls(page: Page, routePath: string) {
   const resolveControl = async (
     item: (typeof inventory)[number],
   ): Promise<(typeof inventory)[number] | undefined> => {
-    const refreshedInventory = await collectInteractiveInventory(page);
     const exactIdentity = (candidate: (typeof inventory)[number]) =>
       candidate.tag === item.tag &&
       candidate.role === item.role &&
@@ -311,32 +310,44 @@ async function clickAuditableControls(page: Page, routePath: string) {
     const originalOccurrence = inventory
       .slice(0, inventory.indexOf(item))
       .filter(exactIdentity).length;
-    const exactMatch = refreshedInventory
-      .filter(exactIdentity)
-      .at(originalOccurrence);
-    if (exactMatch) return exactMatch;
+    const deadline = Date.now() + 5_000;
+    let structuralFallback: (typeof inventory)[number] | undefined;
 
-    // Some live route cards include a clock value in their accessible label.
-    // Prefer the structurally identical control nearest its original DOM index
-    // when only dynamic text changed between inventory and interaction.
-    const structuralMatches = refreshedInventory
-      .filter(
-        (candidate) =>
-          candidate.tag === item.tag &&
-          candidate.role === item.role &&
-          candidate.type === item.type &&
-          candidate.href === item.href,
-      )
-      .sort(
-        (left, right) =>
-          Math.abs(left.index - item.index) - Math.abs(right.index - item.index),
-      );
-    const selectedStateMatches = structuralMatches.filter(
-      (candidate) => candidate.selected === item.selected,
-    );
-    if (selectedStateMatches[0]) return selectedStateMatches[0];
-    if (structuralMatches[0]) return structuralMatches[0];
-    return undefined;
+    do {
+      const refreshedInventory = await collectInteractiveInventory(page);
+      const exactMatch = refreshedInventory
+        .filter(exactIdentity)
+        .at(originalOccurrence);
+      if (exactMatch) return exactMatch;
+
+      // Some live route cards include a clock value in their accessible label.
+      // Prefer the structurally identical control nearest its original DOM
+      // index only after the restored route has rebuilt the complete control
+      // inventory. On slower CI runners, #root becomes visible before the
+      // authenticated shell and route data have finished mounting.
+      const structuralMatches = refreshedInventory
+        .filter(
+          (candidate) =>
+            candidate.tag === item.tag &&
+            candidate.role === item.role &&
+            candidate.type === item.type &&
+            candidate.href === item.href,
+        )
+        .sort(
+          (left, right) =>
+            Math.abs(left.index - item.index) - Math.abs(right.index - item.index),
+        );
+      structuralFallback =
+        structuralMatches.find(
+          (candidate) => candidate.selected === item.selected,
+        ) || structuralMatches[0];
+      if (refreshedInventory.length >= inventory.length && structuralFallback) {
+        return structuralFallback;
+      }
+      await page.waitForTimeout(100);
+    } while (Date.now() < deadline);
+
+    return structuralFallback;
   };
 
   for (const item of inventory) {
