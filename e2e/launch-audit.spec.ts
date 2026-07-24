@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page, type Response } from '@playwright/test';
+import { preparePreviewSession } from './helpers/preview-session';
 
 const auditRoot =
   process.env.LAUNCH_AUDIT_DIR ||
@@ -248,7 +249,6 @@ async function gotoReady(
     window.localStorage.removeItem('trovan-preview-state-v2');
     window.localStorage.removeItem('trovan.shell.sidebarCollapsed');
     window.localStorage.removeItem('trovan.theme.mode');
-    window.localStorage.removeItem('trovan-preview-auth-user');
   });
   if (authToken) {
     await page.addInitScript((token) => {
@@ -461,6 +461,13 @@ async function clickAuditableControls(page: Page, routePath: string) {
 
 test.describe('launch UI audit', () => {
   test.describe.configure({ timeout: 900_000 });
+  test.beforeEach(async ({ page }) => {
+    await preparePreviewSession(page, {
+      role: 'dispatcher',
+      authToken,
+    });
+  });
+
   test('public launch route audit flow is interactive', async ({ page }) => {
     await gotoReady(page, '/');
 
