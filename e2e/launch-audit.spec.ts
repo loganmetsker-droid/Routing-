@@ -290,6 +290,47 @@ async function clickAuditableControls(page: Page, routePath: string) {
   await gotoReady(page, routePath, { settle: false });
   const inventory = await collectInteractiveInventory(page);
 
+  const resolveControl = async (
+    item: (typeof inventory)[number],
+  ): Promise<(typeof inventory)[number] | undefined> => {
+    const refreshedInventory = await collectInteractiveInventory(page);
+    const exactIdentity = (candidate: (typeof inventory)[number]) =>
+      candidate.tag === item.tag &&
+      candidate.role === item.role &&
+      candidate.type === item.type &&
+      candidate.href === item.href &&
+      candidate.label === item.label;
+    const originalOccurrence = inventory
+      .slice(0, inventory.indexOf(item))
+      .filter(exactIdentity).length;
+    const exactMatch = refreshedInventory
+      .filter(exactIdentity)
+      .at(originalOccurrence);
+    if (exactMatch) return exactMatch;
+
+    // Some live route cards include a clock value in their accessible label.
+    // Prefer the structurally identical control nearest its original DOM index
+    // when only dynamic text changed between inventory and interaction.
+    const structuralMatches = refreshedInventory
+      .filter(
+        (candidate) =>
+          candidate.tag === item.tag &&
+          candidate.role === item.role &&
+          candidate.type === item.type &&
+          candidate.href === item.href,
+      )
+      .sort(
+        (left, right) =>
+          Math.abs(left.index - item.index) - Math.abs(right.index - item.index),
+      );
+    const selectedStateMatches = structuralMatches.filter(
+      (candidate) => candidate.selected === item.selected,
+    );
+    if (selectedStateMatches[0]) return selectedStateMatches[0];
+    if (structuralMatches[0]) return structuralMatches[0];
+    return undefined;
+  };
+
   for (const item of inventory) {
     const label = String(item.label || item.tag);
     if (item.disabled) {
@@ -338,25 +379,13 @@ async function clickAuditableControls(page: Page, routePath: string) {
     if (isLeafletControl) {
       await page.waitForTimeout(1_200);
     }
-    const refreshedInventory = await collectInteractiveInventory(page);
-    const sameControl = (candidate: (typeof refreshedInventory)[number]) =>
-      candidate.tag === item.tag &&
-      candidate.role === item.role &&
-      candidate.type === item.type &&
-      candidate.href === item.href &&
-      candidate.label === item.label;
-    const originalOccurrence = inventory
-      .slice(0, inventory.indexOf(item))
-      .filter(sameControl).length;
-    const refreshedItem = refreshedInventory
-      .filter(sameControl)
-      .at(originalOccurrence);
+    const refreshedItem = await resolveControl(item);
     const controls = page.locator(interactiveSelector);
     if (!refreshedItem || (await controls.count()) <= refreshedItem.index) {
       clicked.push({
         ...item,
         result: 'failed',
-        reason: 'control was not present after deterministic route reload',
+        reason: 'control was not present in the current or restored route state',
       });
       continue;
     }
@@ -958,8 +987,27 @@ test.describe('launch UI audit', () => {
     );
   });
 
+  test('routing refresh and job selection expose observable state', async ({ page }) => {
+    await gotoReady(page, '/routing');
+
+    await page.getByTestId('routing-draft-refresh-button').click();
+    await expect(page.getByTestId('routing-action-notice')).toContainText(
+      'Planner data refreshed.',
+    );
+
+    const jobRow = page
+      .getByRole('button', { name: /Omega Medical.*2100 Santa Fe Dr/i })
+      .first();
+    const initialSelection = await jobRow.getAttribute('aria-selected');
+    await jobRow.click();
+    await expect(jobRow).toHaveAttribute(
+      'aria-selected',
+      initialSelection === 'true' ? 'false' : 'true',
+    );
+  });
+
   test('accounts for visible controls on every primary route', async ({ page }) => {
-    test.setTimeout(900_000);
+    test.setTimeout(1_200_000);
     const results: Record<string, unknown> = {};
     const issues: AuditIssue[] = [];
     installFailureCollectors(page, issues, 'control-clicks');

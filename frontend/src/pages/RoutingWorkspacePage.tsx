@@ -1811,6 +1811,11 @@ export default function RoutingWorkspacePage() {
         throw new Error(draftActionFailureMessage);
       }
       await plannerQuery.refetch();
+      setRoutingActionNotice(
+        hasDurableDraftSave
+          ? 'Route draft saved.'
+          : 'Planner data refreshed.',
+      );
     } catch (err: unknown) {
       setError(getErrorMessage(err, draftActionFailureMessage));
     } finally {
@@ -2302,6 +2307,7 @@ export default function RoutingWorkspacePage() {
               <ListItemButton
                 key={job.id}
                 selected={selected}
+                aria-selected={selected}
                 onClick={() =>
                   setSelectedJobIds((current) =>
                     current.includes(job.id)
@@ -2728,6 +2734,8 @@ export default function RoutingWorkspacePage() {
                       : [...current, job.id],
                   )
                 }
+                selected={selected}
+                aria-selected={selected}
                 data-testid={`routing-job-row-${index}`}
                 sx={{ gap: 1, py: 0.85, px: 1.1 }}
               >
