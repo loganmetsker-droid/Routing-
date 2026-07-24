@@ -484,17 +484,14 @@ test.describe('launch UI audit', () => {
 
     await expect(page.getByRole('heading', { name: /Plan the route\. Run the day\. Prove every stop/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /^Book demo$/i }).first()).toBeVisible();
-    await expect(page.getByRole('link', { name: /^Watch a Demo$/i }).first()).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Get a free route audit$/i }).first()).toBeVisible();
     await expect(page.getByLabel(/Route audit preview/i)).toHaveCount(0);
     await expect(page.getByText(/Start with one real route day/i)).toHaveCount(0);
     await expect(page.getByText(/Ready routes|Needs review|Live ETAs/i)).toHaveCount(0);
 
-    await page.getByRole('button', { name: /^Book demo$/i }).first().click();
+    await page.getByRole('button', { name: /^Get a free route audit$/i }).first().click();
     await expect(page.getByRole('dialog', { name: /Talk to Trovan/i })).toBeVisible();
     const requestType = page.getByRole('combobox', { name: /Request type/i });
-    await expect(requestType).toContainText('Book demo');
-    await requestType.click();
-    await page.getByRole('option', { name: 'Route audit' }).click();
     await expect(requestType).toContainText('Route audit');
     await page.getByRole('combobox', { name: /Fleet size/i }).click();
     await expect(page.getByRole('option', { name: '300+ / Custom' })).toBeVisible();

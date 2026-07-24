@@ -35,7 +35,7 @@ Trovan is not being prepared for self-serve general availability. Launch is $399
 
 - [x] Reproducible `npm ci` and workspace production build.
 - [x] Frontend lint with zero warnings.
-- [x] Backend: 282 tests; frontend: 55 tests; routing service: 13 tests.
+- [x] Backend: 283 tests; frontend: 55 tests; routing service: 13 tests.
 - [x] Driver workflow: three consecutive isolated runs, two tests per run.
 - [x] Complete Chromium Playwright suite: 150 passed, one hosted-only persistence test skipped, zero failures.
 - [x] Production dependency audit: zero critical/high findings. Two accepted React Router 6 moderate advisories remain documented for the pilot.
@@ -47,7 +47,7 @@ Trovan is not being prepared for self-serve general availability. Launch is $399
 - backend health/runtime/readiness, optimizer, queue, and protected metrics
 - WorkOS login/logout/expiry/revocation
 - two-organization tenant denial and fresh-session persistence
-- lead persistence, deduplication, throttle, operator readback, Postmark delivery, and status update
+- lead persistence, transaction-serialized deduplication, throttle, operator readback, Postmark delivery, and status update
 - proof upload/download and R2 persistence
 - API-key lifecycle, webhook signature/replay/SSRF, Socket.IO authorization, and public tracking
 - assisted Stripe invoice/subscription, failed payment, period-end cancellation, and refund procedure without self-serve

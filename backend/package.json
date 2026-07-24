@@ -4,8 +4,8 @@
   "description": "NestJS Backend API for Routing & Dispatching",
   "scripts": {
     "dev": "node scripts/dev-server.mjs",
-    "dev:builder": "nest build --watch",
-    "build": "nest build",
+    "dev:builder": "tsc -p tsconfig.build.json --watch",
+    "build": "tsc -p tsconfig.build.json",
     "start": "node dist/backend/src/main.js",
     "start:prod": "node dist/backend/src/main.js",
     "migrate": "node run-migration.js",
@@ -65,8 +65,6 @@
     "util": "^0.12.5"
   },
   "devDependencies": {
-    "@nestjs/cli": "^11.0.21",
-    "@nestjs/schematics": "^11.1.0",
     "@nestjs/testing": "^11.1.28",
     "@types/bcrypt": "^5.0.2",
     "@types/express": "^4.17.21",

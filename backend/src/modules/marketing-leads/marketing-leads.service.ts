@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThanOrEqual, MoreThan, Repository } from 'typeorm';
+import { DataSource, LessThanOrEqual, MoreThan, Repository } from 'typeorm';
 import { CreateMarketingLeadDto } from './dto/create-marketing-lead.dto';
 import {
   MarketingLead,
@@ -27,6 +27,7 @@ export class MarketingLeadsService {
     @InjectRepository(MarketingLead)
     private readonly leads: Repository<MarketingLead>,
     private readonly config: ConfigService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(dto: CreateMarketingLeadDto) {
@@ -34,45 +35,57 @@ export class MarketingLeadsService {
       return { id: 'accepted', duplicate: false, notificationStatus: 'skipped' as const };
     }
 
-    const existing = await this.leads.findOne({
-      where: {
-        workEmail: dto.workEmail,
-        createdAt: MoreThan(new Date(Date.now() - DUPLICATE_WINDOW_MS)),
-      },
-      order: { createdAt: 'DESC' },
+    const persisted = await this.dataSource.transaction(async (manager) => {
+      await manager.query(
+        'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+        [`marketing-lead:${dto.workEmail}`],
+      );
+      const leads = manager.getRepository(MarketingLead);
+      const existing = await leads.findOne({
+        where: {
+          workEmail: dto.workEmail,
+          createdAt: MoreThan(new Date(Date.now() - DUPLICATE_WINDOW_MS)),
+        },
+        order: { createdAt: 'DESC' },
+      });
+      if (existing) {
+        return { lead: existing, duplicate: true };
+      }
+
+      const lead = await leads.save(
+        leads.create({
+          name: dto.name,
+          workEmail: dto.workEmail,
+          company: dto.company,
+          fleetSize: dto.fleetSize,
+          exactFleetSize: dto.exactFleetSize ?? null,
+          requestType: dto.requestType,
+          notes: dto.notes || null,
+          source: dto.source || 'trytrovan.com',
+          pagePath: dto.pagePath || null,
+          status: 'new',
+          notificationStatus: 'pending',
+          notificationAttempts: 0,
+          lastNotificationAttemptAt: null,
+          nextNotificationAttemptAt: null,
+        }),
+      );
+      return { lead, duplicate: false };
     });
-    if (existing) {
+
+    if (persisted.duplicate) {
       return {
-        id: existing.id,
+        id: persisted.lead.id,
         duplicate: true,
-        notificationStatus: existing.notificationStatus,
+        notificationStatus: persisted.lead.notificationStatus,
       };
     }
 
-    const lead = await this.leads.save(
-      this.leads.create({
-        name: dto.name,
-        workEmail: dto.workEmail,
-        company: dto.company,
-        fleetSize: dto.fleetSize,
-        exactFleetSize: dto.exactFleetSize ?? null,
-        requestType: dto.requestType,
-        notes: dto.notes || null,
-        source: dto.source || 'trytrovan.com',
-        pagePath: dto.pagePath || null,
-        status: 'new',
-        notificationStatus: 'pending',
-        notificationAttempts: 0,
-        lastNotificationAttemptAt: null,
-        nextNotificationAttemptAt: null,
-      }),
-    );
-
-    await this.deliverOperatorNotification(lead);
+    await this.deliverOperatorNotification(persisted.lead);
     return {
-      id: lead.id,
+      id: persisted.lead.id,
       duplicate: false,
-      notificationStatus: lead.notificationStatus,
+      notificationStatus: persisted.lead.notificationStatus,
     };
   }
 

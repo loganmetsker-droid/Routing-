@@ -1,5 +1,5 @@
 import type { ConfigService } from '@nestjs/config';
-import type { Repository } from 'typeorm';
+import type { DataSource, Repository } from 'typeorm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CreateMarketingLeadDto } from './dto/create-marketing-lead.dto';
 import type { MarketingLead } from './entities/marketing-lead.entity';
@@ -38,7 +38,22 @@ function createHarness(
   const config = {
     get: vi.fn((key: string) => configValues[key]),
   } as unknown as ConfigService;
-  return { service: new MarketingLeadsService(repository, config), repository, save };
+  const query = vi.fn(async () => []);
+  const dataSource = {
+    transaction: vi.fn(async (work) =>
+      work({
+        query,
+        getRepository: () => repository,
+      }),
+    ),
+  } as unknown as DataSource;
+  return {
+    service: new MarketingLeadsService(repository, config, dataSource),
+    repository,
+    save,
+    query,
+    dataSource,
+  };
 }
 
 describe('MarketingLeadsService', () => {
@@ -84,13 +99,28 @@ describe('MarketingLeadsService', () => {
     });
   });
 
+  it('serializes the dedupe lookup with a transaction-scoped email lock', async () => {
+    const { service, repository, query } = createHarness();
+
+    await service.create(validLead);
+
+    expect(query).toHaveBeenCalledWith(
+      'SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      ['marketing-lead:jordan@example.com'],
+    );
+    expect(query.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(repository.findOne).mock.invocationCallOrder[0],
+    );
+  });
+
   it('quietly accepts honeypot submissions without writing them', async () => {
-    const { service, repository, save } = createHarness();
+    const { service, repository, save, dataSource } = createHarness();
 
     const result = await service.create({ ...validLead, website: 'https://spam.example' });
 
     expect(repository.findOne).not.toHaveBeenCalled();
     expect(save).not.toHaveBeenCalled();
+    expect(dataSource.transaction).not.toHaveBeenCalled();
     expect(result).toEqual({
       id: 'accepted',
       duplicate: false,

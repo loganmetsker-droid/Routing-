@@ -3445,8 +3445,13 @@ function HomePage({ onOpenRequest }: { onOpenRequest: (requestType: RequestType,
               <Button variant="contained" size="large" onClick={() => onOpenRequest('Book demo')}>
                 {BOOK_DEMO_CTA}
               </Button>
-              <Button component={RouterLink} to="/demo" variant="outlined" size="large" endIcon={<ArrowForwardRoundedIcon />}>
-                {PRODUCT_WALKTHROUGH_CTA}
+              <Button
+                variant="outlined"
+                size="large"
+                endIcon={<ArrowForwardRoundedIcon />}
+                onClick={() => onOpenRequest('Route audit')}
+              >
+                {ROUTE_AUDIT_CTA}
               </Button>
             </Stack>
             <Typography sx={{ mt: 1.6, color: alpha('#FFF8ED', 0.66), fontSize: 15.5, lineHeight: 1.45, maxWidth: 620 }}>
