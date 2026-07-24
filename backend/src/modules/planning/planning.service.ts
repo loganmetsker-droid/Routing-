@@ -27,6 +27,7 @@ import { Vehicle } from '../vehicles/entities/vehicle.entity';
 import { Route, RouteStatus, RouteWorkflowStatus } from '../dispatch/entities/route.entity';
 import { RouteAssignment } from '../dispatch/entities/route-assignment.entity';
 import { RouteRunStop } from '../dispatch/entities/route-run-stop.entity';
+import { DispatchService } from '../dispatch/dispatch.service';
 import { Depot } from '../depots/entities/depot.entity';
 import { RoutePlan, type RoutePlanPublishDecision } from './entities/route-plan.entity';
 import { RoutePlanGroup } from './entities/route-plan-group.entity';
@@ -152,6 +153,7 @@ export class PlanningService {
     private readonly routeRunStops: Repository<RouteRunStop>,
     @InjectRepository(RouteAssignment)
     private readonly routeAssignments: Repository<RouteAssignment>,
+    private readonly dispatchService: DispatchService,
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
     private readonly audit: AuditService,
@@ -1386,6 +1388,15 @@ export class PlanningService {
         readiness,
       });
     }
+    const recoverableRoutes = (await this.routes.find({
+      where: { organizationId: routePlan.organizationId },
+      order: { createdAt: 'ASC' },
+    })).filter((route) => route.routeData?.routePlanId === routePlanId);
+    const recoverableRouteByGroup = new Map(
+      recoverableRoutes
+        .filter((route) => typeof route.routeData?.routePlanGroupId === 'string')
+        .map((route) => [String(route.routeData?.routePlanGroupId), route]),
+    );
     const byGroup = new Map<string, RoutePlanStop[]>();
     for (const stop of stops) {
       const bucket = byGroup.get(stop.routePlanGroupId) || [];
@@ -1400,12 +1411,13 @@ export class PlanningService {
       }
       const groupStops = (byGroup.get(group.id) || []).sort((a, b) => a.stopSequence - b.stopSequence);
       const jobIds = Array.from(new Set(groupStops.map((stop) => stop.jobId)));
-      const route = await this.routes.save(this.routes.create({
-        organizationId: routePlan.organizationId,
+      const recoverableRoute = recoverableRouteByGroup.get(group.id);
+      const routeValues = {
         vehicleId: group.vehicleId,
         driverId: group.driverId || null,
         jobIds,
         routeData: {
+          ...(recoverableRoute?.routeData || {}),
           routePlanId,
           routePlanGroupId: group.id,
           publishedAt: new Date().toISOString(),
@@ -1419,9 +1431,22 @@ export class PlanningService {
           : new Date(`${routePlan.serviceDate}T00:00:00.000Z`),
         jobCount: jobIds.length,
         notes: `Published from route plan ${routePlanId}`,
-      }));
+      };
+      const route = await this.routes.save(
+        recoverableRoute
+          ? Object.assign(recoverableRoute, routeValues)
+          : this.routes.create({
+              organizationId: routePlan.organizationId,
+              ...routeValues,
+            }),
+      );
       createdRoutes.push(route);
+      await this.dispatchService.ensurePublishedRouteVersionSnapshot(
+        route.id,
+        actor,
+      );
 
+      await this.routeRunStops.delete({ routeId: route.id });
       await this.routeRunStops.save(groupStops.map((stop) => this.routeRunStops.create({
         organizationId: routePlan.organizationId,
         routeId: route.id,
@@ -1434,6 +1459,7 @@ export class PlanningService {
         notes: null,
       })));
 
+      await this.routeAssignments.delete({ routeId: route.id });
       await this.routeAssignments.save(this.routeAssignments.create({
         organizationId: routePlan.organizationId,
         routeId: route.id,

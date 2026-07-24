@@ -120,3 +120,16 @@ Stable startup and backend logs must expose the following non-secret summary:
 - storage mode
 
 No secrets, passwords, or tokens should be written to logs.
+
+## Scheduled production monitor
+
+The GitHub `Trovan Production Monitor` workflow requires:
+
+| GitHub setting | Kind | Purpose |
+| --- | --- | --- |
+| `PRODUCTION_FRONTEND_URL` | Actions variable | Public Cloudflare origin checked by the scheduled smoke. |
+| `PRODUCTION_BACKEND_URL` | Actions variable | Render API origin checked by the scheduled smoke. |
+| `PRODUCTION_AUTH_TOKEN` | Actions secret | Revocable operator smoke identity used only for `/api/auth/me`. |
+| `PRODUCTION_METRICS_TOKEN` | Actions secret | Dedicated read token used only for `/api/metrics`. |
+
+Rotate the two smoke tokens independently of customer sessions. A missing or expired token must fail the scheduled monitor instead of silently degrading it to public-only checks.

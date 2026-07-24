@@ -4,6 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Route } from '../dispatch/entities/route.entity';
 import { RouteAssignment } from '../dispatch/entities/route-assignment.entity';
 import { RouteRunStop } from '../dispatch/entities/route-run-stop.entity';
+import { DispatchModule } from '../dispatch/dispatch.module';
 import { Driver } from '../drivers/entities/driver.entity';
 import { Job } from '../jobs/entities/job.entity';
 import { JobStop } from '../jobs/entities/job-stop.entity';
@@ -18,6 +19,7 @@ import { PlanningService } from './planning.service';
 @Module({
   imports: [
     HttpModule,
+    DispatchModule,
     TypeOrmModule.forFeature([
       RoutePlan,
       RoutePlanGroup,

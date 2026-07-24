@@ -11,14 +11,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Verify frontend, API, auth config, and sitemap
+      - name: Verify frontend, API, authenticated session, metrics, and sitemap
         env:
           PRODUCTION_FRONTEND_URL: ${{ vars.PRODUCTION_FRONTEND_URL }}
           PRODUCTION_BACKEND_URL: ${{ vars.PRODUCTION_BACKEND_URL }}
+          PRODUCTION_AUTH_TOKEN: ${{ secrets.PRODUCTION_AUTH_TOKEN }}
+          PRODUCTION_METRICS_TOKEN: ${{ secrets.PRODUCTION_METRICS_TOKEN }}
         run: |
+          test -n "$PRODUCTION_AUTH_TOKEN"
+          test -n "$PRODUCTION_METRICS_TOKEN"
           curl -fsS --max-time 20 "$PRODUCTION_FRONTEND_URL" > /dev/null
           curl -fsS --max-time 20 "$PRODUCTION_BACKEND_URL/health/readiness" > /dev/null
           curl -fsS --max-time 20 "$PRODUCTION_BACKEND_URL/api/auth/config" > /dev/null
+          curl -fsS --max-time 20 \
+            -H "Authorization: Bearer $PRODUCTION_AUTH_TOKEN" \
+            "$PRODUCTION_BACKEND_URL/api/auth/me" > /dev/null
+          curl -fsS --max-time 20 \
+            -H "x-metrics-token: $PRODUCTION_METRICS_TOKEN" \
+            "$PRODUCTION_BACKEND_URL/api/metrics" > /dev/null
           content_type="$(
             curl -fsSI --max-time 20 "$PRODUCTION_FRONTEND_URL/sitemap.xml" |
               tr -d '\r' |

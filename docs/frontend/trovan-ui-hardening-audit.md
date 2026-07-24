@@ -2,6 +2,8 @@
 
 Date: 2026-03-25
 
+Status refresh: 2026-07-24. The current cross-route evidence and acceptance record lives in [`docs/ui-ux-improvement-report.md`](../ui-ux-improvement-report.md).
+
 ## Build blockers fixed
 
 - `frontend/src/pages/Dashboard.tsx`
@@ -43,4 +45,4 @@ Date: 2026-03-25
 - `DispatchUnifiedV2.tsx` still contains a number of page-local panel styles, but many are already token-backed and not currently breaking the shell
 - `TrackingEnhanced.tsx` still has some local map and alert spacing rules; they are not currently causing build or obvious layout issues
 - `JobsPageEnhancedV2.tsx` still contains several page-local surface styles, but they are internally consistent and not the worst source of token drift compared with the audited data tables and vehicle cards
-- the frontend build still emits a large chunk warning from Vite; that is a bundling optimization task, not a UI hardening blocker
+- route-level and vendor chunking now completes without Vite's large-chunk warning; the largest route chunk is the routing workspace at about 59 kB gzip

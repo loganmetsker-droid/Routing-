@@ -21,6 +21,9 @@ Trovan is not being prepared for self-serve general availability. Launch is $399
 - Telemetry migrations normalize legacy camelCase fuel/engine columns to the runtime schema so the Prometheus fuel-efficiency refresh succeeds on both upgraded and empty databases.
 - CI runs build, lint, backend/frontend/routing tests, empty-database migrations, dependency audit, and Playwright.
 - Promotion uses an immutable SHA, protected staging/production environments, Cloudflare frontend deployment, Render service deployment, and captured rollback versions.
+- A successful promotion records an explicit GitHub deployment for the exact release SHA; production refuses any SHA without a successful staging deployment record.
+- The scheduled production monitor verifies readiness plus a revocable authenticated session and protected metrics access.
+- Publishing a route plan now creates the canonical published route-version snapshot before dispatch handoff, preserving the audit and rollback chain.
 - Sitemap, robots, canonical, Open Graph, and Twitter metadata ship from the same frontend build; the sitemap has an explicit XML content type.
 - SMS is globally disabled unless explicitly enabled after the pilot.
 - React Router 6 remains for this pilot. Controlled navigation and the moderate advisory are accepted only for authenticated, application-controlled destinations; migrate to Router 7 before self-serve GA.
@@ -31,9 +34,9 @@ Trovan is not being prepared for self-serve general availability. Launch is $399
 
 - [x] Reproducible `npm ci` and workspace production build.
 - [x] Frontend lint with zero warnings.
-- [x] Backend: 242 tests; frontend: 52 tests; routing service: 13 tests.
+- [x] Backend: 266 tests; frontend: 53 tests; routing service: 13 tests.
 - [x] Driver workflow: three consecutive isolated runs, two tests per run.
-- [x] Complete Chromium Playwright suite: 78 passed, one hosted-only persistence test skipped, zero failures.
+- [x] Complete Chromium Playwright suite: 147 passed, one hosted-only persistence test skipped, zero failures.
 - [x] Production dependency audit: zero critical/high findings. Two accepted React Router 6 moderate advisories remain documented for the pilot.
 - [x] Database migrations applied successfully.
 - [x] Release scope contains only application code, migrations, configuration, production assets, tests, and runbooks; generated QA/audit artifacts are excluded.
@@ -64,7 +67,6 @@ These items do not change the assisted-pilot commercial boundary, but they shoul
 
 - Move from React Router 6 to Router 7 and remove the two accepted moderate advisories.
 - Replace the remaining local-only route exception decisions, route-version display, draft save, and autosave status with durable backend transactions before exposing those controls in production.
-- Split the large public-site and routing-workspace bundles further to improve first-load and route-change performance.
 - Replace the stale external Vercel repository checks with Cloudflare/Render checks so a retired frontend provider cannot leave unrelated red statuses on release PRs.
 - Add production analytics funnels only after consent, retention, and event ownership are approved.
 - Move DMARC from monitoring to quarantine after at least two weeks of clean delivery reports.

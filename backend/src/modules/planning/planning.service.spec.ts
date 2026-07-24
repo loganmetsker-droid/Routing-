@@ -78,6 +78,13 @@ describe('PlanningService', () => {
   const audit = { record: jest.fn() } as any;
   const httpService = { post: jest.fn(), get: jest.fn() } as any;
   const configService = { get: jest.fn(() => undefined) } as any;
+  const dispatchService = {
+    ensurePublishedRouteVersionSnapshot: jest.fn(async () => ({
+      id: 'version-1',
+      versionNumber: 1,
+      status: 'PUBLISHED',
+    })),
+  } as any;
 
   function createPlanningService(
     routePlans: any,
@@ -104,6 +111,7 @@ describe('PlanningService', () => {
       routes,
       routeRunStops,
       routeAssignments,
+      dispatchService,
       httpService,
       configService,
       audit,
@@ -155,6 +163,10 @@ describe('PlanningService', () => {
     expect(result.routeRuns).toHaveLength(1);
     expect(routeRunStops.save).toHaveBeenCalled();
     expect(routeAssignments.save).toHaveBeenCalled();
+    expect(dispatchService.ensurePublishedRouteVersionSnapshot).toHaveBeenCalledWith(
+      result.routeRuns[0].id,
+      { userId: 'user-1', organizationId: 'org-1' },
+    );
   });
 
   it('recovers a published plan that has no route runs yet', async () => {
@@ -176,6 +188,34 @@ describe('PlanningService', () => {
     expect(result.routeRuns).toHaveLength(1);
     expect(routeRunStops.save).toHaveBeenCalled();
     expect(routeAssignments.save).toHaveBeenCalled();
+  });
+
+  it('reuses a partially created route when retrying publication', async () => {
+    const routePlans = createRepo([{ id: 'plan-1', organizationId: 'org-1', serviceDate: '2026-04-10', status: 'READY', objective: 'distance', warnings: [], metrics: {}, depotId: 'dep-1' }]);
+    const routePlanGroups = createRepo([{ id: 'group-1', routePlanId: 'plan-1', groupIndex: 1, label: 'Route 1', vehicleId: 'veh-1', driverId: 'drv-1', totalDistanceKm: 12, totalDurationMinutes: 60 }]);
+    const routePlanStops = createRepo([{ id: 'rps-1', routePlanId: 'plan-1', routePlanGroupId: 'group-1', jobId: 'job-1', jobStopId: 'stop-1', stopSequence: 1, isLocked: false, plannedArrival: new Date('2026-04-10T09:00:00Z') }]);
+    const jobs = createRepo([{ id: 'job-1', organizationId: 'org-1', customerName: 'A', deliveryAddress: 'A St', status: 'pending', timeWindowStart: new Date('2026-04-10T09:00:00Z'), timeWindowEnd: new Date('2026-04-10T10:00:00Z'), estimatedDuration: 30, routingRequirements: { load: { palletCount: 1, palletLengthIn: 48, palletWidthIn: 40, palletHeightIn: 48, palletWeightLb: 300, stackable: true } } }]);
+    const jobStops = createRepo([{ id: 'stop-1', jobId: 'job-1', stopOrder: 1, stopType: 'DROPOFF', address: 'A St', serviceDurationMinutes: 10 }]);
+    const vehicles = createRepo([{ id: 'veh-1', organizationId: 'org-1', status: 'available', licensePlate: 'TRK-1' }]);
+    const drivers = createRepo([{ id: 'drv-1', organizationId: 'org-1' }]);
+    const depots = createRepo([{ id: 'dep-1', organizationId: 'org-1', isPrimary: true, name: 'Main', address: 'HQ', location: { lat: 39.0997, lng: -94.5786 } }]);
+    const routes = createRepo([{
+      id: 'partial-route-1',
+      organizationId: 'org-1',
+      routeData: { routePlanId: 'plan-1', routePlanGroupId: 'group-1' },
+      createdAt: new Date('2026-04-10T08:00:00Z'),
+    }]);
+    const routeRunStops = createRepo([{ id: 'partial-stop', routeId: 'partial-route-1' }]);
+    const routeAssignments = createRepo([{ id: 'partial-assignment', routeId: 'partial-route-1' }]);
+
+    const service = createPlanningService(routePlans, routePlanGroups, routePlanStops, jobs, jobStops, vehicles, drivers, depots, routes, routeRunStops, routeAssignments);
+    const result = await service.publish('plan-1', { userId: 'user-1', organizationId: 'org-1' });
+
+    expect(result.routeRuns).toHaveLength(1);
+    expect(result.routeRuns[0].id).toBe('partial-route-1');
+    expect(routes.items).toHaveLength(1);
+    expect(routeRunStops.delete).toHaveBeenCalledWith({ routeId: 'partial-route-1' });
+    expect(routeAssignments.delete).toHaveBeenCalledWith({ routeId: 'partial-route-1' });
   });
 
   it('blocks publish readiness when stops reference missing route lanes', async () => {

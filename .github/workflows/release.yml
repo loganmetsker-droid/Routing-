@@ -17,7 +17,7 @@ on:
 
 permissions:
   contents: read
-  deployments: read
+  deployments: write
 
 env:
   NODE_VERSION: '24'
@@ -259,3 +259,42 @@ jobs:
           name: ${{ inputs.target }}-release-${{ inputs.release_sha }}
           path: release-evidence/
           retention-days: 90
+
+      - name: Record successful immutable deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          TARGET_ENVIRONMENT: ${{ inputs.target }}
+          ENVIRONMENT_URL: ${{ vars.FRONTEND_URL }}
+        run: |
+          deployment_id="$(
+            jq -n \
+              --arg ref "$RELEASE_SHA" \
+              --arg environment "$TARGET_ENVIRONMENT" \
+              '{
+                ref: $ref,
+                environment: $environment,
+                auto_merge: false,
+                required_contexts: [],
+                production_environment: ($environment == "production")
+              }' |
+              gh api \
+                --method POST \
+                "repos/${GITHUB_REPOSITORY}/deployments" \
+                --input - \
+                --jq '.id'
+          )"
+          jq -n \
+            --arg state success \
+            --arg environment_url "$ENVIRONMENT_URL" \
+            --arg description "Trovan immutable release verified at $RELEASE_SHA" \
+            '{
+              state: $state,
+              environment_url: $environment_url,
+              description: $description,
+              auto_inactive: true
+            }' |
+            gh api \
+              --method POST \
+              "repos/${GITHUB_REPOSITORY}/deployments/${deployment_id}/statuses" \
+              --input -

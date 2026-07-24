@@ -1372,6 +1372,14 @@ export class DispatchService {
     });
   }
 
+  async ensurePublishedRouteVersionSnapshot(
+    routeId: string,
+    actor?: DispatchActorContext,
+  ): Promise<RouteVersion> {
+    const route = await this.findOne(routeId, actor);
+    return this.seedPublishedRouteVersion(route, actor);
+  }
+
   async createRouteVersionSnapshot(
     routeId: string,
     actor?: DispatchActorContext,
