@@ -85,6 +85,12 @@ function getSearchPlaceholder(pathname: string) {
   return match?.[1] ?? 'Search jobs, drivers, vehicles, customers...';
 }
 
+export function shouldShowShellOperatingDate(pathname: string) {
+  return !['/dispatch', '/messages'].some(
+    (path) => pathname === path || pathname.startsWith(`${path}/`),
+  );
+}
+
 function TrovanBrand({ collapsed }: { collapsed: boolean }) {
   return (
     <Box
@@ -284,6 +290,7 @@ export function AppShell({ onLogout, children }: AppShellProps) {
   const activeItem = getActiveNavItem(location.pathname);
   const [pageTitle, pageSubtitle] = getPageCopy(location.pathname, activeItem.label);
   const searchPlaceholder = getSearchPlaceholder(location.pathname);
+  const showShellOperatingDate = shouldShowShellOperatingDate(location.pathname);
   const sidebarWidth = desktopCollapsed ? COLLAPSED_SIDEBAR_WIDTH : trovanLayout.sidebarWidth;
   const currentDateLabel = new Date().toLocaleDateString([], {
     month: 'short',
@@ -546,27 +553,29 @@ export function AppShell({ onLogout, children }: AppShellProps) {
             }}
           />
 
-          <Box
-            aria-label={`Current operating date: ${currentDateLabel}`}
-            sx={{
-              height: 40,
-              display: { xs: 'none', md: 'inline-flex' },
-              minWidth: 150,
-              px: 1.5,
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 0.9,
-              border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: '8px',
-              bgcolor: 'background.paper',
-              fontSize: 13,
-              fontWeight: 800,
-            }}
-          >
-            <CalendarTodayOutlined sx={{ fontSize: 19 }} />
-            {currentDateLabel}
-          </Box>
+          {showShellOperatingDate ? (
+            <Box
+              aria-label={`Current operating date: ${currentDateLabel}`}
+              sx={{
+                height: 40,
+                display: { xs: 'none', md: 'inline-flex' },
+                minWidth: 150,
+                px: 1.5,
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 0.9,
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: '8px',
+                bgcolor: 'background.paper',
+                fontSize: 13,
+                fontWeight: 800,
+              }}
+            >
+              <CalendarTodayOutlined sx={{ fontSize: 19 }} />
+              {currentDateLabel}
+            </Box>
+          ) : null}
           <Tooltip title={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
             <IconButton
               onClick={toggleMode}

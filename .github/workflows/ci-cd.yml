@@ -86,6 +86,9 @@ jobs:
       - name: Require zero production high or critical advisories
         run: npm audit --omit=dev --audit-level=high
 
+      - name: Require zero full-tree high or critical advisories
+        run: npm audit --audit-level=high
+
       - name: Check patch whitespace
         run: git diff --check
 

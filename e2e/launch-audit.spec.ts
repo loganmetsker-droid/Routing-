@@ -607,6 +607,16 @@ test.describe('launch UI audit', () => {
     await expect(page.getByText(/Driver mobile app proof/i)).toBeVisible();
   });
 
+  test('dispatch owns one operating date and keeps preview persistence truth readable', async ({ page }) => {
+    await gotoReady(page, '/dispatch');
+
+    await expect(page.locator('[aria-label^="Current operating date:"]')).toHaveCount(0);
+    await expect(page.locator('[aria-label^="Current dispatch date:"]')).toHaveCount(1);
+    await expect(
+      page.getByText('Local preview state; not backend persistence.', { exact: true }),
+    ).toBeVisible();
+  });
+
   test('public launch product proof tabs change content', async ({ page }) => {
     await gotoReady(page, '/');
 
