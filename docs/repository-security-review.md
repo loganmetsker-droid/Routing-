@@ -17,6 +17,8 @@ remain required before production promotion**
   require both an exact test/example path and an exact non-secret fixture shape.
 - CodeQL runs the `security-extended` query suite against
   `javascript-typescript` and `python` on every release pull request.
+- Staging and production promotion reject any SHA without both a successful
+  Trovan Release Gate run and a successful PR-level CodeQL check.
 - Full-tree and production dependency audits reject high or critical
   advisories.
 - The full build, lint, unit, migration, and Playwright gates run in the same

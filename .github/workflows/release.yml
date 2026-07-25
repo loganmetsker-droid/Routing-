@@ -39,6 +39,45 @@ jobs:
             exit 1
           fi
 
+      - name: Require successful release and CodeQL gates for exact SHA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          release_runs="$(
+            gh api --method GET \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/ci-cd.yml/runs" \
+              -f head_sha="$RELEASE_SHA" \
+              -f event="pull_request" \
+              -f per_page=100
+          )"
+          release_gate="$(
+            printf '%s' "$release_runs" |
+              jq -r --arg sha "$RELEASE_SHA" \
+                '[.workflow_runs[] | select(.head_sha == $sha)] |
+                 sort_by(.created_at) | last | .conclusion // empty'
+          )"
+          if [ "$release_gate" != "success" ]; then
+            echo "No successful Trovan Release Gate run exists for $RELEASE_SHA"
+            exit 1
+          fi
+
+          check_runs="$(
+            gh api \
+              -H "Accept: application/vnd.github+json" \
+              "repos/${GITHUB_REPOSITORY}/commits/${RELEASE_SHA}/check-runs?per_page=100"
+          )"
+          codeql_gate="$(
+            printf '%s' "$check_runs" |
+              jq -r \
+                '[.check_runs[] | select(.name == "CodeQL")] |
+                 sort_by(.completed_at) | last | .conclusion // empty'
+          )"
+          if [ "$codeql_gate" != "success" ]; then
+            echo "The PR-level CodeQL check is not successful for $RELEASE_SHA"
+            exit 1
+          fi
+
       - name: Require successful staging deployment for production
         if: inputs.target == 'production'
         env:

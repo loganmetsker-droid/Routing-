@@ -23,6 +23,8 @@ Trovan is not being prepared for self-serve general availability. Launch is $399
 - OpenAPI docs advertise only validated, environment-configured API origins; no placeholder production server is published when hosted configuration is absent.
 - Job creation reports whether background queueing actually occurred, so queue-disabled local workflows cannot emit a false “added to queue” success message.
 - Promotion uses an immutable SHA, protected staging/production environments, Cloudflare frontend deployment, Render service deployment, and captured rollback versions.
+- Promotion rejects a SHA unless its Trovan Release Gate workflow and PR-level
+  CodeQL security check both completed successfully.
 - A successful promotion records an explicit GitHub deployment for the exact release SHA; production refuses any SHA without a successful staging deployment record.
 - The scheduled production monitor verifies readiness plus a revocable authenticated session and protected metrics access.
 - Publishing a route plan now creates the canonical published route-version snapshot before dispatch handoff, preserving the audit and rollback chain.
