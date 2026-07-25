@@ -103,13 +103,14 @@ export function sanitizeValue(
     return value;
   }
 
-  const next: Record<string, unknown> = {};
-  for (const [entryKey, entryValue] of Object.entries(
-    value as Record<string, unknown>,
-  )) {
-    next[entryKey] = sanitizeValue(entryKey, entryValue, depth + 1);
-  }
-  return next;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(
+      ([entryKey, entryValue]) => [
+        entryKey,
+        sanitizeValue(entryKey, entryValue, depth + 1),
+      ],
+    ),
+  );
 }
 
 export function sanitizeBody(body: unknown) {

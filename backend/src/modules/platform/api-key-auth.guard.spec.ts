@@ -63,6 +63,27 @@ describe('ApiKeyAuthGuard', () => {
     expect(platformService.authenticateApiKey).toHaveBeenCalledWith('token_2');
   });
 
+  it('rejects non-Bearer and oversized authorization values before authentication', async () => {
+    const platformService = {
+      authenticateApiKey: vi.fn(),
+    } as any;
+    const guard = new ApiKeyAuthGuard(platformService);
+
+    await expect(() =>
+      guard.canActivate(
+        createExecutionContext({ headers: { authorization: 'Basic abc123' } }),
+      ),
+    ).rejects.toThrow(new UnauthorizedException('Missing API key'));
+    await expect(() =>
+      guard.canActivate(
+        createExecutionContext({
+          headers: { authorization: `Bearer ${'a'.repeat(600)}` },
+        }),
+      ),
+    ).rejects.toThrow(new UnauthorizedException('Missing API key'));
+    expect(platformService.authenticateApiKey).not.toHaveBeenCalled();
+  });
+
   it('uses the first x-api-key header value when multiple are provided', async () => {
     const platformService = {
       authenticateApiKey: vi.fn().mockResolvedValue({

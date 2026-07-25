@@ -169,6 +169,12 @@ let previewApiKeyStore: PlatformApiKeyRecord[] = [
   },
 ];
 
+const securePreviewSuffix = () => {
+  const bytes = new Uint8Array(8);
+  globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+};
+
 const previewApiKeys = (): PlatformApiKeyRecord[] =>
   previewApiKeyStore.map((apiKey) => ({ ...apiKey, scopes: [...apiKey.scopes] }));
 
@@ -261,7 +267,7 @@ export async function createApiKey(payload: {
 }): Promise<{ apiKey: PlatformApiKeyRecord; secret: string | null }> {
   if (isPreview()) {
     const now = new Date().toISOString();
-    const suffix = Math.random().toString(36).slice(2, 10);
+    const suffix = securePreviewSuffix();
     const apiKey = normalizeApiKey({
       id: `key-preview-${Date.now()}-${suffix}`,
       organizationId: 'preview-org',
@@ -326,7 +332,7 @@ export async function createWebhook(payload: {
 }): Promise<{ endpoint: PlatformWebhookRecord; signingSecret: string | null }> {
   if (isPreview()) {
     const now = new Date().toISOString();
-    const suffix = Math.random().toString(36).slice(2, 10);
+    const suffix = securePreviewSuffix();
     const endpoint = normalizeWebhook({
       id: `webhook-preview-${Date.now()}-${suffix}`,
       organizationId: 'preview-org',
@@ -390,7 +396,7 @@ export async function updateWebhook(
 export async function rotateWebhookSecret(webhookId: string) {
   if (isPreview()) {
     const webhook = previewWebhookStore.find((item) => item.id === webhookId) || null;
-    const suffix = Math.random().toString(36).slice(2, 10);
+    const suffix = securePreviewSuffix();
     return {
       webhook: webhook ? { ...webhook, updatedAt: new Date().toISOString() } : null,
       signingSecret: webhook ? `whsec_preview_${suffix}` : null,

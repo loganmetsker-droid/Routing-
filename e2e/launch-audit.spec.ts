@@ -803,7 +803,7 @@ test.describe('launch UI audit', () => {
   test('marketing dashboard frames do not use fake browser chrome', async ({ page }) => {
     await gotoReady(page, '/');
 
-    await expect(page.getByText(/trytrovan\.com/i)).toHaveCount(0);
+    await expect(page.getByText('trytrovan.com', { exact: false })).toHaveCount(0);
     await expect(page.getByTestId('fake-browser-dot')).toHaveCount(0);
     await expect(page.getByTestId('product-app-frame').first()).toBeVisible();
     await expect(page.getByText(/Live Trovan workspace/i).first()).toBeVisible();

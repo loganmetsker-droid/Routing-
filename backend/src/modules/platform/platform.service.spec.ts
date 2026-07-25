@@ -24,7 +24,11 @@ describe('PlatformService', () => {
     webhookEndpoints = repositoryMock();
     webhookDeliveries = repositoryMock();
     const config = {
-      get: vi.fn((_key: string, fallback?: string) => fallback),
+      get: vi.fn((key: string, fallback?: string) =>
+        key === 'API_KEY_HASH_SECRET'
+          ? 'unit-test-api-key-hash-secret'
+          : fallback,
+      ),
     } as unknown as ConfigService;
     service = new PlatformService(
       apiKeys as never,

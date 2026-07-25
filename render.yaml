@@ -69,6 +69,8 @@ services:
           property: connectionString
       - key: JWT_SECRET
         generateValue: true
+      - key: API_KEY_HASH_SECRET
+        generateValue: true
       - key: WORKOS_CLIENT_ID
         sync: false
       - key: WORKOS_API_KEY

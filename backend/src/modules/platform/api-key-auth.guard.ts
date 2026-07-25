@@ -27,9 +27,13 @@ export class ApiKeyAuthGuard implements CanActivate {
           : null;
       if (fromHeader) return fromHeader.trim();
 
-      if (typeof authHeader !== 'string') return '';
-      const match = authHeader.trim().match(/^Bearer\s+(.+)$/i);
-      return (match?.[1] || '').trim();
+      if (typeof authHeader !== 'string' || authHeader.length > 520) return '';
+      const normalizedAuthHeader = authHeader.trim();
+      const bearerPrefix = 'bearer ';
+      if (!normalizedAuthHeader.toLowerCase().startsWith(bearerPrefix)) {
+        return '';
+      }
+      return normalizedAuthHeader.slice(bearerPrefix.length).trim();
     })();
 
     if (!rawKey) {

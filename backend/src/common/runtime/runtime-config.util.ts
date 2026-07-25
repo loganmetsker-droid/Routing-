@@ -29,6 +29,12 @@ export function getMissingRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
   }
   if (
     ['production', 'staging'].includes(env.NODE_ENV || '') &&
+    !String(env.API_KEY_HASH_SECRET || '').trim()
+  ) {
+    missing.push('API_KEY_HASH_SECRET');
+  }
+  if (
+    ['production', 'staging'].includes(env.NODE_ENV || '') &&
     !(env.CORS_ORIGINS || env.CORS_ORIGIN || env.FRONTEND_URL)
   ) {
     missing.push('CORS_ORIGINS or CORS_ORIGIN or FRONTEND_URL');

@@ -7,7 +7,6 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
-  createHash,
   createHmac,
   randomBytes,
   timingSafeEqual,
@@ -78,7 +77,16 @@ export class PlatformService {
   }
 
   private hashSecret(value: string) {
-    return createHash('sha256').update(value).digest('hex');
+    const hashSecret =
+      this.configService.get<string>('API_KEY_HASH_SECRET') ||
+      this.configService.get<string>('JWT_SECRET');
+    if (!hashSecret) {
+      throw new Error('API_KEY_HASH_SECRET is required');
+    }
+    return createHmac('sha256', hashSecret)
+      .update('trovan-api-key:v1:')
+      .update(value)
+      .digest('hex');
   }
 
   private constantTimeEquals(left: string, right: string) {

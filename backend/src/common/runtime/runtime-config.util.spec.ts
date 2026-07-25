@@ -4,6 +4,7 @@ import { getMissingRuntimeConfig } from './runtime-config.util';
 const baseHostedEnv = {
   NODE_ENV: 'staging',
   JWT_SECRET: 'configured',
+  API_KEY_HASH_SECRET: 'configured',
   FRONTEND_URL: 'https://staging.example.test',
   DATABASE_URL: 'postgres://example.invalid/app',
   ROUTING_SERVICE_INTERNAL_TOKEN: 'configured',
@@ -42,5 +43,15 @@ describe('runtime config launch gates', () => {
     } as NodeJS.ProcessEnv);
 
     expect(missing).toContain('ROUTING_SERVICE_INTERNAL_TOKEN');
+  });
+
+  it('requires a dedicated API-key hash secret in hosted environments', () => {
+    const missing = getMissingRuntimeConfig({
+      ...baseHostedEnv,
+      API_KEY_HASH_SECRET: '',
+      METRICS_TOKEN: 'configured',
+    } as NodeJS.ProcessEnv);
+
+    expect(missing).toContain('API_KEY_HASH_SECRET');
   });
 });

@@ -261,7 +261,7 @@ const server = createServer(async (req, res) => {
     const filePath = await resolveRequestPath(url.pathname);
     const body = method === 'HEAD' ? null : await readFile(filePath);
     const transformed = method === 'HEAD' ? null : transformResponse(filePath, body);
-    sendBuffer(res, 200, transformed, contentTypeFor(filePath));
+    sendStaticAsset(res, 200, transformed, contentTypeFor(filePath));
   } catch (error) {
     if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') {
       sendText(res, 404, 'Not found');
@@ -606,21 +606,27 @@ function commonHeaders(contentType) {
   return {
     'Cache-Control': 'no-store',
     'Content-Type': contentType,
+    'Content-Security-Policy':
+      "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://*.basemaps.cartocdn.com; connect-src 'self' http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*",
+    'Referrer-Policy': 'no-referrer',
     'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
   };
 }
 
-function sendBuffer(res, statusCode, body, contentType) {
+function sendStaticAsset(res, statusCode, body, contentType) {
   res.writeHead(statusCode, commonHeaders(contentType));
   res.end(body);
 }
 
 function sendText(res, statusCode, message) {
-  sendBuffer(res, statusCode, Buffer.from(`${message}\n`), 'text/plain; charset=utf-8');
+  res.writeHead(statusCode, commonHeaders('text/plain; charset=utf-8'));
+  res.end(Buffer.from(`${message}\n`));
 }
 
 function sendJson(res, statusCode, payload) {
-  sendBuffer(res, statusCode, Buffer.from(JSON.stringify(payload)), 'application/json; charset=utf-8');
+  res.writeHead(statusCode, commonHeaders('application/json; charset=utf-8'));
+  res.end(Buffer.from(JSON.stringify(payload)));
 }
 
 function sendEmpty(res, statusCode) {

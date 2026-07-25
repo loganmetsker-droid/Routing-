@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -19,21 +19,42 @@ function hasCommand(command) {
 }
 
 function ensureEnvFile() {
-  if (existsSync(envLocal)) {
-    console.log('backend/.env.local already exists. Leaving it untouched.');
-    return;
+  let envTemplate;
+  try {
+    envTemplate = readFileSync(envExample, 'utf8');
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      throw new Error('backend/.env.local.example is missing.', {
+        cause: error,
+      });
+    }
+    throw error;
   }
 
-  if (!existsSync(envExample)) {
-    throw new Error('backend/.env.local.example is missing.');
+  const jwtSecret = randomBytes(32).toString('hex');
+  const apiKeyHashSecret = randomBytes(32).toString('hex');
+  const template = envTemplate
+    .replace(
+      'JWT_SECRET=replace-with-a-strong-secret',
+      `JWT_SECRET=${jwtSecret}`,
+    )
+    .replace(
+      'API_KEY_HASH_SECRET=replace-with-a-different-strong-secret',
+      `API_KEY_HASH_SECRET=${apiKeyHashSecret}`,
+    );
+  try {
+    writeFileSync(envLocal, template, {
+      encoding: 'utf8',
+      flag: 'wx',
+      mode: 0o600,
+    });
+  } catch (error) {
+    if (error?.code === 'EEXIST') {
+      console.log('backend/.env.local already exists. Leaving it untouched.');
+      return;
+    }
+    throw error;
   }
-
-  const secret = randomBytes(32).toString('hex');
-  const template = readFileSync(envExample, 'utf8').replace(
-    'JWT_SECRET=replace-with-a-strong-secret',
-    `JWT_SECRET=${secret}`,
-  );
-  writeFileSync(envLocal, template, 'utf8');
   console.log('Created backend/.env.local with a generated JWT secret.');
 }
 

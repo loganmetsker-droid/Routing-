@@ -48,6 +48,22 @@ describe('request logging sanitizers', () => {
     });
   });
 
+  it('preserves hostile property names as inert own properties', () => {
+    const body = JSON.parse(
+      '{"__proto__":{"polluted":true},"constructor":{"secret":"value"},"safe":"ok"}',
+    );
+    const sanitized = sanitizeBody(body) as Record<string, unknown>;
+
+    expect(Object.prototype.hasOwnProperty.call(sanitized, '__proto__')).toBe(
+      true,
+    );
+    expect(Object.prototype.hasOwnProperty.call(sanitized, 'constructor')).toBe(
+      true,
+    );
+    expect(sanitized.safe).toBe('ok');
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+  });
+
   it('sanitizes UUIDs from request paths', () => {
     expect(
       sanitizePath('/api/jobs/018f3b8d-4d2f-4a56-9a2b-123456789abc'),

@@ -27,6 +27,7 @@ This file is the canonical environment/config reference for local, dev, staging,
 | `HOST` | Yes | Yes | Bind address. |
 | `FRONTEND_URL` | Yes | Yes | CORS origin allowlist source. |
 | `JWT_SECRET` | Yes | Yes | JWT signing secret. Must not use local default outside local/dev. |
+| `API_KEY_HASH_SECRET` | Yes | Yes | Dedicated HMAC secret for API-key verification. Must differ from `JWT_SECRET`; rotate API keys if this value changes. |
 | `JWT_EXPIRES_IN` | Yes | Yes | Session TTL. |
 | `AUTH_SESSION_ENFORCEMENT` | Optional | Yes | Keeps HTTP JWTs tied to non-revoked application sessions. |
 | `ROUTING_SERVICE_URL` | Optional | Yes, unless `ROUTING_SERVICE_HOSTPORT` is provided | Full optimizer service URL, for example `https://optimizer.example.com`. |

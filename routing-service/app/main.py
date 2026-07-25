@@ -153,10 +153,9 @@ async def health_check():
 @app.post("/optimize", response_model=OptimizeResponse, dependencies=[Depends(require_internal_auth)])
 async def optimize(request: OptimizeRequest):
     logger.info(
-        "Optimizing %s stops across %s vehicles using %s objective",
+        "Optimizing %s stops across %s vehicles",
         len(request.stops),
         len(request.vehicles),
-        request.objective,
     )
     try:
         return solve_optimize_request(request)
