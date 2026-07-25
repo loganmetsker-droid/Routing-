@@ -532,7 +532,7 @@ function buildDemoPlannerView(serviceDate) {
   return {
     plan: {
       id: 'preview-plan-1',
-      serviceDate: serviceDate || new Date().toISOString().slice(0, 10),
+      serviceDate: normalizeServiceDate(serviceDate),
       status: 'draft',
       objective: 'balanced',
       metrics: {
@@ -558,6 +558,15 @@ function buildDemoPlannerMutation(serviceDate) {
     unassignedJobs: view.unassignedJobs,
     warnings: view.plan.warnings,
   };
+}
+
+function normalizeServiceDate(value) {
+  const fallback = new Date().toISOString().slice(0, 10);
+  if (!value) return fallback;
+
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) return fallback;
+  return parsed.toISOString().slice(0, 10);
 }
 
 function buildDemoRouteRuns() {
@@ -626,7 +635,13 @@ function sendText(res, statusCode, message) {
 
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, commonHeaders('application/json; charset=utf-8'));
-  res.end(Buffer.from(JSON.stringify(payload)));
+  const serialized = JSON.stringify(payload)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+  res.end(Buffer.from(serialized));
 }
 
 function sendEmpty(res, statusCode) {
