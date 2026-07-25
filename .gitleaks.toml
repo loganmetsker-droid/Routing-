@@ -1,0 +1,46 @@
+title = "Trovan tracked-source secret scanning"
+
+[extend]
+useDefault = true
+
+# These allowlists cover exact, non-secret test fixtures and one empty example
+# variable. Each exception requires both the expected path and expected match so
+# nearby real credentials remain detectable.
+[[rules]]
+id = "jwt"
+
+  [rules.allowlist]
+  condition = "AND"
+  regexTarget = "line"
+  paths = [
+    '''backend/src/common/http/request-logging\.middleware\.spec\.ts$''',
+  ]
+  regexes = [
+    '''eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.eyJraW5kIjoicHVibGljLXRyYWNraW5nIiwicm91dGVJZCI6IjEyMyIsImV4cCI6MTcwMDAwMDAwMH0\.dGhpcy1pcy1ub3QtYS1yZWFsLXNpZ25hdHVyZQ''',
+  ]
+
+[[rules]]
+id = "stripe-access-token"
+
+  [rules.allowlist]
+  condition = "AND"
+  regexTarget = "line"
+  paths = [
+    '''backend/src/modules/subscriptions/subscriptions\.(controller|service)\.spec\.ts$''',
+  ]
+  regexes = [
+    '''sk_test_configured''',
+  ]
+
+[[rules]]
+id = "generic-api-key"
+
+  [rules.allowlist]
+  condition = "AND"
+  regexTarget = "match"
+  paths = [
+    '''backend/\.env\.example$''',
+  ]
+  regexes = [
+    '''REDIS_PASSWORD=\r?\nENABLE_SCHEDULER=0''',
+  ]
