@@ -52,7 +52,7 @@ tool version requires a new release pull request and a green replacement run.
 - [x] Zero critical/high full dependency-tree advisory.
 - [x] Direct tests cover tenant denial, API-key lifecycle, webhook
   signature/replay/SSRF, Socket.IO authorization, and public tracking.
-- [ ] Review the latest CodeQL pull-request results and close every critical or
+- [x] Review the latest CodeQL pull-request results and close every critical or
   high alert.
 - [ ] Run the hosted two-organization denial and fresh-session persistence
   exercises.
@@ -69,3 +69,24 @@ This review is not production approval. Production promotion remains blocked
 until the exact staging SHA has green CodeQL results, every hosted security
 exercise passes, all critical/high findings are closed, recovery and rollback
 drills pass, and owner/legal approvals are recorded.
+
+## CodeQL remediation record
+
+The first `security-extended` scan found nine high and one medium alert. The
+replacement scan for commit `bd13ab1045d90136ae464e8704ef69c8d63b833f`
+closed all ten:
+
+- request-body sanitization now creates inert own properties rather than
+  dynamically assigning attacker-controlled keys;
+- bearer parsing is bounded and linear-time;
+- API keys use a dedicated HMAC secret, required in hosted environments;
+- preview API-key and webhook secrets use cryptographic randomness;
+- the local bootstrap writes generated secret files atomically with owner-only
+  permissions;
+- routing logs no longer include user-controlled objective text;
+- test URL matching no longer relies on an unanchored regular expression;
+- local preview JSON normalizes reflected dates, escapes markup-significant
+  characters, and returns restrictive security headers.
+
+The PR CodeQL check completed successfully with no remaining alert summary.
+The exact final candidate must retain that green result.

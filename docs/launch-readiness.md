@@ -37,15 +37,15 @@ Trovan is not being prepared for self-serve general availability. Launch is $399
 
 - [x] Reproducible `npm ci` and workspace production build.
 - [x] Frontend lint with zero warnings.
-- [x] Backend: 289 tests; frontend: 58 tests; routing service: 13 tests.
+- [x] Backend: 292 tests; frontend: 58 tests; routing service: 13 tests.
 - [x] Driver workflow: three consecutive isolated runs, two tests per run.
 - [x] Complete Chromium Playwright suite: 151 passed, one hosted-only persistence test skipped, zero failures.
 - [x] Full and production dependency audits: zero critical/high findings. Two accepted React Router 6 moderate advisories remain documented for the pilot.
 - [x] Full-history Gitleaks scan: zero unadjudicated findings. Exact fake
   test/example fixtures are narrowly allowlisted by both path and match.
-- [ ] CodeQL `security-extended` analysis for JavaScript/TypeScript and Python
-  is required on every release pull request; the latest results must have zero
-  open critical/high alerts before promotion.
+- [x] CodeQL `security-extended` analysis for JavaScript/TypeScript and Python
+  is required on every release pull request. The review closed all nine high
+  and one medium findings; the replacement PR security check is green.
 - [x] Database migrations applied successfully.
 - [x] Release scope contains only application code, migrations, configuration, production assets, tests, and runbooks; generated QA/audit artifacts are excluded.
 
