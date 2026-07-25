@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  careersPublicCopy,
   cookiePreferenceDefaults,
   legalPages,
   publicMarketingRoutes,
@@ -71,5 +72,13 @@ describe('public site content guardrails', () => {
     const resourceText = resourceCards.map((card) => `${card.title} ${card.body}`).join(' ');
 
     expect(`${legalText} ${resourceText}`).not.toMatch(/draft|should be reviewed|formal legal publication|launch review/i);
+  });
+
+  it('states the current careers posture once without a speculative opening promise', () => {
+    const careersText = Object.values(careersPublicCopy).join(' ');
+
+    expect(careersText).toMatch(/not advertising an open role today/i);
+    expect(careersText).toMatch(/route operations|dispatch|mapping|routing|implementation/i);
+    expect(careersText).not.toMatch(/coming soon|coming later|open jobs are posted yet/i);
   });
 });

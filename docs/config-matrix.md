@@ -11,6 +11,7 @@ This file is the canonical environment/config reference for local, dev, staging,
 | `QUEUE_REQUIRED` | `false` unless validating Redis locally | `true` | `true` | If `true`, startup and health require queue visibility. |
 | `ENABLE_SCHEDULER` | `0` by default | `1` if embedded worker used | `1` if embedded worker used | Dedicated worker is intentionally deferred. |
 | `SWAGGER_ENABLED` | Optional | `false` unless explicitly needed | `false` unless explicitly needed | Production docs surface is opt-in. |
+| `SWAGGER_PUBLIC_SERVER_URL` | Optional | Required if Swagger is exposed | Required if Swagger is exposed | HTTPS API origin advertised by OpenAPI; omitted docs never publish a placeholder server. |
 | `METRICS_TOKEN` | Optional | Required unless protected upstream | Required unless protected upstream | Protects `/api/metrics`. |
 | `LAUNCH_PROFILE` | Optional | `assisted-pilot` | `assisted-pilot` | Documents the approved commercial posture. |
 | `SELF_SERVE_BILLING_ENABLED` | `false` | `false` | `false` | Must remain false until self-serve GA gates pass. |

@@ -55,6 +55,7 @@ import {
   type FleetSizeKey,
   type RequestModalDefaults,
   type RequestType,
+  careersPublicCopy,
   cookiePreferenceDefaults,
   downloadCards,
   fleetSizeOptions,
@@ -160,7 +161,7 @@ function getPageSeo(pathname: string) {
     },
     '/careers': {
       title: 'TryTrovan Careers | Route operations software roles',
-      description: 'Open roles are coming soon. Send general interest for route operations, dispatch, mapping, and implementation experience.',
+      description: careersPublicCopy.seoDescription,
     },
     '/legal/privacy': {
       title: 'TryTrovan Privacy Policy | Route and delivery data',
@@ -4033,16 +4034,16 @@ function MissionPage() {
 function CareersPage({ onOpenRequest }: { onOpenRequest: (requestType: RequestType) => void }) {
   return (
     <>
-      <SimpleHero kicker="Careers" title="Careers at Trovan" body="Open roles are coming later. For now, Trovan is collecting thoughtful general interest from people who care about route operations." />
+      <SimpleHero kicker="Careers" title="Careers at Trovan" body={careersPublicCopy.heroBody} />
       <Box sx={{ py: { xs: 7, md: 9 }, bgcolor: trovanColors.stone[25] }}>
         <Box sx={{ width: 'min(850px, calc(100% - 32px))', mx: 'auto', textAlign: 'center' }}>
           <Typography variant="h3" component="h2" sx={{ fontFamily: trovanTypography.brandFontFamily, fontSize: { xs: 34, md: 46 }, lineHeight: 1 }}>
-            No open jobs are posted yet
+            {careersPublicCopy.sectionTitle}
           </Typography>
           <Typography sx={{ mt: 1.4, color: alpha(trovanColors.black[900], 0.68), fontSize: 18 }}>
-            If you have strong experience in delivery operations, dispatch software, mapping, routing, or customer implementation, send a general note.
+            {careersPublicCopy.sectionBody}
           </Typography>
-          <Button variant="contained" onClick={() => onOpenRequest('Careers')} sx={{ mt: 3 }}>Send general interest</Button>
+          <Button variant="contained" onClick={() => onOpenRequest('Careers')} sx={{ mt: 3 }}>{careersPublicCopy.callToAction}</Button>
         </Box>
       </Box>
     </>

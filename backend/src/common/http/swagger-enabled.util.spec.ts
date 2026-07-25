@@ -1,4 +1,7 @@
-import { isSwaggerEnabled } from './swagger-enabled.util';
+import {
+  getSwaggerServers,
+  isSwaggerEnabled,
+} from './swagger-enabled.util';
 
 describe('isSwaggerEnabled', () => {
   it('defaults to enabled when NODE_ENV is not production', () => {
@@ -19,5 +22,57 @@ describe('isSwaggerEnabled', () => {
     expect(
       isSwaggerEnabled({ NODE_ENV: 'development', SWAGGER_ENABLED: '0' }),
     ).toBe(false);
+  });
+});
+
+describe('getSwaggerServers', () => {
+  it('advertises only the real local server by default in development', () => {
+    expect(getSwaggerServers({ NODE_ENV: 'development', PORT: '3100' })).toEqual([
+      {
+        url: 'http://localhost:3100',
+        description: 'Local Development',
+      },
+    ]);
+  });
+
+  it('does not advertise a fake server when hosted URL configuration is absent', () => {
+    expect(getSwaggerServers({ NODE_ENV: 'staging' })).toEqual([]);
+    expect(getSwaggerServers({ NODE_ENV: 'production' })).toEqual([]);
+  });
+
+  it('normalizes an explicitly configured HTTPS server', () => {
+    expect(
+      getSwaggerServers({
+        NODE_ENV: 'production',
+        SWAGGER_PUBLIC_SERVER_URL: 'https://api.trytrovan.com/',
+      }),
+    ).toEqual([
+      {
+        url: 'https://api.trytrovan.com',
+        description: 'Configured API',
+      },
+    ]);
+  });
+
+  it('rejects unsafe or ambiguous hosted server URLs', () => {
+    expect(() =>
+      getSwaggerServers({
+        NODE_ENV: 'production',
+        SWAGGER_PUBLIC_SERVER_URL: 'http://api.trytrovan.com',
+      }),
+    ).toThrow(/must use HTTPS/i);
+    expect(() =>
+      getSwaggerServers({
+        NODE_ENV: 'production',
+        SWAGGER_PUBLIC_SERVER_URL:
+          'https://user:password@api.trytrovan.com?token=secret',
+      }),
+    ).toThrow(/cannot contain credentials/i);
+    expect(() =>
+      getSwaggerServers({
+        NODE_ENV: 'production',
+        SWAGGER_PUBLIC_SERVER_URL: 'not-a-url',
+      }),
+    ).toThrow(/valid absolute URL/i);
   });
 });

@@ -20,6 +20,8 @@ Trovan is not being prepared for self-serve general availability. Launch is $399
 - Render migrations run before deployment, not during application startup.
 - Telemetry migrations normalize legacy camelCase fuel/engine columns to the runtime schema so the Prometheus fuel-efficiency refresh succeeds on both upgraded and empty databases.
 - CI runs build, lint, backend/frontend/routing tests, empty-database migrations, dependency audit, and Playwright.
+- OpenAPI docs advertise only validated, environment-configured API origins; no placeholder production server is published when hosted configuration is absent.
+- Job creation reports whether background queueing actually occurred, so queue-disabled local workflows cannot emit a false “added to queue” success message.
 - Promotion uses an immutable SHA, protected staging/production environments, Cloudflare frontend deployment, Render service deployment, and captured rollback versions.
 - A successful promotion records an explicit GitHub deployment for the exact release SHA; production refuses any SHA without a successful staging deployment record.
 - The scheduled production monitor verifies readiness plus a revocable authenticated session and protected metrics access.
@@ -35,7 +37,7 @@ Trovan is not being prepared for self-serve general availability. Launch is $399
 
 - [x] Reproducible `npm ci` and workspace production build.
 - [x] Frontend lint with zero warnings.
-- [x] Backend: 283 tests; frontend: 57 tests; routing service: 13 tests.
+- [x] Backend: 289 tests; frontend: 58 tests; routing service: 13 tests.
 - [x] Driver workflow: three consecutive isolated runs, two tests per run.
 - [x] Complete Chromium Playwright suite: 151 passed, one hosted-only persistence test skipped, zero failures.
 - [x] Full and production dependency audits: zero critical/high findings. Two accepted React Router 6 moderate advisories remain documented for the pilot.

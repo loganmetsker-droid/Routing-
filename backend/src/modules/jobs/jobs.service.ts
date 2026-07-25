@@ -381,7 +381,7 @@ export class JobsService {
     const savedJob = await this.jobRepository.save(job);
 
     // Add to BullMQ queue for processing
-    await this.addToQueue(savedJob);
+    const queued = await this.addToQueue(savedJob);
     if (savedJob.organizationId) {
       await this.platformService?.dispatchWebhookEvent({
         organizationId: savedJob.organizationId,
@@ -390,7 +390,11 @@ export class JobsService {
       });
     }
 
-    this.logger.log(`Created job ${savedJob.id} and added to queue`);
+    this.logger.log(
+      queued
+        ? `Created job ${savedJob.id} and queued for processing`
+        : `Created job ${savedJob.id}; background queue is disabled`,
+    );
 
     return this.withRoutingReadiness(savedJob);
   }
@@ -701,10 +705,10 @@ export class JobsService {
   }
 
   // BullMQ Queue Management
-  async addToQueue(job: Job): Promise<void> {
+  async addToQueue(job: Job): Promise<boolean> {
     if (!this.jobQueue) {
       this.logger.debug(`Skipping queue add for job ${job.id} (Redis queue disabled)`);
-      return;
+      return false;
     }
 
     await this.jobQueue.add(
@@ -723,6 +727,7 @@ export class JobsService {
     );
 
     this.logger.debug(`Added job ${job.id} to queue with priority ${job.priority}`);
+    return true;
   }
 
   async removeFromQueue(jobId: string): Promise<void> {

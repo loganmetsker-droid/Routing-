@@ -14,7 +14,10 @@ import {
 import { requestLoggingMiddleware } from './common/http/request-logging.middleware';
 import { createCorsOriginValidator } from './common/http/cors-origin.util';
 import { configureTrustProxy } from './common/http/trust-proxy.util';
-import { isSwaggerEnabled } from './common/http/swagger-enabled.util';
+import {
+  getSwaggerServers,
+  isSwaggerEnabled,
+} from './common/http/swagger-enabled.util';
 import {
   getMissingRuntimeConfig,
   hasDatabaseConfig,
@@ -170,7 +173,7 @@ async function bootstrap() {
   const swaggerEnabled = isSwaggerEnabled();
   if (swaggerEnabled) {
     // Swagger/OpenAPI documentation
-    const swaggerConfig = new DocumentBuilder()
+    const swaggerBuilder = new DocumentBuilder()
       .setTitle('Routing & Dispatch SaaS API')
       .setDescription(
         'REST API for fleet management, route optimization, and real-time dispatching operations',
@@ -200,10 +203,13 @@ async function bootstrap() {
           description: 'Integration API key (header: x-api-key)',
         },
         'x-api-key',
-      )
-      .addServer('http://localhost:3000', 'Local Development')
-      .addServer('https://api.example.com', 'Production')
-      .build();
+      );
+
+    for (const server of getSwaggerServers()) {
+      swaggerBuilder.addServer(server.url, server.description);
+    }
+
+    const swaggerConfig = swaggerBuilder.build();
 
     const document = SwaggerModule.createDocument(app, swaggerConfig);
     SwaggerModule.setup('api/docs', app, document, {

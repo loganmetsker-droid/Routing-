@@ -73,6 +73,17 @@ export const cookiePreferenceDefaults = {
   marketing: false,
 };
 
+export const careersPublicCopy = {
+  seoDescription:
+    'Trovan is not advertising an open role today. Share relevant route operations, dispatch, mapping, routing, or implementation experience for future consideration.',
+  heroBody:
+    'Trovan is not advertising an open role today. We still welcome thoughtful notes from people who care about making route operations easier to run.',
+  sectionTitle: 'Share relevant route-operations experience',
+  sectionBody:
+    'Tell us about your work in delivery operations, dispatch software, mapping, routing, or customer implementation. We will follow up when there is a relevant opportunity.',
+  callToAction: 'Send general interest',
+} as const;
+
 export const publicMarketingRoutes: PublicRoute[] = [
   { path: '/', label: 'Home' },
   { path: '/platform', label: 'Platform' },
