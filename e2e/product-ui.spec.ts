@@ -14,13 +14,19 @@ type RoutingScenario =
   | 'geocode-failure'
   | 'stale-route-data';
 
-async function useAuthenticatedSession(page: Page) {
+async function useAuthenticatedSession(
+  page: Page,
+  resetRouteState = true,
+  preservePreviewIdentityOnNavigation = false,
+) {
   const hostedAuthToken =
     process.env.LAUNCH_AUDIT_AUTH_TOKEN ||
     process.env.STAGING_AUTH_TOKEN ||
     '';
   await preparePreviewSession(page, {
     role: 'dispatcher',
+    resetRouteState,
+    preservePreviewIdentityOnNavigation,
     authToken:
       process.env.PLAYWRIGHT_SKIP_WEBSERVER === 'true'
         ? hostedAuthToken
@@ -34,15 +40,14 @@ async function gotoRoutingWorkspace(
   scenario?: RoutingScenario,
   extraParams: Record<string, string> = {},
   waitForWorkspace = true,
+  resetRouteState = true,
+  preservePreviewIdentityOnNavigation = false,
 ) {
-  await useAuthenticatedSession(page);
-  await page.addInitScript(() => {
-    for (const key of Object.keys(window.localStorage)) {
-      if (key.startsWith('trovan-routing-workspace-preferences:')) {
-        window.localStorage.removeItem(key);
-      }
-    }
-  });
+  await useAuthenticatedSession(
+    page,
+    resetRouteState,
+    preservePreviewIdentityOnNavigation,
+  );
 
   const params = new URLSearchParams({ serviceDate: '2026-06-03', workspaceMode: 'test' });
   if (scenario) params.set('scenario', scenario);
@@ -546,7 +551,7 @@ test.describe('routing workspace product UI', () => {
   });
 
   test('routing workspace restores user-scoped planning preferences without route selections', async ({ page }, testInfo) => {
-    await gotoRoutingWorkspace(page, testInfo, 'dense-route-day');
+    await gotoRoutingWorkspace(page, testInfo, 'dense-route-day', {}, true, false, true);
 
     await setMapMode(page, 'All routes');
     await page.getByTestId('routing-lane-editor-collapse').first().click();

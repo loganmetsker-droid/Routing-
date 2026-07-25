@@ -23,27 +23,59 @@ export async function preparePreviewSession(
     role,
     authToken = '',
     resetPreviewState = true,
+    resetRouteState = true,
+    preservePreviewIdentityOnNavigation = false,
   }: {
     role: PreviewSessionRole;
     authToken?: string;
     resetPreviewState?: boolean;
+    resetRouteState?: boolean;
+    preservePreviewIdentityOnNavigation?: boolean;
   },
 ) {
   await page.addInitScript(
-    ({ selectedRole, selectedAuthToken, shouldResetPreviewState, users }) => {
+    ({
+      selectedRole,
+      selectedAuthToken,
+      shouldResetPreviewState,
+      shouldResetRouteState,
+      shouldPreservePreviewIdentity,
+      users,
+    }) => {
       if (shouldResetPreviewState) {
         window.localStorage.removeItem('trovan-preview-state-v2');
       }
+      if (shouldResetRouteState) {
+        for (const key of Object.keys(window.localStorage)) {
+          if (key.startsWith('trovan-routing-workspace-preferences:')) {
+            window.localStorage.removeItem(key);
+          }
+        }
+        window.localStorage.removeItem('trovan.map.baseStyle');
+      }
       window.localStorage.removeItem('trovan.shell.sidebarCollapsed');
       window.localStorage.removeItem('trovan.theme.mode');
-      window.localStorage.removeItem('trovan-preview-auth-user');
 
       if (selectedAuthToken) {
+        window.localStorage.removeItem('trovan-preview-auth-user');
         window.localStorage.setItem('authToken', selectedAuthToken);
         return;
       }
 
-      const user = users[selectedRole];
+      let user = users[selectedRole] as Record<string, unknown>;
+      if (shouldPreservePreviewIdentity) {
+        try {
+          const existingUser = JSON.parse(
+            window.localStorage.getItem('trovan-preview-auth-user') || 'null',
+          );
+          if (existingUser && typeof existingUser === 'object') {
+            user = existingUser;
+          }
+        } catch {
+          // Invalid test state is replaced with the explicitly selected role.
+        }
+      }
+      window.localStorage.removeItem('trovan-preview-auth-user');
       window.localStorage.setItem('authToken', 'preview-auth-bypass');
       window.localStorage.setItem(
         'trovan-preview-auth-user',
@@ -59,6 +91,8 @@ export async function preparePreviewSession(
       selectedRole: role,
       selectedAuthToken: authToken,
       shouldResetPreviewState: resetPreviewState,
+      shouldResetRouteState: resetRouteState,
+      shouldPreservePreviewIdentity: preservePreviewIdentityOnNavigation,
       users: previewUsers,
     },
   );
