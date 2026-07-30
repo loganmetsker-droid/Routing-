@@ -5,10 +5,19 @@ import path from 'node:path';
 const defaultJsonPath = path.resolve(process.cwd(), 'audit/marketing-audit.json');
 const defaultMdPath = path.resolve(process.cwd(), 'audit/marketing-audit.md');
 const expectedPrimaryCta = process.env.EXPECTED_MARKETING_PRIMARY_CTA || 'Book demo';
-const heroV2Png = '/marketing/hero-route-command-center-v2.png';
-const heroV2Avif = '/marketing/hero-route-command-center-v2.avif';
-const staleHero = '/marketing/hero-route-command-center.png';
-const dottedPlanning = '/marketing/routing-workspace-dotted.png';
+const currentHeroPng = '/marketing/product-routing.png';
+const currentHeroWebpPattern =
+  /^\/marketing\/product-routing(?:-(?:640|768))?\.webp$/;
+const staleMedia = [
+  '/marketing/hero-route-command-center.png',
+  '/marketing/hero-route-command-center-v2.png',
+  '/marketing/hero-route-command-center-v2.avif',
+  '/marketing/jobs-queue.png',
+  '/marketing/dispatch-exceptions.png',
+  '/marketing/dispatch-board.png',
+  '/marketing/routing-workspace.png',
+  '/marketing/routing-workspace-dotted.png',
+];
 
 function readArg(flag, fallback) {
   const index = process.argv.indexOf(flag);
@@ -82,8 +91,10 @@ if (!failures.length) {
 }
 
 if (audit) {
-  if (jsonText.includes(staleHero)) {
-    fail('Stale hero screenshot path exists in marketing-audit.json', staleHero);
+  for (const staleSource of staleMedia) {
+    if (jsonText.includes(staleSource)) {
+      fail('Stale marketing screenshot path exists in marketing-audit.json', staleSource);
+    }
   }
 
   const home = findRoute(audit, '/');
@@ -93,12 +104,12 @@ if (audit) {
 
   const homeImages = screenshotImages(home);
   const demoImages = screenshotImages(demo);
-  const homeHero = homeImages.find((image) => image.src === heroV2Png);
+  const homeHero = homeImages.find((image) => image.src === currentHeroPng);
   if (!homeHero) {
-    fail('Homepage is missing the final v2 hero PNG source', heroV2Png);
-  } else if (homeHero.currentSrc !== heroV2Avif) {
-    fail('Homepage final hero currentSrc does not resolve to the AVIF asset', {
-      expected: heroV2Avif,
+    fail('Homepage is missing the canonical current hero PNG source', currentHeroPng);
+  } else if (!currentHeroWebpPattern.test(homeHero.currentSrc)) {
+    fail('Homepage hero currentSrc does not resolve to the responsive WebP family', {
+      expected: String(currentHeroWebpPattern),
       actual: homeHero.currentSrc,
     });
   }
@@ -126,15 +137,6 @@ if (audit) {
   const demoRepeats = repeatedSrcs(demoImages);
   if (demoRepeats.length) {
     fail('Demo page has repeated screenshot src values', demoRepeats);
-  }
-
-  const homeDottedCount = homeImages.filter((image) => image.src === dottedPlanning).length;
-  if (homeDottedCount > 1) {
-    fail('Homepage repeats routing-workspace-dotted.png more than once', homeDottedCount);
-  }
-  const demoDottedCount = demoImages.filter((image) => image.src === dottedPlanning).length;
-  if (demoDottedCount > 1) {
-    fail('Demo repeats routing-workspace-dotted.png more than once', demoDottedCount);
   }
 
   const altBySrc = new Map();
@@ -184,4 +186,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log(`Marketing artifact assertions passed: hero v2 present, stale hero absent, ${expectedPrimaryCta} primary CTA verified, duplicate screenshot checks clean.`);
+console.log(`Marketing artifact assertions passed: current responsive hero present, stale media absent, ${expectedPrimaryCta} primary CTA verified, duplicate screenshot checks clean.`);

@@ -116,6 +116,7 @@ venv.bak/
 .tmp/
 .artifacts/
 .codex/
+.wrangler/
 audit/
 playwright-report*/
 frontend/artifacts/

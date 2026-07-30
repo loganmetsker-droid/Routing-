@@ -22,6 +22,8 @@
     "audit:product-ui": "node scripts/product-ui-audit.mjs",
     "capture:marketing-screenshots": "node --experimental-strip-types scripts/capture-marketing-screenshots.ts",
     "capture:launch-media": "node scripts/capture-launch-media.mjs",
+    "verify:launch-media": "node scripts/verify-launch-media.mjs",
+    "verify:site-build": "node scripts/verify-public-seo-build.mjs",
     "launch:audit": "playwright test e2e/launch-audit.spec.ts --project=chromium",
     "smoke:local": "node scripts/local-smoke.mjs",
     "smoke:optimizer": "node scripts/optimizer-smoke.mjs",

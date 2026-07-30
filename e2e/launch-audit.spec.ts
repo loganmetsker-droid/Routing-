@@ -645,7 +645,9 @@ test.describe('launch UI audit', () => {
     await expect(page.getByTestId('login-unavailable')).toBeVisible();
     await expect(page.getByText(/Request timed out|Backend may be unavailable/i)).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^Retry$/i })).toBeVisible();
-    await expect(page.getByRole('link', { name: /Request access\/support/i })).toBeVisible();
+    await expect(
+      page.getByRole('link', { name: /Contact support/i }).first(),
+    ).toBeVisible();
   });
 
   test('public page does not expose broken demo tracking or local-capture copy', async ({ page }) => {
@@ -882,7 +884,7 @@ test.describe('launch UI audit', () => {
 
     await expect.poll(() =>
       productImages.first().evaluate((image) => (image as HTMLImageElement).currentSrc),
-    ).toMatch(/\/marketing\/product-routing-(640|768)\.webp$/);
+    ).toMatch(/\/marketing\/product-routing(?:-(?:640|768))?\.webp$/);
   });
 
   test('public metadata, crawler controls, and social preview are launch-ready', async ({ page }) => {
@@ -908,7 +910,8 @@ test.describe('launch UI audit', () => {
     expect(sitemapBody).not.toContain('/dashboard');
   });
 
-  test('homepage excludes the full product-tour download and the dedicated demo loads it', async ({ page }) => {
+  test('homepage and demo defer the product tour until playback begins', async ({ page }) => {
+    test.setTimeout(60_000);
     const productTourRequests: string[] = [];
     page.on('request', (request) => {
       if (request.url().endsWith('/marketing/trovan-product-tour.mp4')) {
@@ -921,9 +924,19 @@ test.describe('launch UI audit', () => {
     expect(productTourRequests).toHaveLength(0);
 
     await gotoReady(page, '/demo', { settle: false });
-    const recording = page.getByLabel(/Trovan product tour recording from dashboard through customer tracking/i);
+    const recording = page.getByLabel(
+      'Trovan full route day product walkthrough video',
+    );
     await recording.scrollIntoViewIfNeeded();
+    await expect(recording).toHaveAttribute('preload', 'none');
+    expect(productTourRequests).toHaveLength(0);
+    await recording.evaluate(async (video) => {
+      const element = video as HTMLVideoElement;
+      element.muted = true;
+      await element.play();
+    });
     await expect.poll(() => productTourRequests.length).toBeGreaterThan(0);
+    await recording.evaluate((video) => (video as HTMLVideoElement).pause());
   });
 
   test('public marketing screenshots are framed without side cropping', async ({ page }) => {

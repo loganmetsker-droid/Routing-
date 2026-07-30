@@ -4,6 +4,7 @@ import path from 'node:path';
 import { chromium } from '@playwright/test';
 
 const baseUrl = process.env.MARKETING_BASE_URL || process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:5185';
+const browserChannel = process.env.PLAYWRIGHT_CHANNEL?.trim();
 const auditRoot = path.resolve(process.cwd(), 'audit');
 const screenshotRoot = path.join(auditRoot, 'screenshots');
 
@@ -45,6 +46,19 @@ const oldHeroSources = new Set([
   '/marketing/hero-route-command-center.png',
   '/marketing/hero-route-command-center-v2.png',
   '/marketing/hero-route-command-center-v2.avif',
+]);
+const legacyScreenshotSources = new Set([
+  ...oldHeroSources,
+  '/marketing/jobs-queue.png',
+  '/marketing/dispatch-exceptions.png',
+  '/marketing/dispatch-board.png',
+  '/marketing/routing-workspace.png',
+  '/marketing/routing-workspace-dotted.png',
+  '/marketing/routing-multistop-workspace.png',
+  '/marketing/routing-multistop-workspace-dotted.png',
+  '/marketing/driver-workspace.png',
+  '/marketing/tracking-workspace.png',
+  '/marketing/proof-workspace.png',
 ]);
 const planningScreenshotSources = new Set([
   '/marketing/product-routing.png',
@@ -147,6 +161,16 @@ function getRouteScreenshotFindings(routePath, screenshotImages, data) {
       type: 'old-hero-screenshot-reference',
       route: routePath,
       src: Array.from(srcSet).filter((src) => oldHeroSources.has(src)),
+    });
+  }
+
+  if (Array.from(srcSet).some((src) => legacyScreenshotSources.has(src))) {
+    findings.push({
+      type: 'legacy-product-screenshot-reference',
+      route: routePath,
+      src: Array.from(srcSet).filter((src) =>
+        legacyScreenshotSources.has(src),
+      ),
     });
   }
 
@@ -276,10 +300,26 @@ async function collectDiscoveredLinks(page) {
 async function loadLazyImages(page) {
   await page.evaluate(async () => {
     const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-    const maxScroll = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-    for (let y = 0; y <= maxScroll; y += Math.max(window.innerHeight * 0.75, 480)) {
+    for (const image of Array.from(document.images)) {
+      image.loading = 'eager';
+    }
+    let y = 0;
+    let previousScrollHeight = 0;
+    for (let iteration = 0; iteration < 100; iteration += 1) {
+      const scrollHeight = Math.max(
+        document.documentElement.scrollHeight,
+        document.body.scrollHeight,
+      );
       window.scrollTo(0, y);
       await delay(60);
+      if (y >= scrollHeight - window.innerHeight) {
+        if (scrollHeight === previousScrollHeight) break;
+        previousScrollHeight = scrollHeight;
+      }
+      y = Math.min(
+        y + Math.max(window.innerHeight * 0.75, 480),
+        scrollHeight,
+      );
     }
     window.scrollTo(0, 0);
     await Promise.all(
@@ -522,7 +562,10 @@ function writeMarkdownReport(results, crossSiteScreenshotUsage, crossSiteScreens
 }
 
 mkdirSync(screenshotRoot, { recursive: true });
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({
+  headless: true,
+  ...(browserChannel ? { channel: browserChannel } : {}),
+});
 try {
   const discoveryContext = await browser.newContext({ viewport: { width: 1440, height: 1000 }, deviceScaleFactor: 2 });
   const discoveryPage = await discoveryContext.newPage();

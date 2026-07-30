@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   copyFileSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
+  readdirSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -13,13 +17,31 @@ import { chromium } from '@playwright/test';
 import sharp from 'sharp';
 
 const baseUrl = process.env.LAUNCH_MEDIA_BASE_URL || 'http://127.0.0.1:5197';
-const outputRoot = path.resolve(process.cwd(), 'frontend/public/marketing');
+const finalOutputRoot = path.resolve(process.cwd(), 'frontend/public/marketing');
+const outputRoot = mkdtempSync(path.join(tmpdir(), 'trovan-launch-media-output-'));
 const videoTempRoot = mkdtempSync(path.join(tmpdir(), 'trovan-launch-media-'));
+const browserChannel = process.env.LAUNCH_MEDIA_BROWSER_CHANNEL?.trim();
+const sourceSha =
+  process.env.TROVAN_RELEASE_SHA?.trim() ||
+  execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+const sourceDirty = Boolean(
+  execFileSync('git', ['status', '--porcelain', '--untracked-files=normal'], {
+    encoding: 'utf8',
+  }).trim(),
+);
+
+if (sourceDirty && process.env.LAUNCH_MEDIA_ALLOW_DIRTY !== '1') {
+  throw new Error(
+    'Refusing to capture launch media from a dirty worktree. Commit the implementation first or set LAUNCH_MEDIA_ALLOW_DIRTY=1 for a non-release validation capture.',
+  );
+}
 
 const desktopCaptures = [
   { route: '/dashboard', filename: 'product-dashboard.png' },
   { route: '/routing', filename: 'product-routing.png' },
   { route: '/dispatch', filename: 'product-dispatch.png' },
+  { route: '/jobs', filename: 'product-jobs.png' },
+  { route: '/exceptions', filename: 'product-exceptions.png' },
   { route: '/route-runs/route-alpha-001', filename: 'product-route-run.png' },
   { route: '/tracking', filename: 'product-tracking.png' },
   { route: '/pod', filename: 'product-proof.png' },
@@ -49,6 +71,19 @@ const tourChapters = [
   { route: '/track/demo-token', eyebrow: 'Customer visibility', title: 'Share a clear delivery status page' },
 ];
 
+const routeLandmarks = new Map([
+  ['/dashboard', { testId: 'operations-dashboard-page' }],
+  ['/routing', { testId: 'routing-workspace-page' }],
+  ['/dispatch', { testId: 'dispatch-board-page' }],
+  ['/jobs', { testId: 'jobs-page' }],
+  ['/exceptions', { heading: 'Exceptions & constraints' }],
+  ['/route-runs/route-alpha-001', { testId: 'route-run-detail-page' }],
+  ['/tracking', { heading: 'Telemetry monitoring' }],
+  ['/pod', { testId: 'proof-of-delivery-page' }],
+  ['/driver/route-runs/route-alpha-001', { testId: 'driver-route-run-page' }],
+  ['/track/demo-token', { heading: 'Your order is on the move' }],
+]);
+
 function absoluteUrl(route) {
   return new URL(route, baseUrl).toString();
 }
@@ -63,13 +98,69 @@ async function primePage(page) {
 
 async function visit(page, route) {
   await page.goto(absoluteUrl(route), { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  const renderedPathname = new URL(page.url()).pathname.replace(/\/+$/, '') || '/';
+  if (renderedPathname !== route) {
+    throw new Error(
+      `Expected launch media route ${route}, but the preview rendered ${renderedPathname}.`,
+    );
+  }
   await page.locator('#root').waitFor({ state: 'visible', timeout: 10_000 });
+  const landmark = routeLandmarks.get(route);
+  if (!landmark) {
+    throw new Error(`Missing launch media landmark configuration for ${route}.`);
+  }
+  const landmarkLocator = landmark.testId
+    ? page.getByTestId(landmark.testId)
+    : page.getByRole('heading', { name: landmark.heading, exact: true });
+  await landmarkLocator.waitFor({ state: 'visible', timeout: 15_000 });
+  const servedSourceSha = await page
+    .locator('meta[name="trovan-release"]')
+    .getAttribute('content');
+  if (servedSourceSha !== sourceSha) {
+    throw new Error(
+      `Launch media preview reports release ${servedSourceSha || '(missing)'}, expected ${sourceSha}. Rebuild the preview with VITE_RELEASE_SHA=${sourceSha}.`,
+    );
+  }
   await page.waitForLoadState('networkidle', { timeout: 8_000 }).catch(() => undefined);
+  await page.evaluate(() => document.fonts?.ready);
+  await page
+    .waitForFunction(
+      () =>
+        Array.from(document.images)
+          .filter((image) => {
+            const rect = image.getBoundingClientRect();
+            return rect.width > 0 && rect.height > 0;
+          })
+          .every((image) => image.complete && image.naturalWidth > 0),
+      undefined,
+      { timeout: 8_000 },
+    )
+    .catch(() => undefined);
+  await page
+    .waitForFunction(
+      () => document.querySelectorAll('.leaflet-tile-loading').length === 0,
+      undefined,
+      { timeout: 8_000 },
+    )
+    .catch(() => undefined);
   await page.waitForTimeout(900);
   const failed = await page.getByText('Workspace Failed To Render', { exact: false }).count();
   if (failed > 0) {
     throw new Error(`Workspace failed to render at ${route}`);
   }
+  await page.evaluate(() => {
+    const label = Array.from(
+      document.querySelectorAll('span, p, div'),
+    ).find(
+      (element) =>
+        element.children.length === 0 &&
+        element.textContent?.trim() === 'Preview data mode',
+    );
+    const banner = label?.parentElement?.parentElement;
+    if (banner?.textContent?.includes('Local preview state')) {
+      banner.remove();
+    }
+  });
 }
 
 async function captureScreenshots(browser) {
@@ -249,7 +340,7 @@ async function captureTour(browser) {
   );
   writeFileSync(
     path.join(outputRoot, 'trovan-product-tour.vtt'),
-    `WEBVTT\n\n00:00.000 --> 00:05.000\nRoute-day overview: see the operating day at a glance.\n\n00:05.000 --> 00:10.000\nPlan routes: balance lanes before publish.\n\n00:10.000 --> 00:15.000\nDispatch live: assign drivers and run active routes.\n\n00:15.000 --> 00:20.000\nRoute execution: keep stop actions and proof together.\n\n00:20.000 --> 00:25.000\nFleet tracking: watch route progress without chasing updates.\n\n00:25.000 --> 00:30.000\nProof of delivery: review completion evidence in context.\n\n00:30.000 --> 00:36.000\nCustomer visibility: share a clear delivery status page.\n`,
+    `WEBVTT\n\n00:00.000 --> 00:05.400\nRoute-day overview: see the operating day at a glance.\n\n00:05.400 --> 00:10.800\nPlan routes: balance lanes before publish.\n\n00:10.800 --> 00:16.200\nDispatch live: assign drivers and run active routes.\n\n00:16.200 --> 00:21.600\nRoute execution: keep stop actions and proof together.\n\n00:21.600 --> 00:27.000\nFleet tracking: watch route progress without chasing updates.\n\n00:27.000 --> 00:32.400\nProof of delivery: review completion evidence in context.\n\n00:32.400 --> 00:38.100\nCustomer visibility: share a clear delivery status page.\n`,
     'utf8',
   );
 }
@@ -269,16 +360,65 @@ async function optimizeScreenshots() {
 
 async function main() {
   mkdirSync(outputRoot, { recursive: true });
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({
+    headless: true,
+    ...(browserChannel ? { channel: browserChannel } : {}),
+  });
   try {
     await captureScreenshots(browser);
     await captureTour(browser);
     await optimizeScreenshots();
+    const artifacts = readdirSync(outputRoot)
+      .sort()
+      .map((filename) => {
+        const filePath = path.join(outputRoot, filename);
+        return {
+          filename,
+          bytes: statSync(filePath).size,
+          sha256: createHash('sha256')
+            .update(readFileSync(filePath))
+            .digest('hex'),
+        };
+      });
+    writeFileSync(
+      path.join(outputRoot, 'launch-media-manifest.json'),
+      `${JSON.stringify(
+        {
+          schemaVersion: 1,
+          sourceSha,
+          sourceDirty,
+          dataProvenance: 'illustrative-preview-data',
+          sanitizations: [
+            'Removed the local-only data-mode banner that is not rendered in production.',
+          ],
+          desktopViewport: { width: 1440, height: 900 },
+          mobileViewport: { width: 390, height: 844 },
+          screenshots: [...desktopCaptures, ...mobileCaptures],
+          video: {
+            filename: 'trovan-product-tour.mp4',
+            captions: 'trovan-product-tour.vtt',
+            poster: 'trovan-product-tour-poster.webp',
+          },
+          artifacts,
+        },
+        null,
+        2,
+      )}\n`,
+      'utf8',
+    );
+    mkdirSync(finalOutputRoot, { recursive: true });
+    for (const filename of readdirSync(outputRoot)) {
+      copyFileSync(
+        path.join(outputRoot, filename),
+        path.join(finalOutputRoot, filename),
+      );
+    }
   } finally {
     await browser.close();
     rmSync(videoTempRoot, { recursive: true, force: true });
+    rmSync(outputRoot, { recursive: true, force: true });
   }
-  console.log(`Launch media captured from ${baseUrl} into ${outputRoot}`);
+  console.log(`Launch media captured from ${baseUrl} into ${finalOutputRoot}`);
 }
 
 await main();

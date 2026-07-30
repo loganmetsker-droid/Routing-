@@ -1,0 +1,90 @@
+{
+  "/": {
+    "title": "TryTrovan | Route planning, dispatch, driver app, tracking, and proof",
+    "description": "Trovan helps delivery and distribution teams plan routes, dispatch live, guide drivers, update customers, and prove every stop."
+  },
+  "/platform": {
+    "title": "TryTrovan Platform | Route-day control from plan to proof",
+    "description": "Explore the Trovan platform across planning, dispatch, driver app, customer tracking, and proof of delivery."
+  },
+  "/platform/plan": {
+    "title": "TryTrovan | Plan routes for route planning and dispatch",
+    "description": "Import stops, apply constraints, balance workload, and create dispatch-ready routes before the day starts."
+  },
+  "/platform/dispatch": {
+    "title": "TryTrovan | Dispatch live for route planning and dispatch",
+    "description": "See route progress, driver status, exceptions, and late-risk stops without chasing updates across calls and texts."
+  },
+  "/platform/drive": {
+    "title": "TryTrovan | Driver app for route planning and dispatch",
+    "description": "Drivers get their route, stop details, customer notes, navigation, and proof capture in a simple mobile workflow."
+  },
+  "/platform/track": {
+    "title": "TryTrovan | Customer tracking & ETA for route planning and dispatch",
+    "description": "Share delivery status, ETA, and proof updates so customers know what is happening without calling dispatch."
+  },
+  "/platform/proof": {
+    "title": "TryTrovan | Proof & analytics for route planning and dispatch",
+    "description": "Capture timestamps, photos, notes, driver updates, and delivery outcomes so your team can resolve questions quickly."
+  },
+  "/demo": {
+    "title": "TryTrovan Demo | Product walkthrough for a full route day",
+    "description": "Watch and click through a Trovan route day from imported stops to dispatch, driver proof, customer tracking, and route summary."
+  },
+  "/pricing": {
+    "title": "TryTrovan Pricing | Route-day ROI and rollout packages",
+    "description": "Estimate route-day savings and review Trovan Launch, Scale, and Enterprise rollout packages."
+  },
+  "/testimonials": {
+    "title": "TryTrovan Testimonials | Route operation scenarios",
+    "description": "Review realistic delivery, distribution, and support scenarios for route-day planning, dispatch, customer status, and proof."
+  },
+  "/security": {
+    "title": "TryTrovan Security | RBAC, audit logs, and route data controls",
+    "description": "Review Trovan security posture for route operations, including RBAC, audit logs, request IDs, redaction, and vendor-review paths."
+  },
+  "/resources": {
+    "title": "TryTrovan Resources | Route audit, buyer guide, and rollout tools",
+    "description": "Use route audit, dispatch readiness, buyer guide, implementation, pricing ROI, security, and support resources."
+  },
+  "/resources/downloads": {
+    "title": "TryTrovan Downloads | Route audit and implementation checklists",
+    "description": "Open route audit, dispatch readiness, implementation, ROI, policy, and workflow resources."
+  },
+  "/support": {
+    "title": "TryTrovan Support | Login, implementation, and security help",
+    "description": "Request login help, implementation guidance, sales follow-up, or security review support."
+  },
+  "/company": {
+    "title": "TryTrovan Company | Route operations software",
+    "description": "Learn why Trovan exists for delivery teams that need to plan the day, run the day, and prove every stop."
+  },
+  "/mission": {
+    "title": "TryTrovan Mission | Make route days easier to run and prove",
+    "description": "Trovan exists to make route days easier to run and easier to prove for delivery and distribution teams."
+  },
+  "/careers": {
+    "title": "TryTrovan Careers | Route operations software roles",
+    "description": "Trovan is not advertising an open role today. Share relevant route operations, dispatch, mapping, routing, or implementation experience for future consideration."
+  },
+  "/legal/privacy": {
+    "title": "TryTrovan Privacy Policy | Route and delivery data",
+    "description": "Review how Trovan describes route, driver, customer, proof, cookie, and rights-request data for public diligence."
+  },
+  "/legal/terms": {
+    "title": "TryTrovan Terms of Service | Route operations SaaS",
+    "description": "Review public service usage boundaries for Trovan route planning, dispatch, tracking, proof, and support workflows."
+  },
+  "/legal/cookies": {
+    "title": "TryTrovan Cookie Policy | Cookie preferences",
+    "description": "Review Trovan cookie categories and update preferences for essential, analytics, and marketing storage."
+  },
+  "/legal/exercise-rights": {
+    "title": "TryTrovan Privacy Rights Request | Data access and deletion",
+    "description": "Request access, correction, deletion, export, or review of personal or operational information associated with Trovan."
+  },
+  "/login": {
+    "title": "Sign in | Trovan",
+    "description": "Secure workspace access for approved Trovan pilot organizations."
+  }
+}

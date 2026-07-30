@@ -5,7 +5,6 @@ import {
   type ReactNode,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 import { Link as RouterLink, useLocation } from 'react-router-dom';
@@ -30,7 +29,6 @@ import {
   Stack,
   TextField,
   Typography,
-  useMediaQuery,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import {
@@ -72,6 +70,7 @@ import {
   supportTopics,
   workflowPages,
 } from './publicSiteData';
+import publicSeo from './publicSeo.json';
 
 type RequestFormState = {
   name: string;
@@ -106,82 +105,10 @@ function normalizePathname(pathname: string) {
 }
 
 function getPageSeo(pathname: string) {
-  const workflow = getWorkflowByPath(pathname);
-  if (workflow) {
-    return {
-      title: `TryTrovan | ${workflow.navLabel} for route planning and dispatch`,
-      description: workflow.body,
-    };
-  }
-
-  const seo: Record<string, { title: string; description: string }> = {
-    '/': {
-      title: 'TryTrovan | Route planning, dispatch, driver app, tracking, and proof',
-      description: 'Trovan helps delivery and distribution teams plan routes, dispatch live, guide drivers, update customers, and prove every stop.',
-    },
-    '/platform': {
-      title: 'TryTrovan Platform | Route-day control from plan to proof',
-      description: 'Explore the Trovan platform across planning, dispatch, driver app, customer tracking, and proof of delivery.',
-    },
-    '/demo': {
-      title: 'TryTrovan Demo | Product walkthrough for a full route day',
-      description: 'Watch and click through a Trovan route day from imported stops to dispatch, driver proof, customer tracking, and route summary.',
-    },
-    '/pricing': {
-      title: 'TryTrovan Pricing | Route-day ROI and rollout packages',
-      description: 'Estimate route-day savings and review Trovan Launch, Scale, and Enterprise rollout packages.',
-    },
-    '/testimonials': {
-      title: 'TryTrovan Testimonials | Route operation scenarios',
-      description: 'Review realistic delivery, distribution, and support scenarios for route-day planning, dispatch, customer status, and proof.',
-    },
-    '/security': {
-      title: 'TryTrovan Security | RBAC, audit logs, and route data controls',
-      description: 'Review Trovan security posture for route operations, including RBAC, audit logs, request IDs, redaction, and vendor-review paths.',
-    },
-    '/resources': {
-      title: 'TryTrovan Resources | Route audit, buyer guide, and rollout tools',
-      description: 'Use route audit, dispatch readiness, buyer guide, implementation, pricing ROI, security, and support resources.',
-    },
-    '/resources/downloads': {
-      title: 'TryTrovan Downloads | Route audit and implementation checklists',
-      description: 'Open route audit, dispatch readiness, implementation, ROI, policy, and workflow resources.',
-    },
-    '/support': {
-      title: 'TryTrovan Support | Login, implementation, and security help',
-      description: 'Request login help, implementation guidance, sales follow-up, or security review support.',
-    },
-    '/company': {
-      title: 'TryTrovan Company | Route operations software',
-      description: 'Learn why Trovan exists for delivery teams that need to plan the day, run the day, and prove every stop.',
-    },
-    '/mission': {
-      title: 'TryTrovan Mission | Make route days easier to run and prove',
-      description: 'Trovan exists to make route days easier to run and easier to prove for delivery and distribution teams.',
-    },
-    '/careers': {
-      title: 'TryTrovan Careers | Route operations software roles',
-      description: careersPublicCopy.seoDescription,
-    },
-    '/legal/privacy': {
-      title: 'TryTrovan Privacy Policy | Route and delivery data',
-      description: 'Review how Trovan describes route, driver, customer, proof, cookie, and rights-request data for public diligence.',
-    },
-    '/legal/terms': {
-      title: 'TryTrovan Terms of Service | Route operations SaaS',
-      description: 'Review public service usage boundaries for Trovan route planning, dispatch, tracking, proof, and support workflows.',
-    },
-    '/legal/cookies': {
-      title: 'TryTrovan Cookie Policy | Cookie preferences',
-      description: 'Review Trovan cookie categories and update preferences for essential, analytics, and marketing storage.',
-    },
-    '/legal/exercise-rights': {
-      title: 'TryTrovan Privacy Rights Request | Data access and deletion',
-      description: 'Request access, correction, deletion, export, or review of personal or operational information associated with Trovan.',
-    },
-  };
-
-  return seo[pathname] ?? seo['/'];
+  return (
+    publicSeo[pathname as keyof typeof publicSeo] ??
+    publicSeo['/']
+  );
 }
 
 function upsertMeta(selector: string, attribute: 'name' | 'property', key: string, content: string) {
@@ -225,6 +152,62 @@ function productWebpStem(imageSrc: string) {
     return undefined;
   }
   return imageSrc.slice(0, -4);
+}
+
+function InlineProductScreenshot({
+  src,
+  alt,
+}: {
+  src: string;
+  alt: string;
+}) {
+  const webpStem = productWebpStem(src);
+  return (
+    <Box
+      component="picture"
+      sx={{
+        display: 'block',
+        width: '100%',
+        mt: 1,
+        borderRadius: 1.2,
+        border: `1px solid ${alpha('#FFF8ED', 0.08)}`,
+        overflow: 'hidden',
+        bgcolor: '#FFFFFF',
+      }}
+    >
+      {webpStem ? (
+        <>
+          <source
+            media="(max-width: 600px)"
+            srcSet={`${webpStem}-640.webp 640w, ${webpStem}-768.webp 768w`}
+            sizes="94vw"
+            type="image/webp"
+          />
+          <source
+            srcSet={`${webpStem}-768.webp 768w, ${webpStem}.webp 1440w`}
+            sizes="(max-width: 900px) 94vw, 560px"
+            type="image/webp"
+          />
+        </>
+      ) : null}
+      <Box
+        component="img"
+        src={src}
+        alt={alt}
+        loading="lazy"
+        decoding="async"
+        width={1440}
+        height={900}
+        sx={{
+          display: 'block',
+          width: '100%',
+          height: 'auto',
+          objectFit: 'contain',
+          objectPosition: 'top center',
+        }}
+      />
+    </Box>
+  );
 }
 
 function buildAuditNotes(inputs: AuditInputs) {
@@ -1015,7 +998,7 @@ function ProductFrameHeader({
           T
         </Box>
         <Typography sx={{ color: '#FFF8ED', fontSize: 12.5, fontWeight: 900, whiteSpace: 'nowrap' }}>
-          Live Trovan workspace
+          Current Trovan workspace
         </Typography>
       </Stack>
       <Typography
@@ -1386,13 +1369,9 @@ function DispatchWorkflowFrame() {
             <Typography sx={{ mt: 0.45, color: '#FFF8ED', fontWeight: 900 }}>
               Dispatch sees multiple route lanes, active assignments, and the current route detail together.
             </Typography>
-            <Box
-              component="img"
+            <InlineProductScreenshot
               src="/marketing/product-dispatch.png"
               alt="Current Trovan dispatch board with unassigned jobs, active routes, live map, and exception communications"
-              loading="lazy"
-              decoding="async"
-              sx={{ display: 'block', width: '100%', mt: 1, borderRadius: 1.2, border: `1px solid ${alpha('#FFF8ED', 0.08)}`, objectFit: 'contain', objectPosition: 'top center' }}
             />
           </Box>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1.2 }}>
@@ -1403,13 +1382,9 @@ function DispatchWorkflowFrame() {
               <Typography sx={{ mt: 0.45, color: '#FFF8ED', fontWeight: 900 }}>
                 The queue shows the work already staged for routing and dispatch.
               </Typography>
-              <Box
-                component="img"
-                src="/marketing/jobs-queue.png"
-                alt="Trovan jobs queue showing staged work already in the routing system"
-                loading="lazy"
-                decoding="async"
-                sx={{ display: 'block', width: '100%', mt: 1, borderRadius: 1.2, border: `1px solid ${alpha('#FFF8ED', 0.08)}`, objectFit: 'contain', objectPosition: 'top center' }}
+              <InlineProductScreenshot
+                src="/marketing/product-jobs.png"
+                alt="Current Trovan jobs queue showing staged work, service windows, routing status, and customer context"
               />
             </Box>
             <Box sx={{ p: 1.2, borderRadius: 1.5, bgcolor: alpha('#FFF8ED', 0.04), border: `1px solid ${alpha('#FFF8ED', 0.08)}` }}>
@@ -1419,20 +1394,16 @@ function DispatchWorkflowFrame() {
               <Typography sx={{ mt: 0.45, color: '#FFF8ED', fontWeight: 900 }}>
                 Route issues stay attached to the lane, not in a separate text thread.
               </Typography>
-              <Box
-                component="img"
-                src="/marketing/dispatch-exceptions.png"
-                alt="Trovan exception queue showing route risk, operator actions, and route context"
-                loading="lazy"
-                decoding="async"
-                sx={{ display: 'block', width: '100%', mt: 1, borderRadius: 1.2, border: `1px solid ${alpha('#FFF8ED', 0.08)}`, objectFit: 'contain', objectPosition: 'top center' }}
+              <InlineProductScreenshot
+                src="/marketing/product-exceptions.png"
+                alt="Current Trovan exception queue showing route risk, operator actions, owner, and route context"
               />
             </Box>
           </Box>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
             {[
-              '6 jobs visible in queue',
-              '4 route lanes on screen',
+              'jobs staged for routing',
+              'route lanes visible together',
               'exceptions tied to the route record',
             ].map((badge) => (
               <Box key={badge} sx={{ px: 1.1, py: 0.7, borderRadius: 999, bgcolor: alpha(trovanColors.copper[300], 0.14), color: trovanColors.copper[100], fontSize: 11, fontWeight: 900 }}>
@@ -1469,13 +1440,9 @@ function PlatformOverviewFrame() {
             <Typography sx={{ mt: 0.45, color: '#FFF8ED', fontWeight: 900 }}>
               Build, balance, and review routes before dispatch takes over.
             </Typography>
-            <Box
-              component="img"
+            <InlineProductScreenshot
               src="/marketing/product-routing-exceptions.png"
               alt="Current Trovan route planning workspace showing route exceptions, stops, and publish-ready totals"
-              loading="lazy"
-              decoding="async"
-              sx={{ display: 'block', width: '100%', mt: 1, borderRadius: 1.2, border: `1px solid ${alpha('#FFF8ED', 0.08)}`, objectFit: 'contain', objectPosition: 'top center' }}
             />
           </Box>
           <Box sx={{ p: 1.2, borderRadius: 1.5, bgcolor: alpha('#FFF8ED', 0.04), border: `1px solid ${alpha('#FFF8ED', 0.08)}` }}>
@@ -1485,13 +1452,9 @@ function PlatformOverviewFrame() {
             <Typography sx={{ mt: 0.45, color: '#FFF8ED', fontWeight: 900 }}>
               Run active routes, watch the queue, and resolve issues in one view.
             </Typography>
-            <Box
-              component="img"
+            <InlineProductScreenshot
               src="/marketing/product-dispatch.png"
               alt="Current Trovan dispatch board with unassigned jobs, active routes, live map, and exception communications"
-              loading="lazy"
-              decoding="async"
-              sx={{ display: 'block', width: '100%', mt: 1, borderRadius: 1.2, border: `1px solid ${alpha('#FFF8ED', 0.08)}`, objectFit: 'contain', objectPosition: 'top center' }}
             />
           </Box>
         </Box>
@@ -1503,13 +1466,9 @@ function PlatformOverviewFrame() {
             <Typography sx={{ mt: 0.45, color: '#FFF8ED', fontWeight: 900 }}>
               Keep support and customers aligned with live route progress.
             </Typography>
-            <Box
-              component="img"
+            <InlineProductScreenshot
               src="/marketing/product-tracking.png"
               alt="Current Trovan tracking workspace showing live telemetry and route visibility"
-              loading="lazy"
-              decoding="async"
-              sx={{ display: 'block', width: '100%', mt: 1, borderRadius: 1.2, border: `1px solid ${alpha('#FFF8ED', 0.08)}`, objectFit: 'contain', objectPosition: 'top center' }}
             />
           </Box>
           <Box sx={{ p: 1.2, borderRadius: 1.5, bgcolor: alpha('#FFF8ED', 0.04), border: `1px solid ${alpha('#FFF8ED', 0.08)}` }}>
@@ -1519,13 +1478,9 @@ function PlatformOverviewFrame() {
             <Typography sx={{ mt: 0.45, color: '#FFF8ED', fontWeight: 900 }}>
               Review notes, timestamps, and delivery evidence after every stop.
             </Typography>
-            <Box
-              component="img"
+            <InlineProductScreenshot
               src="/marketing/product-proof.png"
               alt="Current Trovan proof-of-delivery workspace with delivery status, route links, filters, and evidence details"
-              loading="lazy"
-              decoding="async"
-              sx={{ display: 'block', width: '100%', mt: 1, borderRadius: 1.2, border: `1px solid ${alpha('#FFF8ED', 0.08)}`, objectFit: 'contain', objectPosition: 'top center' }}
             />
           </Box>
         </Box>
@@ -2330,90 +2285,6 @@ function RouteLinePreview({
   );
 }
 
-function RouteMotionVideo() {
-  const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
-  const sectionRef = useRef<HTMLDivElement | null>(null);
-  const [shouldLoadVideo, setShouldLoadVideo] = useState(false);
-
-  useEffect(() => {
-    if (shouldLoadVideo) return undefined;
-    const section = sectionRef.current;
-    if (!section || !('IntersectionObserver' in window)) {
-      setShouldLoadVideo(true);
-      return undefined;
-    }
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) return;
-        setShouldLoadVideo(true);
-        observer.disconnect();
-      },
-      { rootMargin: '320px 0px' },
-    );
-    observer.observe(section);
-    return () => observer.disconnect();
-  }, [shouldLoadVideo]);
-
-  return (
-    <Box ref={sectionRef} sx={{ py: { xs: 7, md: 9 }, bgcolor: trovanColors.stone[25], color: trovanColors.black[950] }}>
-      <Box sx={{ width: sectionWidth, mx: 'auto', display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '0.72fr 1.28fr' }, gap: 3, alignItems: 'center' }}>
-        <Box>
-          <Kicker>Real product recording</Kicker>
-          <Typography variant="h2" sx={{ mt: 1, fontFamily: trovanTypography.brandFontFamily, fontSize: { xs: 38, md: 52 }, lineHeight: 1 }}>
-            See the route day move through the actual Trovan UI.
-          </Typography>
-          <Typography sx={{ mt: 1.5, color: alpha(trovanColors.black[900], 0.68), fontSize: 18, lineHeight: 1.55 }}>
-            This 35-second tour was recorded from the current product preview. It moves from the operations dashboard through planning, dispatch, route execution, tracking, proof, and the customer status page.
-          </Typography>
-          <Stack spacing={1} sx={{ mt: 2.2 }}>
-            {[
-              'Current Trovan screens—not recreated marketing mockups.',
-              'Chapter labels explain what each team sees during the route day.',
-              'Muted playback, controls, captions, and a reduced-motion-safe poster.',
-            ].map((item) => (
-              <Stack key={item} direction="row" spacing={1} alignItems="flex-start">
-                <CheckRoundedIcon sx={{ color: trovanColors.semantic.success, fontSize: 18, mt: '2px' }} />
-                <Typography sx={{ color: alpha(trovanColors.black[900], 0.72), lineHeight: 1.5 }}>{item}</Typography>
-              </Stack>
-            ))}
-          </Stack>
-        </Box>
-        <Box sx={{ borderRadius: 2, bgcolor: '#151210', border: `1px solid ${alpha(trovanColors.copper[300], 0.16)}`, boxShadow: '0 30px 90px rgba(0,0,0,0.32)', overflow: 'hidden' }}>
-          <ProductFrameHeader detail="Recorded in the current Trovan preview" />
-          <Box
-            component="video"
-            controls
-            autoPlay={shouldLoadVideo && !reduceMotion}
-            muted
-            loop
-            playsInline
-            preload={shouldLoadVideo ? 'metadata' : 'none'}
-            poster={PRODUCT_TOUR_POSTER_SRC}
-            aria-label="Trovan product tour recording from dashboard through customer tracking"
-            sx={{ display: 'block', width: '100%', aspectRatio: '16 / 10', bgcolor: '#0C0907' }}
-          >
-            {shouldLoadVideo ? <source src={PRODUCT_TOUR_VIDEO_SRC} type="video/mp4" /> : null}
-            <track kind="captions" src={PRODUCT_TOUR_CAPTIONS_SRC} srcLang="en" label="English" />
-            Your browser does not support the Trovan product-tour video.
-          </Box>
-          <Stack
-            direction="row"
-            spacing={0.8}
-            flexWrap="wrap"
-            sx={{ p: 1.4, borderTop: `1px solid ${alpha('#FFF8ED', 0.12)}` }}
-          >
-            {['Dashboard', 'Planning', 'Dispatch', 'Execution', 'Tracking', 'Proof', 'Customer view'].map((chapter) => (
-              <Box key={chapter} sx={{ px: 1, py: 0.45, borderRadius: 999, color: alpha('#FFF8ED', 0.78), border: `1px solid ${alpha('#FFF8ED', 0.16)}`, fontSize: 11, fontWeight: 900 }}>
-                {chapter}
-              </Box>
-            ))}
-          </Stack>
-        </Box>
-      </Box>
-    </Box>
-  );
-}
-
 function ConnectedRouteProofSection() {
   return (
     <Box sx={{ mt: 4 }}>
@@ -2709,13 +2580,16 @@ function HeroProductShowcase() {
   return (
     <MarketingScreenshotFrame
       title="Route-day command center"
-      caption="Route map, selected lane, and publish-ready route context."
+      caption="Current product UI with illustrative route data."
       imageSrc="/marketing/product-routing.png"
-      imageWebpSrc="/marketing/product-routing-768.webp"
       imageAlt="Current Trovan route planning workspace with unassigned jobs, route lanes, map context, and publish controls"
       variant="map"
       priority
-      badges={['30 jobs planned', '3 routes balanced', '0 unassigned']}
+      badges={[
+        'lane visibility',
+        'route exceptions',
+        'publish readiness',
+      ]}
     />
   );
 }
@@ -3711,7 +3585,7 @@ function DemoVideoSection() {
             component="video"
             controls
             playsInline
-            preload="metadata"
+            preload="none"
             poster={PRODUCT_TOUR_POSTER_SRC}
             aria-label="Trovan full route day product walkthrough video"
             sx={{ display: 'block', width: '100%', aspectRatio: '16 / 10', bgcolor: '#0C0907' }}
@@ -3763,7 +3637,6 @@ function DemoPage({ onOpenRequest }: { onOpenRequest: (requestType: RequestType)
         onPrimary={() => onOpenRequest('Book demo')}
       />
       <DemoVideoSection />
-      <RouteMotionVideo />
       <QuickProductDemo />
       <Box sx={{ py: { xs: 7, md: 9 }, bgcolor: trovanColors.stone[25] }}>
         <Box sx={{ width: sectionWidth, mx: 'auto' }}>
