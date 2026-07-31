@@ -499,20 +499,22 @@ function CookiePreferencesModal({
   );
 }
 
-function BrandLockup({ width = 184 }: { width?: number }) {
-  const height = Math.round((width * 260) / 1120);
+function BrandLockup({ width = 194 }: { width?: number }) {
+  const height = Math.round((width * 261) / 1000);
   return (
     <Box
       component="img"
-      src={trovanBrandAssets.logoHorizontal}
-      alt="Trovan Dispatch"
+      src={trovanBrandAssets.primaryLockupCrop}
+      alt="Trovan — Intelligent routes. Delivered."
       width={width}
       height={height}
       sx={{
         width,
         height,
         display: 'block',
-        filter: `drop-shadow(0 12px 28px ${alpha(trovanColors.copper[700], 0.22)})`,
+        objectFit: 'contain',
+        objectPosition: 'left center',
+        filter: 'none',
       }}
     />
   );
@@ -691,7 +693,7 @@ function PublicHeader({ onOpenRequest }: { onOpenRequest: (requestType: RequestT
         backdropFilter: 'blur(18px)',
       }}
     >
-      <Box sx={{ width: sectionWidth, mx: 'auto', minHeight: 68, display: 'flex', alignItems: 'center', gap: 1.2 }}>
+      <Box sx={{ width: sectionWidth, mx: 'auto', minHeight: 72, display: 'flex', alignItems: 'center', gap: 1.2 }}>
         <Box component={RouterLink} to="/" aria-label="Trovan home" sx={{ display: 'flex', alignItems: 'center', mr: 'auto', textDecoration: 'none' }}>
           <BrandLockup />
         </Box>

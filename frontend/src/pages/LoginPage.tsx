@@ -77,10 +77,10 @@ function ProductProof() {
         >
           <Box
             component="img"
-            src={trovanBrandAssets.logoHorizontal}
-            alt="Trovan Dispatch"
-            width={1120}
-            height={260}
+            src={trovanBrandAssets.primaryLockupCrop}
+            alt="Trovan — Intelligent routes. Delivered."
+            width={1000}
+            height={261}
             sx={{ display: 'block', width: 215, height: 'auto' }}
           />
         </Box>
@@ -383,19 +383,16 @@ export default function LoginPage() {
             {!showProductProof ? (
               <Box
                 component="img"
-                src={trovanBrandAssets.logoHorizontal}
-                alt="Trovan Dispatch"
-                width={1120}
-                height={260}
+                src={trovanBrandAssets.primaryLockupCrop}
+                alt="Trovan — Intelligent routes. Delivered."
+                width={1000}
+                height={261}
                 sx={{
                   width: 210,
                   maxWidth: '72%',
                   height: 'auto',
                   display: 'block',
                   mb: 2.8,
-                  p: 1,
-                  borderRadius: 1,
-                  bgcolor: trovanColors.brand.navy950,
                 }}
               />
             ) : null}

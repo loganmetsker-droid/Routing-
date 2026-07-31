@@ -68,6 +68,11 @@ test.describe('Trovan login experience', () => {
     const proof = page.getByTestId('login-product-proof');
     await expect(proof).toBeVisible();
     await expect(proof.locator('video')).toHaveCount(0);
+    await expect(
+      proof.locator(
+        'img[src="/brand/assets/trovan-primary-lockup-crop.png"]',
+      ),
+    ).toHaveCount(1);
     const productImage = proof.locator(
       'img[src="/marketing/product-routing.png"]',
     );
@@ -145,6 +150,11 @@ test.describe('Trovan login experience', () => {
     await openLiveLogin(page);
 
     await expect(page.getByTestId('login-product-proof')).toHaveCount(0);
+    await expect(
+      page.locator(
+        'img[src="/brand/assets/trovan-primary-lockup-crop.png"]',
+      ),
+    ).toHaveCount(1);
     await expect(
       page.getByRole('button', { name: 'Continue with SSO' }),
     ).toBeVisible();
