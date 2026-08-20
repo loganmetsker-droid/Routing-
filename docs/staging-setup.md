@@ -46,6 +46,8 @@ Do not set `VITE_AUTH_BYPASS` or `VITE_MOCK_PREVIEW` in any hosted environment.
 
 The GitHub environment must contain the provider deployment credentials, the environment's frontend/backend/routing URLs, a dispatcher auth token, an OWNER/ADMIN token for a genuinely different organization (`STAGING_SECOND_ORG_AUTH_TOKEN`), a separate driver auth token, an already-expired staging JWT (`STAGING_EXPIRED_AUTH_TOKEN`), WorkOS hosted/test credentials, Mapbox and contracted matrix credentials, metrics/routing/monitoring/encryption secrets, Stripe test credentials, an outbound-webhook receiver, Postmark credentials, and R2 credentials. `scripts/launch-env-status.mjs` reports missing names without printing values. The two organization tokens must resolve to distinct organization IDs; strict smoke creates a scoped API key, proves the other organization cannot list or revoke it, and confirms the primary key remains usable. The expired JWT must have a valid staging signature and an `exp` claim in the past; it is used only to prove the hosted expiry path rejects stale sessions.
 
+Promotion also runs `npm run release:verify-environment -- <target>` before installing dependencies or contacting a provider. It validates every release-workflow variable and secret by name, reports missing names in stable order, and never prints configured values. A failed preflight means no provider deployment was attempted.
+
 ## Verification
 
 ```sh

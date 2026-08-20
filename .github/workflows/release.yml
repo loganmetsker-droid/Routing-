@@ -101,6 +101,60 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
+      - name: Validate protected release environment
+        env:
+          BACKEND_URL: ${{ vars.BACKEND_URL }}
+          FRONTEND_URL: ${{ vars.FRONTEND_URL }}
+          ROUTING_SERVICE_URL: ${{ vars.ROUTING_SERVICE_URL }}
+          WEBSOCKET_URL: ${{ vars.WEBSOCKET_URL }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_BACKEND_SERVICE_ID: ${{ secrets.RENDER_BACKEND_SERVICE_ID }}
+          RENDER_ROUTING_SERVICE_ID: ${{ secrets.RENDER_ROUTING_SERVICE_ID }}
+          STAGING_AUTH_TOKEN: ${{ secrets.STAGING_AUTH_TOKEN }}
+          STAGING_SECOND_ORG_AUTH_TOKEN: ${{ secrets.STAGING_SECOND_ORG_AUTH_TOKEN }}
+          STAGING_DRIVER_AUTH_TOKEN: ${{ secrets.STAGING_DRIVER_AUTH_TOKEN }}
+          STAGING_EXPIRED_AUTH_TOKEN: ${{ secrets.STAGING_EXPIRED_AUTH_TOKEN }}
+          METRICS_TOKEN: ${{ secrets.METRICS_TOKEN }}
+          ROUTING_SERVICE_INTERNAL_TOKEN: ${{ secrets.ROUTING_SERVICE_INTERNAL_TOKEN }}
+          WORKOS_TEST_EMAIL: ${{ secrets.WORKOS_TEST_EMAIL }}
+          WORKOS_TEST_PASSWORD: ${{ secrets.WORKOS_TEST_PASSWORD }}
+          WORKOS_CLIENT_ID: ${{ secrets.WORKOS_CLIENT_ID }}
+          WORKOS_API_KEY: ${{ secrets.WORKOS_API_KEY }}
+          WORKOS_REDIRECT_URI: ${{ vars.WORKOS_REDIRECT_URI }}
+          WORKOS_LOGOUT_REDIRECT_URI: ${{ vars.WORKOS_LOGOUT_REDIRECT_URI }}
+          ROUTING_MATRIX_BASE_URL: ${{ secrets.ROUTING_MATRIX_BASE_URL }}
+          ROUTING_MATRIX_PROVIDER_LABEL: ${{ vars.ROUTING_MATRIX_PROVIDER_LABEL }}
+          ROUTING_MATRIX_TOKEN: ${{ secrets.ROUTING_MATRIX_TOKEN }}
+          TROVAN_SOLVER_VERSION: ${{ vars.TROVAN_SOLVER_VERSION }}
+          GEOCODING_API_KEY: ${{ secrets.GEOCODING_API_KEY }}
+          ERROR_MONITORING_WEBHOOK_URL: ${{ secrets.ERROR_MONITORING_WEBHOOK_URL }}
+          ERROR_MONITORING_WEBHOOK_TOKEN: ${{ secrets.ERROR_MONITORING_WEBHOOK_TOKEN }}
+          ERROR_MONITORING_TEST_READBACK_URL: ${{ secrets.ERROR_MONITORING_TEST_READBACK_URL }}
+          ERROR_MONITORING_TEST_ACK_URL: ${{ secrets.ERROR_MONITORING_TEST_ACK_URL }}
+          ACCESS_CODE_ENCRYPTION_KEY: ${{ secrets.ACCESS_CODE_ENCRYPTION_KEY }}
+          ACCESS_CODE_KEY_VERSION: ${{ vars.ACCESS_CODE_KEY_VERSION }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+          STRIPE_PRICE_LAUNCH: ${{ secrets.STRIPE_PRICE_LAUNCH }}
+          STRIPE_PRICE_SCALE: ${{ secrets.STRIPE_PRICE_SCALE }}
+          STAGING_WEBHOOK_RECEIVER_URL: ${{ secrets.STAGING_WEBHOOK_RECEIVER_URL }}
+          POSTMARK_SERVER_TOKEN: ${{ secrets.POSTMARK_SERVER_TOKEN }}
+          POSTMARK_FROM_EMAIL: ${{ vars.POSTMARK_FROM_EMAIL }}
+          LEAD_INTAKE_EMAIL: ${{ vars.LEAD_INTAKE_EMAIL }}
+          LEAD_INTAKE_FROM_EMAIL: ${{ vars.LEAD_INTAKE_FROM_EMAIL }}
+          POSTMARK_BOUNCE_WEBHOOK_URL: ${{ secrets.POSTMARK_BOUNCE_WEBHOOK_URL }}
+          POSTMARK_WEBHOOK_USERNAME: ${{ secrets.POSTMARK_WEBHOOK_USERNAME }}
+          POSTMARK_WEBHOOK_PASSWORD: ${{ secrets.POSTMARK_WEBHOOK_PASSWORD }}
+          POSTMARK_BOUNCE_HASH_KEY: ${{ secrets.POSTMARK_BOUNCE_HASH_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          LAUNCH_GATE_EVIDENCE_JSON: ${{ secrets.LAUNCH_GATE_EVIDENCE_JSON }}
+        run: npm run release:verify-environment -- "$DEPLOY_TARGET"
+
       - name: Install dependencies
         run: npm ci
 

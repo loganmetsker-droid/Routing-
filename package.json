@@ -41,6 +41,7 @@
     "release:snapshot": "node scripts/create-safety-snapshot.mjs",
     "release:build-candidate": "node scripts/build-release-candidate.mjs",
     "release:verify-identity": "node scripts/verify-release-identity.mjs",
+    "release:verify-environment": "node scripts/validate-release-environment.mjs",
     "release:verify-launch-evidence": "node scripts/validate-launch-gate-evidence.mjs",
     "check:backend-deps": "npm ls --workspace=backend @nestjs/common @nestjs/core @nestjs/platform-express @nestjs/typeorm typeorm",
     "docker:dev": "docker-compose -f infrastructure/docker/docker-compose.dev.yml up",
