@@ -1,6 +1,6 @@
 # Assisted-Pilot Launch Readiness
 
-Date: 2026-08-06
+Date: 2026-08-20
 
 Scope: publicly marketed, manually approved paid pilots
 
@@ -38,10 +38,10 @@ Trovan is not being prepared for self-serve general availability. Launch is $399
 
 - [x] Reproducible `npm ci` and workspace production build.
 - [x] Frontend lint with zero warnings.
-- [x] Backend: 266 tests; frontend: 93 tests; routing service: 19 tests.
+- [x] Backend: 281 tests; frontend: 98 tests; routing service: 20 tests.
 - [x] Driver workflow: three consecutive isolated runs, two tests per run.
-- [x] Complete installed-Chrome Playwright suite: 89 passed, one hosted-only persistence test skipped, zero failures (2026-08-06).
-- [x] Full installed dependency audit and production-only audit both report zero vulnerabilities on 2026-08-06.
+- [x] Complete installed-Chrome Playwright suite: 93 passed, two hosted-only tests skipped, zero failures (2026-08-20).
+- [x] Full installed dependency audit and production-only audit both report zero vulnerabilities on 2026-08-20.
 - [x] Database migrations applied successfully.
 - [x] A recoverable local safety snapshot and a clean isolated candidate were produced; `release:check-scope --directory <candidate>` passed. Rebuild and re-run this check after the final source change.
 
