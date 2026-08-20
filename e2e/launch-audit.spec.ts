@@ -259,6 +259,63 @@ async function collectInteractiveInventory(page: Page) {
   );
 }
 
+async function collectStableInteractiveInventory(page: Page) {
+  let previousSignature = '';
+  let inventory = await collectInteractiveInventory(page);
+
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const signature = JSON.stringify(
+      inventory.map((item) => [
+        item.tag,
+        item.role,
+        item.href,
+        item.type,
+        item.testId,
+        item.id,
+        item.name,
+        item.ariaControls,
+        item.label,
+        item.disabled,
+        item.selected,
+      ]),
+    );
+    if (signature === previousSignature) return inventory;
+    previousSignature = signature;
+    await page.waitForTimeout(120);
+    inventory = await collectInteractiveInventory(page);
+  }
+
+  return inventory;
+}
+
+async function installStorageBaseline(page: Page) {
+  const baseline = await page.evaluate(() => ({
+    local: Object.fromEntries(
+      Array.from({ length: window.localStorage.length }, (_, index) => {
+        const key = window.localStorage.key(index) || '';
+        return [key, window.localStorage.getItem(key) || ''];
+      }),
+    ),
+    session: Object.fromEntries(
+      Array.from({ length: window.sessionStorage.length }, (_, index) => {
+        const key = window.sessionStorage.key(index) || '';
+        return [key, window.sessionStorage.getItem(key) || ''];
+      }),
+    ),
+  }));
+
+  await page.addInitScript((storage) => {
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+    for (const [key, value] of Object.entries(storage.local)) {
+      window.localStorage.setItem(key, value);
+    }
+    for (const [key, value] of Object.entries(storage.session)) {
+      window.sessionStorage.setItem(key, value);
+    }
+  }, baseline);
+}
+
 async function collectOutcomeSignals(page: Page) {
   return page.evaluate(() => {
     const visible = (element: Element) => {
@@ -373,7 +430,8 @@ function installFailureCollectors(page: Page, issues: AuditIssue[], scope: strin
 async function clickAuditableControls(page: Page, routePath: string) {
   const clicked: Array<Record<string, unknown>> = [];
   await gotoReady(page, routePath, { settle: false });
-  const inventory = await collectInteractiveInventory(page);
+  const inventory = await collectStableInteractiveInventory(page);
+  await installStorageBaseline(page);
 
   for (const item of inventory) {
     const label = String(item.label || item.tag);
@@ -423,7 +481,7 @@ async function clickAuditableControls(page: Page, routePath: string) {
     if (isLeafletControl) {
       await page.waitForTimeout(1_200);
     }
-    const refreshedInventory = await collectInteractiveInventory(page);
+    const refreshedInventory = await collectStableInteractiveInventory(page);
     const sameControl = (candidate: (typeof refreshedInventory)[number]) =>
       candidate.tag === item.tag &&
       candidate.role === item.role &&
