@@ -14,7 +14,11 @@ jobs:
   release-gate:
     name: Build, Test, Security, And E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # The exhaustive Playwright control audit intentionally walks every primary
+    # route and can take more than 30 minutes on a contended hosted runner.
+    # Leave enough headroom for dependency installation and the complete suite;
+    # individual test timeouts still fail stalled browser interactions.
+    timeout-minutes: 90
     services:
       postgres:
         image: postgis/postgis:15-3.5

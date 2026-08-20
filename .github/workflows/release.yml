@@ -35,7 +35,10 @@ jobs:
       (github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    # Promotion includes provider deploys, strict integration smoke, and the
+    # same exhaustive hosted browser gate as CI. Keep the job bounded without
+    # terminating a healthy slow-runner execution before evidence is uploaded.
+    timeout-minutes: 90
     environment: ${{ github.event_name == 'workflow_run' && 'staging' || inputs.target }}
     env:
       DEPLOY_TARGET: ${{ github.event_name == 'workflow_run' && 'staging' || inputs.target }}
