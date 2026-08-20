@@ -429,7 +429,11 @@ async function clickAuditableControls(page: Page, routePath: string) {
 }
 
 test.describe('launch UI audit', () => {
-  test.describe.configure({ timeout: 900_000 });
+  // The all-controls audit below deliberately visits every primary route and
+  // exercises hundreds of controls. It completes in about six minutes on a
+  // local workstation but can exceed fifteen minutes on a throttled hosted
+  // runner, so keep a bounded 30-minute ceiling without weakening coverage.
+  test.describe.configure({ timeout: 1_800_000 });
   test('public launch route audit flow is interactive', async ({ page }) => {
     await gotoReady(page, '/');
 
@@ -970,7 +974,7 @@ test.describe('launch UI audit', () => {
   });
 
   test('accounts for visible controls on every primary route', async ({ page }) => {
-    test.setTimeout(900_000);
+    test.setTimeout(1_800_000);
     const results: Record<string, unknown> = {};
     const issues: AuditIssue[] = [];
     installFailureCollectors(page, issues, 'control-clicks');
