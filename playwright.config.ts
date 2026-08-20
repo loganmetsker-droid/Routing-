@@ -14,7 +14,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   workers: 1,
-  reporter: [['list']],
+  reporter: process.env.CI ? [['list'], ['github']] : [['list']],
   outputDir:
     process.env.PLAYWRIGHT_OUTPUT_DIR || '.tmp/playwright/test-results',
   use: {

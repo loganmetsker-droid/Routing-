@@ -1,4 +1,10 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import {
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import { expect, test, type Page, type Response } from '@playwright/test';
 
@@ -121,6 +127,75 @@ function writeAuditJson(name: string, payload: unknown) {
     JSON.stringify(payload, null, 2),
     'utf8',
   );
+}
+
+function controlAuditSummary(
+  results: Record<string, Array<Record<string, unknown>>>,
+  issues: AuditIssue[],
+) {
+  const controls = Object.values(results).flat();
+  const failedClicks = controls.filter((item) => item.result === 'failed');
+  const buttonControls = controls.filter((item) =>
+    item.tag === 'button' || ['button', 'tab'].includes(String(item.role || '')),
+  );
+  const directlyProvenButtons = buttonControls.filter(
+    (item) => item.result === 'clicked-and-proven',
+  );
+  const workflowProvenButtons = buttonControls.filter((item) =>
+    ['covered by workflow-specific route tests', 'covered by dedicated map interaction proof'].includes(
+      String(item.reason || ''),
+    ),
+  );
+  const disabledButtons = buttonControls.filter((item) => item.disabled === true);
+  const unaccountedEnabledButtons = buttonControls.filter(
+    (item) =>
+      item.disabled !== true &&
+      item.result !== 'clicked-and-proven' &&
+      !['covered by workflow-specific route tests', 'covered by dedicated map interaction proof'].includes(
+        String(item.reason || ''),
+      ),
+  );
+  const resultCounts = controls.reduce<Record<string, number>>((counts, item) => {
+    const result = String(item.result || 'unknown');
+    counts[result] = (counts[result] || 0) + 1;
+    return counts;
+  }, {});
+  const skipReasons = controls
+    .filter((item) => item.result === 'skipped')
+    .reduce<Record<string, number>>((counts, item) => {
+      const reason = String(item.reason || 'unspecified');
+      counts[reason] = (counts[reason] || 0) + 1;
+      return counts;
+    }, {});
+
+  return {
+    failedClicks,
+    unaccountedEnabledButtons,
+    proof: {
+      generatedAt: new Date().toISOString(),
+      status:
+        failedClicks.length || issues.length || unaccountedEnabledButtons.length
+          ? 'failed'
+          : 'passed',
+      routes: Object.keys(results).length,
+      controls: controls.length,
+      buttons: {
+        total: buttonControls.length,
+        directlyProven: directlyProvenButtons.length,
+        workflowProven: workflowProvenButtons.length,
+        disabledAtInitialState: disabledButtons.length,
+        unaccountedEnabled: unaccountedEnabledButtons.length,
+      },
+      resultCounts,
+      skipReasons,
+      workflowEvidence: [
+        'e2e/launch-audit.spec.ts: primary navigation, forms, route rendering, optimization',
+        'e2e/product-ui.spec.ts: lifecycle, dispatch, exception, and route-state actions',
+        'e2e/launch-audit.spec.ts: every visible Leaflet zoom control and interactive marker',
+        'e2e/live-persistence.spec.ts: account sign-out/sign-in and durable customer mutation',
+      ],
+    },
+  };
 }
 
 async function collectInteractiveInventory(page: Page) {
@@ -973,84 +1048,57 @@ test.describe('launch UI audit', () => {
     );
   });
 
-  test('accounts for visible controls on every primary route', async ({ page }) => {
-    test.setTimeout(1_800_000);
-    const results: Record<string, unknown> = {};
-    const issues: AuditIssue[] = [];
-    installFailureCollectors(page, issues, 'control-clicks');
-    await page.setViewportSize({ width: 1440, height: 960 });
+  test.describe('visible control coverage by route', () => {
+    for (const [routeIndex, route] of primaryRoutes.entries()) {
+      test(`accounts for visible controls on ${route.slug}`, async ({ page }) => {
+        test.setTimeout(300_000);
+        const routeEvidenceRoot = path.join(auditRoot, 'control-routes');
+        if (routeIndex === 0) {
+          rmSync(routeEvidenceRoot, { recursive: true, force: true });
+        }
+        mkdirSync(routeEvidenceRoot, { recursive: true });
 
-    for (const route of primaryRoutes) {
-      results[route.slug] = await clickAuditableControls(page, route.path);
+        const issues: AuditIssue[] = [];
+        installFailureCollectors(page, issues, `control-clicks:${route.slug}`);
+        await page.setViewportSize({ width: 1440, height: 960 });
+        const controls = await clickAuditableControls(page, route.path);
+        writeFileSync(
+          path.join(routeEvidenceRoot, `${route.slug}.json`),
+          `${JSON.stringify({ route, controls, issues }, null, 2)}\n`,
+          'utf8',
+        );
+
+        const aggregateResults: Record<string, Array<Record<string, unknown>>> = {};
+        const aggregateIssues: AuditIssue[] = [];
+        for (const evidenceFile of readdirSync(routeEvidenceRoot).sort()) {
+          const evidence = JSON.parse(
+            readFileSync(path.join(routeEvidenceRoot, evidenceFile), 'utf8'),
+          ) as {
+            route: { slug: string };
+            controls: Array<Record<string, unknown>>;
+            issues: AuditIssue[];
+          };
+          aggregateResults[evidence.route.slug] = evidence.controls;
+          aggregateIssues.push(...evidence.issues);
+        }
+
+        writeAuditJson('control-click-results.json', aggregateResults);
+        writeAuditJson('control-click-issues.json', aggregateIssues);
+        const aggregate = controlAuditSummary(aggregateResults, aggregateIssues);
+        const proofRoot = path.join(process.cwd(), '.codex', 'launch-audit');
+        mkdirSync(proofRoot, { recursive: true });
+        writeFileSync(
+          path.join(proofRoot, 'control-proof.json'),
+          `${JSON.stringify(aggregate.proof, null, 2)}\n`,
+          'utf8',
+        );
+
+        const routeSummary = controlAuditSummary({ [route.slug]: controls }, issues);
+        expect(routeSummary.failedClicks).toEqual([]);
+        expect(routeSummary.unaccountedEnabledButtons).toEqual([]);
+        expect(issues).toEqual([]);
+      });
     }
-
-    writeAuditJson('control-click-results.json', results);
-    writeAuditJson('control-click-issues.json', issues);
-    const controls = Object.values(results)
-      .flatMap((value) => value as Array<Record<string, unknown>>);
-    const failedClicks = controls
-      .filter((item) => item.result === 'failed');
-    const buttonControls = controls.filter((item) =>
-      item.tag === 'button' || ['button', 'tab'].includes(String(item.role || '')),
-    );
-    const directlyProvenButtons = buttonControls.filter(
-      (item) => item.result === 'clicked-and-proven',
-    );
-    const workflowProvenButtons = buttonControls.filter((item) =>
-      ['covered by workflow-specific route tests', 'covered by dedicated map interaction proof'].includes(String(item.reason || '')),
-    );
-    const disabledButtons = buttonControls.filter((item) => item.disabled === true);
-    const unaccountedEnabledButtons = buttonControls.filter(
-      (item) =>
-        item.disabled !== true &&
-        item.result !== 'clicked-and-proven' &&
-        !['covered by workflow-specific route tests', 'covered by dedicated map interaction proof'].includes(String(item.reason || '')),
-    );
-    const resultCounts = controls.reduce<Record<string, number>>((counts, item) => {
-      const result = String(item.result || 'unknown');
-      counts[result] = (counts[result] || 0) + 1;
-      return counts;
-    }, {});
-    const skipReasons = controls
-      .filter((item) => item.result === 'skipped')
-      .reduce<Record<string, number>>((counts, item) => {
-        const reason = String(item.reason || 'unspecified');
-        counts[reason] = (counts[reason] || 0) + 1;
-        return counts;
-      }, {});
-    const proofRoot = path.join(process.cwd(), '.codex', 'launch-audit');
-    mkdirSync(proofRoot, { recursive: true });
-    writeFileSync(
-      path.join(proofRoot, 'control-proof.json'),
-      `${JSON.stringify({
-        generatedAt: new Date().toISOString(),
-        status:
-          failedClicks.length || issues.length || unaccountedEnabledButtons.length
-            ? 'failed'
-            : 'passed',
-        routes: primaryRoutes.length,
-        controls: controls.length,
-        buttons: {
-          total: buttonControls.length,
-          directlyProven: directlyProvenButtons.length,
-          workflowProven: workflowProvenButtons.length,
-          disabledAtInitialState: disabledButtons.length,
-          unaccountedEnabled: unaccountedEnabledButtons.length,
-        },
-        resultCounts,
-        skipReasons,
-        workflowEvidence: [
-          'e2e/launch-audit.spec.ts: primary navigation, forms, route rendering, optimization',
-          'e2e/product-ui.spec.ts: lifecycle, dispatch, exception, and route-state actions',
-          'e2e/launch-audit.spec.ts: every visible Leaflet zoom control and interactive marker',
-          'e2e/live-persistence.spec.ts: account sign-out/sign-in and durable customer mutation',
-        ],
-      }, null, 2)}\n`,
-      'utf8',
-    );
-    expect(failedClicks).toEqual([]);
-    expect(unaccountedEnabledButtons).toEqual([]);
-    expect(issues).toEqual([]);
   });
 
   test('fills core SaaS forms with launch audit data', async ({ page }) => {
