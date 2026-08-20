@@ -232,6 +232,10 @@ async function collectInteractiveInventory(page: Page) {
         return {
           index,
           className,
+          testId: htmlElement.getAttribute('data-testid') || null,
+          id: htmlElement.id || null,
+          name: htmlElement.getAttribute('name') || null,
+          ariaControls: htmlElement.getAttribute('aria-controls') || null,
           tag: element.tagName.toLowerCase(),
           role: htmlElement.getAttribute('role') || null,
           href: htmlElement.getAttribute('href') || null,
@@ -425,13 +429,36 @@ async function clickAuditableControls(page: Page, routePath: string) {
       candidate.role === item.role &&
       candidate.type === item.type &&
       candidate.href === item.href &&
+      candidate.testId === item.testId &&
+      candidate.id === item.id &&
+      candidate.name === item.name &&
+      candidate.ariaControls === item.ariaControls &&
       candidate.label === item.label;
     const originalOccurrence = inventory
       .slice(0, inventory.indexOf(item))
       .filter(sameControl).length;
-    const refreshedItem = refreshedInventory
+    let refreshedItem = refreshedInventory
       .filter(sameControl)
       .at(originalOccurrence);
+    let matchedBy = 'exact-control-identity';
+    if (!refreshedItem && !item.testId && !item.id) {
+      const sameControlKind = (candidate: (typeof refreshedInventory)[number]) =>
+        candidate.tag === item.tag &&
+        candidate.role === item.role &&
+        candidate.type === item.type &&
+        candidate.href === item.href &&
+        candidate.name === item.name &&
+        candidate.ariaControls === item.ariaControls &&
+        candidate.className === item.className;
+      const kindOccurrence = inventory
+        .slice(0, inventory.indexOf(item))
+        .filter(sameControlKind).length;
+      const equivalentControls = refreshedInventory.filter(sameControlKind);
+      refreshedItem = equivalentControls.at(
+        Math.min(kindOccurrence, Math.max(equivalentControls.length - 1, 0)),
+      );
+      matchedBy = 'equivalent-dynamic-control';
+    }
     const controls = page.locator(interactiveSelector);
     if (!refreshedItem || (await controls.count()) <= refreshedItem.index) {
       clicked.push({
@@ -477,6 +504,7 @@ async function clickAuditableControls(page: Page, routePath: string) {
       const successfulApiResponse = apiResponses.some((response) => response.status >= 200 && response.status < 400);
       clicked.push({
         ...item,
+        matchedBy,
         result: changed || successfulApiResponse || item.selected || downloadProof ? 'clicked-and-proven' : 'failed',
         reason:
           changed || successfulApiResponse || downloadProof

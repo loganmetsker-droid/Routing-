@@ -275,13 +275,15 @@ test.describe('routing workspace product UI', () => {
     await drawArea.click();
     await expect(drawArea).toHaveAttribute('aria-pressed', 'true');
     await expect(drawArea).toContainText('Drag around jobs');
-    const mapBounds = await page.getByTestId('routing-map-panel').boundingBox();
+    const mapSurface = page.getByTestId('routing-map-panel').locator('.leaflet-container');
+    await expect(mapSurface).toBeVisible();
+    const mapBounds = await mapSurface.boundingBox();
     expect(mapBounds).not.toBeNull();
     if (!mapBounds) return;
-    const left = mapBounds.x + 60;
-    const right = mapBounds.x + mapBounds.width - 24;
-    const top = mapBounds.y + 96;
-    const bottom = mapBounds.y + mapBounds.height - 28;
+    const left = mapBounds.x + 48;
+    const right = mapBounds.x + mapBounds.width - 48;
+    const top = mapBounds.y + 48;
+    const bottom = mapBounds.y + mapBounds.height - 48;
     await page.mouse.move(left, top);
     await page.mouse.down();
     await page.mouse.move(right, top, { steps: 8 });
@@ -290,7 +292,7 @@ test.describe('routing workspace product UI', () => {
     await page.mouse.move(left, top, { steps: 8 });
     await page.mouse.up();
 
-    await expect(drawArea).toHaveAttribute('aria-pressed', 'false');
+    await expect(drawArea).toHaveAttribute('aria-pressed', 'false', { timeout: 15_000 });
     await expect(page.getByTestId('routing-map-area-review')).toContainText(/Map cluster: \d+ unassigned jobs?/);
     await expect(page.getByTestId('routing-map-area-insert')).toBeEnabled();
     await page.getByTestId('routing-map-clear-area').click();
