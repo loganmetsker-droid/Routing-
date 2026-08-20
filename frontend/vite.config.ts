@@ -12,6 +12,8 @@ export default defineConfig(({ mode }) => {
     ...loadEnv(mode, process.cwd(), ''),
     ...process.env,
   };
+  const releaseSha =
+    env.VITE_RELEASE_SHA || env.VERCEL_GIT_COMMIT_SHA || 'unknown';
 
   if (!['development', 'test', 'local'].includes(mode)) {
     if (isTruthy(env.VITE_AUTH_BYPASS) || isTruthy(env.VITE_MOCK_PREVIEW)) {
@@ -27,7 +29,15 @@ export default defineConfig(({ mode }) => {
   const productionSourcemaps = isTruthy(env.VITE_ENABLE_PRODUCTION_SOURCEMAPS);
 
   return {
-    plugins: [react()],
+    plugins: [
+      {
+        name: 'release-identity-meta',
+        transformIndexHtml(html) {
+          return html.replace('__TROVAN_RELEASE_SHA__', releaseSha);
+        },
+      },
+      react(),
+    ],
     test: {
       include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
       exclude: [],
