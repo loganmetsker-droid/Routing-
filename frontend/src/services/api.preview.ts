@@ -3,7 +3,7 @@ import type {
   DispatchJob,
   DispatchVehicle,
 } from '../types/dispatch';
-import { isAuthBypassed } from './api.session';
+import { getTrovanDataMode, usesPreviewDataMode } from './dataMode';
 import type {
   DispatchTimelineEvent,
   JsonRecord,
@@ -15,9 +15,19 @@ import type {
   RouteVersionStatus,
   RerouteRequest,
   TrackingLocationsSnapshot,
+  TrackingVehicleHistory,
   TrackingVehicleLocation,
 } from './api.types';
 import { clonePreview, isRecord } from './api.types';
+
+const PREVIEW_BASE_DATE = '2026-04-10';
+
+function shiftPreviewDatesToToday<T>(value: T): T {
+  const currentServiceDate = new Date().toISOString().slice(0, 10);
+  return JSON.parse(
+    JSON.stringify(value).split(PREVIEW_BASE_DATE).join(currentServiceDate),
+  ) as T;
+}
 
 const buildDensePreviewDemandJobs = (): DispatchJob[] => {
   const clusters = [
@@ -130,10 +140,11 @@ const buildDensePreviewDemandJobs = (): DispatchJob[] => {
   );
 };
 
-const PREVIEW_STATE_SEED: PreviewState = {
+const PREVIEW_STATE_SEED: PreviewState = shiftPreviewDatesToToday({
   jobs: clonePreview<DispatchJob[]>([
     {
       id: 'job-jane-1',
+      customerId: 'CUST-ROUTE-1001',
       customerName: 'Jane & Sons Bakery',
       deliveryAddress: '1425 Market Ave, Denver, CO 80202',
       pickupAddress: 'Bakery Loading Dock',
@@ -142,10 +153,40 @@ const PREVIEW_STATE_SEED: PreviewState = {
       status: 'pending',
       priority: 'high',
       assignedRouteId: 'route-alpha-001',
+      weight: 816.47,
+      volume: 5.35,
+      quantity: 4,
+      routingRequirements: {
+        load: {
+          fragile: true,
+          stackable: false,
+          palletGroups: [{
+            id: 'glass-display-pallets',
+            label: 'Glass display cases',
+            quantity: 4,
+            lengthIn: 48,
+            widthIn: 40,
+            heightIn: 58,
+            weightLb: 450,
+            stackable: false,
+            fragile: true,
+            rotationAllowed: false,
+          }],
+        },
+        requiredEquipment: ['liftgate'],
+        sequence: { position: 'first', strict: true },
+        site: {
+          accessCode: '4827',
+          accessCodeRequired: true,
+          gateInstructions: 'Use the service lane, enter the code at the black keypad, then call receiving.',
+        },
+        handlingRequirement: 'Do not stack. Glass faces must remain upright and strapped.',
+      },
       createdAt: '2026-04-10T08:30:00.000Z',
     },
     {
       id: 'job-omega-2',
+      customerId: 'CUST-ROUTE-1002',
       customerName: 'Omega Medical',
       deliveryAddress: '2100 Santa Fe Dr, Denver, CO 80204',
       pickupAddress: 'Medical Fulfillment Hub',
@@ -154,10 +195,34 @@ const PREVIEW_STATE_SEED: PreviewState = {
       status: 'pending',
       priority: 'urgent',
       assignedRouteId: 'route-alpha-001',
+      weight: 544.31,
+      volume: 3.4,
+      quantity: 3,
+      routingRequirements: {
+        load: {
+          palletGroups: [{
+            id: 'medical-cold-chain',
+            label: 'Cold-chain medical freight',
+            quantity: 3,
+            lengthIn: 48,
+            widthIn: 40,
+            heightIn: 48,
+            weightLb: 400,
+            stackable: true,
+            maxStackLevels: 2,
+            compatibilityTags: ['medical'],
+            incompatibleWithTags: ['food'],
+          }],
+        },
+        requiredEquipment: ['refrigerated'],
+        driver: { requiredCertifications: ['cold_chain'] },
+        temperatureRequirement: 'Maintain 36–46°F during transport.',
+      },
       createdAt: '2026-04-10T08:45:00.000Z',
     },
     {
       id: 'job-pioneer-3',
+      customerId: 'CUST-ROUTE-1003',
       customerName: 'Pioneer Logistics',
       deliveryAddress: '3300 Peña Blvd, Denver, CO 80216',
       pickupAddress: 'Distribution Center',
@@ -170,6 +235,7 @@ const PREVIEW_STATE_SEED: PreviewState = {
     },
     {
       id: 'job-ridge-4',
+      customerId: 'CUST-ROUTE-1004',
       customerName: 'Ridgewood Labs',
       deliveryAddress: '4100 Irving St, Denver, CO 80217',
       pickupAddress: 'Regional Depot',
@@ -182,6 +248,7 @@ const PREVIEW_STATE_SEED: PreviewState = {
     },
     {
       id: 'job-river-5',
+      customerId: 'CUST-ROUTE-1005',
       customerName: 'Riverfront Catering',
       deliveryAddress: '870 W Evans Ave, Denver, CO 80223',
       pickupAddress: 'Kitchen Hub',
@@ -194,6 +261,7 @@ const PREVIEW_STATE_SEED: PreviewState = {
     },
     {
       id: 'job-route-6',
+      customerId: 'CUST-ROUTE-1006',
       customerName: 'Aurora Office Supply',
       deliveryAddress: '12100 E Iliff Ave, Aurora, CO 80014',
       pickupAddress: 'Southeast Staging',
@@ -206,6 +274,7 @@ const PREVIEW_STATE_SEED: PreviewState = {
     },
     {
       id: 'job-highland-7',
+      customerId: 'CUST-ROUTE-1007',
       customerName: 'Arvada Grocer',
       deliveryAddress: '7600 W 57th Ave, Arvada, CO 80002',
       pickupAddress: 'Northwest Cross Dock',
@@ -218,6 +287,7 @@ const PREVIEW_STATE_SEED: PreviewState = {
     },
     {
       id: 'job-sloan-8',
+      customerId: 'CUST-ROUTE-1008',
       customerName: 'Wheat Ridge Pharmacy',
       deliveryAddress: '4990 Kipling St, Wheat Ridge, CO 80033',
       pickupAddress: 'Northwest Cross Dock',
@@ -336,7 +406,7 @@ const PREVIEW_STATE_SEED: PreviewState = {
       totalDurationMinutes: 35,
       jobIds: ['job-jane-1', 'job-omega-2'],
       workflowStatus: 'planned',
-      dataQuality: 'simulated',
+      dataQuality: 'degraded',
       optimizationStatus: 'optimized',
       optimizedStops: [
         {
@@ -367,7 +437,7 @@ const PREVIEW_STATE_SEED: PreviewState = {
           ],
         },
       },
-      planningWarnings: ['Simulated planning path used'],
+      planningWarnings: ['Capacity review required before dispatch'],
       droppedJobIds: [],
       estimatedCapacity: 1400,
       optimizedAt: '2026-04-10T10:00:00.000Z',
@@ -418,7 +488,7 @@ const PREVIEW_STATE_SEED: PreviewState = {
       totalDurationMinutes: 58,
       jobIds: ['job-ridge-4'],
       workflowStatus: 'in_progress',
-      dataQuality: 'simulated',
+      dataQuality: 'degraded',
       optimizationStatus: 'degraded',
       optimizedStops: [
         {
@@ -443,42 +513,39 @@ const PREVIEW_STATE_SEED: PreviewState = {
       id: 'driver-anna-2',
       firstName: 'Anna',
       lastName: 'Quinn',
-      status: 'on_duty',
-      currentHours: 2.1,
-      maxHours: 12,
-    },
-    {
-      id: 'driver-carl-3',
-      firstName: 'Carl',
-      lastName: 'Snyder',
-      status: 'on_route',
-      currentHours: 6.5,
-      maxHours: 10,
-    },
-    {
-      id: 'driver-maya-4',
-      firstName: 'Maya',
-      lastName: 'Vega',
-      status: 'on_duty',
+      email: 'anna.quinn@trovan.local',
+      phone: '(555) 010-2102',
+      licenseNumber: 'CO-CDL-2102',
+      licenseType: 'CLASS_B',
+      status: 'ACTIVE',
+      currentVehicleId: 'veh-van-2',
+      assignedVehicleId: 'veh-van-2',
       currentHours: 1.4,
       maxHours: 11,
     },
     {
-      id: 'driver-eli-5',
-      firstName: 'Eli',
-      lastName: 'Brooks',
-      status: 'on_duty',
-      currentHours: 3.2,
+      id: 'D-1023',
+      firstName: 'Sarah',
+      lastName: 'Johnson',
+      email: 'sarah.johnson@trovan.com',
+      phone: '(555) 123-4567',
+      licenseNumber: 'TX-CDL-1023',
+      licenseType: 'CLASS_A',
+      status: 'ACTIVE',
+      currentVehicleId: 'veh-van-1',
+      assignedVehicleId: 'veh-van-1',
+      currentHours: 6.2,
       maxHours: 11,
     },
-    {
-      id: 'driver-nora-6',
-      firstName: 'Nora',
-      lastName: 'Shaw',
-      status: 'available',
-      currentHours: 0.7,
-      maxHours: 12,
-    },
+    { id: 'D-1008', firstName: 'James', lastName: 'Martinez', email: 'james.martinez@trovan.com', phone: '(555) 123-1008', licenseNumber: 'TX-CDL-1008', licenseType: 'CLASS_A', status: 'ACTIVE', currentVehicleId: 'veh-van-2', assignedVehicleId: 'veh-van-2', currentHours: 0, maxHours: 11 },
+    { id: 'D-1015', firstName: 'Michael', lastName: 'Chen', email: 'michael.chen@trovan.com', phone: '(555) 123-1015', licenseNumber: 'TX-CDL-1015', licenseType: 'CLASS_B', certifications: ['cold_chain'], status: 'ACTIVE', currentVehicleId: 'veh-shuttle-3', assignedVehicleId: 'veh-shuttle-3', currentHours: 5.7, maxHours: 11 },
+    { id: 'D-1003', firstName: 'David', lastName: 'Thompson', email: 'david.thompson@trovan.com', phone: '(555) 123-1003', licenseNumber: 'TX-CDL-1003', licenseType: 'CLASS_A', certifications: ['hazmat', 'cold_chain'], status: 'ACTIVE', currentVehicleId: 'veh-semi-4', assignedVehicleId: 'veh-semi-4', currentHours: 3.4, maxHours: 11 },
+    { id: 'D-1018', firstName: 'Lisa', lastName: 'Rodriguez', email: 'lisa.rodriguez@trovan.com', phone: '(555) 123-1018', licenseNumber: 'TX-CDL-1018', licenseType: 'CLASS_A', status: 'ACTIVE', currentVehicleId: 'veh-van-5', assignedVehicleId: 'veh-van-5', currentHours: 4.9, maxHours: 11 },
+    { id: 'D-1005', firstName: 'Robert', lastName: 'Williams', email: 'robert.williams@trovan.com', phone: '(555) 123-1005', licenseNumber: 'TX-CDL-1005', licenseType: 'CLASS_B', status: 'OFF_DUTY', currentVehicleId: null, assignedVehicleId: null, currentHours: 0, maxHours: 11 },
+    { id: 'D-1021', firstName: 'Emily', lastName: 'Davis', email: 'emily.davis@trovan.com', phone: '(555) 123-1021', licenseNumber: 'TX-CDL-1021', licenseType: 'CLASS_A', status: 'ACTIVE', currentVehicleId: 'veh-van-2', assignedVehicleId: 'veh-van-2', currentHours: 7.1, maxHours: 11 },
+    { id: 'D-1007', firstName: 'Daniel', lastName: 'Brown', email: 'daniel.brown@trovan.com', phone: '(555) 123-1007', licenseNumber: 'TX-CDL-1007', licenseType: 'CLASS_A', status: 'ACTIVE', currentVehicleId: 'veh-shuttle-3', assignedVehicleId: 'veh-shuttle-3', currentHours: 9.6, maxHours: 11 },
+    { id: 'D-1012', firstName: 'Amanda', lastName: 'Lee', email: 'amanda.lee@trovan.com', phone: '(555) 123-1012', licenseNumber: 'TX-CDL-1012', licenseType: 'CLASS_B', status: 'ACTIVE', currentVehicleId: null, assignedVehicleId: null, currentHours: 0, maxHours: 11 },
+    { id: 'D-1011', firstName: 'Kevin', lastName: 'Harris', email: 'kevin.harris@trovan.com', phone: '(555) 123-1011', licenseNumber: 'TX-CDL-1011', licenseType: 'CLASS_A', status: 'OFF_DUTY', currentVehicleId: null, assignedVehicleId: null, currentHours: 0, maxHours: 11 },
   ]),
   vehicles: clonePreview<DispatchVehicle[]>([
     {
@@ -489,6 +556,15 @@ const PREVIEW_STATE_SEED: PreviewState = {
       vehicleType: 'cargo_van',
       status: 'available',
       capacity: 1500,
+      capacityWeightKg: 1587.57,
+      capacityVolumeM3: 7.36,
+      routingProfile: {
+        cargo: { interiorLengthIn: 126, interiorWidthIn: 70, interiorHeightIn: 72, doorHeightIn: 68, maxPalletPositions: 3, maxPalletWeightLb: 1200, maxStackLevels: 1 },
+        features: ['side door'],
+        handlingCapabilities: ['parcel'],
+        blockedDriverIds: ['D-1008'],
+        operatingRules: [{ id: 'van-1-height', label: 'Low-clearance routes only', instruction: 'Do not assign to mountain roads requiring more than 9 ft clearance.', severity: 'warning', active: true }],
+      },
       currentLocation: { lat: 39.762, lng: -105.018 },
     },
     {
@@ -499,6 +575,14 @@ const PREVIEW_STATE_SEED: PreviewState = {
       vehicleType: 'box_truck',
       status: 'available',
       capacity: 1200,
+      capacityWeightKg: 4535.92,
+      capacityVolumeM3: 25.49,
+      routingProfile: {
+        cargo: { interiorLengthIn: 192, interiorWidthIn: 90, interiorHeightIn: 90, doorHeightIn: 84, maxPalletPositions: 8, maxPalletWeightLb: 2200, maxStackLevels: 2, maxStackHeightIn: 84 },
+        features: ['liftgate', 'pallet jack'],
+        handlingCapabilities: ['fragile'],
+        operatingRules: [{ id: 'box-2-glass', label: 'Glass securement', instruction: 'Use E-track straps and corner protectors for glass freight.', severity: 'hard', active: true }],
+      },
       currentLocation: { lat: 39.806, lng: -104.99 },
     },
     {
@@ -509,6 +593,14 @@ const PREVIEW_STATE_SEED: PreviewState = {
       vehicleType: 'sprinter_van',
       status: 'in_use',
       capacity: 1800,
+      capacityWeightKg: 1905.09,
+      capacityVolumeM3: 11.89,
+      routingProfile: {
+        cargo: { interiorLengthIn: 168, interiorWidthIn: 70, interiorHeightIn: 75, doorHeightIn: 72, maxPalletPositions: 4, maxPalletWeightLb: 1400, maxStackLevels: 2 },
+        features: ['liftgate'],
+        handlingCapabilities: ['refrigerated', 'medical'],
+        allowedDriverIds: ['D-1015', 'D-1003'],
+      },
       currentLocation: { lat: 39.748, lng: -104.94 },
     },
     {
@@ -519,6 +611,13 @@ const PREVIEW_STATE_SEED: PreviewState = {
       vehicleType: 'semi_truck',
       status: 'available',
       capacity: 18000,
+      capacityWeightKg: 20411.66,
+      capacityVolumeM3: 98.97,
+      routingProfile: {
+        cargo: { interiorLengthIn: 636, interiorWidthIn: 100, interiorHeightIn: 110, doorHeightIn: 108, maxPalletPositions: 26, maxPalletWeightLb: 3000, maxStackLevels: 2, maxStackHeightIn: 106 },
+        features: ['dock height', 'pallet jack'],
+        handlingCapabilities: ['hazmat', 'refrigerated', 'medical'],
+      },
       currentLocation: { lat: 39.708, lng: -104.997 },
     },
     {
@@ -529,6 +628,13 @@ const PREVIEW_STATE_SEED: PreviewState = {
       vehicleType: 'box_truck',
       status: 'available',
       capacity: 5200,
+      capacityWeightKg: 5216.31,
+      capacityVolumeM3: 28.32,
+      routingProfile: {
+        cargo: { interiorLengthIn: 216, interiorWidthIn: 92, interiorHeightIn: 91, doorHeightIn: 85, maxPalletPositions: 10, maxPalletWeightLb: 2400, maxStackLevels: 2 },
+        features: ['liftgate', 'pallet jack'],
+        handlingCapabilities: ['fragile'],
+      },
       currentLocation: { lat: 39.7, lng: -104.945 },
     },
   ]),
@@ -577,7 +683,7 @@ const PREVIEW_STATE_SEED: PreviewState = {
         routeId: 'route-alpha-001',
         versionNumber: 1,
         status: 'DRAFT',
-        snapshot: { note: 'Initial draft generated from simulated planner.' },
+        snapshot: { note: 'Initial draft generated from seeded planner data.' },
         createdByUserId: 'preview-user',
         createdAt: '2026-04-10T09:57:00.000Z',
       },
@@ -633,11 +739,43 @@ const PREVIEW_STATE_SEED: PreviewState = {
       },
     ],
   },
+});
+
+const PREVIEW_STATE_STORAGE_KEY = 'trovan-preview-state-v2';
+
+const readPersistedPreviewState = (): PreviewState | null => {
+  if (typeof window === 'undefined' || !window.localStorage) return null;
+  try {
+    const raw = window.localStorage.getItem(PREVIEW_STATE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return isRecord(parsed) ? (parsed as PreviewState) : null;
+  } catch {
+    return null;
+  }
 };
 
-export const previewState = clonePreview(PREVIEW_STATE_SEED);
+export const previewState = clonePreview(
+  readPersistedPreviewState() || PREVIEW_STATE_SEED,
+);
 
-export const isPreview = () => isAuthBypassed();
+export const persistPreviewState = () => {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    window.localStorage.setItem(
+      PREVIEW_STATE_STORAGE_KEY,
+      JSON.stringify(previewState),
+    );
+  } catch {
+    // Preview persistence is best-effort only.
+  }
+};
+
+export const isPreview = () => usesPreviewDataMode(getTrovanDataMode());
+
+if (typeof window !== 'undefined' && isPreview() && !readPersistedPreviewState()) {
+  persistPreviewState();
+}
 
 export const nowIso = () => new Date().toISOString();
 
@@ -781,21 +919,25 @@ const toPreviewCoordinate = (
 export const getPreviewTrackingCoordinate = (
   route: RouteRecord,
 ): { latitude: number; longitude: number } | null => {
-  const stop = route.optimizedStops?.find((item) => Boolean(toPreviewCoordinate(item)));
+  const stop = [...(route.optimizedStops || [])]
+    .reverse()
+    .find((item) => Boolean(toPreviewCoordinate(item)));
   if (stop) {
     return toPreviewCoordinate(stop);
   }
 
   const routeData = isRecord(route.routeData) ? route.routeData : {};
   const rawStops = Array.isArray(routeData.route) ? routeData.route : [];
-  const rawStop = rawStops.find((item) => isRecord(item) && Boolean(toPreviewCoordinate(item)));
+  const rawStop = [...rawStops]
+    .reverse()
+    .find((item) => isRecord(item) && Boolean(toPreviewCoordinate(item)));
   return isRecord(rawStop) ? toPreviewCoordinate(rawStop) : null;
 };
 
 export const buildPreviewTrackingSnapshot = (): TrackingLocationsSnapshot => {
   const vehicles = previewState.routes
     .filter((route) => route.vehicleId)
-    .map((route) => {
+    .map((route, routeIndex) => {
       const coordinate = getPreviewTrackingCoordinate(route);
       if (!coordinate) {
         return null;
@@ -806,7 +948,9 @@ export const buildPreviewTrackingSnapshot = (): TrackingLocationsSnapshot => {
         vehicleId: route.vehicleId,
         latitude: coordinate.latitude,
         longitude: coordinate.longitude,
-        timestamp: route.dispatchedAt || route.createdAt || nowIso(),
+        timestamp: new Date(
+          Date.now() - [60_000, 5 * 60_000, 16 * 60_000][routeIndex % 3],
+        ).toISOString(),
         vehicleInfo: {
           licensePlate: vehicle?.licensePlate,
           make: vehicle?.make,
@@ -824,5 +968,102 @@ export const buildPreviewTrackingSnapshot = (): TrackingLocationsSnapshot => {
     vehicles,
     timestamp: nowIso(),
     count: vehicles.length,
+  };
+};
+
+export const buildPreviewVehicleTrackingHistory = (
+  vehicleId: string,
+  hours: number,
+): TrackingVehicleHistory => {
+  const rangeHours = Math.max(1, Math.min(168, Math.floor(hours) || 24));
+  const route = previewState.routes.find((item) => item.vehicleId === vehicleId);
+  const vehicle = previewState.vehicles.find((item) => item.id === vehicleId);
+  const routeIndex = Math.max(
+    previewState.routes.findIndex((item) => item.vehicleId === vehicleId),
+    0,
+  );
+  const routeData = isRecord(route?.routeData) ? route?.routeData : {};
+  const polyline = isRecord(routeData.polyline) ? routeData.polyline : {};
+  const routePoints = Array.isArray(polyline.coordinates)
+    ? polyline.coordinates
+        .map((point) => {
+          if (!Array.isArray(point) || point.length < 2) return null;
+          const longitude = Number(point[0]);
+          const latitude = Number(point[1]);
+          return Number.isFinite(latitude) && Number.isFinite(longitude)
+            ? { latitude, longitude }
+            : null;
+        })
+        .filter(
+          (point): point is { latitude: number; longitude: number } =>
+            Boolean(point),
+        )
+    : [];
+  const stopPoints = (route?.optimizedStops || [])
+    .map((stop) =>
+      stop.location
+        ? {
+            latitude: stop.location.latitude,
+            longitude: stop.location.longitude,
+          }
+        : null,
+    )
+    .filter(
+      (point): point is { latitude: number; longitude: number } => Boolean(point),
+    );
+  const anchors = [
+    vehicle?.currentLocation
+      ? {
+          latitude: vehicle.currentLocation.lat,
+          longitude: vehicle.currentLocation.lng,
+        }
+      : null,
+    ...routePoints,
+    ...stopPoints,
+  ].filter(
+    (point): point is { latitude: number; longitude: number } => Boolean(point),
+  );
+
+  const expanded = anchors.flatMap((point, index) => {
+    const next = anchors[index + 1];
+    if (!next) return [point];
+    return Array.from({ length: 4 }, (_, step) => {
+      const progress = step / 4;
+      return {
+        latitude: point.latitude + (next.latitude - point.latitude) * progress,
+        longitude: point.longitude + (next.longitude - point.longitude) * progress,
+      };
+    });
+  });
+  const newestAtMs =
+    Date.now() - [60_000, 5 * 60_000, 16 * 60_000][routeIndex % 3];
+  const history = expanded.map((point, index) => ({
+    vehicleId,
+    latitude: point.latitude,
+    longitude: point.longitude,
+    speed: 18 + ((index + routeIndex) % 5) * 4,
+    heading: (80 + index * 17) % 360,
+    timestamp: new Date(
+      newestAtMs - (expanded.length - index - 1) * 3 * 60_000,
+    ).toISOString(),
+    vehicleInfo: {
+      licensePlate: vehicle?.licensePlate,
+      make: vehicle?.make,
+      model: vehicle?.model,
+      status: vehicle?.status,
+    },
+  }));
+
+  return {
+    vehicleId,
+    rangeHours,
+    count: history.length,
+    pointLimit: 1000,
+    pointLimitReached: false,
+    order: 'ascending',
+    source: 'preview',
+    oldestAt: history[0]?.timestamp,
+    newestAt: history.at(-1)?.timestamp,
+    history,
   };
 };

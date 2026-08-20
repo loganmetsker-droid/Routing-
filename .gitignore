@@ -11,7 +11,9 @@ __pycache__/
 build/
 develop-eggs/
 dist/
-downloads/
+# Ignore Python packaging output at the repository root. Customer-facing
+# versioned files under frontend/public/downloads are release assets.
+/downloads/
 eggs/
 .eggs/
 lib/

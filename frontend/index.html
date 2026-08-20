@@ -2,22 +2,54 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/trovan-mark.svg" />
+    <link rel="icon" type="image/svg+xml" href="/brand/assets/trovan-app-icon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700;800;900&display=swap"
+      href="/fonts/instrument-sans.css"
       rel="stylesheet"
     />
+    <link
+      rel="preload"
+      as="image"
+      href="/marketing/product-routing-768.webp"
+      type="image/webp"
+      fetchpriority="high"
+    />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#1F1A17" />
+    <meta name="theme-color" content="#0B1324" />
+    <meta name="trovan-release-sha" content="%VITE_RELEASE_SHA%" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
     <meta
       name="description"
-      content="Find wasted miles, dispatch routes, guide drivers, and keep customers updated from one last-mile delivery workspace."
+      content="Trovan helps delivery and distribution teams plan routes, dispatch live, guide drivers, update customers, and prove every stop."
     />
-    <title>Trovan | Last-mile route planning and dispatch</title>
+    <link rel="canonical" href="https://trytrovan.com/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Trovan" />
+    <meta property="og:title" content="TryTrovan | Route planning, dispatch, driver app, tracking, and proof" />
+    <meta property="og:description" content="Plan the route, run the day, and prove every stop from one route-operations workspace." />
+    <meta property="og:url" content="https://trytrovan.com/" />
+    <meta property="og:image" content="https://trytrovan.com/marketing/product-routing.webp" />
+    <meta property="og:image:width" content="1440" />
+    <meta property="og:image:height" content="900" />
+    <meta property="og:image:alt" content="Current Trovan route planning workspace" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="TryTrovan | Route planning, dispatch, driver app, tracking, and proof" />
+    <meta name="twitter:description" content="Plan the route, run the day, and prove every stop from one route-operations workspace." />
+    <meta name="twitter:image" content="https://trytrovan.com/marketing/product-routing.webp" />
+    <title>TryTrovan | Route planning, dispatch, driver app, tracking, and proof</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Trovan",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web",
+        "url": "https://trytrovan.com/",
+        "description": "Route planning, dispatch, driver execution, customer tracking, and proof of delivery for delivery and distribution teams."
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

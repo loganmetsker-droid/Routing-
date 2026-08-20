@@ -19,6 +19,9 @@ import {
   Place,
   Send,
   UploadFile,
+  Visibility,
+  VisibilityOff,
+  VpnKey,
 } from '@mui/icons-material';
 import {
   Alert,
@@ -38,7 +41,7 @@ import {
   Typography,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
-import { useParams } from 'react-router-dom';
+import { useParams } from '../router';
 import { StatusPill } from '../components/StatusPill';
 import { SurfacePanel } from '../components/SurfacePanel';
 import { TopoShellBackground } from '../components/TopoShellBackground';
@@ -287,6 +290,7 @@ export default function DriverRouteRunPage() {
   const [detailsDrawerOpen, setDetailsDrawerOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showAccessCode, setShowAccessCode] = useState(false);
 
   const detail = routeRunQuery.data ?? null;
   const routeRun = detail?.routeRun ?? null;
@@ -301,6 +305,7 @@ export default function DriverRouteRunPage() {
   const nextStop = orderedStops.find((stop) => !isStopClosed(stop.status)) || null;
   const progress = orderedStops.length ? Math.round((completedStops / orderedStops.length) * 100) : 0;
   const mapUrl = buildMapUrl(nextStop);
+  const vehicleOperatingRules = detail?.vehicleOperatingRules || [];
 
   const proofsByStop = useMemo(() => {
     const proofs = detail?.proofArtifacts || [];
@@ -367,6 +372,7 @@ export default function DriverRouteRunPage() {
 
   useEffect(() => {
     setNoteDraft('');
+    setShowAccessCode(false);
   }, [nextStop?.id]);
 
   const runStopAction = async (stopId: string, action: 'arrived' | 'serviced') => {
@@ -730,6 +736,7 @@ export default function DriverRouteRunPage() {
 
   return (
     <Box
+      data-testid="driver-route-run-page"
       sx={{
         minHeight: '100dvh',
         width: '100%',
@@ -829,6 +836,64 @@ export default function DriverRouteRunPage() {
                     {nextStop.presentation.instructions}
                   </Typography>
                 ) : null}
+                {nextStop.presentation?.access ? (
+                  <Alert
+                    severity={nextStop.presentation.access.codeRequired ? 'warning' : 'info'}
+                    icon={<VpnKey />}
+                    action={nextStop.presentation.access.code ? (
+                      <Button
+                        color="inherit"
+                        size="small"
+                        startIcon={showAccessCode ? <VisibilityOff /> : <Visibility />}
+                        onClick={() => setShowAccessCode((current) => !current)}
+                      >
+                        {showAccessCode ? 'Hide' : 'Reveal'}
+                      </Button>
+                    ) : undefined}
+                    sx={{ alignItems: 'center' }}
+                  >
+                    <Typography variant="subtitle2">
+                      {nextStop.presentation.access.codeRequired
+                        ? 'Access code required'
+                        : 'Site access'}
+                    </Typography>
+                    {nextStop.presentation.access.code ? (
+                      <Typography
+                        variant="h6"
+                        sx={{
+                          fontFamily: 'monospace',
+                          letterSpacing: showAccessCode ? '0.12em' : '0.25em',
+                        }}
+                      >
+                        {showAccessCode
+                          ? nextStop.presentation.access.code
+                          : '•'.repeat(
+                              Math.max(4, nextStop.presentation.access.code.length),
+                            )}
+                      </Typography>
+                    ) : null}
+                    {nextStop.presentation.access.gateInstructions ? (
+                      <Typography variant="body2">
+                        {nextStop.presentation.access.gateInstructions}
+                      </Typography>
+                    ) : null}
+                    {nextStop.presentation.access.notes ? (
+                      <Typography variant="body2">
+                        {nextStop.presentation.access.notes}
+                      </Typography>
+                    ) : null}
+                  </Alert>
+                ) : null}
+                {vehicleOperatingRules.length ? (
+                  <Alert severity={vehicleOperatingRules.some((rule) => rule.severity === 'hard') ? 'warning' : 'info'}>
+                    <Typography variant="subtitle2">Vehicle operating rules</Typography>
+                    {vehicleOperatingRules.map((rule) => (
+                      <Typography key={rule.id} variant="body2">
+                        {rule.label}: {rule.instruction}
+                      </Typography>
+                    ))}
+                  </Alert>
+                ) : null}
                 <Stack direction="row" spacing={0.75}>
                   <Button
                     component="a"
@@ -861,7 +926,9 @@ export default function DriverRouteRunPage() {
         </SurfacePanel>
 
         {error ? <Alert severity="error">{error}</Alert> : null}
-        {notice ? <Alert severity="success">{notice}</Alert> : null}
+        {notice && !detailsDrawerOpen && !messageDrawerOpen ? (
+          <Alert severity="success">{notice}</Alert>
+        ) : null}
 
         <SurfacePanel variant="command" padding={1.35}>
           {renderStep()}
@@ -982,6 +1049,8 @@ export default function DriverRouteRunPage() {
               <Close />
             </IconButton>
           </Stack>
+
+          {notice ? <Alert severity="success">{notice}</Alert> : null}
 
           {nextStop ? (
             <SurfacePanel variant="subtle" padding={1.2}>

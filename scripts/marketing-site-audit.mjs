@@ -39,11 +39,17 @@ const viewportSpecs = [
 
 const expectedPrimaryCta = 'Book demo';
 const heroV2Sources = new Set([
+  '/marketing/product-routing.png',
+]);
+const oldHeroSources = new Set([
+  '/marketing/hero-route-command-center.png',
   '/marketing/hero-route-command-center-v2.png',
   '/marketing/hero-route-command-center-v2.avif',
 ]);
-const oldHeroSource = '/marketing/hero-route-command-center.png';
 const planningScreenshotSources = new Set([
+  '/marketing/product-routing.png',
+  '/marketing/product-routing-all-routes.png',
+  '/marketing/product-routing-density.png',
   '/marketing/routing-workspace.png',
   '/marketing/routing-workspace-dotted.png',
   '/marketing/routing-multistop-workspace.png',
@@ -136,11 +142,11 @@ function getRouteScreenshotFindings(routePath, screenshotImages, data) {
     });
   }
 
-  if (Array.from(srcSet).some((src) => src === oldHeroSource)) {
+  if (Array.from(srcSet).some((src) => oldHeroSources.has(src))) {
     findings.push({
       type: 'old-hero-screenshot-reference',
       route: routePath,
-      src: oldHeroSource,
+      src: Array.from(srcSet).filter((src) => oldHeroSources.has(src)),
     });
   }
 

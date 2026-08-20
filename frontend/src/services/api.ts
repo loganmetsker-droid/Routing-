@@ -8,6 +8,8 @@ export {
   login,
   setAuthToken,
   validateSession,
+  validateSessionState,
   type AuthUser,
   type LoginResponse,
+  type SessionValidationState,
 } from './api.session';

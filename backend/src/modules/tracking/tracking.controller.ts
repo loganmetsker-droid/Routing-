@@ -13,7 +13,11 @@ import {
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { TrackingService } from './tracking.service';
+import {
+  boundTrackingHistoryHours,
+  TRACKING_HISTORY_POINT_LIMIT,
+  TrackingService,
+} from './tracking.service';
 import { TelemetryIngestDto } from './dto/telemetry-ingest.dto';
 
 type AuthenticatedRequest = {
@@ -63,16 +67,24 @@ export class TrackingController {
     @Query('hours', new ParseIntPipe({ optional: true })) hours?: number,
   ) {
     const scopedOrganizationId = this.requireOrganizationId(req);
+    const rangeHours = boundTrackingHistoryHours(hours ?? 24);
     const history = await this.trackingService.getVehicleLocationHistory(
       vehicleId,
-      hours ?? 24,
+      rangeHours,
       scopedOrganizationId,
     );
 
     return {
       vehicleId,
       organizationId: scopedOrganizationId,
+      rangeHours,
       count: history.length,
+      pointLimit: TRACKING_HISTORY_POINT_LIMIT,
+      pointLimitReached: history.length >= TRACKING_HISTORY_POINT_LIMIT,
+      order: 'ascending',
+      source: 'telemetry',
+      oldestAt: history[0]?.timestamp,
+      newestAt: history.at(-1)?.timestamp,
       history,
     };
   }

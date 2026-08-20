@@ -161,6 +161,28 @@ export class ProofStorageService {
     throw new BadRequestException('Proof artifact does not reference a stored file');
   }
 
+  async checkR2Availability() {
+    const config = this.r2Config;
+    if (!config) return false;
+    const endpoint = new URL(config.endpoint);
+    const url = new URL(
+      `/${encodeURIComponent(config.bucket)}?list-type=2&max-keys=1`,
+      endpoint.origin,
+    );
+    const payloadHash = sha256(Buffer.alloc(0));
+    const headers = this.signR2Request(config, 'GET', url, payloadHash);
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+        signal: AbortSignal.timeout(3_000),
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
   private localPathForKey(storageKey: string) {
     const root = this.localRoot;
     const filePath = resolve(root, storageKey);

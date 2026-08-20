@@ -29,6 +29,14 @@ export class ReassignRouteRunDto {
   reason?: string;
 }
 
+export class DispatchRouteRunDto {
+  @IsOptional()
+  @IsString()
+  @Length(1, 2000)
+  @Transform(trimString)
+  note?: string;
+}
+
 export class StopReasonDto {
   @IsString()
   @Length(1, 500)

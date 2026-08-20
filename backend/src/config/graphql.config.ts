@@ -25,10 +25,10 @@ export const graphqlConfig = (
     : join(process.cwd(), 'src/schema.gql'),
   sortSchema: true,
 
-  // GraphQL Playground
-  playground: ['development', 'test'].includes(
-    configService.get('NODE_ENV') || 'development',
-  ),
+  // The legacy Playground plugin bundled by @nestjs/apollo targets Apollo 4,
+  // while this service runs Apollo 5. Keep it disabled; GraphQL requests and
+  // development introspection remain available without loading that plugin.
+  playground: false,
   introspection: ['development', 'test'].includes(
     configService.get('NODE_ENV') || 'development',
   ),
@@ -40,11 +40,15 @@ export const graphqlConfig = (
   // Format errors for production
   formatError: (error) => {
     if (configService.get('NODE_ENV') === 'production') {
-      // Don't expose internal errors in production
+      const code = error.extensions?.code;
       return {
-        message: error.message,
+        message:
+          code === 'INTERNAL_SERVER_ERROR'
+            ? 'Internal server error'
+            : error.message,
         locations: error.locations,
         path: error.path,
+        extensions: code ? { code } : undefined,
       };
     }
     return error;
@@ -53,9 +57,10 @@ export const graphqlConfig = (
   // CORS
 
 
-  // Subscriptions (for real-time features)
+  // This service has no GraphQL subscription resolvers. Keep both protocols
+  // disabled so enabling the compatibility API does not open an unused socket.
   subscriptions: {
-    'graphql-ws': true,
-    'subscriptions-transport-ws': false, // Deprecated
+    'graphql-ws': false,
+    'subscriptions-transport-ws': false,
   },
 });

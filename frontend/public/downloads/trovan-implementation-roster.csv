@@ -1,0 +1,7 @@
+type,name,email_or_identifier,role_or_status,owner,training_required,training_completed,notes
+Champion,,,OWNER or ADMIN,,Start Here; Workspace Setup; Route Operations; Go-Live,,
+User,,,DISPATCHER,Champion,Route Operations,,
+User,,,DRIVER,Champion,Driver Quick Start,,
+Depot,,,Primary,Champion,,,
+Vehicle,,,Available,Fleet owner,,,
+Escalation,,,Support contact,Champion,,,

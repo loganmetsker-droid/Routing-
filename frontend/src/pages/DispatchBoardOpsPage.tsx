@@ -1,6 +1,5 @@
-import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd';
 import { useEffect, useMemo, useState } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink } from '../router';
 import {
   Alert,
   Box,
@@ -9,58 +8,79 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemText,
+  Divider,
+  LinearProgress,
   MenuItem,
+  Snackbar,
   Stack,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
   Typography,
-  useMediaQuery,
 } from '@mui/material';
+import {
+  CalendarTodayOutlined,
+  MoreVertOutlined,
+  PauseCircleOutlineOutlined,
+  RefreshOutlined,
+  ReportGmailerrorredOutlined,
+  SendOutlined,
+  SwapHorizOutlined,
+} from '@mui/icons-material';
 import { alpha, useTheme } from '@mui/material/styles';
 import MultiRouteMap from '../components/maps/MultiRouteMap';
-import { OpsCommandBar, RouteInspectorPanel } from '../components/ops';
 import { StatusPill } from '../components/StatusPill';
 import { SurfacePanel } from '../components/SurfacePanel';
 import LoadingState from '../components/ui/LoadingState';
 import {
   type CreateExceptionPayload,
+  type DispatchExceptionRecord,
+  type RouteRunRecord,
+  type RouteRunStopRecord,
   getRouteRunsErrorMessage,
   useCreateExceptionMutation,
+  useCreateRouteRunMessageMutation,
   useDispatchBoardQuery,
   useDispatchRouteRunMutation,
-  useMoveDispatchStopMutation,
   useReassignRouteRunMutation,
-  useReorderDispatchStopsMutation,
   useRouteRunMessagesQuery,
-  useStartRouteRunMutation,
 } from '../features/dispatch/api/routeRunsApi';
+import {
+  buildRouteDispatchReadiness,
+  buildRouteExecutionSummary,
+  getRouteDispatchState,
+  resolveDriverVehicleAssignment,
+  type RouteExecutionHealth,
+  type RouteExecutionSummary,
+} from '../features/dispatch/utils/dispatchExecution';
 import { buildDispatchMapRoutes } from '../features/dispatch/utils/opsMapData';
 import { useRoutesQuery } from '../services/dispatchApi';
+import type { JobRecord } from '../services/api.types';
 import { useDriversQuery, useVehiclesQuery } from '../services/fleetApi';
 import { useJobsQuery } from '../services/jobsApi';
+import { trovanColors } from '../theme/designTokens';
 
-function statusTone(status: string) {
-  const normalized = String(status || '').toLowerCase();
-  if (['completed', 'serviced', 'resolved'].includes(normalized)) return 'success';
-  if (['failed', 'cancelled'].includes(normalized)) return 'danger';
-  if (['assigned', 'ready_for_dispatch', 'in_progress', 'arrived'].includes(normalized)) return 'info';
-  if (['open', 'rescheduled'].includes(normalized)) return 'warning';
-  return 'default';
-}
+type DispatchLaneStop = RouteRunStopRecord & { job?: JobRecord };
+type DispatchRouteLane = {
+  route: RouteRunRecord;
+  stops: DispatchLaneStop[];
+  exceptions: DispatchExceptionRecord[];
+  execution: RouteExecutionSummary;
+};
 
-function isEditableRoute(status: string) {
-  return ['planned', 'assigned', 'ready_for_dispatch'].includes(
-    String(status || '').toLowerCase(),
-  );
-}
+type ExecutionFilter =
+  | 'all'
+  | 'attention'
+  | 'delayed'
+  | 'at_risk'
+  | 'on_plan'
+  | 'awaiting';
 
 type ExceptionFormState = {
   code: string;
+  message: string;
+};
+
+type NoticeState = {
+  severity: 'success' | 'info' | 'warning' | 'error';
   message: string;
 };
 
@@ -69,33 +89,157 @@ const emptyExceptionForm: ExceptionFormState = {
   message: '',
 };
 
+const routeLaneAccents = ['#B87333', '#2E90FA', '#16A34A', '#855CF8', '#F59E0B', '#20C5A3'];
+const kmToMiles = 0.621371;
+
+const asCoordinateNumber = (value: unknown) => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+};
+
+const coordinateFromRecord = (value: unknown) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const lat = asCoordinateNumber(record.lat ?? record.latitude);
+  const lng = asCoordinateNumber(record.lng ?? record.longitude);
+  return lat == null || lng == null ? null : { lat, lng };
+};
+
+const milesBetween = (
+  left?: { lat: number; lng: number } | null,
+  right?: { lat: number; lng: number } | null,
+) => {
+  if (!left || !right) return null;
+  const earthRadiusMiles = 3958.8;
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+  const latDelta = toRadians(right.lat - left.lat);
+  const lngDelta = toRadians(right.lng - left.lng);
+  const startLat = toRadians(left.lat);
+  const endLat = toRadians(right.lat);
+  const a =
+    Math.sin(latDelta / 2) ** 2 +
+    Math.cos(startLat) * Math.cos(endLat) * Math.sin(lngDelta / 2) ** 2;
+  return earthRadiusMiles * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
+function statusTone(status: string) {
+  const normalized = String(status || '').toLowerCase();
+  if (['completed', 'serviced', 'resolved'].includes(normalized)) return 'success';
+  if (['failed', 'cancelled'].includes(normalized)) return 'danger';
+  if (['assigned', 'ready_for_dispatch', 'in_progress', 'arrived', 'planned'].includes(normalized)) return 'success';
+  if (['open', 'rescheduled'].includes(normalized)) return 'warning';
+  return 'default';
+}
+
+function priorityTone(priority: string) {
+  const normalized = String(priority || '').toLowerCase();
+  if (['urgent', 'critical', 'high'].includes(normalized)) return 'danger';
+  if (['medium', 'normal'].includes(normalized)) return 'warning';
+  return 'success';
+}
+
+function isEditableRoute(status: string) {
+  return ['planned', 'assigned', 'ready_for_dispatch'].includes(
+    String(status || '').toLowerCase(),
+  );
+}
+
+function routeLabel(route: RouteRunRecord) {
+  const compact = route.id.replace(/^route-/i, '').toUpperCase();
+  return compact.startsWith('RT-') ? compact : `R-${compact.slice(0, 5)}`;
+}
+
+function routeZone(index: number) {
+  return ['North Zone', 'East Zone', 'South Zone', 'West Zone', 'Downtown'][index % 5];
+}
+
+function formatMiles(value?: number | null) {
+  if (!value || !Number.isFinite(value)) return '0 mi';
+  return `${value.toFixed(value >= 10 ? 0 : 1)} mi`;
+}
+
+function formatTimeWindow(job: JobRecord) {
+  const start = job.timeWindow?.start || job.timeWindowStart || '';
+  const end = job.timeWindow?.end || job.timeWindowEnd || '';
+  if (!start && !end) return 'Window pending';
+  if (start && end) return `${start} - ${end}`;
+  return start || end;
+}
+
+function jobAddress(job: JobRecord) {
+  return job.deliveryAddress || job.pickupAddress || 'Address pending';
+}
+
+function jobDistanceMiles(job: JobRecord) {
+  return milesBetween(
+    coordinateFromRecord(job.pickupLocation),
+    coordinateFromRecord(job.deliveryLocation),
+  );
+}
+
+function driverDisplayName(driver: { firstName?: string; lastName?: string; id: string }) {
+  return [driver.firstName, driver.lastName].filter(Boolean).join(' ') || driver.id;
+}
+
+function formatClock(value?: string | null) {
+  if (!value) return 'Not started';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+function executionMatchesFilter(
+  health: RouteExecutionHealth,
+  filter: ExecutionFilter,
+) {
+  if (filter === 'all') return true;
+  if (filter === 'attention') return health === 'delayed' || health === 'at_risk';
+  if (filter === 'on_plan') return health === 'on_time' || health === 'ahead';
+  return health === filter;
+}
+
 export default function DispatchBoardOpsPage() {
   const theme = useTheme();
   const isDark = theme.palette.mode === 'dark';
   const [savingRouteId, setSavingRouteId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectedDriverByRoute, setSelectedDriverByRoute] = useState<Record<string, string>>({});
+  const [selectedVehicleByRoute, setSelectedVehicleByRoute] = useState<Record<string, string>>({});
+  const [dispatchNoteByRoute, setDispatchNoteByRoute] = useState<Record<string, string>>({});
+  const [messageDraft, setMessageDraft] = useState('');
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
   const [exceptionDialogOpen, setExceptionDialogOpen] = useState(false);
   const [exceptionForm, setExceptionForm] = useState<ExceptionFormState>(emptyExceptionForm);
-  const [mobilePanel, setMobilePanel] = useState<'map' | 'routes' | 'inspector'>('map');
-  const isDesktopWorkspace = useMediaQuery('(min-width:1200px)');
+  const [depotFilter, setDepotFilter] = useState('all');
+  const [dispatcherFilter, setDispatcherFilter] = useState('all');
+  const [regionFilter, setRegionFilter] = useState('all');
+  const [jobStatusFilter, setJobStatusFilter] = useState('all');
+  const [executionFilter, setExecutionFilter] = useState<ExecutionFilter>('all');
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [dispatchAllDialogOpen, setDispatchAllDialogOpen] = useState(false);
+  const [sendUpdatesDialogOpen, setSendUpdatesDialogOpen] = useState(false);
+  const [reassignDialogOpen, setReassignDialogOpen] = useState(false);
+  const [bulkUpdateDraft, setBulkUpdateDraft] = useState('Please confirm your next stop status.');
+  const [notice, setNotice] = useState<NoticeState | null>(null);
 
-  const boardQuery = useDispatchBoardQuery();
+  const boardQuery = useDispatchBoardQuery(autoRefreshEnabled ? 30_000 : false);
   const routesQuery = useRoutesQuery();
   const jobsQuery = useJobsQuery();
   const driversQuery = useDriversQuery();
   const vehiclesQuery = useVehiclesQuery();
   const dispatchMutation = useDispatchRouteRunMutation();
-  const startMutation = useStartRouteRunMutation();
   const reassignMutation = useReassignRouteRunMutation();
-  const reorderMutation = useReorderDispatchStopsMutation();
-  const moveMutation = useMoveDispatchStopMutation();
   const createExceptionMutation = useCreateExceptionMutation();
+  const createMessageMutation = useCreateRouteRunMessageMutation();
 
   const routeRuns = boardQuery.data?.routeRuns ?? [];
   const routeRunStops = boardQuery.data?.routeRunStops ?? [];
   const exceptions = boardQuery.data?.exceptions ?? [];
+  const dispatchReadinessByRoute = boardQuery.data?.dispatchReadiness ?? {};
   const routes = routesQuery.data ?? [];
   const jobs = jobsQuery.data ?? [];
   const drivers = driversQuery.data ?? [];
@@ -107,36 +251,12 @@ export default function DispatchBoardOpsPage() {
     driversQuery.isLoading ||
     vehiclesQuery.isLoading;
 
-  useEffect(() => {
-    if (!selectedRouteId && routeRuns.length) {
-      setSelectedRouteId(routeRuns[0].id);
-    }
-    if (
-      selectedRouteId &&
-      routeRuns.length &&
-      !routeRuns.some((route) => route.id === selectedRouteId)
-    ) {
-      setSelectedRouteId(routeRuns[0]?.id || null);
-    }
-  }, [routeRuns, selectedRouteId]);
-
-  const fullRouteById = useMemo(
-    () => new Map(routes.map((route) => [route.id, route])),
-    [routes],
-  );
   const jobById = useMemo(
     () => new Map(jobs.map((job) => [job.id, job])),
     [jobs],
   );
   const driverNameById = useMemo(
-    () =>
-      Object.fromEntries(
-        drivers.map((driver) => [
-          driver.id,
-          [driver.firstName, driver.lastName].filter(Boolean).join(' ') ||
-            driver.id,
-        ]),
-      ),
+    () => Object.fromEntries(drivers.map((driver) => [driver.id, driverDisplayName(driver)])),
     [drivers],
   );
   const vehicleNameById = useMemo(
@@ -153,16 +273,15 @@ export default function DispatchBoardOpsPage() {
   );
 
   const stopsByRoute = useMemo(() => {
-    return routeRunStops.reduce<Record<string, typeof routeRunStops>>((acc, stop) => {
+    return routeRunStops.reduce<Record<string, RouteRunStopRecord[]>>((acc, stop) => {
       acc[stop.routeId] = [...(acc[stop.routeId] || []), stop];
       return acc;
     }, {});
   }, [routeRunStops]);
 
-  const orderedRouteLanes = useMemo(() => {
+  const orderedRouteLanes = useMemo<DispatchRouteLane[]>(() => {
     return routeRuns
       .map((route) => {
-        const liveRoute = fullRouteById.get(route.id);
         const laneStops = (stopsByRoute[route.id] || [])
           .slice()
           .sort((left, right) => left.stopSequence - right.stopSequence)
@@ -170,24 +289,44 @@ export default function DispatchBoardOpsPage() {
             ...stop,
             job: jobById.get(stop.jobId),
           }));
-        const routeExceptions = exceptions.filter((item) => item.routeId === route.id);
         return {
           route,
-          liveRoute,
           stops: laneStops,
-          exceptions: routeExceptions,
+          exceptions: exceptions.filter((item) => item.routeId === route.id),
+          execution: buildRouteExecutionSummary({
+            route,
+            stops: laneStops,
+          }),
         };
       })
-      .sort((left, right) => left.route.id.localeCompare(right.route.id));
-  }, [exceptions, fullRouteById, jobById, routeRuns, stopsByRoute]);
+      .sort((left, right) => {
+        return (
+          left.execution.priorityRank - right.execution.priorityRank ||
+          (right.execution.varianceMinutes ?? Number.NEGATIVE_INFINITY) -
+            (left.execution.varianceMinutes ?? Number.NEGATIVE_INFINITY) ||
+          left.route.id.localeCompare(right.route.id)
+        );
+      });
+  }, [exceptions, jobById, routeRuns, stopsByRoute]);
+
+  useEffect(() => {
+    if (!selectedRouteId && orderedRouteLanes.length) {
+      setSelectedRouteId(orderedRouteLanes[0].route.id);
+    }
+    if (
+      selectedRouteId &&
+      orderedRouteLanes.length &&
+      !orderedRouteLanes.some((lane) => lane.route.id === selectedRouteId)
+    ) {
+      setSelectedRouteId(orderedRouteLanes[0]?.route.id || null);
+    }
+  }, [orderedRouteLanes, selectedRouteId]);
 
   const selectedLane =
     orderedRouteLanes.find((item) => item.route.id === selectedRouteId) ||
     orderedRouteLanes[0] ||
     null;
-  const selectedRouteMessagesQuery = useRouteRunMessagesQuery(
-    selectedLane?.route.id || '',
-  );
+  const selectedRouteMessagesQuery = useRouteRunMessagesQuery(selectedLane?.route.id || '');
   const selectedRouteMessages = selectedRouteMessagesQuery.data?.messages || [];
 
   const mapRoutes = useMemo(
@@ -199,6 +338,55 @@ export default function DispatchBoardOpsPage() {
         vehicles,
       }),
     [drivers, jobs, routes, vehicles],
+  );
+
+  const routedJobIds = useMemo(
+    () => new Set(routeRunStops.map((stop) => stop.jobId)),
+    [routeRunStops],
+  );
+
+  const unassignedJobs = useMemo(() => {
+    return jobs.filter((job) => {
+      const record = job as JobRecord & { assignedRouteId?: string | null; routeId?: string | null };
+      const hasRoute = routedJobIds.has(job.id) || Boolean(record.assignedRouteId || record.routeId);
+      const status = String(job.status || '').toLowerCase();
+      if (jobStatusFilter !== 'all' && status !== jobStatusFilter) return false;
+      return !hasRoute && !['delivered', 'completed', 'cancelled'].includes(status);
+    });
+  }, [jobStatusFilter, jobs, routedJobIds]);
+
+  const routesMatchingDispatchFilters = useMemo(() => {
+    return orderedRouteLanes.filter((lane, index) => {
+      if (regionFilter !== 'all' && routeZone(index) !== regionFilter) return false;
+      if (dispatcherFilter !== 'all' && lane.route.driverId !== dispatcherFilter) return false;
+      return depotFilter === 'all';
+    });
+  }, [depotFilter, dispatcherFilter, orderedRouteLanes, regionFilter]);
+
+  const visibleRoutes = useMemo(
+    () =>
+      routesMatchingDispatchFilters.filter((lane) =>
+        executionMatchesFilter(lane.execution.health, executionFilter),
+      ),
+    [executionFilter, routesMatchingDispatchFilters],
+  );
+
+  const executionSummary = useMemo(
+    () => ({
+      delayed: routesMatchingDispatchFilters.filter(
+        (lane) => lane.execution.health === 'delayed',
+      ).length,
+      atRisk: routesMatchingDispatchFilters.filter(
+        (lane) => lane.execution.health === 'at_risk',
+      ).length,
+      onPlan: routesMatchingDispatchFilters.filter((lane) =>
+        ['on_time', 'ahead'].includes(lane.execution.health),
+      ).length,
+      awaiting: routesMatchingDispatchFilters.filter(
+        (lane) => lane.execution.health === 'awaiting',
+      ).length,
+    }),
+    [routesMatchingDispatchFilters],
   );
 
   const boardSummary = useMemo(
@@ -219,26 +407,105 @@ export default function DispatchBoardOpsPage() {
     [exceptions, routeRuns],
   );
 
-  const handleRouteAction = async (
-    routeId: string,
-    action: 'dispatch' | 'start' | 'assign',
-  ) => {
+  const getAssignmentPayload = (routeId: string) => {
+    const lane = orderedRouteLanes.find((item) => item.route.id === routeId);
+    const selectedDriverId = selectedDriverByRoute[routeId] ?? lane?.route.driverId ?? '';
+    const selectedVehicleId = selectedVehicleByRoute[routeId] ?? '';
+    return resolveDriverVehicleAssignment({
+      selectedDriverId,
+      selectedVehicleId,
+      routeVehicleId: lane?.route.vehicleId || null,
+      drivers,
+    });
+  };
+
+  const getReadiness = (lane: DispatchRouteLane) => {
+    const assignment = getAssignmentPayload(lane.route.id);
+    const localReadiness = buildRouteDispatchReadiness({
+      route: {
+        ...lane.route,
+        driverId: assignment.driverId || null,
+        vehicleId: assignment.vehicleId || null,
+      },
+      stops: lane.stops,
+      exceptions: lane.exceptions,
+    });
+    return dispatchReadinessByRoute[lane.route.id] &&
+      !selectedDriverByRoute[lane.route.id] &&
+      !selectedVehicleByRoute[lane.route.id]
+      ? dispatchReadinessByRoute[lane.route.id]
+      : localReadiness;
+  };
+
+  const dispatchableRouteIds = visibleRoutes
+    .filter((lane) => isEditableRoute(String(lane.route.status)) && getReadiness(lane).ready)
+    .map((lane) => lane.route.id);
+
+  const handleDriverSelection = (routeId: string, driverId: string) => {
+    const nextAssignment = resolveDriverVehicleAssignment({
+      selectedDriverId: driverId,
+      selectedVehicleId: selectedVehicleByRoute[routeId] || '',
+      routeVehicleId:
+        orderedRouteLanes.find((item) => item.route.id === routeId)?.route.vehicleId || null,
+      drivers,
+    });
+    setSelectedDriverByRoute((current) => ({
+      ...current,
+      [routeId]: driverId,
+    }));
+    if (nextAssignment.vehicleId) {
+      setSelectedVehicleByRoute((current) => ({
+        ...current,
+        [routeId]: nextAssignment.vehicleId || '',
+      }));
+    }
+  };
+
+  const handleRouteAction = async (routeId: string, action: 'dispatch' | 'assign') => {
     setSavingRouteId(routeId);
     setError(null);
     try {
+      const lane = orderedRouteLanes.find((item) => item.route.id === routeId);
+      const assignment = getAssignmentPayload(routeId);
       if (action === 'dispatch') {
-        await dispatchMutation.mutateAsync(routeId);
-      } else if (action === 'start') {
-        await startMutation.mutateAsync(routeId);
+        if (
+          assignment.driverId &&
+          (assignment.driverId !== (lane?.route.driverId || '') ||
+            assignment.vehicleId !== (lane?.route.vehicleId || ''))
+        ) {
+          await reassignMutation.mutateAsync({
+            routeRunId: routeId,
+            payload: {
+              driverId: assignment.driverId,
+              vehicleId: assignment.vehicleId,
+              reason: 'dispatch board assignment',
+            },
+          });
+        }
+        await dispatchMutation.mutateAsync({
+          routeRunId: routeId,
+          payload: {
+            note: dispatchNoteByRoute[routeId]?.trim() || undefined,
+          },
+        });
       } else {
         await reassignMutation.mutateAsync({
           routeRunId: routeId,
           payload: {
-            driverId: selectedDriverByRoute[routeId] || undefined,
+            driverId: assignment.driverId,
+            vehicleId: assignment.vehicleId,
             reason: 'dispatch board assignment',
           },
         });
       }
+      const routeName = routeLabel(lane?.route || ({ id: routeId } as RouteRunRecord));
+      setNotice({
+        severity: 'success',
+        message:
+          action === 'dispatch'
+            ? `${routeName} sent to the assigned driver.`
+            : `${routeName} assignment saved.`,
+      });
     } catch (err: unknown) {
       setError(getRouteRunsErrorMessage(err));
     } finally {
@@ -246,41 +513,68 @@ export default function DispatchBoardOpsPage() {
     }
   };
 
-  const handleDragEnd = async (result: DropResult) => {
-    if (!result.destination) return;
-    const sourceRouteId = result.source.droppableId;
-    const targetRouteId = result.destination.droppableId;
-    const sourceLane = orderedRouteLanes.find((item) => item.route.id === sourceRouteId);
-    const targetLane = orderedRouteLanes.find((item) => item.route.id === targetRouteId);
-    if (!sourceLane || !targetLane) return;
-    if (!isEditableRoute(String(sourceLane.route.status)) || !isEditableRoute(String(targetLane.route.status))) {
-      setError('Only planned and ready routes can be manually edited from dispatch.');
+  const handleDispatchAll = async () => {
+    if (!dispatchableRouteIds.length) {
+      setNotice({
+        severity: 'warning',
+        message: 'No routes are ready to dispatch. Assign a driver and vehicle first.',
+      });
       return;
     }
-
+    setSavingRouteId('bulk-dispatch');
     setError(null);
     try {
-      if (sourceRouteId === targetRouteId) {
-        const liveRoute = fullRouteById.get(sourceRouteId);
-        if (!liveRoute?.jobIds) return;
-        const newJobOrder = liveRoute.jobIds.slice();
-        const [movedJobId] = newJobOrder.splice(result.source.index, 1);
-        newJobOrder.splice(result.destination.index, 0, movedJobId);
-        await reorderMutation.mutateAsync({ routeId: sourceRouteId, newJobOrder });
-      } else {
-        await moveMutation.mutateAsync({
-          routeId: sourceRouteId,
-          payload: {
-            jobId: result.draggableId,
-            targetRouteId,
-            targetSequence: result.destination.index + 1,
-          },
-        });
-        setSelectedRouteId(targetRouteId);
+      for (const routeId of dispatchableRouteIds) {
+        await handleRouteAction(routeId, 'dispatch');
       }
+      setNotice({
+        severity: 'success',
+        message: `${dispatchableRouteIds.length} route${dispatchableRouteIds.length === 1 ? '' : 's'} sent to drivers.`,
+      });
+      setDispatchAllDialogOpen(false);
+    } catch (err: unknown) {
+      setError(getRouteRunsErrorMessage(err));
+    } finally {
+      setSavingRouteId(null);
+    }
+  };
+
+  const handleSendBulkUpdate = async () => {
+    if (!bulkUpdateDraft.trim()) {
+      setNotice({ severity: 'warning', message: 'Write an update before sending.' });
+      return;
+    }
+    const targetRoutes = visibleRoutes.length ? visibleRoutes : orderedRouteLanes;
+    if (!targetRoutes.length) {
+      setNotice({ severity: 'warning', message: 'No route runs are available for updates.' });
+      return;
+    }
+    setError(null);
+    try {
+      for (const lane of targetRoutes) {
+        await createMessageMutation.mutateAsync({
+          routeRunId: lane.route.id,
+          payload: { body: bulkUpdateDraft.trim() },
+        });
+      }
+      setNotice({
+        severity: 'success',
+        message: `Update sent to ${targetRoutes.length} active route${targetRoutes.length === 1 ? '' : 's'}.`,
+      });
+      setSendUpdatesDialogOpen(false);
+      setBulkUpdateDraft('Please confirm your next stop status.');
     } catch (err: unknown) {
       setError(getRouteRunsErrorMessage(err));
     }
+  };
+
+  const handleResetFilters = () => {
+    setDepotFilter('all');
+    setDispatcherFilter('all');
+    setRegionFilter('all');
+    setJobStatusFilter('all');
+    setExecutionFilter('all');
+    setNotice({ severity: 'info', message: 'Dispatch filters reset.' });
   };
 
   const submitException = async () => {
@@ -305,476 +599,785 @@ export default function DispatchBoardOpsPage() {
     return <LoadingState label="Loading dispatch board..." minHeight="50vh" />;
   }
 
-  const summaryMetrics = [
-    { label: 'Ready', value: boardSummary.ready, tone: 'accent' as const },
-    { label: 'In progress', value: boardSummary.inProgress, tone: 'info' as const },
-    { label: 'Completed', value: boardSummary.completed, tone: 'success' as const },
-    { label: 'Open exceptions', value: boardSummary.exceptions, tone: boardSummary.exceptions ? 'warning' as const : 'default' as const },
-  ];
+  const actionButtonSx = {
+    minHeight: 42,
+    px: 1.45,
+    whiteSpace: 'nowrap',
+    fontWeight: 850,
+  } as const;
 
-  const commandBar = (
-    <OpsCommandBar
-      eyebrow="Live Dispatch"
-      title="Dispatch"
-      subtitle="Move from route lanes to live map context without burying the execution surface."
-      actions={
-        <>
-          <Button variant="outlined" component={RouterLink} to="/exceptions">
-            Open queue
-          </Button>
-          <Button variant="contained" onClick={() => setExceptionDialogOpen(true)}>
-            New exception
-          </Button>
-        </>
-      }
-      meta={
-        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
-          {summaryMetrics.map((item) => (
-            <StatusPill
-              key={item.label}
-              label={`${item.label}: ${item.value}`}
-              tone={item.tone}
-            />
-          ))}
-        </Stack>
-      }
-    />
+  const openExceptions = exceptions.filter((item) => item.status === 'OPEN');
+  const missedWindowExceptions = openExceptions.filter((item) =>
+    `${item.code} ${item.message}`.toLowerCase().includes('window'),
   );
+  const highSignalExceptions = missedWindowExceptions.length
+    ? missedWindowExceptions
+    : openExceptions;
+  const activeDrivers = drivers.filter((driver) =>
+    ['active', 'available', 'en_route', 'on_route'].includes(String(driver.status || '').toLowerCase()),
+  ).length;
+  const jobsInProgress = jobs.filter((job) =>
+    ['in_progress', 'assigned', 'ready'].includes(String(job.status || '').toLowerCase()),
+  ).length;
+  const currentDateLabel = new Date().toLocaleDateString([], {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 
-  const lanesPanel = (
-    <SurfacePanel
-      variant="panel"
-      padding={0}
-      sx={{ overflow: 'hidden', height: { xl: '100%' }, display: 'flex', flexDirection: 'column' }}
-    >
-      <Box sx={{ px: 1.5, py: 1.15, borderBottom: '1px solid', borderColor: 'divider' }}>
-        <Typography variant="h6">Route lanes</Typography>
-        <Typography variant="body2" color="text.secondary">
-          Drag future work inside eligible lanes or move it to another planned route.
-        </Typography>
-      </Box>
-      {orderedRouteLanes.length === 0 ? (
-        <Box sx={{ p: 2.5 }}>
-          <Typography variant="body2" color="text.secondary">
-            No published routes are available for dispatch.
-          </Typography>
-        </Box>
-      ) : (
-        <DragDropContext onDragEnd={(result) => void handleDragEnd(result)}>
-          <Stack spacing={1} sx={{ p: 1.2, overflowY: 'auto', minHeight: 0 }}>
-            {orderedRouteLanes.map((lane) => {
-              const routeStatus = String(lane.route.workflowStatus || lane.route.status);
-              const editable = isEditableRoute(routeStatus);
-              const selected = lane.route.id === selectedLane?.route.id;
-              return (
-                <Box
-                  key={lane.route.id}
-                  sx={{
-                    border: '1px solid',
-                    borderColor: selected ? alpha('#B97129', 0.38) : 'divider',
-                    borderRadius: 1.2,
-                    overflow: 'hidden',
-                    bgcolor: selected ? alpha('#B97129', 0.04) : 'background.paper',
-                  }}
-                >
-                  <ListItemButton
-                    onClick={() => setSelectedRouteId(lane.route.id)}
-                    sx={{
-                      py: 0.95,
-                      px: 1.15,
-                      borderBottom: '1px solid',
-                      borderColor: 'divider',
-                      borderLeft: selected ? '3px solid #B97129' : '3px solid transparent',
-                    }}
-                  >
-                    <ListItemText
-                      primary={`Route ${lane.route.id.slice(0, 8)}`}
-                      secondary={`${lane.stops.length} stops • ${
-                        vehicleNameById[lane.route.vehicleId || ''] || 'Vehicle pending'
-                      } • ${driverNameById[lane.route.driverId || ''] || 'Driver pending'}`}
-                      primaryTypographyProps={{ fontWeight: 800, noWrap: true }}
-                      secondaryTypographyProps={{ noWrap: true }}
-                    />
-                    <Stack spacing={0.45} alignItems="flex-end">
-                      <StatusPill
-                        label={routeStatus.replace(/_/g, ' ')}
-                        tone={statusTone(routeStatus)}
-                      />
-                      <StatusPill
-                        label={editable ? 'Editable' : 'Read only'}
-                        tone={editable ? 'accent' : 'default'}
-                      />
-                    </Stack>
-                  </ListItemButton>
-                  <Droppable droppableId={lane.route.id} isDropDisabled={!editable}>
-                    {(provided, snapshot) => (
-                      <Box
-                        ref={provided.innerRef}
-                        {...provided.droppableProps}
-                        sx={{
-                          p: 1,
-                          minHeight: 76,
-                          bgcolor: snapshot.isDraggingOver
-                            ? alpha('#B97129', 0.07)
-                            : 'transparent',
-                        }}
-                      >
-                        <Stack spacing={0.65}>
-                          {lane.stops.map((stop, index) => (
-                            <Draggable
-                              key={stop.jobId}
-                              draggableId={stop.jobId}
-                              index={index}
-                              isDragDisabled={!editable}
-                            >
-                              {(dragProvided, dragSnapshot) => (
-                                <Box
-                                  ref={dragProvided.innerRef}
-                                  {...dragProvided.draggableProps}
-                                  {...dragProvided.dragHandleProps}
-                                  sx={{
-                                    px: 0.95,
-                                    py: 0.7,
-                                    borderRadius: 1,
-                                    border: '1px solid',
-                                    borderColor: dragSnapshot.isDragging
-                                      ? alpha('#B97129', 0.42)
-                                      : 'divider',
-                                    bgcolor: dragSnapshot.isDragging
-                                      ? alpha('#B97129', 0.07)
-                                      : trovanRowColor(editable, isDark),
-                                    cursor: editable ? 'grab' : 'not-allowed',
-                                  }}
-                                >
-                                  <Stack spacing={0.25}>
-                                    <Stack direction="row" justifyContent="space-between" gap={1}>
-                                      <Typography variant="body2" noWrap sx={{ fontWeight: 750 }}>
-                                        {stop.job?.customerName || stop.jobId}
-                                      </Typography>
-                                      <Typography variant="caption" color="text.secondary">
-                                        {stop.stopSequence}
-                                      </Typography>
-                                    </Stack>
-                                    <Typography variant="caption" color="text.secondary" noWrap>
-                                      {stop.job?.deliveryAddress || 'Address pending'}
-                                    </Typography>
-                                  </Stack>
-                                </Box>
-                              )}
-                            </Draggable>
-                          ))}
-                          {lane.stops.length === 0 ? (
-                            <Typography variant="body2" color="text.secondary" sx={{ px: 0.4, py: 1 }}>
-                              No future stops in this lane.
-                            </Typography>
-                          ) : null}
-                        </Stack>
-                        {provided.placeholder}
-                      </Box>
-                    )}
-                  </Droppable>
-                </Box>
-              );
-            })}
-          </Stack>
-        </DragDropContext>
-      )}
-    </SurfacePanel>
-  );
-
-  const mapPanel = (
-    <SurfacePanel
-      variant="canvas"
-      padding={0}
+  return (
+    <Box
+      data-testid="dispatch-board-page"
       sx={{
-        overflow: 'hidden',
-        minHeight: isDesktopWorkspace ? 0 : { xs: 430, md: 540 },
-        height: isDesktopWorkspace ? '100%' : { xs: 430, md: 540 },
-        display: 'flex',
-        flexDirection: 'column',
+        display: 'grid',
+        gap: 1.35,
+        overflowX: 'hidden',
+        maxWidth: '100%',
+        '& .MuiButton-root, & .MuiInputBase-root, & .MuiTypography-root': {
+          letterSpacing: 0,
+        },
       }}
     >
       <Stack
-        direction="row"
+        direction={{ xs: 'column', xl: 'row' }}
+        spacing={1}
         justifyContent="space-between"
-        alignItems="center"
-        sx={{ px: 1.6, py: 1.15, borderBottom: '1px solid', borderColor: 'divider' }}
+        alignItems={{ xs: 'stretch', xl: 'center' }}
+        sx={{ minWidth: 0 }}
       >
-        <Box sx={{ minWidth: 0 }}>
-          <Typography variant="h6">Live dispatch map</Typography>
-          <Typography variant="body2" color="text.secondary" noWrap>
-            Execution map stays in the first viewport while lanes update.
-          </Typography>
-        </Box>
-        <StatusPill
-          label={selectedLane ? `Route ${selectedLane.route.id.slice(0, 8)}` : `${mapRoutes.length} routes`}
-          tone={selectedLane ? 'accent' : 'default'}
-        />
-      </Stack>
-      <Box sx={{ flex: 1, minHeight: 0 }}>
-        {mapRoutes.length ? (
-          <MultiRouteMap
-            routes={mapRoutes}
-            height="100%"
-            selectedRouteId={selectedRouteId}
-            onRouteSelect={(routeId) => {
-              if (routeId) setSelectedRouteId(routeId);
+        <Stack direction="row" spacing={0.8} flexWrap="wrap" useFlexGap>
+          <Button
+            variant="contained"
+            startIcon={<CalendarTodayOutlined />}
+            disabled={savingRouteId === 'bulk-dispatch'}
+            onClick={() => setDispatchAllDialogOpen(true)}
+            sx={actionButtonSx}
+          >
+            Dispatch All ({dispatchableRouteIds.length})
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<SendOutlined />}
+            disabled={!selectedLane}
+            onClick={() => {
+              if (!selectedLane) return;
+              setSelectedRouteId(selectedLane.route.id);
+              setSendUpdatesDialogOpen(true);
             }}
-          />
-        ) : (
-          <Box sx={{ p: 3 }}>
-            <Typography variant="body2" color="text.secondary">
-              Publish a route plan to populate the live dispatch map.
-            </Typography>
+            sx={actionButtonSx}
+          >
+            Send Updates
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<SwapHorizOutlined />}
+            disabled={!visibleRoutes.length}
+            onClick={() => {
+              const reassignmentLane =
+                visibleRoutes.find((lane) => !lane.route.driverId) || visibleRoutes[0];
+              setSelectedRouteId(reassignmentLane.route.id);
+              setReassignDialogOpen(true);
+            }}
+            sx={actionButtonSx}
+          >
+            Reassign
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<PauseCircleOutlineOutlined />}
+            disabled={!selectedLane}
+            onClick={() => {
+              setExceptionForm({
+                code: 'HOLD',
+                message: selectedLane
+                  ? `${routeLabel(selectedLane.route)} needs dispatch hold review.`
+                  : 'Route needs dispatch hold review.',
+              });
+              setExceptionDialogOpen(true);
+            }}
+            sx={actionButtonSx}
+          >
+            Hold
+          </Button>
+          <Button
+            component={RouterLink}
+            to="/exceptions"
+            variant="outlined"
+            color="error"
+            startIcon={<ReportGmailerrorredOutlined />}
+            sx={actionButtonSx}
+          >
+            Accept Risk
+          </Button>
+        </Stack>
+        <Stack direction="row" spacing={0.9} alignItems="center" justifyContent={{ xs: 'flex-start', xl: 'flex-end' }}>
+          <Box
+            aria-label={`Current dispatch date: ${currentDateLabel}`}
+            sx={{
+              ...actionButtonSx,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 0.8,
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: '8px',
+              px: 1.35,
+              bgcolor: 'background.paper',
+              fontWeight: 800,
+            }}
+          >
+            <CalendarTodayOutlined sx={{ fontSize: 19 }} />
+            {currentDateLabel}
           </Box>
-        )}
-      </Box>
-    </SurfacePanel>
-  );
+          <Button
+            variant={autoRefreshEnabled ? 'contained' : 'outlined'}
+            startIcon={<RefreshOutlined />}
+            onClick={() => {
+              setAutoRefreshEnabled((current) => !current);
+              setNotice({
+                severity: 'info',
+                message: `Auto-refresh ${autoRefreshEnabled ? 'paused' : 'resumed'}.`,
+              });
+            }}
+            sx={actionButtonSx}
+          >
+            Auto-refresh {autoRefreshEnabled ? 'on' : 'off'}
+          </Button>
+        </Stack>
+      </Stack>
 
-  const inspectorPanel = (
-    <RouteInspectorPanel
-      title={selectedLane ? `Route ${selectedLane.route.id.slice(0, 8)}` : 'Route inspector'}
-      subtitle={
-        selectedLane
-          ? `${vehicleNameById[selectedLane.route.vehicleId || ''] || 'Vehicle pending'} • ${
-              driverNameById[selectedLane.route.driverId || ''] || 'Driver pending'
-            }`
-          : 'Select a route lane or map route to inspect execution state.'
-      }
-      status={
-        selectedLane ? (
-          <StatusPill
-            label={String(selectedLane.route.workflowStatus || selectedLane.route.status).replace(/_/g, ' ')}
-            tone={statusTone(String(selectedLane.route.workflowStatus || selectedLane.route.status))}
-          />
-        ) : null
-      }
-      actions={
-        selectedLane ? (
-          <>
-            <Button
-              variant="outlined"
-              size="small"
-              disabled={savingRouteId === selectedLane.route.id}
-              onClick={() => void handleRouteAction(selectedLane.route.id, 'assign')}
-            >
-              Save driver
-            </Button>
-            <Button
-              variant="outlined"
-              size="small"
-              disabled={savingRouteId === selectedLane.route.id}
-              onClick={() => void handleRouteAction(selectedLane.route.id, 'dispatch')}
-            >
-              Dispatch
-            </Button>
-            <Button
-              variant="contained"
-              size="small"
-              disabled={savingRouteId === selectedLane.route.id}
-              onClick={() => void handleRouteAction(selectedLane.route.id, 'start')}
-            >
-              Start
-            </Button>
-          </>
-        ) : null
-      }
-      summary={
-        selectedLane ? (
-          <Stack spacing={0.75}>
-            <Typography variant="body2" color="text.secondary">
-              {selectedLane.stops.length} stops • {selectedLane.exceptions.length} exceptions
-            </Typography>
-            <TextField
-              select
-              size="small"
-              label="Assign driver"
-              value={
-                selectedDriverByRoute[selectedLane.route.id] ??
-                selectedLane.route.driverId ??
-                ''
-              }
-              onChange={(event) =>
-                setSelectedDriverByRoute((current) => ({
-                  ...current,
-                  [selectedLane.route.id]: event.target.value,
-                }))
-              }
-            >
-              <MenuItem value="">Unassigned</MenuItem>
+      {error ? <Alert severity="error">{error}</Alert> : null}
+
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', xl: 'minmax(0, 1.1fr) minmax(320px, 0.9fr)' },
+          gap: 1.2,
+          minWidth: 0,
+        }}
+      >
+        <SurfacePanel variant="panel" padding={1.1}>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(5, minmax(0, 1fr))' },
+              gap: 1,
+              alignItems: 'end',
+            }}
+          >
+            <TextField select size="small" label="Depot" value={depotFilter} onChange={(event) => setDepotFilter(event.target.value)}>
+              <MenuItem value="all">All Depots</MenuItem>
+            </TextField>
+            <TextField select size="small" label="Dispatcher" value={dispatcherFilter} onChange={(event) => setDispatcherFilter(event.target.value)}>
+              <MenuItem value="all">All Dispatchers</MenuItem>
               {drivers.map((driver) => (
                 <MenuItem key={driver.id} value={driver.id}>
                   {driverNameById[driver.id]}
                 </MenuItem>
               ))}
             </TextField>
-            <Stack direction="row" spacing={1}>
-              <Button
-                component={RouterLink}
-                to={`/route-runs/${selectedLane.route.id}`}
-                variant="text"
-                size="small"
-              >
-                Open detail
-              </Button>
-              <Button
-                variant="text"
-                size="small"
-                onClick={() => setExceptionDialogOpen(true)}
-              >
-                Create route exception
-              </Button>
-            </Stack>
-          </Stack>
-        ) : null
-      }
-    >
-      {!selectedLane ? (
-        <Typography variant="body2" color="text.secondary">
-          Select a route to inspect driver assignment, future stops, and pressure.
-        </Typography>
-      ) : (
-        <Stack spacing={1.15}>
-          <Box>
-            <Typography variant="h6" sx={{ mb: 0.75 }}>
-              Future stops
-            </Typography>
-            <Stack spacing={0.65}>
-              {selectedLane.stops.map((stop) => (
-                <Box
-                  key={stop.id}
-                  sx={{
-                    px: 1,
-                    py: 0.75,
-                    borderRadius: 1,
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    bgcolor: 'background.paper',
-                  }}
-                >
-                  <Typography variant="body2" noWrap sx={{ fontWeight: 750 }}>
-                    {stop.stopSequence}. {stop.job?.customerName || stop.jobId}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" noWrap>
-                    {stop.job?.deliveryAddress || 'Address pending'}
-                  </Typography>
-                </Box>
+            <TextField select size="small" label="Region" value={regionFilter} onChange={(event) => setRegionFilter(event.target.value)}>
+              <MenuItem value="all">All Regions</MenuItem>
+              {['North Zone', 'East Zone', 'South Zone', 'West Zone', 'Downtown'].map((region) => (
+                <MenuItem key={region} value={region}>
+                  {region}
+                </MenuItem>
               ))}
-            </Stack>
+            </TextField>
+            <TextField select size="small" label="Job Status" value={jobStatusFilter} onChange={(event) => setJobStatusFilter(event.target.value)}>
+              <MenuItem value="all">Unassigned, Ready, In Progress</MenuItem>
+              <MenuItem value="pending">Pending</MenuItem>
+              <MenuItem value="ready">Ready</MenuItem>
+              <MenuItem value="assigned">Assigned</MenuItem>
+              <MenuItem value="in_progress">In Progress</MenuItem>
+            </TextField>
+            <Button
+              variant="text"
+              onClick={handleResetFilters}
+              sx={{ minHeight: 40, fontWeight: 850 }}
+            >
+              Reset filters
+            </Button>
           </Box>
-
-          <Box>
-            <Typography variant="h6" sx={{ mb: 0.75 }}>
-              Route pressure
-            </Typography>
-            {selectedLane.exceptions.length === 0 ? (
+        </SurfacePanel>
+        <SurfacePanel variant="canvas" padding={0} sx={{ overflow: 'hidden', minHeight: 184 }}>
+          {mapRoutes.length ? (
+            <MultiRouteMap
+              routes={mapRoutes}
+              height="184px"
+              showLegend={false}
+              selectedRouteId={selectedRouteId}
+              onRouteSelect={(routeId) => {
+                if (routeId) setSelectedRouteId(routeId);
+              }}
+            />
+          ) : (
+            <Box sx={{ p: 2 }}>
               <Typography variant="body2" color="text.secondary">
-                No active exceptions on the selected route.
+                Publish routes to populate the live map preview.
               </Typography>
-            ) : (
-              <List disablePadding>
-                {selectedLane.exceptions.map((item) => (
-                  <ListItem
-                    key={item.id}
-                    disableGutters
-                    sx={{ borderBottom: '1px solid', borderColor: 'divider' }}
-                  >
-                    <ListItemText primary={item.code} secondary={item.message} />
-                    <StatusPill label={item.status} tone={statusTone(item.status)} />
-                  </ListItem>
-                ))}
-              </List>
-            )}
+            </Box>
+          )}
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: 'block', px: 1.1, py: 0.55, borderTop: '1px solid', borderColor: 'divider' }}
+          >
+            Vehicle markers use reported coordinates. Stop pins remain visible when GPS is unavailable.
+          </Typography>
+        </SurfacePanel>
+      </Box>
+
+      <SurfacePanel
+        variant="panel"
+        padding={1.1}
+        data-testid="dispatch-execution-summary"
+      >
+        <Stack
+          direction={{ xs: 'column', lg: 'row' }}
+          spacing={1.1}
+          alignItems={{ xs: 'stretch', lg: 'center' }}
+          justifyContent="space-between"
+        >
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 950 }}>
+              Live execution
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Routes are prioritized by confirmed timestamps and route ETA. Missing telemetry is never inferred.
+            </Typography>
           </Box>
+          <Stack direction="row" spacing={0.65} flexWrap="wrap" useFlexGap>
+            <ExecutionFilterButton
+              label="All"
+              count={routesMatchingDispatchFilters.length}
+              active={executionFilter === 'all'}
+              onClick={() => setExecutionFilter('all')}
+            />
+            <ExecutionFilterButton
+              label="Needs attention"
+              count={executionSummary.delayed + executionSummary.atRisk}
+              active={executionFilter === 'attention'}
+              tone="danger"
+              onClick={() => setExecutionFilter('attention')}
+            />
+            <ExecutionFilterButton
+              label="Delayed"
+              count={executionSummary.delayed}
+              active={executionFilter === 'delayed'}
+              tone="danger"
+              onClick={() => setExecutionFilter('delayed')}
+            />
+            <ExecutionFilterButton
+              label="At risk"
+              count={executionSummary.atRisk}
+              active={executionFilter === 'at_risk'}
+              tone="warning"
+              onClick={() => setExecutionFilter('at_risk')}
+            />
+            <ExecutionFilterButton
+              label="On plan"
+              count={executionSummary.onPlan}
+              active={executionFilter === 'on_plan'}
+              tone="success"
+              onClick={() => setExecutionFilter('on_plan')}
+            />
+            <ExecutionFilterButton
+              label="Awaiting data"
+              count={executionSummary.awaiting}
+              active={executionFilter === 'awaiting'}
+              onClick={() => setExecutionFilter('awaiting')}
+            />
+          </Stack>
+        </Stack>
+      </SurfacePanel>
 
-          <Box>
-            <Typography variant="h6" sx={{ mb: 0.75 }}>
-              Driver thread
-            </Typography>
-            {selectedRouteMessages.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                No route messages yet.
-              </Typography>
-            ) : (
-              <Stack spacing={0.65}>
-                {selectedRouteMessages.slice(-3).map((message) => (
-                  <Box
-                    key={message.id}
-                    sx={{
-                      px: 1,
-                      py: 0.75,
-                      borderRadius: 1,
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      bgcolor: 'background.paper',
-                    }}
-                  >
-                    <Typography variant="caption" color="text.secondary">
-                      {String(message.senderRole).toUpperCase() === 'DRIVER'
-                        ? 'Driver'
-                        : 'Dispatch'}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: {
+            xs: '1fr',
+            lg: 'minmax(300px, 0.88fr) minmax(430px, 1.42fr)',
+            xl: 'minmax(280px, 0.92fr) minmax(360px, 1.28fr) minmax(300px, 1.02fr)',
+          },
+          gap: 1.2,
+          minWidth: 0,
+          alignItems: 'start',
+        }}
+      >
+        <SurfacePanel variant="panel" padding={0} sx={{ overflow: 'hidden', minWidth: 0 }}>
+          <PanelHeader title="Unassigned Jobs" count={unassignedJobs.length} action="Sort by: Window Start" />
+          <Stack spacing={0.85} sx={{ p: 1, maxHeight: { lg: 'calc(100vh - 296px)' }, overflowY: 'auto' }}>
+            {unassignedJobs.slice(0, 12).map((job) => (
+              <Box
+                key={job.id}
+                sx={{
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 1.1,
+                  p: 1,
+                  bgcolor: 'background.paper',
+                }}
+              >
+                <Stack direction="row" spacing={1} justifyContent="space-between" alignItems="flex-start">
+                  <Box sx={{ minWidth: 0 }}>
+                    <Stack direction="row" spacing={0.7} alignItems="center" sx={{ mb: 0.6 }}>
+                      <StatusPill label={job.priority || 'Normal'} tone={priorityTone(job.priority || '')} />
+                      <Typography variant="subtitle2" noWrap sx={{ fontWeight: 950 }}>
+                        {job.id}
+                      </Typography>
+                    </Stack>
+                    <Typography variant="body2" noWrap sx={{ fontWeight: 850 }}>
+                      {job.customerName}
                     </Typography>
-                    <Typography variant="body2" noWrap>
-                      {message.body}
+                    <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+                      {formatTimeWindow(job)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+                      {jobAddress(job)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                      {jobDistanceMiles(job) == null ? 'Distance pending' : formatMiles(jobDistanceMiles(job))}
                     </Typography>
                   </Box>
-                ))}
-                <Button
-                  component={RouterLink}
-                  to={`/route-runs/${selectedLane.route.id}`}
-                  variant="text"
-                  size="small"
+                  <Stack spacing={0.55} alignItems="flex-end">
+                    <StatusPill label={String(job.status || 'Ready')} tone={statusTone(job.status)} />
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      component={RouterLink}
+                      to="/routing"
+                      sx={{ minWidth: 72, fontWeight: 850 }}
+                    >
+                      Assign
+                    </Button>
+                  </Stack>
+                </Stack>
+              </Box>
+            ))}
+            {unassignedJobs.length === 0 ? (
+              <Typography variant="body2" color="text.secondary" sx={{ p: 1 }}>
+                No unassigned jobs match the current filters.
+              </Typography>
+            ) : null}
+            <Button component={RouterLink} to="/jobs" variant="text" sx={{ justifyContent: 'flex-start', fontWeight: 850 }}>
+              View all unassigned jobs
+            </Button>
+          </Stack>
+        </SurfacePanel>
+
+        <SurfacePanel variant="panel" padding={0} sx={{ overflow: 'hidden', minWidth: 0 }}>
+          <PanelHeader title="Routes by Execution Priority" count={visibleRoutes.length} action="Confirmed variance first" />
+          <Stack spacing={0.95} sx={{ p: 1, maxHeight: { lg: 'calc(100vh - 296px)' }, overflowY: 'auto' }}>
+            {visibleRoutes.map((lane, index) => {
+              const accent = routeLaneAccents[index % routeLaneAccents.length];
+              const execution = lane.execution;
+              const completed = execution.processedStops;
+              const progress = execution.progressPercent;
+              const routeState = getRouteDispatchState(lane.route);
+              const readiness = getReadiness(lane);
+              const assignment = resolveDriverVehicleAssignment({
+                selectedDriverId:
+                  selectedDriverByRoute[lane.route.id] ?? lane.route.driverId ?? '',
+                selectedVehicleId: selectedVehicleByRoute[lane.route.id] || '',
+                routeVehicleId: lane.route.vehicleId || null,
+                drivers,
+              });
+              const driverId = assignment.driverId || lane.route.driverId || '';
+              const vehicleId = assignment.vehicleId || lane.route.vehicleId || '';
+              const editable = isEditableRoute(String(lane.route.status));
+              const selected = selectedLane?.route.id === lane.route.id;
+              return (
+                <Box
+                  key={lane.route.id}
+                  data-testid={`dispatch-route-card-${lane.route.id}`}
+                  data-execution-health={execution.health}
+                  data-execution-priority={execution.priorityRank}
+                  data-execution-variance={execution.varianceMinutes ?? ''}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={selected}
+                  aria-label={`Select ${routeLabel(lane.route)}`}
+                  onClick={() => setSelectedRouteId(lane.route.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setSelectedRouteId(lane.route.id);
+                    }
+                  }}
+                  sx={{
+                    border: '1px solid',
+                    borderColor: selected ? alpha(accent, 0.55) : 'divider',
+                    borderRadius: 1.1,
+                    p: 1.1,
+                    bgcolor: selected ? alpha(accent, isDark ? 0.1 : 0.055) : 'background.paper',
+                    boxShadow: `inset 4px 0 0 ${accent}`,
+                    cursor: 'pointer',
+                  }}
                 >
-                  Open message thread
-                </Button>
-              </Stack>
-            )}
-          </Box>
-        </Stack>
-      )}
-    </RouteInspectorPanel>
-  );
+                  <Stack spacing={1}>
+                    <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between">
+                      <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
+                        <Typography variant="h6" noWrap sx={{ fontWeight: 950, minWidth: 76 }}>
+                          {routeLabel(lane.route)}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" noWrap>
+                          {routeZone(index)}
+                        </Typography>
+                        <StatusPill label={routeState.label} tone={routeState.tone} />
+                        <Box data-testid={`dispatch-execution-status-${lane.route.id}`}>
+                          <StatusPill label={execution.label} tone={execution.tone} />
+                        </Box>
+                      </Stack>
+                      <Stack direction="row" spacing={0.8} alignItems="center">
+                        <Typography variant="subtitle2" sx={{ fontWeight: 950 }}>
+                          {progress}%
+                        </Typography>
+                        <Box sx={{ width: 96 }}>
+                          <LinearProgress
+                            variant="determinate"
+                            value={progress}
+                            sx={{
+                              height: 6,
+                              borderRadius: 999,
+                              bgcolor: alpha(trovanColors.semantic.success, 0.12),
+                              '& .MuiLinearProgress-bar': {
+                                bgcolor:
+                                  execution.health === 'delayed'
+                                    ? trovanColors.semantic.danger
+                                    : execution.health === 'at_risk'
+                                      ? trovanColors.semantic.warning
+                                      : trovanColors.semantic.success,
+                                borderRadius: 999,
+                              },
+                            }}
+                          />
+                        </Box>
+                      </Stack>
+                    </Stack>
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gridTemplateColumns: { xs: '1fr 1fr', sm: '1.2fr 1.2fr 0.9fr 0.9fr auto' },
+                        gap: 1,
+                        alignItems: 'center',
+                      }}
+                    >
+                      <InfoBlock label="Driver" value={driverNameById[driverId] || 'Unassigned'} />
+                      <InfoBlock label="Vehicle" value={vehicleNameById[vehicleId] || 'Unassigned'} />
+                      <InfoBlock label="Planned" value={execution.plannedAt ? formatClock(execution.plannedAt) : 'Unavailable'} />
+                      <InfoBlock label={execution.basis === 'route_eta' ? 'Route ETA' : 'Confirmed'} value={execution.observedAt ? formatClock(execution.observedAt) : 'No update'} />
+                      <InfoBlock label="Progress" value={`${completed} / ${lane.stops.length || 0}`} />
+                    </Box>
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gridTemplateColumns: `repeat(${Math.max(lane.stops.length || 1, 5)}, minmax(0, 1fr))`,
+                        gap: 0.5,
+                        alignItems: 'center',
+                      }}
+                    >
+                      {Array.from({ length: Math.max(lane.stops.length || 1, 5) }).map((_, stopIndex) => {
+                        const done = stopIndex < completed;
+                        return (
+                          <Box
+                            key={`${lane.route.id}-${stopIndex}`}
+                            sx={{
+                              height: 8,
+                              borderRadius: 999,
+                              bgcolor: done ? trovanColors.semantic.success : alpha(theme.palette.text.primary, 0.16),
+                            }}
+                          />
+                        );
+                      })}
+                    </Box>
+                    <Stack direction="row" spacing={0.65} flexWrap="wrap" useFlexGap alignItems="center" justifyContent="space-between">
+                      <Stack direction="row" spacing={0.55} flexWrap="wrap" useFlexGap>
+                        {editable ? (
+                          <StatusPill label={readiness.ready ? 'Ready to dispatch' : readiness.blockers[0]?.message || 'Needs review'} tone={readiness.ready ? 'success' : 'warning'} />
+                        ) : null}
+                        <StatusPill label={formatMiles((lane.route.totalDistanceKm || 0) * kmToMiles)} tone="default" />
+                      </Stack>
+                      <Stack direction="row" spacing={0.65} alignItems="center">
+                        <Button component={RouterLink} to={`/route-runs/${lane.route.id}`} variant="text" size="small" sx={{ fontWeight: 850 }}>
+                          View route
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          disabled={!editable || savingRouteId === lane.route.id}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleRouteAction(lane.route.id, 'assign');
+                          }}
+                          sx={{ fontWeight: 850 }}
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          variant="contained"
+                          size="small"
+                          disabled={!editable || !readiness.ready || savingRouteId === lane.route.id}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleRouteAction(lane.route.id, 'dispatch');
+                          }}
+                          sx={{ fontWeight: 850 }}
+                        >
+                          Dispatch
+                        </Button>
+                      </Stack>
+                    </Stack>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      data-testid={`dispatch-execution-basis-${lane.route.id}`}
+                    >
+                      {execution.basisLabel}
+                    </Typography>
+                    {selected ? (
+                      <Box
+                        sx={{
+                          display: 'grid',
+                          gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', xl: '1fr 1fr 1.2fr' },
+                          gap: 0.8,
+                        }}
+                      >
+                        <TextField
+                          select
+                          size="small"
+                          label="Driver"
+                          value={driverId}
+                          onChange={(event) => handleDriverSelection(lane.route.id, event.target.value)}
+                        >
+                          <MenuItem value="">Unassigned</MenuItem>
+                          {drivers.map((driver) => (
+                            <MenuItem key={driver.id} value={driver.id}>
+                              {driverNameById[driver.id]}
+                            </MenuItem>
+                          ))}
+                        </TextField>
+                        <TextField
+                          select
+                          size="small"
+                          label="Vehicle"
+                          value={vehicleId}
+                          onChange={(event) =>
+                            setSelectedVehicleByRoute((current) => ({
+                              ...current,
+                              [lane.route.id]: event.target.value,
+                            }))
+                          }
+                        >
+                          <MenuItem value="">Unassigned</MenuItem>
+                          {vehicles.map((vehicle) => (
+                            <MenuItem key={vehicle.id} value={vehicle.id}>
+                              {vehicleNameById[vehicle.id]}
+                            </MenuItem>
+                          ))}
+                        </TextField>
+                        <TextField
+                          size="small"
+                          label="Dispatch note"
+                          value={dispatchNoteByRoute[lane.route.id] ?? lane.route.dispatchNote ?? ''}
+                          onChange={(event) =>
+                            setDispatchNoteByRoute((current) => ({
+                              ...current,
+                              [lane.route.id]: event.target.value,
+                            }))
+                          }
+                        />
+                      </Box>
+                    ) : null}
+                  </Stack>
+                </Box>
+              );
+            })}
+            {visibleRoutes.length === 0 ? (
+              <Typography variant="body2" color="text.secondary" sx={{ p: 1 }}>
+                No active routes match the current filters.
+              </Typography>
+            ) : null}
+            <Button component={RouterLink} to="/routing" variant="text" sx={{ justifyContent: 'flex-start', fontWeight: 850 }}>
+              View all routes
+            </Button>
+          </Stack>
+        </SurfacePanel>
 
-  return (
-    <Box data-testid="dispatch-board-page" sx={{ display: 'grid', gap: 1.5 }}>
-      {commandBar}
-
-      {error ? <Alert severity="error" sx={{ mb: 1.5 }}>{error}</Alert> : null}
-
-      {isDesktopWorkspace ? (
-        <Box
+        <SurfacePanel
+          variant="panel"
+          padding={0}
           sx={{
-            display: 'grid',
-            gap: 1.5,
-            gridTemplateColumns: '315px minmax(640px, 1fr) 320px',
-            alignItems: 'stretch',
-            height: 'calc(100vh - 176px)',
-            minHeight: 640,
+            overflow: 'hidden',
+            minWidth: 0,
+            gridColumn: { lg: '1 / -1', xl: 'auto' },
           }}
         >
-          {lanesPanel}
-          {mapPanel}
-          {inspectorPanel}
-        </Box>
-      ) : (
-        <Box sx={{ display: 'grid', gap: 1.2 }}>
-          <ToggleButtonGroup
-            fullWidth
-            size="small"
-            exclusive
-            value={mobilePanel}
-            onChange={(_, value) => value && setMobilePanel(value)}
-          >
-            <ToggleButton value="map">Map</ToggleButton>
-            <ToggleButton value="routes">Routes</ToggleButton>
-            <ToggleButton value="inspector">Inspector</ToggleButton>
-          </ToggleButtonGroup>
-          {mobilePanel === 'map' ? mapPanel : null}
-          {mobilePanel === 'routes' ? lanesPanel : null}
-          {mobilePanel === 'inspector' ? inspectorPanel : null}
-        </Box>
-      )}
+          <PanelHeader title="Exceptions & Communications" count={openExceptions.length} action="" />
+          <Stack spacing={1} sx={{ p: 1, maxHeight: { lg: 'calc(100vh - 296px)' }, overflowY: 'auto' }}>
+            <SurfacePanel variant="subtle" padding={1}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.8 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 950 }}>
+                  Missed Window Alerts
+                </Typography>
+                <StatusPill label={String(highSignalExceptions.length)} tone={highSignalExceptions.length ? 'danger' : 'success'} />
+              </Stack>
+              <Stack spacing={0.7}>
+                {highSignalExceptions.slice(0, 4).map((item) => (
+                  <Box
+                    key={item.id}
+                    sx={{
+                      borderLeft: `3px solid ${trovanColors.semantic.danger}`,
+                      pl: 0.9,
+                      py: 0.35,
+                    }}
+                  >
+                    <Stack direction="row" justifyContent="space-between" spacing={1}>
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="body2" noWrap sx={{ fontWeight: 850 }}>
+                          {item.code}
+                        </Typography>
+                        <Typography variant="caption" color="error" noWrap sx={{ display: 'block' }}>
+                          {item.message}
+                        </Typography>
+                      </Box>
+                      <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                        {formatClock(item.createdAt)}
+                      </Typography>
+                    </Stack>
+                  </Box>
+                ))}
+                {highSignalExceptions.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    No active exceptions are blocking dispatch.
+                  </Typography>
+                ) : null}
+                <Button component={RouterLink} to="/exceptions" size="small" variant="text" sx={{ justifyContent: 'flex-start', fontWeight: 850 }}>
+                  View all
+                </Button>
+              </Stack>
+            </SurfacePanel>
+
+            <SurfacePanel variant="subtle" padding={1}>
+              <Stack direction="row" spacing={0.75} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
+                <StatusPill label="Communications" tone="accent" />
+                <StatusPill label="Driver Chat" tone="default" />
+                <StatusPill label="Dispatch Notes" tone="default" />
+                <StatusPill label="Acks" tone="default" />
+              </Stack>
+              <Stack spacing={0.75}>
+                {selectedRouteMessages.slice(-5).reverse().map((message) => (
+                  <Stack key={message.id} direction="row" spacing={0.9} alignItems="flex-start">
+                    <Box
+                      sx={{
+                        width: 26,
+                        height: 26,
+                        borderRadius: 999,
+                        bgcolor:
+                          String(message.senderRole).toUpperCase() === 'DRIVER'
+                            ? alpha(trovanColors.semantic.blue, 0.14)
+                            : alpha(trovanColors.semantic.success, 0.14),
+                        color:
+                          String(message.senderRole).toUpperCase() === 'DRIVER'
+                            ? trovanColors.semantic.blue
+                            : trovanColors.semantic.success,
+                        display: 'grid',
+                        placeItems: 'center',
+                        flex: '0 0 auto',
+                      }}
+                    >
+                      <SendOutlined sx={{ fontSize: 15 }} />
+                    </Box>
+                    <Box sx={{ minWidth: 0, flex: 1 }}>
+                      <Stack direction="row" justifyContent="space-between" spacing={1}>
+                        <Typography variant="body2" noWrap sx={{ fontWeight: 850 }}>
+                          {String(message.senderRole).toUpperCase() === 'DRIVER' ? 'Driver' : 'Dispatch'}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+                          {formatClock(message.createdAt)}
+                        </Typography>
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+                        {message.body}
+                      </Typography>
+                    </Box>
+                  </Stack>
+                ))}
+                {selectedRouteMessages.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary">
+                    No messages yet for the selected route.
+                  </Typography>
+                ) : null}
+                <Stack direction="row" spacing={0.75}>
+                  <TextField
+                    size="small"
+                    label="Type message"
+                    value={messageDraft}
+                    onChange={(event) => setMessageDraft(event.target.value)}
+                    fullWidth
+                  />
+                  <Button
+                    variant="contained"
+                    disabled={!selectedLane || !messageDraft.trim() || createMessageMutation.isPending}
+                    onClick={async () => {
+                      if (!selectedLane || !messageDraft.trim()) return;
+                      setError(null);
+                      try {
+                        await createMessageMutation.mutateAsync({
+                          routeRunId: selectedLane.route.id,
+                          payload: { body: messageDraft.trim() },
+                        });
+                        setMessageDraft('');
+                      } catch (err: unknown) {
+                        setError(getRouteRunsErrorMessage(err));
+                      }
+                    }}
+                    sx={{ fontWeight: 850 }}
+                  >
+                    Send
+                  </Button>
+                </Stack>
+              </Stack>
+            </SurfacePanel>
+
+            <SurfacePanel variant="subtle" padding={1}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 950, mb: 0.8 }}>
+                Acknowledgment Status
+              </Typography>
+              <Stack spacing={0.9}>
+                <StatusProgress label="All drivers" value={routeRuns.length ? Math.max(routeRuns.length - boardSummary.ready, 0) : 0} total={routeRuns.length || 1} tone={trovanColors.semantic.success} />
+                <StatusProgress label="Pending" value={boardSummary.ready} total={routeRuns.length || 1} tone={trovanColors.semantic.warning} />
+              </Stack>
+              <Button component={RouterLink} to={selectedLane ? `/route-runs/${selectedLane.route.id}` : '/dispatch'} size="small" variant="text" sx={{ mt: 1, fontWeight: 850 }}>
+                View details
+              </Button>
+            </SurfacePanel>
+          </Stack>
+        </SurfacePanel>
+      </Box>
+
+      <SurfacePanel variant="panel" padding={0.9}>
+        <Stack
+          direction={{ xs: 'column', md: 'row' }}
+          spacing={1}
+          alignItems={{ xs: 'stretch', md: 'center' }}
+          justifyContent="space-between"
+          divider={<Divider orientation="vertical" flexItem />}
+        >
+          <FooterMetric label="Live Updates" value="On" color={trovanColors.semantic.success} />
+          <FooterMetric label="Active Drivers" value={`${activeDrivers} / ${drivers.length || 0}`} />
+          <FooterMetric label="Jobs in Progress" value={String(jobsInProgress)} />
+          <FooterMetric label="Exceptions" value={String(boardSummary.exceptions)} color={boardSummary.exceptions ? trovanColors.semantic.danger : trovanColors.semantic.success} />
+          <FooterMetric
+            label="Last updated"
+            value={
+              boardQuery.dataUpdatedAt
+                ? formatClock(new Date(boardQuery.dataUpdatedAt).toISOString())
+                : 'Not updated'
+            }
+          />
+        </Stack>
+      </SurfacePanel>
 
       <Dialog
         open={exceptionDialogOpen}
@@ -818,11 +1421,340 @@ export default function DispatchBoardOpsPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <Dialog
+        open={dispatchAllDialogOpen}
+        onClose={() => setDispatchAllDialogOpen(false)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Dispatch Ready Routes</DialogTitle>
+        <DialogContent sx={{ display: 'grid', gap: 1.5, pt: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            {dispatchableRouteIds.length
+              ? `${dispatchableRouteIds.length} route${dispatchableRouteIds.length === 1 ? '' : 's'} passed driver, vehicle, stop, and blocker checks.`
+              : 'No routes currently pass dispatch readiness checks.'}
+          </Typography>
+          {visibleRoutes.map((lane) => {
+            const readiness = getReadiness(lane);
+            return (
+              <Stack
+                key={lane.route.id}
+                direction="row"
+                justifyContent="space-between"
+                spacing={1}
+                sx={{
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  px: 1,
+                  py: 0.85,
+                }}
+              >
+                <Typography variant="body2" sx={{ fontWeight: 850 }}>
+                  {routeLabel(lane.route)}
+                </Typography>
+                <StatusPill
+                  label={readiness.ready ? 'Ready' : readiness.blockers[0]?.message || 'Blocked'}
+                  tone={readiness.ready ? 'success' : 'warning'}
+                />
+              </Stack>
+            );
+          })}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDispatchAllDialogOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            disabled={!dispatchableRouteIds.length || savingRouteId === 'bulk-dispatch'}
+            onClick={() => void handleDispatchAll()}
+          >
+            Dispatch ready routes
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={sendUpdatesDialogOpen}
+        onClose={() => setSendUpdatesDialogOpen(false)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Send Route Updates</DialogTitle>
+        <DialogContent sx={{ display: 'grid', gap: 2, pt: 2 }}>
+          <Typography variant="body2" color="text.secondary">
+            This sends a persisted dispatch message to every route currently visible on the board.
+          </Typography>
+          <TextField
+            label="Update message"
+            value={bulkUpdateDraft}
+            onChange={(event) => setBulkUpdateDraft(event.target.value)}
+            multiline
+            minRows={3}
+            fullWidth
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSendUpdatesDialogOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            disabled={!bulkUpdateDraft.trim() || createMessageMutation.isPending}
+            onClick={() => void handleSendBulkUpdate()}
+          >
+            Send updates
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={reassignDialogOpen}
+        onClose={() => setReassignDialogOpen(false)}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Reassign Route</DialogTitle>
+        <DialogContent sx={{ display: 'grid', gap: 2, pt: 2 }}>
+          <TextField
+            select
+            label="Route"
+            value={selectedLane?.route.id || ''}
+            onChange={(event) => setSelectedRouteId(event.target.value)}
+            fullWidth
+          >
+            {visibleRoutes.map((lane) => (
+              <MenuItem key={lane.route.id} value={lane.route.id}>
+                {routeLabel(lane.route)} · {lane.stops.length} stops
+              </MenuItem>
+            ))}
+          </TextField>
+          {selectedLane ? (
+            <>
+              <TextField
+                select
+                label="Driver"
+                value={selectedDriverByRoute[selectedLane.route.id] ?? selectedLane.route.driverId ?? ''}
+                onChange={(event) => handleDriverSelection(selectedLane.route.id, event.target.value)}
+                fullWidth
+              >
+                <MenuItem value="">Unassigned</MenuItem>
+                {drivers.map((driver) => (
+                  <MenuItem key={driver.id} value={driver.id}>
+                    {driverNameById[driver.id]}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                select
+                label="Vehicle"
+                value={selectedVehicleByRoute[selectedLane.route.id] ?? selectedLane.route.vehicleId ?? ''}
+                onChange={(event) =>
+                  setSelectedVehicleByRoute((current) => ({
+                    ...current,
+                    [selectedLane.route.id]: event.target.value,
+                  }))
+                }
+                fullWidth
+              >
+                <MenuItem value="">Unassigned</MenuItem>
+                {vehicles.map((vehicle) => (
+                  <MenuItem key={vehicle.id} value={vehicle.id}>
+                    {vehicleNameById[vehicle.id]}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setReassignDialogOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            disabled={!selectedLane || savingRouteId === selectedLane.route.id}
+            onClick={async () => {
+              if (!selectedLane) return;
+              await handleRouteAction(selectedLane.route.id, 'assign');
+              setNotice({ severity: 'success', message: `${routeLabel(selectedLane.route)} assignment saved.` });
+              setReassignDialogOpen(false);
+            }}
+          >
+            Save reassignment
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={Boolean(notice)}
+        autoHideDuration={3600}
+        onClose={() => setNotice(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        {notice ? (
+          <Alert severity={notice.severity} variant="filled" onClose={() => setNotice(null)}>
+            {notice.message}
+          </Alert>
+        ) : undefined}
+      </Snackbar>
     </Box>
   );
 }
 
-function trovanRowColor(editable: boolean, isDark: boolean) {
-  if (isDark) return editable ? 'rgba(21, 18, 16, 0.94)' : 'rgba(11, 9, 8, 0.68)';
-  return editable ? 'rgba(255, 253, 249, 0.78)' : 'rgba(239, 231, 220, 0.66)';
+function ExecutionFilterButton({
+  label,
+  count,
+  active,
+  tone = 'default',
+  onClick,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  tone?: 'default' | 'danger' | 'warning' | 'success';
+  onClick: () => void;
+}) {
+  const color =
+    tone === 'danger'
+      ? trovanColors.semantic.danger
+      : tone === 'warning'
+        ? trovanColors.semantic.warning
+        : tone === 'success'
+          ? trovanColors.semantic.success
+          : trovanColors.copper[500];
+
+  return (
+    <Button
+      size="small"
+      variant={active ? 'contained' : 'outlined'}
+      aria-pressed={active}
+      onClick={onClick}
+      sx={{
+        minHeight: 34,
+        borderColor: alpha(color, active ? 0.9 : 0.4),
+        bgcolor: active ? color : 'transparent',
+        color: active ? '#fff' : 'text.primary',
+        fontWeight: 850,
+        '&:hover': {
+          borderColor: color,
+          bgcolor: active ? color : alpha(color, 0.08),
+        },
+      }}
+    >
+      {label} · {count}
+    </Button>
+  );
+}
+
+function PanelHeader({
+  title,
+  count,
+  action,
+}: {
+  title: string;
+  count: number;
+  action: string;
+}) {
+  return (
+    <Stack
+      direction="row"
+      justifyContent="space-between"
+      alignItems="center"
+      sx={{ px: 1.25, py: 1.05, borderBottom: '1px solid', borderColor: 'divider' }}
+    >
+      <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0 }}>
+        <Typography variant="h6" noWrap sx={{ fontWeight: 950 }}>
+          {title}
+        </Typography>
+        <StatusPill label={String(count)} tone={count ? 'info' : 'default'} />
+      </Stack>
+      {action ? (
+        <Stack direction="row" spacing={0.4} alignItems="center">
+          <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 800 }}>
+            {action}
+          </Typography>
+          <MoreVertOutlined sx={{ fontSize: 18, color: 'text.secondary' }} />
+        </Stack>
+      ) : null}
+    </Stack>
+  );
+}
+
+function InfoBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <Box sx={{ minWidth: 0 }}>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontWeight: 750 }}>
+        {label}
+      </Typography>
+      <Typography variant="body2" noWrap sx={{ fontWeight: 850 }}>
+        {value}
+      </Typography>
+    </Box>
+  );
+}
+
+function StatusProgress({
+  label,
+  value,
+  total,
+  tone,
+}: {
+  label: string;
+  value: number;
+  total: number;
+  tone: string;
+}) {
+  const percent = total ? Math.min(100, Math.round((value / total) * 100)) : 0;
+  return (
+    <Stack direction="row" spacing={1} alignItems="center">
+      <Typography variant="body2" sx={{ width: 96, fontWeight: 750 }}>
+        {label}
+      </Typography>
+      <Box sx={{ flex: 1 }}>
+        <LinearProgress
+          variant="determinate"
+          value={percent}
+          sx={{
+            height: 6,
+            borderRadius: 999,
+            bgcolor: alpha(tone, 0.12),
+            '& .MuiLinearProgress-bar': {
+              bgcolor: tone,
+              borderRadius: 999,
+            },
+          }}
+        />
+      </Box>
+      <Typography variant="body2" sx={{ width: 52, textAlign: 'right', fontWeight: 850 }}>
+        {value} / {total}
+      </Typography>
+    </Stack>
+  );
+}
+
+function FooterMetric({
+  label,
+  value,
+  color = trovanColors.black[500],
+}: {
+  label: string;
+  value: string;
+  color?: string;
+}) {
+  return (
+    <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minWidth: 0 }}>
+      <Box
+        sx={{
+          width: 8,
+          height: 8,
+          borderRadius: 999,
+          bgcolor: color,
+          flex: '0 0 auto',
+        }}
+      />
+      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 750 }}>
+        {label}
+      </Typography>
+      <Typography variant="body2" noWrap sx={{ fontWeight: 900 }}>
+        {value}
+      </Typography>
+    </Stack>
+  );
 }

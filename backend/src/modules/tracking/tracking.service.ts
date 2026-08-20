@@ -35,6 +35,10 @@ export interface VehicleLocation {
   };
 }
 
+export const TRACKING_HISTORY_POINT_LIMIT = 1000;
+export const boundTrackingHistoryHours = (hours: number) =>
+  Math.max(1, Math.min(24 * 7, Math.floor(hours) || 24));
+
 export interface TrackingOverview {
   organizationId?: string;
   generatedAt: string;
@@ -223,7 +227,7 @@ export class TrackingService {
     hours: number = 24,
     organizationId?: string,
   ): Promise<VehicleLocation[]> {
-    const boundedHours = Math.max(1, Math.min(24 * 7, hours));
+    const boundedHours = boundTrackingHistoryHours(hours);
     await this.findVehicleForOrganization(vehicleId, organizationId);
 
     const results = await this.telemetryRepository
@@ -239,7 +243,7 @@ export class TrackingService {
         hours: boundedHours,
       })
       .orderBy('telemetry.timestamp', 'DESC')
-      .limit(1000)
+      .limit(TRACKING_HISTORY_POINT_LIMIT)
       .getRawMany();
 
     return results.map((row: any) => ({
@@ -252,7 +256,7 @@ export class TrackingService {
           ? parseFloat(row.heading)
           : undefined,
       timestamp: row.timestamp,
-    }));
+    })).reverse();
   }
 
   async getOverview(options?: {

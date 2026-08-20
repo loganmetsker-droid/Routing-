@@ -8,11 +8,13 @@ import {
   TrovanDriversIcon,
   TrovanExceptionsIcon,
   TrovanJobsIcon,
+  TrovanPodIcon,
   TrovanRoutingIcon,
   TrovanSettingsIcon,
   TrovanTrackingIcon,
   TrovanVehiclesIcon,
 } from '../components/nav/TrovanNavIcons';
+import { SchoolOutlined } from '@mui/icons-material';
 
 export type NavItem = {
   label: string;
@@ -27,49 +29,21 @@ export type NavSection = {
 
 export const navSections: NavSection[] = [
   {
-    label: 'Overview',
+    label: 'Operations',
     items: [
       { label: 'Dashboard', to: '/dashboard', icon: TrovanDashboardIcon },
-    ],
-  },
-  {
-    label: 'Planning',
-    items: [
-      { label: 'Jobs', to: '/jobs', icon: TrovanJobsIcon },
-      { label: 'Routing', to: '/routing', icon: TrovanRoutingIcon },
-    ],
-  },
-  {
-    label: 'Live Dispatch',
-    items: [
       { label: 'Dispatch', to: '/dispatch', icon: TrovanDispatchIcon },
-      { label: 'Exceptions', to: '/exceptions', icon: TrovanExceptionsIcon },
-      { label: 'Tracking', to: '/tracking', icon: TrovanTrackingIcon },
-    ],
-  },
-  {
-    label: 'Fleet',
-    items: [
+      { label: 'Routing', to: '/routing', icon: TrovanRoutingIcon },
+      { label: 'Jobs', to: '/jobs', icon: TrovanJobsIcon },
+      { label: 'Customers', to: '/customers', icon: TrovanCustomersIcon },
       { label: 'Drivers', to: '/drivers', icon: TrovanDriversIcon },
       { label: 'Vehicles', to: '/vehicles', icon: TrovanVehiclesIcon },
-    ],
-  },
-  {
-    label: 'Customers',
-    items: [
-      { label: 'Customers', to: '/customers', icon: TrovanCustomersIcon },
-    ],
-  },
-  {
-    label: 'Intelligence',
-    items: [
-      { label: 'Analytics', to: '/analytics', icon: TrovanAnalyticsIcon },
-    ],
-  },
-  {
-    label: 'Admin',
-    items: [
+      { label: 'Tracking', to: '/tracking', icon: TrovanTrackingIcon },
+      { label: 'Proof of Delivery', to: '/pod', icon: TrovanPodIcon },
+      { label: 'Exceptions', to: '/exceptions', icon: TrovanExceptionsIcon },
+      { label: 'Reports', to: '/analytics', icon: TrovanAnalyticsIcon },
       { label: 'Settings', to: '/settings', icon: TrovanSettingsIcon },
+      { label: 'Academy', to: '/academy', icon: SchoolOutlined },
     ],
   },
 ];

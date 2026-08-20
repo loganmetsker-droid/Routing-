@@ -67,6 +67,34 @@ const normalizeOrganizationSettings = (
         notifications.defaultChannel === 'both'
           ? notifications.defaultChannel
           : undefined,
+      scheduledEnabled:
+        typeof notifications.scheduledEnabled === 'boolean'
+          ? notifications.scheduledEnabled
+          : undefined,
+      onTheWayEnabled:
+        typeof notifications.onTheWayEnabled === 'boolean'
+          ? notifications.onTheWayEnabled
+          : undefined,
+      onTheWayMinutesBefore:
+        typeof notifications.onTheWayMinutesBefore === 'number'
+          ? notifications.onTheWayMinutesBefore
+          : undefined,
+      onTheWayRequirePreviousCompletion:
+        typeof notifications.onTheWayRequirePreviousCompletion === 'boolean'
+          ? notifications.onTheWayRequirePreviousCompletion
+          : undefined,
+      completionEnabled:
+        typeof notifications.completionEnabled === 'boolean'
+          ? notifications.completionEnabled
+          : undefined,
+      failureEnabled:
+        typeof notifications.failureEnabled === 'boolean'
+          ? notifications.failureEnabled
+          : undefined,
+      completionVarianceThresholdMeters:
+        typeof notifications.completionVarianceThresholdMeters === 'number'
+          ? notifications.completionVarianceThresholdMeters
+          : undefined,
     },
     retention: {
       auditDays:
@@ -213,14 +241,14 @@ const normalizeInvitation = (value: unknown): OrganizationInvitationRecord => {
   };
 };
 
-const previewOrganization = (): OrganizationRecord => ({
+let previewOrganizationStore: OrganizationRecord = {
   id: 'preview-org',
-  name: 'Trovan Logistics',
+  name: 'Trovan Dispatch',
   slug: 'trovan-preview',
   serviceTimezone: 'America/Chicago',
   settings: {
     branding: {
-      brandName: 'Trovan Logistics',
+      brandName: 'Trovan Dispatch',
       primaryColor: '#0D1218',
       accentColor: '#B97129',
       supportEmail: 'support@trovan.local',
@@ -230,9 +258,16 @@ const previewOrganization = (): OrganizationRecord => ({
     },
     notifications: {
       emailEnabled: true,
-      smsEnabled: true,
+      smsEnabled: false,
       replyToEmail: 'dispatch@trovan.local',
-      defaultChannel: 'both',
+      defaultChannel: 'email',
+      scheduledEnabled: true,
+      onTheWayEnabled: true,
+      onTheWayMinutesBefore: 30,
+      onTheWayRequirePreviousCompletion: true,
+      completionEnabled: true,
+      failureEnabled: true,
+      completionVarianceThresholdMeters: 250,
     },
     retention: {
       auditDays: 365,
@@ -250,7 +285,10 @@ const previewOrganization = (): OrganizationRecord => ({
     role: 'OWNER',
     roles: ['OWNER'],
   },
-});
+};
+
+const previewOrganization = (): OrganizationRecord =>
+  normalizeOrganization(JSON.parse(JSON.stringify(previewOrganizationStore)));
 
 const previewMembers = (): OrganizationMemberRecord[] => [
   {
@@ -273,7 +311,7 @@ const previewMembers = (): OrganizationMemberRecord[] => [
   },
 ];
 
-const previewInvitations = (): OrganizationInvitationRecord[] => [
+let previewInvitationStore: OrganizationInvitationRecord[] = [
   {
     id: 'invite-preview-1',
     organizationId: 'preview-org',
@@ -293,6 +331,12 @@ const previewInvitations = (): OrganizationInvitationRecord[] => [
     updatedAt: new Date().toISOString(),
   },
 ];
+
+const previewInvitations = (): OrganizationInvitationRecord[] =>
+  previewInvitationStore.map((invitation) => ({
+    ...invitation,
+    roles: [...invitation.roles],
+  }));
 
 export const getOrganizations = async (): Promise<OrganizationRecord[]> => {
   if (isPreview()) {
@@ -345,6 +389,17 @@ export const createOrganization = async (payload: {
   slug?: string;
   serviceTimezone?: string;
 }) => {
+  if (isPreview()) {
+    previewOrganizationStore = normalizeOrganization({
+      id: `preview-org-${Date.now()}`,
+      name: payload.name,
+      slug: payload.slug || payload.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      serviceTimezone: payload.serviceTimezone || 'UTC',
+      settings: previewOrganizationStore.settings,
+      membership: { role: 'OWNER', roles: ['OWNER'] },
+    });
+    return previewOrganization();
+  }
   const response = await apiFetch('/api/organizations', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -365,6 +420,13 @@ export const updateCurrentOrganizationSettings = async (payload: {
   notificationSmsEnabled?: boolean;
   notificationReplyToEmail?: string;
   defaultNotificationChannel?: 'email' | 'sms' | 'both';
+  notificationScheduledEnabled?: boolean;
+  notificationOnTheWayEnabled?: boolean;
+  notificationOnTheWayMinutesBefore?: number;
+  notificationOnTheWayRequirePreviousCompletion?: boolean;
+  notificationCompletionEnabled?: boolean;
+  notificationFailureEnabled?: boolean;
+  completionVarianceThresholdMeters?: number;
   auditRetentionDays?: number;
   operationalRetentionDays?: number;
   workosOrganizationId?: string;
@@ -373,6 +435,55 @@ export const updateCurrentOrganizationSettings = async (payload: {
   ssoEnforced?: boolean;
   mfaEnforced?: boolean;
 }) => {
+  if (isPreview()) {
+    const current: OrganizationSettingsRecord =
+      previewOrganizationStore.settings || { branding: {} };
+    previewOrganizationStore = {
+      ...previewOrganizationStore,
+      settings: {
+        branding: {
+          ...(current.branding || {}),
+          brandName: payload.brandName,
+          primaryColor: payload.primaryColor,
+          accentColor: payload.accentColor,
+          supportEmail: payload.supportEmail,
+          supportPhone: payload.supportPhone,
+          trackingHeadline: payload.trackingHeadline,
+          trackingSubtitle: payload.trackingSubtitle,
+        },
+        notifications: {
+          ...(current.notifications || {}),
+          emailEnabled: payload.notificationEmailEnabled,
+          smsEnabled: payload.notificationSmsEnabled,
+          replyToEmail: payload.notificationReplyToEmail,
+          defaultChannel: payload.defaultNotificationChannel,
+          scheduledEnabled: payload.notificationScheduledEnabled,
+          onTheWayEnabled: payload.notificationOnTheWayEnabled,
+          onTheWayMinutesBefore: payload.notificationOnTheWayMinutesBefore,
+          onTheWayRequirePreviousCompletion:
+            payload.notificationOnTheWayRequirePreviousCompletion,
+          completionEnabled: payload.notificationCompletionEnabled,
+          failureEnabled: payload.notificationFailureEnabled,
+          completionVarianceThresholdMeters:
+            payload.completionVarianceThresholdMeters,
+        },
+        retention: {
+          ...(current.retention || {}),
+          auditDays: payload.auditRetentionDays,
+          operationalDays: payload.operationalRetentionDays,
+        },
+        identity: {
+          ...(current.identity || {}),
+          workosOrganizationId: payload.workosOrganizationId,
+          workosConnectionId: payload.workosConnectionId,
+          domainVerificationStatus: payload.domainVerificationStatus,
+          ssoEnforced: payload.ssoEnforced,
+          mfaEnforced: payload.mfaEnforced,
+        },
+      },
+    };
+    return previewOrganization();
+  }
   const response = await apiFetch('/api/organizations/current/settings', {
     method: 'PATCH',
     body: JSON.stringify(payload),
@@ -386,6 +497,29 @@ export const createOrganizationInvitation = async (payload: {
   role?: string;
   expiresInDays?: number;
 }) => {
+  if (isPreview()) {
+    const now = new Date().toISOString();
+    const invitation = normalizeInvitation({
+      id: `invite-preview-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      organizationId: previewOrganizationStore.id,
+      email: payload.email,
+      role: payload.role || 'VIEWER',
+      roles: [payload.role || 'VIEWER'],
+      status: 'PENDING',
+      provider: 'local',
+      providerInvitationId: null,
+      acceptUrl: null,
+      providerState: 'preview',
+      lastError: null,
+      invitedByUserId: 'preview-user',
+      expiresAt: null,
+      acceptedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    previewInvitationStore = [invitation, ...previewInvitationStore];
+    return invitation;
+  }
   const response = await apiFetch('/api/organizations/current/invitations', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -395,6 +529,19 @@ export const createOrganizationInvitation = async (payload: {
 };
 
 export const revokeOrganizationInvitation = async (invitationId: string) => {
+  if (isPreview()) {
+    let revoked: OrganizationInvitationRecord | null = null;
+    previewInvitationStore = previewInvitationStore.map((invitation) => {
+      if (invitation.id !== invitationId) return invitation;
+      revoked = {
+        ...invitation,
+        status: 'REVOKED',
+        updatedAt: new Date().toISOString(),
+      };
+      return revoked;
+    });
+    return revoked;
+  }
   const response = await apiFetch(
     `/api/organizations/current/invitations/${invitationId}/revoke`,
     {

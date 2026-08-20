@@ -17,7 +17,7 @@ describe('publicTrackingApi', () => {
               slug: 'acme-routing',
               branding: {
                 brandName: 'Acme Routing',
-                primaryColor: '#1F1A17',
+                primaryColor: '#0B1324',
               },
             },
             routeRun: {

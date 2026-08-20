@@ -1,5 +1,10 @@
 import type { SvgIconComponent } from '@mui/icons-material';
 import {
+  assistedPilotPlanCatalog,
+  marketingRequestTypes,
+  type MarketingRequestType,
+} from '@shared/contracts';
+import {
   AssignmentTurnedInRounded,
   ArrowForwardRounded,
   CheckCircleRounded,
@@ -25,14 +30,7 @@ import {
 export type FleetSizeKey = '5–15' | '16–35' | '36–75' | '76–150' | '151–300' | '300+ / Custom';
 export type DailyStopsKey = '50' | '125' | '250';
 export type PainKey = 'planning' | 'updates' | 'etas' | 'windows';
-export type RequestType =
-  | 'Route audit'
-  | 'Book demo'
-  | 'Sales question'
-  | 'Implementation'
-  | 'Support / login help'
-  | 'Security review'
-  | 'Careers interest';
+export type RequestType = MarketingRequestType;
 
 export type AuditInputs = {
   fleetSize: FleetSizeKey;
@@ -121,15 +119,7 @@ export const painOptions: Array<{ key: PainKey; label: string; description: stri
   { key: 'windows', label: 'Missed windows', description: 'Stops slip without early warning.' },
 ];
 
-export const requestTypeOptions: RequestType[] = [
-  'Route audit',
-  'Book demo',
-  'Sales question',
-  'Implementation',
-  'Support / login help',
-  'Security review',
-  'Careers interest',
-];
+export const requestTypeOptions: RequestType[] = [...marketingRequestTypes];
 
 export const workflowPages: WorkflowPage[] = [
   {
@@ -141,8 +131,8 @@ export const workflowPages: WorkflowPage[] = [
     body: 'Import stops, apply constraints, balance workload, and create dispatch-ready routes before the day starts.',
     problem: 'Late route plans force dispatchers to fix preventable problems while drivers are already waiting.',
     outcome: 'A planning workspace that shows imported stops, lane balance, route risk, and map context before publish.',
-    image: '/marketing/routing-workspace-dotted.png',
-    imageAlt: 'Trovan route planning workspace with imported stops, draft lanes, and connected route map',
+    image: '/marketing/product-routing-density.png',
+    imageAlt: 'Current Trovan route planning workspace showing route density, stops, and publish-ready totals',
     capabilities: ['Import stops from CSV or order-system exports', 'Set time windows, capacity, territories, and driver limits', 'Compare route versions before sending approved routes to dispatch'],
     metrics: [
       { label: 'Planning mode', value: 'before dispatch' },
@@ -158,10 +148,10 @@ export const workflowPages: WorkflowPage[] = [
     heading: 'Run the route day from one live board.',
     eyebrow: 'Live dispatch board',
     body: 'See route progress, driver status, exceptions, and late-risk stops without chasing updates across calls and texts.',
-    problem: 'Dispatcher chaos starts when driver status, exceptions, notes, and route changes live in different places.',
+    problem: 'Dispatch breaks down when route updates live in different places.',
     outcome: 'A live dispatch board that keeps assignments, route progress, exception flags, and same-day changes visible.',
-    image: '/marketing/dispatch-board.png',
-    imageAlt: 'Trovan live dispatch board with route progress, driver status, and exception context',
+    image: '/marketing/product-dispatch.png',
+    imageAlt: 'Current Trovan dispatch board with unassigned jobs, active routes, live map, and exception communications',
     capabilities: ['Monitor live route progress by lane and driver', 'Handle exceptions without losing route context', 'Reassign or rebalance work while keeping a proof trail'],
     metrics: [
       { label: 'Dispatch state', value: 'live' },
@@ -179,8 +169,8 @@ export const workflowPages: WorkflowPage[] = [
     body: 'Drivers get their route, stop details, customer notes, navigation, and proof capture in a simple mobile workflow.',
     problem: 'Drivers should not need dispatcher screens, text threads, or paper notes to know what happens next.',
     outcome: 'A driver-only mobile route flow for the next stop, notes, completion, skip reasons, and proof capture.',
-    image: '/marketing/driver-workspace.png',
-    imageAlt: 'Trovan Driver mobile app showing next stop, route notes, and completion actions',
+    image: '/marketing/product-driver-mobile.png',
+    imageAlt: 'Current Trovan driver mobile route showing the next stop, navigation, location, and arrival action',
     capabilities: ['Show the next stop, customer notes, and navigation context', 'Capture complete, skip, notes, signature, photo, or document proof', 'Keep driver updates attached to route history'],
     metrics: [
       { label: 'Mobile flow', value: 'driver-only' },
@@ -198,8 +188,8 @@ export const workflowPages: WorkflowPage[] = [
     body: 'Share delivery status, ETA, and proof updates so customers know what is happening without calling dispatch.',
     problem: 'Where-is-my-order calls steal dispatcher time when route progress is invisible to customers and support.',
     outcome: 'A customer-facing tracking page that turns live route events into clear status and ETA context.',
-    image: '/marketing/tracking-workspace.png',
-    imageAlt: 'Trovan customer tracking page with ETA, delivery status timeline, and support context',
+    image: '/marketing/product-customer-tracking-mobile.png',
+    imageAlt: 'Current Trovan customer tracking page with delivery status, vehicle telemetry, and support context',
     capabilities: ['Share customer ETA and route-progress status', 'Show delivery-complete state and proof context when available', 'Give support a consistent page for delivery questions'],
     metrics: [
       { label: 'Customer view', value: 'public link' },
@@ -217,8 +207,8 @@ export const workflowPages: WorkflowPage[] = [
     body: 'Capture timestamps, photos, notes, driver updates, and delivery outcomes so your team can resolve questions quickly.',
     problem: 'Missed proof, scattered notes, and unclear delivery outcomes create avoidable disputes after the route ends.',
     outcome: 'A completed-route record with timestamps, proof records, exception notes, and delivery outcomes in one place.',
-    image: '/marketing/proof-workspace.png',
-    imageAlt: 'Trovan proof summary showing completed route records, timestamps, notes, and proof of delivery',
+    image: '/marketing/product-proof.png',
+    imageAlt: 'Current Trovan proof-of-delivery workspace with delivery status, route links, filters, and evidence details',
     capabilities: ['Review completed route records with proof and timestamps', 'Keep exception notes and failed-delivery reasons attached', 'Use route history to support customer follow-up and coaching'],
     metrics: [
       { label: 'Evidence', value: 'attached' },
@@ -264,34 +254,19 @@ export const auditDeliverables = [
   ['Rollout plan', 'What Trovan would need to connect first before a larger production rollout.'],
 ] as const;
 
-export const pricingPlans = [
-  {
-    name: 'Launch',
-    price: '$399',
-    cta: 'Request Launch setup',
-    requestType: 'Implementation' as RequestType,
-    helperText: 'Launch onboarding is currently reviewed before activation.',
-    body: 'For local delivery teams proving route discipline.',
-    features: ['Route planning workspace', 'Driver mobile flow', 'Public tracking links'],
-  },
-  {
-    name: 'Scale',
-    price: '$899',
-    cta: 'Book ROI walkthrough',
-    requestType: 'Book demo' as RequestType,
-    body: 'For operators that need live dispatch, customer visibility, route history, and exception control.',
-    features: ['Dispatch command center', 'Customer and fleet records', 'Analytics and route history'],
-    featured: true,
-  },
-  {
-    name: 'Enterprise',
-    price: 'Custom',
-    cta: 'Review route-day ROI',
-    requestType: 'Sales question' as RequestType,
-    body: 'For multi-team fleets with security review, implementation planning, API needs, and support requirements.',
-    features: ['Security review support', 'Webhook and API access', 'Implementation readiness plan'],
-  },
-];
+export const pricingPlans = assistedPilotPlanCatalog.map((plan) => ({
+  name: plan.label,
+  price:
+    plan.monthlyPriceUsd === null
+      ? 'Custom'
+      : `$${plan.monthlyPriceUsd.toLocaleString()}`,
+  cadence: plan.billingCadence ? `/${plan.billingCadence}` : '',
+  cta: plan.cta,
+  requestType: plan.requestType,
+  body: plan.publicDescription,
+  features: plan.features.slice(0, 3),
+  featured: plan.plan === 'professional',
+}));
 
 export const securityControlCopy = [
   'Role-based access separates owner, admin, dispatcher, driver, and viewer workflows.',
@@ -344,6 +319,25 @@ export const supportTopics = [
   { icon: ForumRounded, title: 'Sales and demo follow-up', body: 'Book a walkthrough around your planning, dispatch, driver execution, and tracking workflows.' },
 ];
 
+export const supportFaqs = [
+  { category: 'Access', question: 'I cannot sign in. What should I check first?', answer: 'Confirm that you are using the invited work email, that the invitation has not expired, and that your organization administrator has not revoked the membership. Include the visible request ID when contacting support.' },
+  { category: 'Access', question: 'Which role should each team member receive?', answer: 'Owners and Admins manage the workspace, Dispatchers plan and run routes, Drivers execute assigned routes, and Viewers have read-only operational visibility. Use the least-privileged role that fits the person’s job.' },
+  { category: 'Setup', question: 'What is the minimum setup for a practice route?', answer: 'Assign an Owner or Admin Champion, confirm one primary depot, create one active driver and one available vehicle, and import one representative route day.' },
+  { category: 'Imports', question: 'Which job import formats are supported?', answer: 'Trovan accepts CSV or JSON arrays. The minimum fields are customerName and deliveryAddress. Time windows, service duration, pallet/load details, equipment, driver rules, access instructions, temperature, and hazmat fields can be added when relevant.' },
+  { category: 'Imports', question: 'Why is an imported job blocked from routing?', answer: 'The most common causes are an unresolved location, missing time-window data, incompatible vehicle capacity, required equipment, driver restrictions, or incomplete load dimensions. Open the job readiness details for the specific reason.' },
+  { category: 'Planning', question: 'What does provider-backed mean?', answer: 'The plan was solved with road-network travel inputs rather than a straight-line estimate or simulated preview. The optimizer provenance panel identifies solver, matrix mode, coverage, fallback state, and warnings.' },
+  { category: 'Planning', question: 'Can I publish a degraded or simulated route?', answer: 'The hosted pilot blocks unsupported fallbacks from production publication. Correct the provider or data blocker and rerun optimization.' },
+  { category: 'Dispatch', question: 'Why is a route not ready to dispatch?', answer: 'Confirm that it is published, assigned to an eligible driver and ready vehicle, has no unresolved load or appointment blockers, and is not waiting on a reroute decision.' },
+  { category: 'Exceptions', question: 'Who owns same-day route exceptions?', answer: 'The Driver records the on-road condition and messages Dispatch. The Dispatcher owns route changes and customer-impact coordination. An Owner or Admin handles policy, access, or escalation issues.' },
+  { category: 'Driver', question: 'What must a driver do at every stop?', answer: 'Review instructions, record arrival at the physical stop, capture required proof, record an exception when service fails, message Dispatch when timing changes, and record departure before moving on.' },
+  { category: 'Proof', question: 'What counts as complete proof of delivery?', answer: 'The exact requirement is configured per stop and may include a photo, signature, recipient name, note, and timestamps. Trovan readiness requires at least one persisted proof artifact from the practice route.' },
+  { category: 'Tracking', question: 'Can a public tracking link expose another customer’s route?', answer: 'Public links are scoped to one tracking token and delivery context. Report any unexpected data immediately and include the link and request ID without forwarding private access codes.' },
+  { category: 'Training', question: 'Who should be the Trovan Champion?', answer: 'Choose an Owner or Admin who can coordinate data, users, dispatch, the pilot driver, internal follow-through, and the launch-readiness signoff.' },
+  { category: 'Training', question: 'Is live team training included?', answer: 'The standard assisted pilot includes the Academy, Customer Launch Docket, best-effort support, and one 30-minute readiness review. Live team training, data cleanup, onsite work, and custom process design are separately scoped.' },
+  { category: 'Billing', question: 'Can customers start a subscription through public checkout?', answer: 'No. Launch and Scale remain manually approved assisted pilots. Billing, entitlements, and cancellation are operator-managed according to the signed order form.' },
+  { category: 'Support', question: 'What should I include in a support request?', answer: 'Include your organization, role, page, route or job identifier, what you expected, what happened, the visible request ID, and a redacted screenshot. Never include passwords, tokens, access codes, or customer secrets.' },
+] as const;
+
 export const legalPages = {
   privacy: {
     heading: 'Privacy Policy',
@@ -359,14 +353,14 @@ export const legalPages = {
   },
   terms: {
     heading: 'Terms of Service',
-    body: 'These terms describe expected service usage boundaries for TryTrovan public review. Commercial terms, subscription details, and security attachments should be confirmed in the signed customer agreement.',
+    body: 'These terms describe the assisted-pilot service boundaries for TryTrovan. The signed customer order form controls commercial terms, implementation scope, security attachments, and any negotiated commitments.',
     sections: [
       ['Use of service', 'Trovan is intended for legitimate route planning, dispatch, delivery tracking, driver execution, proof, analytics, and operational review workflows.'],
-      ['Subscriptions, payment, and cancellation', 'Subscription, payment, cancellation, support, and implementation terms should be defined in the customer agreement or order form. Public pricing is directional until reviewed with Trovan.'],
+      ['Subscriptions, payment, and cancellation', 'Launch is $399 per month and Scale is $899 per month for approved assisted pilots. Enterprise terms are custom. There is no public self-service checkout or free trial. Unless the signed order form says otherwise, cancellation takes effect at the end of the current billing period and refund decisions follow the signed agreement.'],
       ['Customer responsibilities', 'Customers are responsible for accurate account users, route data, customer permissions, driver/customer communications, and compliance with their own delivery obligations.'],
       ['Data ownership and confidentiality', 'Customers retain responsibility for the data they provide. Trovan should protect confidential operational data according to the security and commercial terms agreed with each customer.'],
       ['Acceptable use and beta features', 'The service should not be used for unlawful activity, unauthorized tracking, or unsupported production workflows. Beta or preview features may change before general availability.'],
-      ['Availability and changes', 'Trovan may improve product surfaces, security controls, integrations, support paths, and pricing as the service matures.'],
+      ['Availability, support, and changes', 'Pilot support targets a response within one business day on a best-effort basis. No uptime service-level agreement applies unless it is included in a signed order form. Trovan may improve product surfaces, security controls, integrations, support paths, and future pricing as the service matures.'],
     ],
   },
   cookies: {

@@ -40,11 +40,11 @@ describe('roadRouteGeometry', () => {
     const geometry = await fetchRoadRoutePolyline([
       [-104.99, 39.73],
       [-104.97, 39.75],
-    ]);
+    ], undefined, 'https://routes.trytrovan.test/route/v1/driving');
 
     expect(fetchMock).toHaveBeenCalledWith(
       expect.stringContaining(
-        'https://router.project-osrm.org/route/v1/driving/-104.99,39.73;-104.97,39.75',
+        'https://routes.trytrovan.test/route/v1/driving/-104.99,39.73;-104.97,39.75',
       ),
       expect.objectContaining({ headers: { Accept: 'application/json' } }),
     );
@@ -60,6 +60,17 @@ describe('roadRouteGeometry', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     await expect(fetchRoadRoutePolyline([[-104.99, 39.73]])).resolves.toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does not call an unconfigured public routing service', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchRoadRoutePolyline([
+      [-104.99, 39.73],
+      [-104.97, 39.75],
+    ])).resolves.toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

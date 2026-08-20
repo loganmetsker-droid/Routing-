@@ -3,6 +3,7 @@
  */
 import { io, Socket } from 'socket.io-client';
 import { getAuthToken } from './apiClient';
+import { getTrovanDataMode, usesPreviewDataMode } from './dataMode';
 
 const SOCKET_URL = (
   import.meta.env.VITE_WS_URL ||
@@ -14,7 +15,7 @@ const SOCKET_URL = (
 
 const SOCKETS_ENABLED =
   import.meta.env.VITE_ENABLE_SOCKETS !== 'false' &&
-  import.meta.env.VITE_MOCK_PREVIEW !== 'true';
+  !usesPreviewDataMode(getTrovanDataMode());
 
 let previewSocketsDisabledLogged = false;
 

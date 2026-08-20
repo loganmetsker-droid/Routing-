@@ -1,5 +1,6 @@
 import React from 'react';
 import ErrorState from './ErrorState';
+import { reportClientError } from '../../services/clientErrorReporting';
 
 type ErrorBoundaryProps = {
   children: React.ReactNode;
@@ -29,6 +30,7 @@ export default class ErrorBoundary extends React.Component<
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('Trovan UI boundary caught an error', error, info);
+    reportClientError(error, info.componentStack || undefined);
   }
 
   private handleRetry = () => {

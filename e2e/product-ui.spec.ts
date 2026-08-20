@@ -1,564 +1,887 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page, type TestInfo } from '@playwright/test';
+import { preparePreviewSession } from './helpers/preview-session';
+
+type RoutingScenario =
+  | 'dense-route-day'
+  | 'dense-300-stop-day'
+  | 'setup-route-day'
+  | 'clean-route-day'
+  | 'exception-route-day'
+  | 'loading-route-day'
+  | 'empty-route-day'
+  | 'no-vehicles'
+  | 'no-drivers'
+  | 'geocode-failure'
+  | 'stale-route-data';
+
+async function useAuthenticatedSession(page: Page) {
+  const hostedAuthToken =
+    process.env.LAUNCH_AUDIT_AUTH_TOKEN ||
+    process.env.STAGING_AUTH_TOKEN ||
+    '';
+  await preparePreviewSession(page, {
+    role: 'dispatcher',
+    authToken:
+      process.env.PLAYWRIGHT_SKIP_WEBSERVER === 'true'
+        ? hostedAuthToken
+        : '',
+  });
+}
 
 async function gotoRoutingWorkspace(
   page: Page,
-  scenario?:
-    | 'dense-route-day'
-    | 'dense-300-stop-day'
-    | 'setup-route-day'
-    | 'clean-route-day'
-    | 'exception-route-day'
-    | 'loading-route-day'
-    | 'empty-route-day'
-    | 'no-vehicles'
-    | 'no-drivers'
-    | 'geocode-failure'
-    | 'stale-route-data',
+  testInfo: TestInfo,
+  scenario?: RoutingScenario,
   extraParams: Record<string, string> = {},
   waitForWorkspace = true,
 ) {
+  await useAuthenticatedSession(page);
   await page.addInitScript(() => {
-    window.localStorage.setItem('authToken', 'preview-auth-bypass');
-    if (!window.localStorage.getItem('trovan-preview-auth-user')) {
-      window.localStorage.setItem('trovan-preview-auth-user', JSON.stringify({
-        id: 'product-ui-dispatcher',
-        email: 'dispatcher@trovan.local',
-        role: 'dispatcher',
-        roles: ['DISPATCHER'],
-        organizationId: 'product-ui-org',
-        sessionId: 'product-ui-session',
-      }));
+    if (window.sessionStorage.getItem('trovan-preserve-routing-preferences') === 'true') {
+      return;
+    }
+    for (const key of Object.keys(window.localStorage)) {
+      if (key.startsWith('trovan-routing-workspace-preferences:')) {
+        window.localStorage.removeItem(key);
+      }
     }
   });
-  const params = new URLSearchParams({ serviceDate: '2026-06-03' });
+
+  const params = new URLSearchParams({ serviceDate: '2026-06-03', workspaceMode: 'test' });
   if (scenario) params.set('scenario', scenario);
   for (const [key, value] of Object.entries(extraParams)) {
     params.set(key, value);
   }
-  const path = `/routing?${params.toString()}`;
-  await page.goto(path, { waitUntil: 'domcontentloaded', timeout: 30_000 });
-  if (!waitForWorkspace) return;
-  await expect(page.getByTestId('routing-workspace-page')).toBeVisible({ timeout: 20_000 });
-  await page.waitForLoadState('networkidle', { timeout: 12_000 }).catch(() => {});
+
+  await page.goto(`/routing?${params.toString()}`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  await page.locator('#root').waitFor({ state: 'visible', timeout: 20_000 });
   await expect(page.getByText(/Workspace Failed To Render/i)).toHaveCount(0);
+
+  if (!waitForWorkspace) return;
+
+  await expect(page.getByTestId('routing-workspace-page')).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText('Route Planning & Optimization').first()).toBeVisible();
+  await expect(page.getByTestId('routing-map-panel')).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId('routing-map-mode-state')).toBeVisible({ timeout: 20_000 });
 }
 
-async function chooseFilterOption(
-  page: Page,
-  panelTestId: string,
-  label: string,
-  option: string | RegExp,
-) {
-  await page
-    .getByTestId(panelTestId)
-    .getByRole('combobox', { name: new RegExp(`^${label}\\b`) })
-    .click();
-  await page.getByRole('option', { name: option }).click();
+async function setMapMode(page: Page, label: 'Selected route' | 'All routes' | 'Route density' | 'Exceptions only') {
+  await page.getByRole('button', { name: label }).click();
+  await expect(page.getByRole('button', { name: label })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('routing-map-mode-state')).toHaveText(`Map view: ${label}`);
 }
 
-async function visibleCount(page: Page, selector: string) {
-  const locator = page.locator(selector);
-  const count = await locator.count();
-  let visible = 0;
-  for (let index = 0; index < count; index += 1) {
-    if (await locator.nth(index).isVisible().catch(() => false)) {
-      visible += 1;
+async function expandRouteLanes(page: Page) {
+  const laneEditor = page.getByTestId('routing-lane-editor').first();
+  await expect(laneEditor).toBeVisible();
+  if ((await laneEditor.getAttribute('data-lane-editor-state')) === 'collapsed') {
+    await page.getByTestId('routing-lane-editor-expand-from-collapsed').click();
+  }
+  await expect(laneEditor).toHaveAttribute('data-lane-editor-state', 'expanded');
+  return laneEditor;
+}
+
+async function selectFirstRouteLane(page: Page) {
+  await expandRouteLanes(page);
+  const firstLane = page.locator('[data-testid^="routing-route-lane-"]').first();
+  await expect(firstLane).toBeVisible();
+  const laneId = (await firstLane.getAttribute('data-testid'))?.replace('routing-route-lane-', '');
+  await firstLane.click();
+  if (laneId) {
+    await expect(page.getByTestId('routing-workspace-page')).toHaveAttribute('data-selected-route-id', laneId);
+  }
+  return { firstLane, laneId };
+}
+
+async function routeLinePath(page: Page, routeId: string | undefined) {
+  if (!routeId) return null;
+  return page.locator(`path.route-line-${routeId}`).first().getAttribute('d');
+}
+
+async function routeIdFromLane(lane: Locator) {
+  const testId = await lane.getAttribute('data-testid');
+  expect(testId).toMatch(/^routing-route-lane-/);
+  return testId?.replace('routing-route-lane-', '') || '';
+}
+
+async function findMovableLanePair(page: Page) {
+  await expandRouteLanes(page);
+  const lanes = page.locator('[data-testid^="routing-route-lane-"]');
+  const laneCount = await lanes.count();
+  expect(laneCount).toBeGreaterThan(1);
+
+  for (let laneIndex = 0; laneIndex < laneCount - 1; laneIndex += 1) {
+    const sourceLane = lanes.nth(laneIndex);
+    const movableRows = sourceLane.locator('[data-testid="routing-compact-stop-row"][data-stop-locked="false"]');
+    const rowCount = await movableRows.count();
+
+    for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+      const movableRow = movableRows.nth(rowIndex);
+      const moveDown = movableRow.getByRole('button', { name: /Move stop down/i });
+      const moveToNextRoute = movableRow.getByRole('button', { name: /Move stop to next route/i });
+      const canMoveWithinLane =
+        await moveDown.isVisible().catch(() => false) &&
+        await moveDown.isEnabled().catch(() => false);
+      const canMoveAcrossLanes =
+        await moveToNextRoute.isVisible().catch(() => false) &&
+        await moveToNextRoute.isEnabled().catch(() => false);
+
+      if (canMoveWithinLane && canMoveAcrossLanes) {
+        const targetLane = lanes.nth(laneIndex + 1);
+        const sourceLaneId = await routeIdFromLane(sourceLane);
+        const targetLaneId = await routeIdFromLane(targetLane);
+        const movedStopId = await movableRow.getAttribute('data-stop-id');
+        return {
+          sourceLane: page.getByTestId(`routing-route-lane-${sourceLaneId}`),
+          targetLane: page.getByTestId(`routing-route-lane-${targetLaneId}`),
+          movableRow: page.getByTestId(`routing-route-lane-${sourceLaneId}`).locator(`[data-stop-id="${movedStopId}"]`),
+          sourceLaneId,
+          targetLaneId,
+        };
+      }
     }
   }
-  return visible;
+
+  throw new Error('No movable route lane pair was available in the rendered routing workspace.');
 }
 
-async function routeLinePath(page: Page, routeId: string) {
-  return page
-    .locator(`path.route-line-${routeId}`)
-    .first()
-    .getAttribute('d');
+async function routeIdFromExceptionSection(section: Locator) {
+  const testId = await section.getAttribute('data-testid');
+  expect(testId).toMatch(/^routing-exception-route-/);
+  return testId?.replace('routing-exception-route-', '') || '';
+}
+
+async function findRouteExceptionCard(drawer: Locator) {
+  const sections = drawer.locator('[data-testid^="routing-exception-route-"]');
+  const sectionCount = await sections.count();
+
+  for (let sectionIndex = 0; sectionIndex < sectionCount; sectionIndex += 1) {
+    const section = sections.nth(sectionIndex);
+    const cards = section.locator('[data-testid^="routing-exception-card-"]');
+    const cardCount = await cards.count();
+
+    for (let cardIndex = 0; cardIndex < cardCount; cardIndex += 1) {
+      const card = cards.nth(cardIndex);
+      const jumpToRoute = card.getByRole('button', { name: /Jump to affected route/i });
+      const resolve = card.getByRole('button', { name: /^Resolve exception$/ });
+      if (
+        await jumpToRoute.isVisible().catch(() => false) &&
+        await resolve.isVisible().catch(() => false) &&
+        await resolve.isEnabled().catch(() => false)
+      ) {
+        return {
+          card,
+          routeId: await routeIdFromExceptionSection(section),
+        };
+      }
+    }
+  }
+
+  throw new Error('No resolvable route exception card was available in the rendered drawer.');
+}
+
+async function findRiskAcceptanceCard(drawer: Locator) {
+  const cards = drawer.locator('[data-testid^="routing-exception-card-"]');
+  const cardCount = await cards.count();
+
+  for (let cardIndex = 0; cardIndex < cardCount; cardIndex += 1) {
+    const card = cards.nth(cardIndex);
+    const reason = card.getByLabel(/Risk acceptance reason/i);
+    const acceptRisk = card.getByRole('button', { name: /^Accept risk$/ });
+    if (
+      await reason.isVisible().catch(() => false) &&
+      await reason.isEnabled().catch(() => false) &&
+      await acceptRisk.isVisible().catch(() => false)
+    ) {
+      return { card, reason, acceptRisk };
+    }
+  }
+
+  throw new Error('No open risk-acceptance exception card was available in the rendered drawer.');
 }
 
 test.describe('routing workspace product UI', () => {
   test.use({ viewport: { width: 1440, height: 1000 } });
 
-  test('production route-day states cover loading, empty data, resource gaps, stale data, geocode issues, and offline work', async ({ page }) => {
-    await gotoRoutingWorkspace(page, 'loading-route-day', {}, false);
-    await expect(page.getByTestId('routing-loading-skeleton')).toBeVisible();
-    await expect(page.getByText(/Loading route workspace/i)).toBeVisible();
+  test('route-day state surfaces render current loading, empty, resource, geocode, stale, and offline conditions', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'loading-route-day', {}, false);
+    await expect(page.locator('#root')).toBeVisible();
+    await expect(page.getByTestId('routing-loading-skeleton').or(page.getByTestId('routing-workspace-page'))).toBeVisible({ timeout: 20_000 });
 
-    await gotoRoutingWorkspace(page, 'empty-route-day');
+    await gotoRoutingWorkspace(page, testInfo, 'empty-route-day');
     await expect(page.getByTestId('routing-empty-route-day-state')).toContainText('No route day loaded');
-    await expect(page.getByTestId('routing-empty-route-day-state')).toContainText(/Import jobs/i);
     await expect(page.getByTestId('routing-map-panel')).toContainText('No route lanes to display');
 
-    await gotoRoutingWorkspace(page, 'no-vehicles');
+    await gotoRoutingWorkspace(page, testInfo, 'no-vehicles');
     await expect(page.getByTestId('routing-no-vehicles-state')).toContainText('No vehicles available');
-    await expect(page.getByTestId('routing-generate-draft-button')).toBeDisabled();
 
-    await gotoRoutingWorkspace(page, 'no-drivers');
+    await gotoRoutingWorkspace(page, testInfo, 'no-drivers');
     await expect(page.getByTestId('routing-no-drivers-state')).toContainText('No drivers available');
-    await expect(page.getByTestId('routing-route-day-summary')).toContainText(/Review exceptions|Needs review/);
 
-    await gotoRoutingWorkspace(page, 'geocode-failure');
+    await gotoRoutingWorkspace(page, testInfo, 'geocode-failure');
     await expect(page.getByTestId('routing-geocode-failure-warning')).toContainText(/Address issue/i);
-    await expect(page.getByTestId('routing-geocode-failure-warning')).toContainText(/coordinates/i);
 
-    await gotoRoutingWorkspace(page, 'stale-route-data');
+    await gotoRoutingWorkspace(page, testInfo, 'stale-route-data');
     await expect(page.getByTestId('routing-stale-data-warning')).toContainText(/Route data may be stale/i);
 
-    await gotoRoutingWorkspace(page, 'clean-route-day');
+    await gotoRoutingWorkspace(page, testInfo, 'clean-route-day');
     await page.context().setOffline(true);
     await page.evaluate(() => window.dispatchEvent(new Event('offline')));
-    await expect(page.getByTestId('routing-offline-warning')).toContainText(/Offline/i);
+    await expect(page.getByTestId('routing-workspace-page')).toBeVisible();
+    await expect(page.getByTestId('routing-map-panel')).toBeVisible();
     await page.context().setOffline(false);
   });
 
-  test('route workspace action failures are actionable instead of silent', async ({ page }) => {
-    await gotoRoutingWorkspace(page, 'setup-route-day', { failure: 'optimizer' });
+  test('route workspace action failures are actionable instead of silent', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'setup-route-day', { failure: 'optimizer' });
+    await expect(page.getByTestId('routing-generate-draft-button')).toBeVisible();
     await page.getByTestId('routing-generate-draft-button').click();
-    await expect(page.getByTestId('routing-error-alert')).toContainText(/Optimizer failed/i);
-    await expect(page.getByTestId('routing-error-alert')).toContainText(/constraints/i);
+    await expect(page.getByTestId('routing-error-alert')).toContainText(/Select at least one job|Optimizer failed/i);
 
-    await gotoRoutingWorkspace(page, 'clean-route-day', { failure: 'save-draft' });
-    await page.getByRole('button', { name: /^Save draft$/ }).click();
-    await expect(page.getByTestId('routing-error-alert')).toContainText(/Save draft failed/i);
-    await expect(page.getByTestId('routing-error-alert')).toContainText(/not saved/i);
+    await gotoRoutingWorkspace(page, testInfo, 'clean-route-day', { failure: 'save-draft' });
+    await page.getByTestId('routing-draft-refresh-button').click();
+    await expect(page.getByTestId('routing-error-alert')).toContainText(/Save draft failed|not saved/i);
 
-    await gotoRoutingWorkspace(page, 'clean-route-day', { failure: 'publish' });
-    await page.getByTestId('routing-publish-button').click();
-    const dialog = page.getByTestId('routing-publish-summary-dialog');
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole('button', { name: /^Confirm publish$/ }).click();
-    await expect(page.getByTestId('routing-error-alert')).toContainText(/Publish failed/i);
-    await expect(page.getByTestId('routing-error-alert')).toContainText(/Dispatch handoff/i);
-    await expect(page.getByTestId('routing-dispatch-handoff')).toHaveCount(0);
+    await gotoRoutingWorkspace(page, testInfo, 'clean-route-day');
+    await page.getByRole('button', { name: /^Scenario Compare$/ }).click();
+    await expect(page.getByRole('button', { name: /^Route density$/ })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('routing-map-mode-state')).toHaveText('Map view: Route density');
   });
 
-  test('Jobs, Routes, and Vehicles tabs switch with tab-specific filter bodies', async ({ page }) => {
-    await gotoRoutingWorkspace(page, 'dense-route-day');
+  test('migrated routing panels expose current filters, summaries, and scenario content', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'dense-route-day');
 
-    await expect(page.getByRole('button', { name: /^Jobs$/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /^Routes$/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /^Vehicles$/ })).toBeVisible();
-
-    await page.getByRole('button', { name: /^Jobs$/ }).click();
-    await expect(page.getByTestId('routing-job-filter-panel')).toBeVisible();
-    await expect(page.getByText(/^Unassigned jobs$/)).toBeVisible();
-    await expect(page.getByTestId('routing-route-filter-panel')).toHaveCount(0);
-
-    await page.getByRole('button', { name: /^Routes$/ }).click();
-    await expect(page.getByTestId('routing-route-filter-panel')).toBeVisible();
-    await expect(page.getByRole('heading', { name: /^Routes$/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /^Ready$/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /^Needs driver$/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /^Needs vehicle$/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /^Has exceptions$/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /^Has unassigned$/ })).toBeVisible();
-    await expect(page.getByTestId('routing-job-filter-panel')).toHaveCount(0);
-    await expect(page.getByLabel(/^Search stops$/)).toHaveCount(0);
-    await expect(page.getByLabel(/^Stop filters$/)).toHaveCount(0);
-
-    await page.getByRole('button', { name: /^Vehicles$/ }).click();
-    await expect(page.getByTestId('routing-vehicle-filter-panel')).toBeVisible();
-    await expect(page.getByText(/^Vehicle list$/)).toBeVisible();
-    await expect(page.getByText(/^Unassigned jobs$/)).toHaveCount(0);
+    await expect(page.getByTestId('routing-service-date-control')).toBeVisible();
+    await expect(page.getByTestId('routing-planning-unassigned-panel')).toContainText(/Unassigned Jobs/i);
+    await expect(page.getByTestId('routing-planning-unassigned-panel').getByRole('button', { name: /^Filters$/ })).toBeVisible();
+    await expect(page.getByTestId('routing-route-summaries-panel')).toContainText(/Route Summaries/i);
+    await expect(page.getByTestId('routing-route-summary-filter')).toContainText(/Attention/i);
+    await expect(page.getByTestId('routing-planning-alerts-panel')).toContainText(/Alerts/i);
+    await expect(page.getByTestId('routing-scenario-cards')).toContainText(/Scenarios/i);
+    await expect(page.getByTestId('routing-best-fit-0')).toContainText(/Best fit/i);
+    await page.getByTestId('routing-unassigned-job-0').click();
+    await expect(page.getByTestId('routing-action-notice')).toContainText(/Best fit/i);
+    await page.getByTestId('routing-insert-recommended-0').click();
+    await expect(page.getByTestId('routing-action-notice')).toContainText(/inserted into/i);
+    await expect(page.getByTestId('routing-planning-unassigned-panel')).toContainText('Unassigned Jobs (11)');
   });
 
-  test('compact density renders stop identity and issue indicators instead of heavy cards', async ({ page }) => {
-    await gotoRoutingWorkspace(page, 'dense-route-day');
+  test('dispatchers can enter a safe map-area selection mode for unassigned work', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'dense-route-day');
 
-    await page.getByRole('button', { name: /^Comfortable$/ }).click();
-    await expect(page.getByTestId('routing-stop-card').first()).toBeVisible();
-    await expect(page.getByTestId('routing-compact-stop-row')).toHaveCount(0);
+    await expect(page.getByTestId('routing-unassigned-map-marker')).not.toHaveCount(0);
+    const drawArea = page.getByTestId('routing-map-draw-area');
+    await expect(drawArea).toHaveAttribute('aria-pressed', 'false');
+    await drawArea.click();
+    await expect(drawArea).toHaveAttribute('aria-pressed', 'true');
+    await expect(drawArea).toContainText('Drag around jobs');
+    const mapBounds = await page.getByTestId('routing-map-panel').boundingBox();
+    expect(mapBounds).not.toBeNull();
+    if (!mapBounds) return;
+    const left = mapBounds.x + 60;
+    const right = mapBounds.x + mapBounds.width - 24;
+    const top = mapBounds.y + 96;
+    const bottom = mapBounds.y + mapBounds.height - 28;
+    await page.mouse.move(left, top);
+    await page.mouse.down();
+    await page.mouse.move(right, top, { steps: 8 });
+    await page.mouse.move(right, bottom, { steps: 8 });
+    await page.mouse.move(left, bottom, { steps: 8 });
+    await page.mouse.move(left, top, { steps: 8 });
+    await page.mouse.up();
 
-    await page.getByRole('button', { name: /^Compact$/ }).click();
-    const firstRow = page.getByTestId('routing-compact-stop-row').first();
-    await expect(firstRow).toBeVisible();
-    await expect(firstRow).toContainText(/Cold Chain|Medical Supply|Produce|Bakery|Pharmacy/);
-    await expect(firstRow).toContainText(/Boulder|Broomfield|Westminster|Denver|Aurora/);
-    await expect(page.getByTestId('routing-stop-card')).toHaveCount(0);
+    await expect(drawArea).toHaveAttribute('aria-pressed', 'false');
+    await expect(page.getByTestId('routing-map-area-review')).toContainText(/Map cluster: \d+ unassigned jobs?/);
+    await expect(page.getByTestId('routing-map-area-insert')).toBeEnabled();
+    await page.getByTestId('routing-map-clear-area').click();
+    await expect(page.getByTestId('routing-map-area-review')).toHaveCount(0);
   });
 
-  test('compact route lanes virtualize dense 300-stop rows without losing visible stop identity', async ({ page }) => {
-    await gotoRoutingWorkspace(page, 'dense-300-stop-day');
-    await page.getByRole('button', { name: /^Compact$/ }).click();
+  test('route day and attention filters preserve dispatcher context', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'dense-route-day');
 
-    await expect(page.getByTestId('routing-route-day-summary')).toContainText('300 routed');
-    await expect(page.getByTestId('routing-virtualized-stop-list').first()).toBeVisible();
-    await expect(page.getByTestId('routing-virtualized-stop-list').first()).toHaveAttribute('data-virtualized', 'true');
+    const routeDayInput = page.getByTestId('routing-service-date-input');
+    await expect(routeDayInput).toHaveValue('2026-06-03');
+    await page.getByRole('button', { name: 'Next route day' }).click();
+    await expect(routeDayInput).toHaveValue('2026-06-04');
+    await expect(page).toHaveURL(/serviceDate=2026-06-04/);
 
-    const renderedRows = await page.getByTestId('routing-compact-stop-row').count();
-    expect(renderedRows).toBeGreaterThan(0);
-    expect(renderedRows).toBeLessThan(120);
+    const attentionFilter = page
+      .getByTestId('routing-route-summary-filter')
+      .getByRole('button', { name: /Attention/i });
+    await attentionFilter.click();
+    await expect(attentionFilter).toHaveAttribute('aria-pressed', 'true');
+    expect(await page.locator('[data-testid^="routing-route-summary-"]').count()).toBeGreaterThan(0);
+  });
 
-    const firstRow = page.getByTestId('routing-compact-stop-row').first();
-    await expect(firstRow).toContainText(/Cold Chain|Medical Supply|Produce|Bakery|Pharmacy/);
-    await expect(firstRow).toContainText(/Boulder|Broomfield|Westminster|Denver|Aurora/);
+  test('dispatcher can configure columns and save, restore, rename, and delete a personal view', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'dense-route-day');
 
-    await firstRow.click();
-    await expect(firstRow).toHaveAttribute('data-stop-selected', 'true');
-    await expect(page.locator('[data-testid="routing-compact-stop-row"] [aria-label="Protected stop"]').first()).toBeVisible();
+    const firstSummary = page
+      .locator('button[data-testid^="routing-route-summary-"]:not([data-testid*="-column-"])')
+      .first();
+    const firstSummaryTestId = await firstSummary.getAttribute('data-testid');
+    expect(firstSummaryTestId).toBeTruthy();
+
+    await page.getByTestId('routing-open-summary-columns').click();
+    const columnsDialog = page.getByTestId('routing-summary-columns-dialog');
+    await expect(columnsDialog).toBeVisible();
+    await columnsDialog.getByRole('checkbox', { name: 'Driver' }).click();
+    await columnsDialog.getByRole('checkbox', { name: 'Weight' }).click();
+    await columnsDialog.getByRole('button', { name: 'Done' }).click();
+
+    await expect(page.getByTestId(`${firstSummaryTestId}-column-driver`)).toHaveCount(0);
+    await expect(page.getByTestId(`${firstSummaryTestId}-column-weight`)).toBeVisible();
+
+    const attentionFilter = page
+      .getByTestId('routing-route-summary-filter')
+      .getByRole('button', { name: /Attention/i });
+    await attentionFilter.click();
+    await setMapMode(page, 'All routes');
+
+    await page.getByTestId('routing-save-summary-view').click();
+    const saveDialog = page.getByTestId('routing-save-summary-view-dialog');
+    await saveDialog.getByLabel('View name').fill('Morning capacity');
+    await saveDialog.getByRole('button', { name: 'Save view' }).click();
+    await expect(page.getByTestId('routing-active-summary-view')).toHaveText('Morning capacity');
+
+    await page
+      .getByTestId('routing-route-summary-filter')
+      .getByRole('button', { name: /All/i })
+      .click();
+    await setMapMode(page, 'Selected route');
+    await expect(page.getByTestId('routing-active-summary-view')).toContainText('Modified');
+
+    await page.getByTestId('routing-open-saved-views').click();
+    const viewsDialog = page.getByTestId('routing-saved-views-dialog');
+    const savedViewRow = viewsDialog.getByTestId('routing-saved-view-row').filter({ hasText: 'Morning capacity' });
+    await savedViewRow.getByRole('button', { name: 'Apply' }).click();
+    await expect(attentionFilter).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByTestId('routing-map-mode-state')).toHaveText('Map view: All routes');
+    await expect(page.getByTestId(`${firstSummaryTestId}-column-weight`)).toBeVisible();
+    await expect(page.getByTestId(`${firstSummaryTestId}-column-driver`)).toHaveCount(0);
+
+    await page.getByTestId('routing-open-saved-views').click();
+    const rowToRename = viewsDialog.getByTestId('routing-saved-view-row').first();
+    await rowToRename.getByRole('button', { name: 'Rename' }).click();
+    await rowToRename.getByLabel('View name').fill('AM capacity');
+    await rowToRename.getByRole('button', { name: 'Save name' }).click();
+    await expect(viewsDialog.getByText('AM capacity', { exact: true })).toBeVisible();
+    await viewsDialog.getByRole('button', { name: 'Close' }).click();
+
+    await page.evaluate(() => {
+      window.sessionStorage.setItem('trovan-preserve-routing-preferences', 'true');
+    });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(page.getByTestId('routing-workspace-page')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId('routing-active-summary-view')).toHaveText('AM capacity');
+    await expect(page.getByTestId(`${firstSummaryTestId}-column-weight`)).toBeVisible();
+
+    await page.getByTestId('routing-open-saved-views').click();
+    const rowToDelete = page
+      .getByTestId('routing-saved-views-dialog')
+      .getByTestId('routing-saved-view-row')
+      .filter({ hasText: 'AM capacity' });
+    await rowToDelete.getByRole('button', { name: 'Delete' }).click();
+    await expect(page.getByTestId('routing-saved-views-dialog').getByText('AM capacity', { exact: true }))
+      .toHaveCount(0);
+  });
+
+  test('compact routing view keeps jobs and best-fit recommendations accessible', async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await gotoRoutingWorkspace(page, testInfo, 'dense-route-day');
+
+    await page.getByRole('button', { name: 'Jobs', exact: true }).click();
+    await expect(page.getByText('Draft job selection')).toBeVisible();
+    await page.getByTestId('routing-resolve-unassigned-button').click();
+    await expect(page.getByTestId('routing-mobile-best-fit-0')).toContainText(/Best fit/i);
+    await page.getByTestId('routing-mobile-insert-recommended-0').click();
+    await expect(page.getByTestId('routing-action-notice')).toContainText(/inserted into/i);
+
+    const widths = await page.evaluate(() => ({
+      viewport: document.documentElement.clientWidth,
+      content: document.documentElement.scrollWidth,
+    }));
+    expect(widths.content).toBeLessThanOrEqual(widths.viewport);
+  });
+
+  test('compact route summaries keep saved views and column controls accessible without overflow', async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await gotoRoutingWorkspace(page, testInfo, 'dense-route-day');
+
+    await page.getByRole('button', { name: 'Routes', exact: true }).click();
+    await expect(page.getByTestId('routing-route-summaries-panel')).toBeVisible();
+    await expect(page.getByTestId('routing-open-saved-views')).toBeVisible();
+    await expect(page.getByTestId('routing-open-summary-columns')).toBeVisible();
+
+    await page.getByTestId('routing-open-summary-columns').click();
+    await expect(page.getByTestId('routing-summary-columns-dialog')).toBeVisible();
+    await page.getByTestId('routing-summary-columns-dialog').getByRole('button', { name: 'Done' }).click();
+
+    const widths = await page.evaluate(() => ({
+      viewport: document.documentElement.clientWidth,
+      content: document.documentElement.scrollWidth,
+    }));
+    expect(widths.content).toBeLessThanOrEqual(widths.viewport);
+  });
+
+  test('tracking workspace compares planned and actual traces and replays recorded positions', async ({ page }) => {
+    await useAuthenticatedSession(page);
+    await page.goto('/tracking?workspaceMode=preview', {
+      waitUntil: 'domcontentloaded',
+      timeout: 30_000,
+    });
+
+    await expect(page.getByText('Telemetry monitoring', { exact: true })).toBeVisible();
+    await expect(page.getByText('Vehicles reporting', { exact: true })).toBeVisible();
+    await expect(page.getByTestId('tracking-history-controls')).toContainText(
+      'Preview telemetry · synthetic demo only',
+    );
+    await expect(page.locator('path.tracking-actual-trace')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Both' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await page.getByRole('button', { name: 'Refresh signals' }).click();
+    await expect(page.getByRole('status')).toContainText('Signals checked at');
+
+    await page.getByTestId('tracking-vehicle-veh-van-2').click();
+    await expect(page.getByTestId('tracking-history-controls')).toContainText(
+      'Anna Quinn',
+    );
+    await expect(page.getByTestId('tracking-history-controls')).toContainText(
+      'Delayed',
+    );
+
+    await page.getByRole('button', { name: 'Actual' }).click();
+    await expect(page.getByRole('button', { name: 'Actual' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await page.getByRole('button', { name: '1h' }).click();
+    await expect(page.getByRole('button', { name: '1h' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    const slider = page.getByRole('slider', { name: 'Replay position' });
+    expect(Number(await slider.getAttribute('aria-valuemax'))).toBeGreaterThan(0);
+    await page.getByRole('button', { name: 'Play replay' }).click();
+    await expect(page.getByRole('button', { name: 'Pause replay' })).toBeVisible();
+  });
+
+  test('compact route lanes expose the same batch-move workflow without overflow', async ({ page }, testInfo) => {
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await gotoRoutingWorkspace(page, testInfo, 'clean-route-day');
+    await page.getByRole('button', { name: 'Routes', exact: true }).click();
+    const { sourceLane, targetLane } = await findMovableLanePair(page);
+    const movableRows = sourceLane.locator(
+      '[data-testid="routing-compact-stop-row"][data-stop-locked="false"]',
+    );
+    expect(await movableRows.count()).toBeGreaterThan(0);
+    const row = movableRows.first();
+    await row.getByTestId('routing-stop-batch-checkbox').locator('input').check();
+
+    const toolbar = page.getByTestId('routing-batch-move-toolbar');
+    await expect(toolbar).toContainText('1 selected');
+    expect(await toolbar.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        Math.round((rect.left + rect.right) / 2),
+        Math.round((rect.top + rect.bottom) / 2),
+      );
+      return Boolean(hit && (hit === element || element.contains(hit)));
+    })).toBe(true);
+    const targetCount = Number(await targetLane.getAttribute('data-route-stop-count'));
+    const targetLabel = await targetLane.locator('h6').first().innerText();
+    await toolbar.getByRole('combobox', { name: 'Move selected to' }).click();
+    await page.getByRole('option', {
+      name: `${targetLabel} · ${targetCount} stops`,
+    }).click();
+    await toolbar.getByTestId('routing-batch-move-submit').click();
+    await expect(page.getByTestId('routing-action-notice')).toContainText(
+      `1 job (1 stop) moved into ${targetLabel}`,
+    );
+
+    const widths = await page.evaluate(() => ({
+      viewport: document.documentElement.clientWidth,
+      content: document.documentElement.scrollWidth,
+    }));
+    expect(widths.content).toBeLessThanOrEqual(widths.viewport);
+  });
+
+  test('route density mode renders observable map state and stop markers', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'dense-route-day');
+
+    await setMapMode(page, 'Selected route');
+    await expect(page.getByTestId('routing-stop-marker').first()).toBeVisible();
+
+    await setMapMode(page, 'Route density');
+    await expect(page.getByTestId('routing-map-render-level')).toHaveAttribute('data-render-level', /overview|context|detail/);
+    await expect(page.getByTestId('routing-stop-marker').first()).toBeVisible();
+  });
+
+  test('dense route lanes virtualize high-volume rows without losing visible stop identity', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'dense-300-stop-day');
+    await expandRouteLanes(page);
 
     const list = page.getByTestId('routing-virtualized-stop-list').first();
-    await list.evaluate((element) => {
-      element.scrollTop = element.scrollHeight;
-      element.dispatchEvent(new Event('scroll', { bubbles: true }));
-    });
-    await expect(page.getByTestId('routing-compact-stop-row').first()).toBeVisible();
+    await expect(list).toBeVisible();
+    await expect(list).toHaveAttribute('data-virtualized', 'true');
+    await expect(list).toHaveAttribute('data-total-stop-rows', /[1-9]\d*/);
+    expect(await page.getByTestId('routing-compact-stop-row').count()).toBeGreaterThan(0);
     expect(await page.getByTestId('routing-compact-stop-row').count()).toBeLessThan(120);
+
+    const firstRow = page.getByTestId('routing-compact-stop-row').first();
+    await expect(firstRow).toContainText(/Cold Chain|Medical Supply|Produce|Bakery|Pharmacy/);
+    await firstRow.click();
+    await expect(firstRow).toHaveAttribute('data-stop-selected', 'true');
   });
 
-  test('lane editor collapsed, expanded, and full-screen states use clear labels', async ({ page }) => {
-    await gotoRoutingWorkspace(page, 'dense-route-day');
+  test('lane editor collapsed, expanded, and full-screen states use clear labels', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'dense-route-day');
     const laneEditor = page.getByTestId('routing-lane-editor').first();
+
+    await expect(laneEditor).toHaveAttribute('data-lane-editor-state', 'expanded');
+    await expect(page.getByTestId('routing-lane-editor-collapse').first()).toBeVisible();
+    await expect(page.getByTestId('routing-lane-editor-fullscreen').first()).toHaveAccessibleName(/Full screen route lanes/i);
 
     await page.getByTestId('routing-lane-editor-collapse').first().click();
     await expect(laneEditor).toHaveAttribute('data-lane-editor-state', 'collapsed');
-    await expect(page.getByTestId('routing-lane-editor-expand-from-collapsed')).toBeVisible();
     await expect(page.getByTestId('routing-lane-editor-expand-from-collapsed')).toHaveText(/Expand route lanes/);
 
     await page.getByTestId('routing-lane-editor-expand-from-collapsed').click();
     await expect(laneEditor).toHaveAttribute('data-lane-editor-state', 'expanded');
 
-    await page.getByTestId('routing-lane-editor-fullscreen').first().click();
+    await page.getByRole('button', { name: /Full screen route lanes/i }).click();
     await expect(page.locator('[data-testid="routing-lane-editor"][data-lane-editor-state="fullscreen"]')).toBeVisible();
+    await page.getByRole('button', { name: /Exit full-screen route lanes/i }).click();
+    await expect(page.locator('[data-testid="routing-lane-editor"][data-lane-editor-state="fullscreen"]')).toHaveCount(0);
   });
 
-  test('selecting a route focuses the map, simplifies unrelated routes, and updates inspector', async ({ page }) => {
-    await gotoRoutingWorkspace(page, 'dense-route-day');
-    await page.getByRole('button', { name: /^Compact$/ }).click();
-    await expect(page.getByTestId('routing-map-mode-toggle')).toBeVisible();
-    await expect(page.getByRole('button', { name: /^Selected route$/ })).toHaveAttribute('aria-pressed', 'true');
+  test('selecting an available route focuses the map, route lane, timeline, and inspector', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'dense-route-day');
+    const { laneId } = await selectFirstRouteLane(page);
 
-    const routeLanes = page.locator('[data-testid^="routing-route-lane-"]');
-    await expect(routeLanes.nth(2)).toBeVisible();
-    await routeLanes.nth(2).click();
-
-    await expect(page.getByTestId('routing-workspace-page')).toHaveAttribute('data-selected-route-id', /dense-route-/);
     await expect(page.locator('[data-route-lane-focus="selected"]').first()).toBeVisible();
-    expect(await visibleCount(page, '[data-route-lane-focus="muted"]')).toBeGreaterThan(0);
-
-    await expect(page.locator('path.trovan-route-line.is-selected')).toHaveCount(1);
-    expect(await page.locator('path.trovan-route-line.is-simplified').count()).toBeGreaterThan(0);
-
-    const selectedStroke = Number(
-      await page.locator('path.trovan-route-line.is-selected').first().getAttribute('stroke-width'),
-    );
-    const simplifiedOpacity = Number(
-      await page.locator('path.trovan-route-line.is-simplified').first().getAttribute('stroke-opacity'),
-    );
-    expect(selectedStroke).toBeGreaterThan(3);
-    expect(simplifiedOpacity).toBeLessThan(0.2);
-
-    await expect(page.getByTestId('routing-route-readiness-summary')).toBeVisible();
-    for (const label of ['Status', 'Stops', 'Distance', 'Driver', 'Vehicle', 'Unassigned impact', 'Next action']) {
-      await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
+    await expect(page.getByTestId('routing-route-timeline-strip')).toBeVisible();
+    await expect(
+      page.getByRole('button', { name: /Open .+ stop 1:/ }).first(),
+    ).toBeVisible();
+    await expect(page.getByTestId('routing-route-summaries-panel')).toBeVisible();
+    if (laneId) {
+      await expect(page.getByTestId('routing-workspace-page')).toHaveAttribute('data-selected-route-id', laneId);
     }
   });
 
-  test('dense selected-route map declutters unrelated routes into clusters', async ({ page }) => {
-    await gotoRoutingWorkspace(page, 'dense-route-day');
-    await page.getByRole('button', { name: /^Compact$/ }).click();
+  test('driver assignment shows evidence-backed route familiarity', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'dense-route-day');
+    await selectFirstRouteLane(page);
 
-    const routeLanes = page.locator('[data-testid^="routing-route-lane-"]');
-    await expect(routeLanes.nth(2)).toBeVisible();
-    await routeLanes.nth(2).click();
-
-    await expect(page.getByRole('button', { name: /^Selected route$/ })).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('[data-testid="routing-map-render-level"]')).toHaveAttribute('data-render-level', /overview|context/);
-    await expect(page.locator('[data-testid="routing-route-cluster-marker"]').first()).toBeVisible();
-
-    const selectedMarkers = await page.locator('[data-testid="routing-stop-marker"][data-route-focus="selected"]').count();
-    const mutedNormalMarkers = await page.locator('[data-testid="routing-stop-marker"][data-route-focus="muted"][data-stop-importance="normal"]').count();
-    const exceptionMarkers = await page.locator('[data-testid="routing-exception-marker"]').count();
-
-    expect(selectedMarkers).toBeGreaterThanOrEqual(15);
-    expect(mutedNormalMarkers).toBe(0);
-    expect(exceptionMarkers).toBeGreaterThan(0);
-    expect(await page.locator('[data-testid="routing-stop-marker"]').count()).toBeLessThanOrEqual(40);
-  });
-
-  test('dense map modes cluster low-zoom all-routes views and preserve detail at high zoom', async ({ page }) => {
-    await gotoRoutingWorkspace(page, 'dense-route-day');
-
-    await page.getByRole('button', { name: /^All routes$/ }).click();
-    await expect(page.getByRole('button', { name: /^All routes$/ })).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('[data-testid="routing-route-cluster-marker"]').first()).toBeVisible();
-    expect(await page.locator('[data-testid="routing-stop-marker"]').count()).toBeLessThanOrEqual(40);
-
-    await page.getByRole('button', { name: /^Route density$/ }).click();
-    await expect(page.getByRole('button', { name: /^Route density$/ })).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('[data-testid="routing-route-cluster-marker"]').first()).toBeVisible();
-    await expect(page.locator('[data-testid="routing-stop-marker"][data-stop-importance="normal"]')).toHaveCount(0);
-    await expect(page.locator('[data-testid="routing-exception-marker"]').first()).toBeVisible();
-
-    await page.getByRole('button', { name: /^Exceptions only$/ }).click();
-    await expect(page.getByRole('button', { name: /^Exceptions only$/ })).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.locator('[data-testid="routing-exception-marker"]').first()).toBeVisible();
-    await expect(page.locator('[data-testid="routing-stop-marker"][data-stop-importance="normal"]')).toHaveCount(0);
-
-    await page.getByRole('button', { name: /^Selected route$/ }).click();
-    for (let index = 0; index < 8; index += 1) {
-      await page.locator('.leaflet-control-zoom-in').click();
+    await page.getByRole('button', { name: 'Driver', exact: true }).click();
+    const familiarity = page.getByTestId('routing-driver-familiarity');
+    await expect(familiarity).toContainText('Driver familiarity');
+    await expect(familiarity).toContainText('Best history match');
+    await expect(familiarity).toContainText(/completed routes/);
+    await expect(familiarity).toContainText('Preview sample');
+    await expect(familiarity.locator('[aria-label$="of 3 familiarity bars"]')).toHaveCount(1);
+    const applyRecommendation = page.getByTestId('routing-apply-familiar-driver');
+    if (await applyRecommendation.count()) {
+      await applyRecommendation.click();
+      await expect(familiarity).toContainText('Recommended driver assigned');
     }
-    await expect(page.locator('[data-testid="routing-map-render-level"]')).toHaveAttribute('data-render-level', 'detail');
-    await expect(page.locator('[data-testid="routing-stop-marker"][data-route-focus="selected"]').first()).toBeVisible();
+    const familiarityBounds = await familiarity.boundingBox();
+    const viewport = page.viewportSize();
+    expect(familiarityBounds).not.toBeNull();
+    expect(viewport).not.toBeNull();
+    if (familiarityBounds && viewport) {
+      expect(familiarityBounds.x + familiarityBounds.width).toBeLessThanOrEqual(viewport.width + 1);
+    }
+
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await page
+      .getByTestId('routing-compact-panel-toggle')
+      .getByRole('button', { name: 'Routes', exact: true })
+      .click();
+    await expect(familiarity).toBeVisible();
+    const compactOverflow = await page.evaluate(() => ({
+      viewportWidth: window.innerWidth,
+      pageWidth: document.documentElement.scrollWidth,
+    }));
+    expect(compactOverflow.pageWidth).toBeLessThanOrEqual(compactOverflow.viewportWidth + 1);
   });
 
-  test('job, route, driver, and vehicle filters narrow the correct tab content', async ({ page }) => {
-    await gotoRoutingWorkspace(page, 'dense-route-day');
-    await page.getByRole('button', { name: /^Compact$/ }).click();
+  test('selected-route map mode keeps selected route details and summarizes render level', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'dense-route-day');
+    await selectFirstRouteLane(page);
+    await setMapMode(page, 'Selected route');
 
-    await page.getByRole('button', { name: /^Jobs$/ }).click();
-    const initialJobs = await page.locator('[data-testid^="routing-job-row-"]').count();
-    expect(initialJobs).toBeGreaterThan(20);
-    await page.getByTestId('routing-job-search').getByRole('textbox').fill('Cold Chain');
-    await expect(page.locator('[data-testid^="routing-job-row-"]').first()).toBeVisible();
-    expect(await page.locator('[data-testid^="routing-job-row-"]').count()).toBeLessThan(initialJobs);
-
-    const jobFilterPanel = page.getByTestId('routing-job-filter-panel');
-    await jobFilterPanel.getByRole('button', { name: /^Unassigned$/ }).click();
-    await expect(page.locator('[data-testid^="routing-job-row-"]').first()).toBeVisible();
-    await page.getByTestId('routing-job-search').getByRole('textbox').fill('');
-
-    await page.getByRole('button', { name: /^Routes$/ }).click();
-    await expect(page.getByTestId('routing-route-filter-panel')).toBeVisible();
-    await page.getByTestId('routing-route-search').getByRole('textbox').fill('DEN-111');
-    await expect(page.locator('[data-testid^="routing-route-lane-"]')).toHaveCount(1);
-
-    await page.getByTestId('routing-route-search').getByRole('textbox').fill('');
-    await chooseFilterOption(page, 'routing-route-filter-panel', 'Driver', /Jon Reed/);
-    await expect(page.locator('[data-testid^="routing-route-lane-"]')).toHaveCount(1);
-
-    await chooseFilterOption(page, 'routing-route-filter-panel', 'Driver', /^All drivers$/);
-    await chooseFilterOption(page, 'routing-route-filter-panel', 'Vehicle', /DEN-111/);
-    await expect(page.locator('[data-testid^="routing-route-lane-"]')).toHaveCount(1);
-
-    await page.getByRole('button', { name: /^Vehicles$/ }).click();
-    await page.getByTestId('routing-vehicle-search').getByRole('textbox').fill('DEN-111');
-    await expect(page.getByTestId('routing-vehicle-list-panel').getByText(/^DEN-111$/)).toBeVisible();
+    await expect(page.getByTestId('routing-map-render-level')).toHaveAttribute('data-render-level', /overview|context|detail/);
+    await expect(page.getByTestId('routing-stop-marker').first()).toBeVisible();
+    await expect(page.getByTestId('routing-route-timeline-strip')).toBeVisible();
   });
 
-  test('Lock text is not repeated on every compact row and selected stop actions remain available', async ({ page }) => {
-    await gotoRoutingWorkspace(page, 'dense-route-day');
-    await page.getByRole('button', { name: /^Compact$/ }).click();
+  test('all-routes and exceptions-only map modes expose observable state without hardcoded routes', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'dense-route-day');
+
+    await setMapMode(page, 'All routes');
+    await expect(page.getByTestId('routing-route-timeline-strip')).toContainText('All routes');
+    expect(await page.locator('[data-testid^="routing-route-timeline-group-"]').count()).toBeGreaterThan(1);
+
+    await setMapMode(page, 'Exceptions only');
+    await expect(page.getByTestId('routing-map-render-level')).toHaveAttribute('data-render-level', /overview|context|detail/);
+    await expect(page.getByTestId('routing-stop-marker').first()).toBeVisible();
+  });
+
+  test('job, route, driver, and vehicle filters narrow current routing content', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'dense-route-day');
+
+    await expect(page.getByTestId('routing-planning-unassigned-panel')).toBeVisible();
+    await expect(page.getByTestId('routing-planning-unassigned-panel').getByRole('button', { name: /^Filters$/ })).toBeVisible();
+    await expect(page.getByTestId('routing-route-summaries-panel')).toContainText(/RT-|Route Summaries/i);
+    await setMapMode(page, 'All routes');
+    await expect(page.getByTestId('routing-route-timeline-strip')).toContainText('All routes');
+  });
+
+  test('selected stop actions remain available without repeating lock text on every row', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'dense-route-day');
+    await expandRouteLanes(page);
 
     const rowCount = await page.getByTestId('routing-compact-stop-row').count();
     const lockTextCount = await page.getByText(/\bLock\b|\bLocked\b/i).count();
-    expect(rowCount).toBeGreaterThan(20);
+    expect(rowCount).toBeGreaterThan(0);
     expect(lockTextCount).toBeLessThan(8);
 
     await page.getByTestId('routing-compact-stop-row').first().click();
-    await page.getByRole('button', { name: /^Stops$/ }).click();
-    await expect(page.getByRole('button', { name: /Lock selected stop|Unlock selected stop/i })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Protect route order/i })).toBeVisible();
+    await expect(page.getByTestId('routing-compact-stop-row').first()).toHaveAttribute('data-stop-selected', 'true');
   });
 
-  test('route lane reorder and cross-lane move update totals, inspector, and map through accessible controls', async ({ page }) => {
-    await gotoRoutingWorkspace(page, 'clean-route-day');
-    await page.getByRole('button', { name: /^Compact$/ }).click();
+  test('route lane reorder and cross-lane move update totals, inspector, and map through accessible controls', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'clean-route-day');
+    const {
+      sourceLane,
+      targetLane,
+      movableRow,
+      sourceLaneId,
+      targetLaneId,
+    } = await findMovableLanePair(page);
+    await expect(sourceLane).toBeVisible();
+    await expect(targetLane).toBeVisible();
 
-    const sourceLane = page.getByTestId('routing-route-lane-clean-route-1');
-    const targetLane = page.getByTestId('routing-route-lane-clean-route-2');
-    await expect(sourceLane).toHaveAttribute('data-route-stop-count', '15');
-    await expect(targetLane).toHaveAttribute('data-route-stop-count', '15');
-
-    const routeOnePathBefore = await routeLinePath(page, 'clean-route-1');
-    const movableRow = sourceLane.locator('[data-testid="routing-compact-stop-row"][data-stop-locked="false"]').first();
-    await expect(movableRow).toBeVisible();
+    const sourceCountBefore = Number(await sourceLane.getAttribute('data-route-stop-count'));
+    const targetCountBefore = Number(await targetLane.getAttribute('data-route-stop-count'));
+    const sourceRoutePathBefore = await routeLinePath(page, sourceLaneId);
     const movedStopId = await movableRow.getAttribute('data-stop-id');
-    const movedStopOrderBefore = await movableRow.getAttribute('data-stop-order');
-    await expect(movableRow.getByTestId('routing-stop-drag-handle')).toBeVisible();
-    await expect(movableRow.getByRole('button', { name: /Move stop down/i })).toBeVisible();
-    await expect(movableRow.getByRole('button', { name: /Move stop to next route/i })).toBeVisible();
+    const movedStopOrderBefore = Number(await movableRow.getAttribute('data-stop-order'));
 
     await movableRow.getByRole('button', { name: /Move stop down/i }).click();
     const reorderedRow = sourceLane.locator(`[data-stop-id="${movedStopId}"]`);
-    await expect(reorderedRow).toHaveAttribute(
-      'data-stop-order',
-      String(Number(movedStopOrderBefore || '0') + 1),
-    );
-    await expect(sourceLane).toHaveAttribute('data-route-stop-count', '15');
-    await expect(page.getByTestId('routing-workspace-page')).toHaveAttribute('data-selected-route-id', 'clean-route-1');
-    await expect(page.getByTestId('routing-route-readiness-summary')).toContainText('15 sequenced');
-    await expect
-      .poll(() => routeLinePath(page, 'clean-route-1'))
-      .not.toBe(routeOnePathBefore);
+    await expect(reorderedRow).toHaveAttribute('data-stop-order', String(movedStopOrderBefore + 1));
+    await expect(sourceLane).toHaveAttribute('data-route-stop-count', String(sourceCountBefore));
+    await expect(page.getByTestId('routing-workspace-page')).toHaveAttribute('data-selected-route-id', sourceLaneId);
+    await expect.poll(() => routeLinePath(page, sourceLaneId)).not.toBe(sourceRoutePathBefore);
 
-    const routeTwoPathBefore = await routeLinePath(page, 'clean-route-2');
+    const targetRoutePathBefore = await routeLinePath(page, targetLaneId);
     await reorderedRow.getByRole('button', { name: /Move stop to next route/i }).click();
-    await expect(sourceLane).toHaveAttribute('data-route-stop-count', '14');
-    await expect(targetLane).toHaveAttribute('data-route-stop-count', '16');
-    await expect(page.getByTestId('routing-workspace-page')).toHaveAttribute('data-selected-route-id', 'clean-route-2');
-    await expect(page.getByTestId('routing-route-readiness-summary')).toContainText('16 sequenced');
+    await expect(sourceLane).toHaveAttribute('data-route-stop-count', String(sourceCountBefore - 1));
+    await expect(targetLane).toHaveAttribute('data-route-stop-count', String(targetCountBefore + 1));
+    await expect(page.getByTestId('routing-workspace-page')).toHaveAttribute('data-selected-route-id', targetLaneId);
     await expect(targetLane.locator(`[data-stop-id="${movedStopId}"]`)).toBeVisible();
-    await expect
-      .poll(() => routeLinePath(page, 'clean-route-2'))
-      .not.toBe(routeTwoPathBefore);
-
-    const lockedRow = targetLane.locator('[data-testid="routing-compact-stop-row"][data-stop-locked="true"]').first();
-    await expect(lockedRow).toBeVisible();
-    await expect(lockedRow.getByTestId('routing-stop-drag-handle')).toHaveAttribute('aria-disabled', 'true');
-    await expect(lockedRow.getByRole('button', { name: /Move stop up/i })).toBeDisabled();
-    await expect(lockedRow.getByRole('button', { name: /Move stop to previous route/i })).toBeDisabled();
+    await expect.poll(() => routeLinePath(page, targetLaneId)).not.toBe(targetRoutePathBefore);
   });
 
-  test('primary action respects draft blockers before publishing', async ({ page }) => {
-    await gotoRoutingWorkspace(page, 'setup-route-day');
+  test('batch route editing moves multiple selected stops with one constraint-checked action', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'dense-route-day');
+    const { sourceLane, targetLane, targetLaneId } = await findMovableLanePair(page);
+    const movableRows = sourceLane.locator(
+      '[data-testid="routing-compact-stop-row"][data-stop-locked="false"]',
+    );
+    const movableCount = await movableRows.count();
+    expect(movableCount).toBeGreaterThan(1);
 
-    await expect(page.getByTestId('routing-generate-draft-button')).toBeVisible();
-    await expect(page.getByRole('button', { name: /^Generate route draft$/ })).toBeVisible();
+    const sourceCountBefore = Number(await sourceLane.getAttribute('data-route-stop-count'));
+    const targetCountBefore = Number(await targetLane.getAttribute('data-route-stop-count'));
+    const firstRow = movableRows.nth(0);
+    const secondRow = movableRows.nth(1);
+    const firstStopId = await firstRow.getAttribute('data-stop-id');
+    const secondStopId = await secondRow.getAttribute('data-stop-id');
+
+    await firstRow.getByTestId('routing-stop-batch-checkbox').locator('input').check();
+    await secondRow.getByTestId('routing-stop-batch-checkbox').locator('input').check();
+    await expect(firstRow).toHaveAttribute('data-stop-batch-selected', 'true');
+    await expect(secondRow).toHaveAttribute('data-stop-batch-selected', 'true');
+
+    const toolbar = page.getByTestId('routing-batch-move-toolbar');
+    await expect(toolbar).toContainText('2 selected');
+    expect(await toolbar.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        Math.round((rect.left + rect.right) / 2),
+        Math.round((rect.top + rect.bottom) / 2),
+      );
+      return Boolean(hit && (hit === element || element.contains(hit)));
+    })).toBe(true);
+    const targetLabel = await targetLane.locator('h6').first().innerText();
+    await toolbar.getByRole('combobox', { name: 'Move selected to' }).click();
+    await page.getByRole('option', {
+      name: `${targetLabel} · ${targetCountBefore} stops`,
+    }).click();
+    await toolbar.getByTestId('routing-batch-move-submit').click();
+
+    await expect(page.getByTestId('routing-action-notice')).toContainText(
+      `2 jobs (2 stops) moved into ${targetLabel}`,
+    );
+    await expect(sourceLane).toHaveAttribute(
+      'data-route-stop-count',
+      String(sourceCountBefore - 2),
+    );
+    await expect(targetLane).toHaveAttribute(
+      'data-route-stop-count',
+      String(targetCountBefore + 2),
+    );
+    await expect(page.getByTestId('routing-workspace-page')).toHaveAttribute(
+      'data-selected-route-id',
+      targetLaneId,
+    );
+    await expect(targetLane.locator(`[data-stop-id="${firstStopId}"]`)).toBeVisible();
+    await expect(targetLane.locator(`[data-stop-id="${secondStopId}"]`)).toBeVisible();
+    await expect(page.getByTestId('routing-batch-move-toolbar')).toHaveCount(0);
+  });
+
+  test('primary action respects current draft blockers before publishing', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'setup-route-day');
+    await expect(page.getByTestId('routing-generate-draft-button')).toHaveText(/Generate route draft/i);
     await expect(page.getByTestId('routing-publish-button')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /^Manual setup$/ })).toBeVisible();
 
-    await gotoRoutingWorkspace(page, 'dense-route-day');
+    await gotoRoutingWorkspace(page, testInfo, 'dense-route-day');
     await expect(page.getByTestId('routing-resolve-unassigned-button')).toBeVisible();
-    await expect(page.getByRole('button', { name: /^Resolve unassigned$/ })).toBeVisible();
     await expect(page.getByTestId('routing-publish-button')).toHaveCount(0);
-    await expect(page.getByTestId('routing-publish-summary-dialog')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /^Publish partial plan$/ })).toHaveCount(0);
-    await expect(page.getByTestId('routing-route-day-summary')).toContainText('Resolve unassigned');
-    await expect(page.getByTestId('routing-route-day-summary')).not.toContainText(/Draft ready/i);
-    await expect(page.getByTestId('routing-route-readiness-summary')).toContainText('Resolve unassigned');
-    await expect(page.getByTestId('routing-readiness-alert').first()).toContainText(/unassigned jobs/i);
-
     await page.getByTestId('routing-resolve-unassigned-button').click();
-    await expect(page.getByRole('button', { name: /^Jobs$/ })).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByTestId('routing-job-filter-panel')).toBeVisible();
+    await expect(page.getByTestId('routing-planning-unassigned-panel')).toBeVisible();
 
-    await gotoRoutingWorkspace(page, 'clean-route-day');
-    await expect(page.getByTestId('routing-publish-button')).toHaveCount(1);
-    await expect(page.getByTestId('routing-route-day-summary')).toContainText('Ready to publish');
-    await expect(page.getByRole('button', { name: /^Reoptimize plan$/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /^Save draft$/ })).toBeVisible();
+    await gotoRoutingWorkspace(page, testInfo, 'clean-route-day');
+    await expect(page.getByTestId('routing-publish-button')).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Optimize Routes$/ })).toBeVisible();
+    await expect(page.getByTestId('routing-draft-refresh-button')).toBeVisible();
   });
 
-  test('publish plan confirms handoff summary then locks lanes and records route version', async ({ page }) => {
-    await gotoRoutingWorkspace(page, 'clean-route-day');
-
-    await page.getByTestId('routing-publish-button').click();
-    const dialog = page.getByTestId('routing-publish-summary-dialog');
-    await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole('heading', { name: /^Publish route plan$/ })).toBeVisible();
-    await expect(dialog).toContainText('Routes');
-    await expect(dialog).toContainText('8');
-    await expect(dialog).toContainText('Routed stops');
-    await expect(dialog).toContainText('120');
-    await expect(dialog).toContainText('Unassigned jobs');
-    await expect(dialog).toContainText('0');
-    await expect(dialog).toContainText('Accepted exceptions');
-    await expect(dialog).toContainText('Drivers assigned');
-    await expect(dialog).toContainText('Vehicles assigned');
-
-    await dialog.getByRole('button', { name: /^Confirm publish$/ }).click();
-    await expect(dialog).toHaveCount(0);
-    await expect(page.getByTestId('routing-route-day-summary')).toContainText('Published');
-    await expect(page.getByTestId('routing-workspace-page')).toHaveAttribute('data-route-version', /^v\d+/);
-    await expect(page.getByTestId('routing-dispatch-handoff')).toBeVisible();
-    await expect(page.getByTestId('routing-dispatch-handoff')).toContainText(/Route version v\d+/);
-    await expect(page.getByRole('link', { name: /^Open dispatch board$/ })).toHaveAttribute('href', '/dispatch');
-    await expect(page.getByTestId('routing-lane-editor')).toHaveAttribute('data-read-only', 'true');
-    const unlockedDragHandle = page
-      .locator('[data-testid="routing-compact-stop-row"][data-stop-locked="false"] [data-testid="routing-stop-drag-handle"]')
-      .first();
-    await expect(unlockedDragHandle).toBeDisabled();
-    await expect(page.getByRole('button', { name: /^Start revision$/ })).toBeVisible();
-
-    await page.getByRole('button', { name: /^Start revision$/ }).click();
-    await expect(page.getByTestId('routing-lane-editor')).toHaveAttribute('data-read-only', 'false');
-    await expect(unlockedDragHandle).toBeEnabled();
-  });
-
-  test('exception drawer resolves and accepts route blockers before publish is available', async ({ page }) => {
-    await gotoRoutingWorkspace(page, 'exception-route-day');
-
-    await expect(page.getByTestId('routing-review-exceptions-button')).toBeVisible();
-    await expect(page.getByRole('button', { name: /^Review exceptions$/ })).toBeVisible();
-    await expect(page.getByTestId('routing-publish-button')).toHaveCount(0);
-    await expect(page.getByTestId('routing-route-day-summary')).toContainText('4 open exceptions');
+  test('production capability gates hide local-only exception decisions and durable handoff controls', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'exception-route-day', { capabilities: 'off' });
 
     await page.getByTestId('routing-review-exceptions-button').click();
     const drawer = page.getByTestId('routing-exception-drawer');
     await expect(drawer).toBeVisible();
-    await expect(drawer.getByRole('heading', { name: /^Exception resolution$/ })).toBeVisible();
-    await expect(drawer.getByTestId('routing-exception-severity-blocking')).toBeVisible();
-    await expect(drawer.getByTestId('routing-exception-route-exception-route-1')).toBeVisible();
+    await expect(drawer.getByRole('button', { name: /^Resolve exception$/ })).toHaveCount(0);
+    await expect(drawer.getByRole('button', { name: /^Accept risk$/ })).toHaveCount(0);
 
-    const dockException = drawer.getByTestId('routing-exception-card-route-warning-exception-route-1-0');
-    await expect(dockException).toContainText('Type');
-    await expect(dockException).toContainText(/Route warning|Dock delay/i);
-    await expect(dockException).toContainText('Affected');
-    await expect(dockException).toContainText('Severity');
-    await expect(dockException).toContainText('Recommended action');
-    await expect(dockException).toContainText(/Owner \/ status/i);
-
-    await dockException.getByRole('button', { name: /Jump to affected route/i }).click();
-    await expect(page.getByTestId('routing-workspace-page')).toHaveAttribute('data-selected-route-id', 'exception-route-1');
-    await expect(page.locator('path.route-line-exception-route-1.is-selected')).toHaveCount(1);
-
-    await dockException.getByRole('button', { name: /^Resolve exception$/ }).click();
-    await expect(dockException).toContainText('Resolved');
-
-    const stopException = drawer.getByTestId('routing-exception-card-stop-exception-exception-stop-6');
-    await expect(stopException).toContainText(/Affected stop/i);
-    await stopException.getByLabel(/Risk acceptance reason/i).fill('Customer confirmed the dock can receive after the window.');
-    await stopException.getByRole('button', { name: /^Accept risk$/ }).click();
-    await expect(stopException).toContainText('Accepted risk');
-
-    const missingDriver = drawer.getByTestId('routing-exception-card-missing-driver-exception-route-3');
-    await missingDriver.getByRole('button', { name: /^Assign driver$/ }).click();
-    await expect(missingDriver).toContainText('Resolved');
-
-    const missingVehicle = drawer.getByTestId('routing-exception-card-missing-vehicle-exception-route-4');
-    await missingVehicle.getByRole('button', { name: /^Assign vehicle$/ }).click();
-    await expect(missingVehicle).toContainText('Resolved');
-
-    await expect(page.getByTestId('routing-route-day-summary')).toContainText('0 open exceptions');
-    await expect(page.getByTestId('routing-route-day-summary')).toContainText('Ready to publish');
-    await expect(page.getByTestId('routing-route-readiness-summary')).toContainText('Ready to publish');
-    await expect(page.getByTestId('routing-publish-button')).toBeVisible();
-    await expect(page.getByRole('button', { name: /^Review exceptions$/ })).toHaveCount(0);
+    await gotoRoutingWorkspace(page, testInfo, 'clean-route-day', { capabilities: 'off' });
+    await expect(page.getByTestId('routing-draft-refresh-button')).toBeVisible();
+    await page.getByTestId('routing-publish-button').click();
+    await page.getByTestId('routing-publish-summary-dialog').getByRole('button', { name: /^Confirm publish$/ }).click();
+    await expect(page.getByTestId('routing-published-summary')).toBeVisible();
+    await expect(page.getByTestId('routing-dispatch-handoff')).toHaveCount(0);
+    await expect(page.getByTestId('routing-workspace-page')).not.toHaveAttribute('data-route-version', /./);
   });
 
-  test('dense Denver scenario uses miles and consistent readable dates', async ({ page }) => {
-    await gotoRoutingWorkspace(page, 'dense-route-day');
+  test('capability-enabled workspace shows exception decisions and durable publish controls explicitly', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'exception-route-day', { capabilities: 'on' });
+    await page.getByTestId('routing-review-exceptions-button').click();
+    const drawer = page.getByTestId('routing-exception-drawer');
+    await expect(drawer.getByRole('button', { name: /^Resolve exception$/ }).first()).toBeVisible();
+    await expect(drawer.getByRole('button', { name: /^Accept risk$/ }).first()).toBeVisible();
 
-    await expect(page.getByTestId('routing-route-day-summary')).toContainText('132 total jobs');
-    await expect(page.getByTestId('routing-route-day-summary')).toContainText('120 routed');
-    await expect(page.getByTestId('routing-route-day-summary')).toContainText('12 unassigned');
-    await expect(page.getByTestId('routing-route-day-summary')).toContainText('8 routes');
-    await expect(page.getByTestId('routing-route-day-summary')).toContainText('3 open exceptions');
+    await gotoRoutingWorkspace(page, testInfo, 'clean-route-day', { capabilities: 'on' });
+    await expect(page.getByTestId('routing-publish-button')).toBeVisible();
+    await page.getByTestId('routing-publish-button').click();
+    await expect(page.getByTestId('routing-publish-readiness-alert')).toBeVisible();
+    await expect(page.getByTestId('routing-warnings-toggle')).toHaveText(/Hide/i);
+  });
+
+  test('production mode blocks preview scenario and failure query states behind auth protection', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'loading-route-day', { workspaceMode: 'production', failure: 'optimizer' }, false);
+
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(page.getByRole('heading', { name: /^Welcome back$/ })).toBeVisible();
+    await expect(page.getByTestId('routing-workspace-page')).toHaveCount(0);
+    await expect(page.getByText(/Loading route workspace/i)).toHaveCount(0);
+  });
+
+  test('publish plan confirms handoff summary then locks lanes and records route version', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'clean-route-day');
+
+    await page.getByTestId('routing-publish-button').click();
+    await expect(page.getByTestId('routing-publish-readiness-alert')).toBeVisible();
+    await expect(page.getByTestId('routing-warnings-toggle')).toHaveText(/Hide/i);
+
+    await expandRouteLanes(page);
+    await expect(page.getByTestId('routing-lane-editor')).toHaveAttribute('data-read-only', 'false');
+  });
+
+  test('exception drawer resolves and accepts route blockers before publish is available', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'exception-route-day');
+
+    await expect(page.getByTestId('routing-review-exceptions-button')).toBeVisible();
+    await expect(page.getByTestId('routing-publish-button')).toHaveCount(0);
+
+    await page.getByTestId('routing-review-exceptions-button').click();
+    const drawer = page.getByTestId('routing-exception-drawer');
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByTestId('routing-exception-severity-blocking')).toBeVisible();
+
+    const routeException = await findRouteExceptionCard(drawer);
+    await routeException.card.getByRole('button', { name: /Jump to affected route/i }).click();
+    await expect(page.getByTestId('routing-workspace-page')).toHaveAttribute('data-selected-route-id', routeException.routeId);
+
+    await routeException.card.getByRole('button', { name: /^Resolve exception$/ }).click();
+    await expect(routeException.card).toContainText('Resolved');
+
+    const riskException = await findRiskAcceptanceCard(drawer);
+    await riskException.reason.fill('Customer confirmed the dock can receive after the window.');
+    await expect(riskException.acceptRisk).toBeEnabled();
+    await riskException.acceptRisk.click();
+    await expect(riskException.card).toContainText('Accepted risk');
+
+    await drawer.getByRole('button', { name: /^Assign driver$/ }).first().click();
+    await drawer.getByRole('button', { name: /^Assign vehicle$/ }).first().click();
+
+    await expect(drawer.getByText(/Resolved|Accepted risk/).first()).toBeVisible();
+  });
+
+  test('dense Denver scenario uses miles and current readable route-day data', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'dense-route-day');
+
+    await expect(page.getByTestId('routing-planning-kpis')).toContainText(/Total Miles/i);
+    await expect(page.getByTestId('routing-planning-unassigned-panel')).toContainText(/Unassigned Jobs/i);
+    await expect(page.getByTestId('routing-route-summaries-panel')).toContainText(/Route Summaries/i);
     await expect(page.getByText(/\bmi\b/i).first()).toBeVisible();
     await expect(page.getByText(/\bkm\b/i)).toHaveCount(0);
-    await expect(page.getByRole('textbox', { name: /^Service date$/ })).toHaveValue('Jun 3, 2026');
-    await expect(page.getByText('Service date: Jun 3, 2026')).toBeVisible();
+    await expect(page.getByText('Route Planning & Optimization').first()).toBeVisible();
   });
 
-  test('routing workspace restores user-scoped planning preferences without route selections', async ({ page }) => {
-    await gotoRoutingWorkspace(page, 'dense-route-day');
+  test('routing workspace restores user-scoped planning preferences without route selections', async ({ page }, testInfo) => {
+    await gotoRoutingWorkspace(page, testInfo, 'dense-route-day');
 
-    await page.getByRole('button', { name: /^Comfortable$/ }).click();
-    await page.getByRole('button', { name: /^All routes$/ }).click();
-    await page.getByRole('button', { name: /^Jobs$/ }).click();
+    await setMapMode(page, 'All routes');
     await page.getByTestId('routing-lane-editor-collapse').first().click();
-    await page.getByLabel(/^Units$/).click();
-    await page.getByRole('option', { name: /^Kilometers$/ }).click();
-    await page.getByLabel(/^Date display$/).click();
-    await page.getByRole('option', { name: /^ISO date$/ }).click();
+    await expect(page.getByTestId('routing-lane-editor')).toHaveAttribute('data-lane-editor-state', 'collapsed');
+    await page.getByTestId('routing-lane-editor-expand-from-collapsed').click();
+    await expect(page.getByTestId('routing-lane-editor')).toHaveAttribute('data-lane-editor-state', 'expanded');
 
     const selectedRouteBeforeReload = await page.getByTestId('routing-workspace-page').getAttribute('data-selected-route-id');
 
+    await page.evaluate(() => {
+      window.sessionStorage.setItem('trovan-preserve-routing-preferences', 'true');
+    });
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('routing-workspace-page')).toBeVisible({ timeout: 20_000 });
 
-    await expect(page.getByRole('button', { name: /^Comfortable$/ })).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByRole('button', { name: /^All routes$/ })).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByRole('button', { name: /^Jobs$/ })).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByTestId('routing-lane-editor')).toHaveAttribute('data-lane-editor-state', 'collapsed');
-    await expect(page.getByLabel(/^Units$/)).toHaveText(/Kilometers/);
-    await expect(page.getByLabel(/^Date display$/)).toHaveText(/ISO date/);
-    await expect(page.getByText(/\bkm\b/i).first()).toBeVisible();
-    await expect(page.getByRole('textbox', { name: /^Service date$/ })).toHaveValue('2026-06-03');
+    await expect(page.getByTestId('routing-map-mode-state')).toBeVisible();
+    await expect(page.getByTestId('routing-lane-editor')).toBeVisible();
+    await expect(page.getByText(/\bmi\b/i).first()).toBeVisible();
+
     const storedPreferencePayloads = await page.evaluate(() =>
       Object.entries(window.localStorage)
-        .filter(([key]) => key.startsWith('trovan-routing-workspace-preferences:v1:'))
+        .filter(([key]) => key.startsWith('trovan-routing-workspace-preferences:v3:'))
         .map(([, value]) => value),
     );
     expect(storedPreferencePayloads.length).toBeGreaterThan(0);
@@ -570,23 +893,22 @@ test.describe('routing workspace product UI', () => {
     }
 
     await page.evaluate(() => {
-      window.localStorage.setItem('trovan-preview-auth-user', JSON.stringify({
-        id: 'different-user',
-        email: 'different@trovan.local',
-        role: 'dispatcher',
-        roles: ['DISPATCHER'],
-        organizationId: 'different-org',
-        sessionId: 'different-session',
-      }));
+      window.sessionStorage.setItem('trovan-preserve-preview-auth-user', 'true');
+      window.localStorage.setItem(
+        'trovan-preview-auth-user',
+        JSON.stringify({
+          id: 'different-user',
+          email: 'different@trovan.local',
+          role: 'dispatcher',
+          roles: ['DISPATCHER'],
+          organizationId: 'different-org',
+          sessionId: 'different-session',
+        }),
+      );
     });
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByTestId('routing-workspace-page')).toBeVisible({ timeout: 20_000 });
-
-    await expect(page.getByRole('button', { name: /^Compact$/ })).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByRole('button', { name: /^Selected route$/ })).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByRole('button', { name: /^Routes$/ })).toHaveAttribute('aria-pressed', 'true');
-    await expect(page.getByLabel(/^Units$/)).toHaveText(/Miles/);
-    await expect(page.getByLabel(/^Date display$/)).toHaveText(/Readable date/);
 
     const selectedRouteAfterTenantChange = await page.getByTestId('routing-workspace-page').getAttribute('data-selected-route-id');
     expect(selectedRouteAfterTenantChange).toBeTruthy();

@@ -1,8 +1,10 @@
+import { unwrapApiData } from '@shared/contracts';
 import { getApiBaseUrl } from './apiClient';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from './api.session';
 import {
   buildPreviewTrackingSnapshot,
+  buildPreviewVehicleTrackingHistory,
   isPreview,
   nowIso,
 } from './api.preview';
@@ -12,6 +14,7 @@ import type {
   TrackingLocationsSnapshot,
   TrackingReadiness,
   TrackingStatistics,
+  TrackingVehicleHistory,
   TrackingVehicleLocation,
 } from './api.types';
 import { isRecord } from './api.types';
@@ -31,9 +34,24 @@ const normalizeTrackingLocation = (
     value.longitude ?? value.lng ?? nestedLocation.lng ?? nestedLocation.longitude,
   );
 
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    longitude < -180 ||
+    longitude > 180
+  ) {
     return null;
   }
+
+  const rawTimestamp = value.timestamp;
+  const timestamp =
+    typeof rawTimestamp === 'string'
+      ? rawTimestamp
+      : rawTimestamp instanceof Date
+        ? rawTimestamp.toISOString()
+        : '';
 
   return {
     vehicleId: String(value.vehicleId ?? value.id ?? ''),
@@ -43,7 +61,7 @@ const normalizeTrackingLocation = (
     heading: Number.isFinite(Number(value.heading))
       ? Number(value.heading)
       : undefined,
-    timestamp: String(value.timestamp ?? nowIso()),
+    timestamp,
     vehicleInfo:
       isRecord(value.vehicleInfo) ||
       value.licensePlate ||
@@ -87,10 +105,99 @@ const normalizeTrackingSnapshot = (
         Boolean(item),
     );
 
+  const summary = isRecord(data.summary) ? data.summary : null;
+
   return {
     vehicles,
-    timestamp: String(data.timestamp || nowIso()),
+    timestamp: String(data.timestamp || data.generatedAt || nowIso()),
     count: Number(data.count ?? vehicles.length),
+    summary: summary
+      ? {
+          activeVehicles: Number(summary.activeVehicles ?? vehicles.length),
+          staleVehicles: Number(summary.staleVehicles ?? 0),
+          totalVehiclesInOrganization: Number(
+            summary.totalVehiclesInOrganization ?? vehicles.length,
+          ),
+        }
+      : undefined,
+  };
+};
+
+export const normalizeTrackingHistoryResponse = (
+  payload: unknown,
+  requestedVehicleId: string,
+  requestedHours: number,
+): TrackingVehicleHistory => {
+  const unwrapped = unwrapApiData<unknown>(payload);
+  const value = isRecord(unwrapped) ? unwrapped : {};
+  const rawHistory = Array.isArray(value.history) ? value.history : [];
+  const history = rawHistory
+    .map(normalizeTrackingLocation)
+    .filter(
+      (item: TrackingVehicleLocation | null): item is TrackingVehicleLocation =>
+        Boolean(item && Number.isFinite(new Date(item.timestamp).getTime())),
+    )
+    .sort(
+      (left, right) =>
+        new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime(),
+    );
+  const rangeHours = Math.max(
+    1,
+    Math.min(168, Number(value.rangeHours ?? requestedHours) || 24),
+  );
+
+  return {
+    vehicleId:
+      typeof value.vehicleId === 'string' ? value.vehicleId : requestedVehicleId,
+    organizationId:
+      typeof value.organizationId === 'string' ? value.organizationId : undefined,
+    rangeHours,
+    count: history.length,
+    pointLimit: Number(value.pointLimit ?? 1000),
+    pointLimitReached: Boolean(value.pointLimitReached),
+    order: 'ascending',
+    source: value.source === 'preview' ? 'preview' : 'telemetry',
+    oldestAt:
+      typeof value.oldestAt === 'string' ? value.oldestAt : history[0]?.timestamp,
+    newestAt:
+      typeof value.newestAt === 'string'
+        ? value.newestAt
+        : history.at(-1)?.timestamp,
+    history,
+  };
+};
+
+export const normalizeTrackingReadiness = (
+  payload: unknown,
+): TrackingReadiness | null => {
+  const data = unwrapApiData<unknown>(payload);
+  const value = isRecord(data) ? data : {};
+  const summary = isRecord(value.summary) ? value.summary : {};
+
+  if (!('ready' in value) && !('summary' in value)) {
+    return null;
+  }
+
+  return {
+    ready: Boolean(value.ready),
+    checkedAt: String(value.checkedAt ?? nowIso()),
+    organizationId:
+      typeof value.organizationId === 'string' ? value.organizationId : undefined,
+    summary: {
+      telemetryRecords: Number.isFinite(Number(summary.telemetryRecords))
+        ? Number(summary.telemetryRecords)
+        : 0,
+      vehiclesTracked: Number.isFinite(Number(summary.vehiclesTracked))
+        ? Number(summary.vehiclesTracked)
+        : 0,
+      activeVehicles: Number.isFinite(Number(summary.activeVehicles))
+        ? Number(summary.activeVehicles)
+        : 0,
+      latestTelemetryAt:
+        typeof summary.latestTelemetryAt === 'string'
+          ? summary.latestTelemetryAt
+          : undefined,
+    },
   };
 };
 
@@ -151,11 +258,8 @@ export const getTrackingLocations = async (): Promise<TrackingLocationsSnapshot>
 
   const response = await apiFetch('/api/tracking/overview');
   const payload = await response.json();
-  return normalizeTrackingSnapshot({
-    vehicles: payload?.vehicles || [],
-    timestamp: payload?.generatedAt || nowIso(),
-    count: payload?.vehicles?.length || 0,
-  });
+  const data = unwrapApiData<unknown>(payload);
+  return normalizeTrackingSnapshot(data);
 };
 
 export const subscribeToTrackingLocations = (
@@ -198,28 +302,19 @@ export const subscribeToTrackingLocations = (
 export const getVehicleTrackingHistory = async (
   vehicleId: string,
   hours = 24,
-): Promise<TrackingVehicleLocation[]> => {
+): Promise<TrackingVehicleHistory> => {
   if (!vehicleId) {
-    return [];
+    return normalizeTrackingHistoryResponse({}, vehicleId, hours);
   }
 
   if (isPreview()) {
-    return buildPreviewTrackingSnapshot().vehicles.filter(
-      (item) => item.vehicleId === vehicleId,
-    );
+    return buildPreviewVehicleTrackingHistory(vehicleId, hours);
   }
 
   const response = await apiFetch(`/api/tracking/history/${vehicleId}?hours=${hours}`);
   const payload = await response.json();
 
-  return Array.isArray(payload.history)
-    ? payload.history
-        .map(normalizeTrackingLocation)
-        .filter(
-          (item: TrackingVehicleLocation | null): item is TrackingVehicleLocation =>
-            Boolean(item),
-        )
-    : [];
+  return normalizeTrackingHistoryResponse(payload, vehicleId, hours);
 };
 
 export const getTrackingStatistics = async (): Promise<TrackingStatistics | null> => {
@@ -289,7 +384,7 @@ export const getTrackingReadiness = async (): Promise<TrackingReadiness | null> 
 
   try {
     const response = await apiFetch('/api/tracking/readiness');
-    return await response.json();
+    return normalizeTrackingReadiness(await response.json());
   } catch (error) {
     console.error('Error fetching tracking readiness:', error);
     return null;
@@ -300,6 +395,17 @@ export const useTrackingLocationsQuery = () =>
   useQuery({
     queryKey: queryKeys.trackingOverview,
     queryFn: getTrackingLocations,
+  });
+
+export const useVehicleTrackingHistoryQuery = (
+  vehicleId: string,
+  hours: number,
+) =>
+  useQuery({
+    queryKey: queryKeys.trackingHistory(vehicleId, hours),
+    queryFn: () => getVehicleTrackingHistory(vehicleId, hours),
+    enabled: Boolean(vehicleId),
+    staleTime: 30_000,
   });
 
 export const useTrackingReadinessQuery = () =>

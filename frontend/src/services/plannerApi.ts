@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  evaluateJobRoutingReadiness,
+  evaluateVehicleLoadFit,
   getOptimizationObjectiveLabel,
   normalizeOptimizationObjective,
   unwrapApiData,
@@ -46,6 +48,90 @@ type PublishRoutePlanResult = {
 };
 
 export type { PublishRoutePlanResult };
+
+export type PlannerPublishDecision = {
+  id: string;
+  decision: 'accepted_risk' | 'resolved';
+  blockerCode: string;
+  reason: string;
+  actorId?: string | null;
+  jobId?: string | null;
+  groupId?: string | null;
+  warningIndex?: number | null;
+  createdAt: string;
+};
+
+export type PlannerPublishBlocker = {
+  code: string;
+  message: string;
+  severity: 'blocking';
+  canAcceptRisk: boolean;
+  groupId?: string;
+  jobId?: string;
+  warningIndex?: number;
+  acceptedDecision?: PlannerPublishDecision;
+};
+
+export type PlannerPublishReadiness = {
+  ok: boolean;
+  routePlanId: string;
+  ready: boolean;
+  blockers: PlannerPublishBlocker[];
+  blockingBlockers: PlannerPublishBlocker[];
+  decisions: PlannerPublishDecision[];
+  summary: {
+    blockerCount: number;
+    blockingCount: number;
+    acceptedRiskCount: number;
+  };
+};
+
+export type DriverFamiliarityCandidate = {
+  driverId: string;
+  eligible: boolean;
+  bars: 0 | 1 | 2 | 3;
+  coveragePercent: number;
+  familiarStopCount: number;
+  targetStopCount: number;
+  nearbyHistoricalVisitCount: number;
+  historicalRouteCount: number;
+  historicalStopCount: number;
+  latestCompletedAt: string | null;
+};
+
+export type RouteDriverFamiliarity = {
+  groupId: string;
+  locatedStopCount: number;
+  status: 'supported' | 'insufficient_route_locations' | 'insufficient_driver_history';
+  recommendedDriverId: string | null;
+  candidates: DriverFamiliarityCandidate[];
+};
+
+export type DriverFamiliarityResponse = {
+  ok: boolean;
+  source: 'completed_route_history' | 'preview_sample';
+  routePlanId: string;
+  serviceDate: string;
+  lookbackDays: number;
+  radiusKm: number;
+  thresholds: {
+    minimumCompletedRoutes: number;
+    minimumServicedStops: number;
+  };
+  history: {
+    completedRouteCount: number;
+    servicedLocatedStopCount: number;
+    routeLimitReached: boolean;
+  };
+  recommendations: RouteDriverFamiliarity[];
+};
+
+export type PreviewDriverFamiliarityContext = {
+  serviceDate: string;
+  groups: Array<Pick<PlannerRoutePlanGroup, 'id'>>;
+  stops: Array<Pick<PlannerRoutePlanStop, 'routePlanGroupId'>>;
+  driverIds: string[];
+};
 
 const PREVIEW_ROUTE_PLAN_ID = 'preview-plan-1';
 const previewPlannerLocks = new Map<string, boolean>();
@@ -158,6 +244,16 @@ const rebuildPreviewRouteArtifacts = (routeId: string) => {
     planner_diagnostics: {
       objective_used: previewPlannerObjective,
       objective_label: getOptimizationObjectiveLabel(previewPlannerObjective),
+      provenance: {
+        solver: 'preview-heuristic',
+        solver_version: 'preview-v1',
+        matrix_provider: 'preview-estimated',
+        matrix_mode: 'estimated',
+        fallback_used: true,
+        solve_duration_ms: 0,
+        coordinate_coverage_percent: 100,
+        location_count: coordinates.length,
+      },
     },
     polyline: {
       coordinates: coordinates.map((location) => [location.lng, location.lat]),
@@ -177,7 +273,7 @@ const rebuildPreviewRouteArtifacts = (routeId: string) => {
   route.totalDurationMinutes = route.jobIds.length * 14 + (route.jobIds.length ? 10 : 0);
   route.estimatedCapacity = 900 + route.jobIds.length * 180;
   route.optimizationStatus = 'optimized';
-  route.dataQuality = 'simulated';
+  route.dataQuality = 'degraded';
   route.planningWarnings = route.jobIds.length ? [] : ['No assigned jobs'];
 };
 
@@ -245,7 +341,20 @@ const buildPreviewPlannerView = (): PlannerViewResponse => {
         stopCount: stops.length,
         unassignedJobCount: previewState.jobs.filter((job) => !job.assignedRouteId).length,
       },
-      warnings: ['Preview planner uses local seeded routes.'],
+      warnings: [
+        'Preview planner uses local seeded routes.',
+        {
+          type: 'OPTIMIZER_DEGRADED_MATRIX',
+          solver: 'preview-heuristic',
+          solverVersion: 'preview-v1',
+          matrixProvider: 'preview-estimated',
+          matrixMode: 'estimated',
+          fallbackUsed: true,
+          solveDurationMs: 0,
+          coordinateCoveragePercent: 100,
+          locationCount: stops.length,
+        },
+      ],
     },
     groups,
     stops,
@@ -256,7 +365,10 @@ const buildPreviewPlannerView = (): PlannerViewResponse => {
 const normalizePlannerView = (value: unknown): PlannerViewResponse => {
   const unwrapped = unwrapApiData<unknown>(value);
   const data = isRecord(unwrapped) ? unwrapped : {};
-  const rawPlan = (data.plan as PlannerRoutePlan | null | undefined) ?? null;
+  const rawPlan =
+    (data.routePlan as PlannerRoutePlan | null | undefined) ??
+    (data.plan as PlannerRoutePlan | null | undefined) ??
+    null;
   return {
     plan: rawPlan
       ? {
@@ -284,6 +396,35 @@ const parsePreviewStop = (stopId: string) => {
   return { routeId, jobId };
 };
 
+const assertPreviewRouteConstraints = (
+  route: (typeof previewState.routes)[number],
+  jobIds: string[],
+) => {
+  if (!jobIds.length) return;
+  const vehicle = previewState.vehicles.find((item) => item.id === route.vehicleId);
+  if (!vehicle) throw new Error('Assign a vehicle before moving work into this route.');
+  const driver = route.driverId
+    ? previewState.drivers.find((item) => item.id === route.driverId) || null
+    : null;
+  const routeJobs = jobIds
+    .map((jobId) => findPreviewJob(jobId))
+    .filter((job): job is DispatchJob => Boolean(job));
+  const fit = evaluateVehicleLoadFit({ vehicle, driver, jobs: routeJobs });
+  if (!fit.fits) {
+    throw new Error(fit.blockers[0]?.message || 'The route violates a fleet constraint.');
+  }
+  jobIds.forEach((jobId, index) => {
+    const job = findPreviewJob(jobId);
+    const position = job?.routingRequirements?.sequence?.position;
+    if (position === 'first' && index !== 0) {
+      throw new Error(`${job?.customerName || jobId} must be the first job on its route.`);
+    }
+    if (position === 'last' && index !== jobIds.length - 1) {
+      throw new Error(`${job?.customerName || jobId} must be the last job on its route.`);
+    }
+  });
+};
+
 const movePreviewJobBetweenRoutes = (
   sourceRouteId: string,
   targetRouteId: string,
@@ -296,9 +437,12 @@ const movePreviewJobBetweenRoutes = (
     throw new Error('Preview route not found');
   }
 
-  sourceRoute.jobIds = sourceRoute.jobIds.filter((candidate) => candidate !== jobId);
   const nextTargetJobs = targetRoute.jobIds.filter((candidate) => candidate !== jobId);
   nextTargetJobs.splice(Math.max(0, targetSequence - 1), 0, jobId);
+  const nextSourceJobs = sourceRoute.jobIds.filter((candidate) => candidate !== jobId);
+  assertPreviewRouteConstraints(sourceRoute, nextSourceJobs);
+  assertPreviewRouteConstraints(targetRoute, nextTargetJobs);
+  sourceRoute.jobIds = nextSourceJobs;
   targetRoute.jobIds = nextTargetJobs;
 
   syncPreviewAssignments();
@@ -483,7 +627,7 @@ const generatePreviewDraft = (payload: {
     status: 'planned',
     workflowStatus: 'planned',
     jobIds: seed.jobIds,
-    dataQuality: 'simulated' as const,
+    dataQuality: 'degraded' as const,
     optimizationStatus: 'optimized' as const,
     routeData: {
       planner_diagnostics: {
@@ -507,6 +651,168 @@ const createPreviewResponse = (): PlannerMutationResult => {
     stops: view.stops,
     unassignedJobs: view.unassignedJobs,
     warnings: view.plan?.warnings,
+  };
+};
+
+const previewPublishDecisions = new Map<string, PlannerPublishDecision[]>();
+
+const getPreviewPublishDecisions = (routePlanId: string) =>
+  previewPublishDecisions.get(routePlanId) || [];
+
+const withPreviewPublishDecisions = (
+  routePlanId: string,
+  blockers: PlannerPublishBlocker[],
+) => {
+  const decisions = getPreviewPublishDecisions(routePlanId);
+  return blockers.map((blocker) => ({
+    ...blocker,
+    acceptedDecision: blocker.canAcceptRisk
+      ? decisions.find((decision) => {
+          if (decision.decision !== 'accepted_risk') return false;
+          if (decision.blockerCode !== blocker.code) return false;
+          if (blocker.jobId && decision.jobId !== blocker.jobId) return false;
+          if (blocker.groupId && decision.groupId !== blocker.groupId) return false;
+          if (
+            blocker.warningIndex !== undefined &&
+            decision.warningIndex !== blocker.warningIndex
+          ) {
+            return false;
+          }
+          return true;
+        })
+      : undefined,
+  }));
+};
+
+const buildPreviewPublishReadiness = (): PlannerPublishReadiness => {
+  const view = buildPreviewPlannerView();
+  const blockers: PlannerPublishBlocker[] = [];
+  const routePlanId = view.plan?.id || PREVIEW_ROUTE_PLAN_ID;
+  const stopGroupIds = new Set(view.stops.map((stop) => stop.routePlanGroupId));
+  view.groups.forEach((group) => {
+    if (!stopGroupIds.has(group.id)) return;
+    if (!group.vehicleId) {
+      blockers.push({
+        code: 'MISSING_VEHICLE',
+        message: `${group.label || 'Route'} needs a vehicle before publish.`,
+        severity: 'blocking',
+        canAcceptRisk: false,
+        groupId: group.id,
+      });
+    }
+    if (!group.driverId) {
+      blockers.push({
+        code: 'MISSING_DRIVER',
+        message: `${group.label || 'Route'} needs a driver before publish.`,
+        severity: 'blocking',
+        canAcceptRisk: false,
+        groupId: group.id,
+      });
+    }
+  });
+  view.plan?.warnings?.forEach((warning, index) => {
+    blockers.push({
+      code: 'ROUTE_PLAN_WARNING',
+      message: typeof warning === 'string' ? warning : String(warning.message || warning.type || 'Planner warning requires review'),
+      severity: 'blocking',
+      canAcceptRisk: true,
+      warningIndex: index,
+    });
+  });
+  view.groups.forEach((group) => {
+    if (!stopGroupIds.has(group.id)) return;
+    (group.warnings || []).forEach((warning, index) => {
+      blockers.push({
+        code: 'ROUTE_GROUP_WARNING',
+        message: `${group.label || 'Route'}: ${typeof warning === 'string' ? warning : String(warning.message || warning.type || 'Route warning requires review')}`,
+        severity: 'blocking',
+        canAcceptRisk: true,
+        groupId: group.id,
+        warningIndex: index,
+      });
+    });
+  });
+  view.stops.forEach((stop) => {
+    const job = findPreviewJob(stop.jobId);
+    if (!job) return;
+    const readiness = evaluateJobRoutingReadiness({
+      deliveryAddress: job.deliveryAddress,
+      timeWindowStart: job.timeWindowStart,
+      timeWindowEnd: job.timeWindowEnd,
+      estimatedDuration: job.estimatedDuration,
+      weight: job.weight,
+      volume: job.volume,
+      quantity: job.quantity,
+      routingRequirements: job.routingRequirements,
+    });
+    if (readiness.status === 'routable') return;
+    blockers.push({
+      code:
+        readiness.status === 'missing_data'
+          ? 'JOB_MISSING_DATA'
+          : readiness.status === 'capacity_risk'
+            ? 'JOB_CAPACITY_RISK'
+            : readiness.status === 'appointment_risk'
+              ? 'JOB_APPOINTMENT_RISK'
+              : 'JOB_ACCESS_RISK',
+      message: `${job.customerName || job.id}: ${readiness.summary}`,
+      severity: 'blocking',
+      canAcceptRisk: readiness.status !== 'missing_data',
+      jobId: job.id,
+    });
+  });
+  view.unassignedJobs.forEach((job) => {
+    blockers.push({
+      code: 'UNASSIGNED_JOB',
+      message: `${job.customerName || job.id} is not assigned to the route plan.`,
+      severity: 'blocking',
+      canAcceptRisk: false,
+      jobId: job.id,
+    });
+  });
+
+  const blockersWithDecisions = withPreviewPublishDecisions(routePlanId, blockers);
+  const blockingBlockers = blockersWithDecisions.filter((blocker) => !blocker.acceptedDecision);
+  return {
+    ok: true,
+    routePlanId,
+    ready: blockingBlockers.length === 0,
+    blockers: blockersWithDecisions,
+    blockingBlockers,
+    decisions: getPreviewPublishDecisions(routePlanId),
+    summary: {
+      blockerCount: blockersWithDecisions.length,
+      blockingCount: blockingBlockers.length,
+      acceptedRiskCount: blockersWithDecisions.filter((blocker) => blocker.acceptedDecision).length,
+    },
+  };
+};
+
+const normalizePublishReadiness = (value: unknown): PlannerPublishReadiness => {
+  const data = unwrapApiData<unknown>(value);
+  const record = isRecord(data) ? data : {};
+  const blockers = Array.isArray(record.blockers)
+    ? (record.blockers as PlannerPublishBlocker[])
+    : [];
+  const blockingBlockers = Array.isArray(record.blockingBlockers)
+    ? (record.blockingBlockers as PlannerPublishBlocker[])
+    : blockers.filter((blocker) => !blocker.acceptedDecision);
+  return {
+    ok: record.ok !== false,
+    routePlanId: typeof record.routePlanId === 'string' ? record.routePlanId : '',
+    ready: Boolean(record.ready),
+    blockers,
+    blockingBlockers,
+    decisions: Array.isArray(record.decisions)
+      ? (record.decisions as PlannerPublishDecision[])
+      : [],
+    summary: isRecord(record.summary)
+      ? (record.summary as PlannerPublishReadiness['summary'])
+      : {
+          blockerCount: blockers.length,
+          blockingCount: blockingBlockers.length,
+          acceptedRiskCount: blockers.filter((blocker) => blocker.acceptedDecision).length,
+        },
   };
 };
 
@@ -578,12 +884,16 @@ export const updateRoutePlanGroup = async (
     if (!route) {
       throw new Error(`Preview route group not found: ${groupId}`);
     }
-    if (payload.driverId !== undefined) {
-      route.driverId = payload.driverId || null;
-    }
-    if (payload.vehicleId !== undefined) {
-      route.vehicleId = payload.vehicleId || route.vehicleId || '';
-    }
+    const nextRoute = {
+      ...route,
+      driverId: payload.driverId !== undefined ? payload.driverId || null : route.driverId,
+      vehicleId: payload.vehicleId !== undefined
+        ? payload.vehicleId || route.vehicleId || ''
+        : route.vehicleId,
+    };
+    assertPreviewRouteConstraints(nextRoute, route.jobIds);
+    route.driverId = nextRoute.driverId;
+    route.vehicleId = nextRoute.vehicleId;
     syncPreviewAssignments();
     return createPreviewResponse();
   }
@@ -591,6 +901,142 @@ export const updateRoutePlanGroup = async (
     method: 'PATCH',
     body: JSON.stringify(payload),
   }).then(async (response) => normalizePlannerView(await response.json()));
+};
+
+export const insertJobIntoRoutePlan = async (
+  routePlanId: string,
+  groupId: string,
+  payload: { jobId: string; targetSequence?: number },
+) => {
+  if (isPreview()) {
+    const route = previewState.routes.find((item) => item.id === groupId);
+    if (!route) {
+      throw new Error(`Preview route group not found: ${groupId}`);
+    }
+    const job = findPreviewJob(payload.jobId);
+    if (!job) {
+      throw new Error(`Preview job not found: ${payload.jobId}`);
+    }
+    if (previewState.routes.some((item) => item.jobIds.includes(job.id))) {
+      throw new Error('This job is already included in the route plan.');
+    }
+    const requestedIndex = Math.min(
+      Math.max(0, (payload.targetSequence || route.jobIds.length + 1) - 1),
+      route.jobIds.length,
+    );
+    const position = job.routingRequirements?.sequence?.position;
+    const existingLastIndex = route.jobIds.findIndex(
+      (jobId) => findPreviewJob(jobId)?.routingRequirements?.sequence?.position === 'last',
+    );
+    const targetIndex = position === 'first'
+      ? 0
+      : position === 'last'
+        ? route.jobIds.length
+        : existingLastIndex >= 0
+          ? Math.min(requestedIndex, existingLastIndex)
+          : requestedIndex;
+    const nextJobIds = [...route.jobIds];
+    nextJobIds.splice(targetIndex, 0, job.id);
+    assertPreviewRouteConstraints(route, nextJobIds);
+    route.jobIds = nextJobIds;
+    syncPreviewAssignments();
+    return createPreviewResponse();
+  }
+  return apiFetch(
+    `/api/route-plans/${routePlanId}/groups/${groupId}/insert-job`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  ).then(async (response) => normalizePlannerView(await response.json()));
+};
+
+export const buildPreviewDriverFamiliarityResponse = (
+  routePlanId: string,
+  context: PreviewDriverFamiliarityContext,
+): DriverFamiliarityResponse => {
+  const driverIds = Array.from(new Set(context.driverIds.filter(Boolean)));
+  const minimumCompletedRoutes = 2;
+  const minimumServicedStops = 5;
+  const completedRouteCount = Math.max(8, context.groups.length * 3);
+  const servicedLocatedStopCount = Math.max(32, context.stops.length * 4);
+
+  return {
+    ok: true,
+    source: 'preview_sample',
+    routePlanId,
+    serviceDate: context.serviceDate,
+    lookbackDays: 365,
+    radiusKm: 2,
+    thresholds: { minimumCompletedRoutes, minimumServicedStops },
+    history: {
+      completedRouteCount,
+      servicedLocatedStopCount,
+      routeLimitReached: false,
+    },
+    recommendations: context.groups.map((group, groupIndex) => {
+      const locatedStopCount = context.stops.filter(
+        (stop) => stop.routePlanGroupId === group.id,
+      ).length;
+      const recommendedDriverId = locatedStopCount && driverIds.length
+        ? driverIds[(groupIndex + 1) % driverIds.length]
+        : null;
+
+      return {
+        groupId: group.id,
+        locatedStopCount,
+        status: !locatedStopCount
+          ? 'insufficient_route_locations'
+          : recommendedDriverId
+            ? 'supported'
+            : 'insufficient_driver_history',
+        recommendedDriverId,
+        candidates: driverIds.map((driverId, driverIndex) => {
+          const isRecommended = driverId === recommendedDriverId;
+          const historicalRouteCount = isRecommended ? 8 : 4;
+          const historicalStopCount = isRecommended ? 42 : 18;
+          const eligible =
+            historicalRouteCount >= minimumCompletedRoutes &&
+            historicalStopCount >= minimumServicedStops;
+          return {
+            driverId,
+            eligible,
+            bars: isRecommended ? 3 : driverIndex % 2 === 0 ? 2 : 1,
+            coveragePercent: isRecommended ? 82 : driverIndex % 2 === 0 ? 48 : 24,
+            familiarStopCount: Math.min(
+              locatedStopCount,
+              isRecommended ? Math.max(1, Math.round(locatedStopCount * 0.82)) : Math.max(1, Math.round(locatedStopCount * 0.4)),
+            ),
+            targetStopCount: locatedStopCount,
+            nearbyHistoricalVisitCount: isRecommended ? 17 : 7,
+            historicalRouteCount,
+            historicalStopCount,
+            latestCompletedAt: '2026-06-01T18:00:00.000Z',
+          } satisfies DriverFamiliarityCandidate;
+        }),
+      } satisfies RouteDriverFamiliarity;
+    }),
+  };
+};
+
+export const getRoutePlanDriverFamiliarity = async (
+  routePlanId: string,
+  previewContext?: PreviewDriverFamiliarityContext,
+): Promise<DriverFamiliarityResponse> => {
+  if (isPreview()) {
+    const view = buildPreviewPlannerView();
+    return buildPreviewDriverFamiliarityResponse(
+      routePlanId,
+      previewContext || {
+        serviceDate: previewPlannerServiceDate,
+        groups: view.groups,
+        stops: view.stops,
+        driverIds: previewState.drivers.map((driver) => driver.id),
+      },
+    );
+  }
+  const response = await apiFetch(`/api/route-plans/${routePlanId}/driver-familiarity`);
+  return unwrapApiData<DriverFamiliarityResponse>(await response.json());
 };
 
 export const updateRoutePlanStop = async (
@@ -626,8 +1072,93 @@ export const updateRoutePlanStop = async (
   }).then(async (response) => normalizePlannerView(await response.json()));
 };
 
+export const batchMoveRoutePlanStops = async (
+  routePlanId: string,
+  payload: {
+    stopIds: string[];
+    targetGroupId: string;
+    targetSequence?: number;
+  },
+) => {
+  if (isPreview()) {
+    const targetRoute = previewState.routes.find(
+      (route) => route.id === payload.targetGroupId,
+    );
+    if (!targetRoute) {
+      throw new Error(`Preview route group not found: ${payload.targetGroupId}`);
+    }
+    const selectedJobs = Array.from(
+      new Set(payload.stopIds.map((stopId) => parsePreviewStop(stopId).jobId)),
+    );
+    const orderedSelectedJobs = [...selectedJobs].sort((left, right) => {
+      const rank = (jobId: string) => {
+        const position = findPreviewJob(jobId)?.routingRequirements?.sequence?.position;
+        return position === 'first' ? -1 : position === 'last' ? 1 : 0;
+      };
+      return rank(left) - rank(right);
+    });
+    selectedJobs.forEach((jobId) => {
+      const sourceRoutes = previewState.routes.filter((route) =>
+        route.jobIds.includes(jobId),
+      );
+      if (sourceRoutes.length !== 1) {
+        throw new Error('A selected preview job is no longer assigned to one route.');
+      }
+      const sourceRoute = sourceRoutes[0];
+      if (previewPlannerLocks.get(buildPreviewStopId(sourceRoute.id, jobId))) {
+        throw new Error('Protected stops cannot be batch moved. Unlock them first.');
+      }
+    });
+    const nextJobsByRouteId = new Map(
+      previewState.routes.map((route) => [
+        route.id,
+        route.jobIds.filter((jobId) => !selectedJobs.includes(jobId)),
+      ]),
+    );
+    const nextTargetJobIds = nextJobsByRouteId.get(targetRoute.id) || [];
+    const requestedTargetIndex = Math.min(
+      Math.max(0, (payload.targetSequence || nextTargetJobIds.length + 1) - 1),
+      nextTargetJobIds.length,
+    );
+    const existingLastIndex = nextTargetJobIds.findIndex(
+      (jobId) => findPreviewJob(jobId)?.routingRequirements?.sequence?.position === 'last',
+    );
+    const movingHasFirst = orderedSelectedJobs.some(
+      (jobId) => findPreviewJob(jobId)?.routingRequirements?.sequence?.position === 'first',
+    );
+    const movingHasLast = orderedSelectedJobs.some(
+      (jobId) => findPreviewJob(jobId)?.routingRequirements?.sequence?.position === 'last',
+    );
+    const targetIndex = movingHasFirst
+      ? 0
+      : movingHasLast
+        ? nextTargetJobIds.length
+        : existingLastIndex >= 0
+          ? Math.min(requestedTargetIndex, existingLastIndex)
+          : requestedTargetIndex;
+    nextTargetJobIds.splice(targetIndex, 0, ...orderedSelectedJobs);
+    nextJobsByRouteId.set(targetRoute.id, nextTargetJobIds);
+    previewState.routes.forEach((route) => {
+      assertPreviewRouteConstraints(route, nextJobsByRouteId.get(route.id) || []);
+    });
+    previewState.routes.forEach((route) => {
+      route.jobIds = nextJobsByRouteId.get(route.id) || [];
+    });
+    syncPreviewAssignments();
+    return createPreviewResponse();
+  }
+  return apiFetch(`/api/route-plans/${routePlanId}/stops/batch-move`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }).then(async (response) => normalizePlannerView(await response.json()));
+};
+
 export const publishRoutePlan = async (routePlanId: string) => {
   if (isPreview()) {
+    const readiness = buildPreviewPublishReadiness();
+    if (!readiness.ready) {
+      throw new Error('Route plan is not ready to publish.');
+    }
     previewState.routes.forEach((route) => {
       route.status = 'assigned';
       route.workflowStatus = 'ready_for_dispatch';
@@ -653,11 +1184,87 @@ export const publishRoutePlan = async (routePlanId: string) => {
   });
 };
 
+export const getRoutePlanPublishReadiness = async (
+  routePlanId: string,
+): Promise<PlannerPublishReadiness> => {
+  if (isPreview()) {
+    return buildPreviewPublishReadiness();
+  }
+  const response = await apiFetch(`/api/route-plans/${routePlanId}/publish-readiness`);
+  return normalizePublishReadiness(await response.json());
+};
+
+export const acceptRoutePlanPublishRisk = async (
+  routePlanId: string,
+  payload: {
+    blockerCode: string;
+    reason: string;
+    jobId?: string;
+    groupId?: string;
+    warningIndex?: number;
+  },
+): Promise<PlannerPublishReadiness> => {
+  if (isPreview()) {
+    const decision: PlannerPublishDecision = {
+      id: `decision-preview-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      decision: 'accepted_risk',
+      blockerCode: payload.blockerCode,
+      reason: payload.reason,
+      actorId: 'preview-user',
+      jobId: payload.jobId || null,
+      groupId: payload.groupId || null,
+      warningIndex: payload.warningIndex ?? null,
+      createdAt: new Date().toISOString(),
+    };
+    previewPublishDecisions.set(routePlanId, [
+      ...getPreviewPublishDecisions(routePlanId).filter(
+        (item) =>
+          !(
+            item.blockerCode === decision.blockerCode &&
+            (decision.jobId ? item.jobId === decision.jobId : true) &&
+            (decision.groupId ? item.groupId === decision.groupId : true) &&
+            (decision.warningIndex !== null ? item.warningIndex === decision.warningIndex : true)
+          ),
+      ),
+      decision,
+    ]);
+    return buildPreviewPublishReadiness();
+  }
+  const response = await apiFetch(
+    `/api/route-plans/${routePlanId}/publish-decisions/accept-risk`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+  return normalizePublishReadiness(await response.json());
+};
+
 export const usePlannerQuery = (serviceDate: string) =>
   useQuery({
     queryKey: queryKeys.planner(serviceDate),
     queryFn: () => getPlanner(serviceDate),
     enabled: Boolean(serviceDate),
+  });
+
+export const useRoutePlanPublishReadinessQuery = (
+  routePlanId?: string | null,
+) =>
+  useQuery({
+    queryKey: queryKeys.plannerPublishReadiness(routePlanId || 'none'),
+    queryFn: () => getRoutePlanPublishReadiness(routePlanId || ''),
+    enabled: Boolean(routePlanId),
+  });
+
+export const useRoutePlanDriverFamiliarityQuery = (
+  routePlanId?: string | null,
+  routeShapeKey = '',
+  previewContext?: PreviewDriverFamiliarityContext,
+) =>
+  useQuery({
+    queryKey: queryKeys.plannerDriverFamiliarity(routePlanId || 'none', routeShapeKey),
+    queryFn: () => getRoutePlanDriverFamiliarity(routePlanId || '', previewContext),
+    enabled: Boolean(routePlanId),
   });
 
 export const useGenerateDraftRoutePlanMutation = (serviceDate: string) => {

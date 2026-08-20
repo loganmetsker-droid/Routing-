@@ -10,6 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
+import { ConfigService } from '@nestjs/config';
 import { Job, JobStatus, JobPriority, BillingStatus } from './entities/job.entity';
 import { Customer } from '../customers/entities/customer.entity';
 import { CreateJobDto } from './dto/create-job.dto';
@@ -22,6 +23,17 @@ import {
   normalizeLifecycleJobStatus,
 } from './jobs-workflow';
 import { PlatformService } from '../platform/platform.service';
+import {
+  evaluateJobRoutingReadiness,
+  type JobRoutingReadiness,
+} from '@shared/contracts';
+import { buildDefaultJobRoutingRequirements } from './job-routing-defaults';
+import {
+  buildGeocodingRequest,
+  coordinateFromGeocodingResponse,
+} from '../../common/routing/geocoding-config.util';
+import { AuditService } from '../../common/audit/audit.service';
+import { AccessCodeCryptoService } from '../../common/security/access-code-crypto.service';
 
 type Actor = {
   userId?: string;
@@ -36,9 +48,12 @@ type StructuredAddress = {
   zip?: string;
 } | null | undefined;
 
+type JobCoordinate = { lat: number; lng: number };
+
 @Injectable()
 export class JobsService {
   private readonly logger = new Logger(JobsService.name);
+  private readonly geocodeCache = new Map<string, JobCoordinate | null>();
 
   // Capacity constraints (configurable)
   private readonly MAX_WEIGHT_KG = 10000; // 10 tons
@@ -54,7 +69,117 @@ export class JobsService {
     private readonly jobQueue?: Queue,
     @Optional()
     private readonly platformService?: PlatformService,
+    @Optional()
+    private readonly configService?: ConfigService,
+    @Optional()
+    private readonly audit?: AuditService,
+    @Optional()
+    private readonly accessCodes?: AccessCodeCryptoService,
   ) {}
+
+  private normalizeCoordinate(value: unknown): JobCoordinate | undefined {
+    if (!value || typeof value !== 'object') return undefined;
+    const record = value as Record<string, unknown>;
+    const geoJsonCoordinates = Array.isArray(record.coordinates)
+      ? record.coordinates
+      : undefined;
+    const lat = Number(
+      record.lat ??
+        record.latitude ??
+        (geoJsonCoordinates && geoJsonCoordinates.length >= 2
+          ? geoJsonCoordinates[1]
+          : Number.NaN),
+    );
+    const lng = Number(
+      record.lng ??
+        record.longitude ??
+        (geoJsonCoordinates && geoJsonCoordinates.length >= 2
+          ? geoJsonCoordinates[0]
+          : Number.NaN),
+    );
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return undefined;
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return undefined;
+    return { lat, lng };
+  }
+
+  private geocodingEnv(): NodeJS.ProcessEnv {
+    const configured = (key: string) => this.configService?.get<string>(key);
+    return {
+      ...process.env,
+      NODE_ENV: configured('NODE_ENV') || process.env.NODE_ENV,
+      GEOCODING_PROVIDER:
+        configured('GEOCODING_PROVIDER') || process.env.GEOCODING_PROVIDER,
+      GEOCODING_API_KEY:
+        configured('GEOCODING_API_KEY') || process.env.GEOCODING_API_KEY,
+      GEOCODING_BASE_URL:
+        configured('GEOCODING_BASE_URL') || process.env.GEOCODING_BASE_URL,
+      GEOCODING_COUNTRY:
+        configured('GEOCODING_COUNTRY') || process.env.GEOCODING_COUNTRY,
+      GEOCODING_USER_AGENT:
+        configured('GEOCODING_USER_AGENT') || process.env.GEOCODING_USER_AGENT,
+    };
+  }
+
+  private async geocodeAddress(address?: string | null): Promise<JobCoordinate | undefined> {
+    const normalizedAddress = address?.trim();
+    if (!normalizedAddress) {
+      return undefined;
+    }
+
+    const request = buildGeocodingRequest(normalizedAddress, this.geocodingEnv());
+    if (!request) return undefined;
+
+    const cacheKey = `${request.provider}:${normalizedAddress.toLowerCase()}`;
+    if (this.geocodeCache.has(cacheKey)) {
+      return this.geocodeCache.get(cacheKey) || undefined;
+    }
+
+    const timeoutMs = Number(this.configService?.get('GEOCODING_TIMEOUT_MS', 5000));
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) ? timeoutMs : 5000);
+
+    try {
+      const response = await fetch(request.url, {
+        headers: request.headers,
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        this.logger.warn(
+          `${request.provider} geocoding failed with HTTP ${response.status}`,
+        );
+        this.geocodeCache.set(cacheKey, null);
+        return undefined;
+      }
+
+      const payload = await response.json();
+      const coordinate = this.normalizeCoordinate(
+        coordinateFromGeocodingResponse(request.provider, payload),
+      );
+      this.geocodeCache.set(cacheKey, coordinate || null);
+      if (!coordinate) {
+        this.logger.warn(`${request.provider} returned no usable geocode result`);
+      }
+      return coordinate;
+    } catch (error) {
+      this.geocodeCache.set(cacheKey, null);
+      this.logger.warn(
+        `${request.provider} geocoding failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return undefined;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  private async resolveLocation(
+    providedLocation: unknown,
+    address?: string | null,
+  ): Promise<JobCoordinate | undefined> {
+    return this.normalizeCoordinate(providedLocation) || this.geocodeAddress(address);
+  }
 
   private normalizeAddressString(
     structured?: StructuredAddress,
@@ -123,6 +248,24 @@ export class JobsService {
     ) {
       throw new BadRequestException(`Customer with ID ${customer.id} not found`);
     }
+  }
+
+  private withRoutingReadiness<T extends Job>(job: T): T {
+    job.routingReadiness = evaluateJobRoutingReadiness({
+      deliveryAddress: job.deliveryAddress,
+      timeWindowStart: job.timeWindowStart,
+      timeWindowEnd: job.timeWindowEnd,
+      estimatedDuration: job.estimatedDuration,
+      weight: job.weight,
+      volume: job.volume,
+      quantity: job.quantity,
+      routingRequirements: job.routingRequirements,
+    }) as JobRoutingReadiness;
+    return job;
+  }
+
+  private withRoutingReadinessList<T extends Job>(jobs: T[]): T[] {
+    return jobs.map((job) => this.withRoutingReadiness(job));
   }
 
   async create(createJobDto: CreateJobDto, actor?: Actor): Promise<Job> {
@@ -197,12 +340,29 @@ export class JobsService {
       createJobDto.deliveryAddress ||
       this.normalizeAddressString(createJobDto.deliveryAddressStructured) ||
       linkedCustomer?.defaultAddress;
+    const resolvedPickupAddress =
+      createJobDto.pickupAddress ||
+      this.normalizeAddressString(createJobDto.pickupAddressStructured) ||
+      '';
 
     if (!resolvedCustomerName || !resolvedDeliveryAddress) {
       throw new BadRequestException(
         'customerName and deliveryAddress are required',
       );
     }
+
+    const [pickupLocation, deliveryLocation] = await Promise.all([
+      this.resolveLocation(createJobDto.pickupLocation, resolvedPickupAddress),
+      this.resolveLocation(createJobDto.deliveryLocation, resolvedDeliveryAddress),
+    ]);
+    const defaultRoutingRequirements = buildDefaultJobRoutingRequirements({
+      routingRequirements: createJobDto.routingRequirements,
+      customerName: resolvedCustomerName,
+      priority: createJobDto.priority || JobPriority.NORMAL,
+    });
+    const routingRequirements = this.accessCodes?.protect(
+      defaultRoutingRequirements,
+    ) || defaultRoutingRequirements;
 
     // Create job with automatic "pending" status
     const job = this.jobRepository.create({
@@ -218,12 +378,12 @@ export class JobsService {
       customerPhone: resolvedCustomerPhone,
       customerEmail: resolvedCustomerEmail,
       deliveryAddress: resolvedDeliveryAddress,
-      pickupAddress:
-        createJobDto.pickupAddress ||
-        this.normalizeAddressString(createJobDto.pickupAddressStructured) ||
-        '',
+      pickupAddress: resolvedPickupAddress,
+      pickupLocation,
+      deliveryLocation,
       timeWindowStart,
       timeWindowEnd,
+      routingRequirements,
       status: this.normalizeLifecycleStatus(createJobDto.status || JobStatus.PENDING),
       priority: createJobDto.priority || JobPriority.NORMAL,
     });
@@ -242,7 +402,7 @@ export class JobsService {
 
     this.logger.log(`Created job ${savedJob.id} and added to queue`);
 
-    return savedJob;
+    return this.withRoutingReadiness(savedJob);
   }
 
   async importJobs(items: CreateJobDto[], actor?: Actor): Promise<Job[]> {
@@ -250,6 +410,16 @@ export class JobsService {
     for (const item of items) {
       created.push(await this.create(item, actor));
     }
+    this.audit?.record({
+      actorId: actor?.userId || 'system',
+      actorType: 'user',
+      entityType: 'job_import',
+      entityId: created[0]?.id || 'empty-import',
+      action: 'pilot.activation.jobs-imported',
+      source: 'user',
+      newValue: { requestedCount: items.length, createdCount: created.length },
+      metadata: { organizationId: actor?.organizationId },
+    });
     return created;
   }
 
@@ -294,7 +464,7 @@ export class JobsService {
 
     queryBuilder.orderBy('job.priority', 'DESC').addOrderBy('job.createdAt', 'ASC');
 
-    return queryBuilder.getMany();
+    return this.withRoutingReadinessList(await queryBuilder.getMany());
   }
 
   async findOne(id: string, actor?: Actor): Promise<Job> {
@@ -306,21 +476,21 @@ export class JobsService {
       throw new NotFoundException(`Job with ID ${id} not found`);
     }
 
-    return job;
+    return this.withRoutingReadiness(job);
   }
 
   async findByStatus(status: JobStatus, actor?: Actor): Promise<Job[]> {
-    return this.jobRepository.find({
+    return this.withRoutingReadinessList(await this.jobRepository.find({
       where: { status, ...this.organizationWhere(actor) },
       order: { priority: 'DESC', createdAt: 'ASC' },
-    });
+    }));
   }
 
   async findByPriority(priority: JobPriority, actor?: Actor): Promise<Job[]> {
-    return this.jobRepository.find({
+    return this.withRoutingReadinessList(await this.jobRepository.find({
       where: { priority, ...this.organizationWhere(actor) },
       order: { createdAt: 'ASC' },
-    });
+    }));
   }
 
   async findPending(actor?: Actor): Promise<Job[]> {
@@ -339,12 +509,37 @@ export class JobsService {
       });
     }
 
-    return queryBuilder.orderBy('job.time_window_start', 'ASC').getMany();
+    return this.withRoutingReadinessList(
+      await queryBuilder.orderBy('job.time_window_start', 'ASC').getMany(),
+    );
   }
 
   async update(id: string, updateJobDto: UpdateJobDto, actor?: Actor): Promise<Job> {
     const job = await this.findOne(id, actor);
     const safeUpdateDto: UpdateJobDto = { ...updateJobDto };
+    if (safeUpdateDto.routingRequirements) {
+      const incomingSite = safeUpdateDto.routingRequirements.site as
+        | (Record<string, unknown> & { accessCode?: string | null })
+        | null
+        | undefined;
+      const existingSite = job.routingRequirements?.site as
+        | Record<string, unknown>
+        | null
+        | undefined;
+      if (
+        !incomingSite?.accessCode?.trim() &&
+        existingSite?.accessCodeEncrypted
+      ) {
+        safeUpdateDto.routingRequirements.site = {
+          ...incomingSite,
+          accessCodeConfigured: true,
+          accessCodeEncrypted: existingSite.accessCodeEncrypted,
+        };
+      }
+      safeUpdateDto.routingRequirements = this.accessCodes?.protect(
+        safeUpdateDto.routingRequirements,
+      ) || safeUpdateDto.routingRequirements;
+    }
 
     if (safeUpdateDto.deliveryAddressStructured) {
       safeUpdateDto.deliveryAddressStructured = this.normalizeStructuredAddress(
@@ -374,6 +569,34 @@ export class JobsService {
       if (normalized) {
         safeUpdateDto.pickupAddress = normalized;
       }
+    }
+
+    if (safeUpdateDto.pickupLocation !== undefined) {
+      safeUpdateDto.pickupLocation = this.normalizeCoordinate(
+        safeUpdateDto.pickupLocation,
+      );
+    } else if (
+      safeUpdateDto.pickupAddress !== undefined ||
+      safeUpdateDto.pickupAddressStructured !== undefined
+    ) {
+      safeUpdateDto.pickupLocation = await this.resolveLocation(
+        undefined,
+        safeUpdateDto.pickupAddress ?? job.pickupAddress,
+      );
+    }
+
+    if (safeUpdateDto.deliveryLocation !== undefined) {
+      safeUpdateDto.deliveryLocation = this.normalizeCoordinate(
+        safeUpdateDto.deliveryLocation,
+      );
+    } else if (
+      safeUpdateDto.deliveryAddress !== undefined ||
+      safeUpdateDto.deliveryAddressStructured !== undefined
+    ) {
+      safeUpdateDto.deliveryLocation = await this.resolveLocation(
+        undefined,
+        safeUpdateDto.deliveryAddress ?? job.deliveryAddress,
+      );
     }
 
     if (safeUpdateDto.status) {
@@ -468,7 +691,7 @@ export class JobsService {
       });
     }
 
-    return savedJob;
+    return this.withRoutingReadiness(savedJob);
   }
 
   async remove(id: string, actor?: Actor): Promise<void> {

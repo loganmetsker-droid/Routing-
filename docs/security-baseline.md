@@ -24,6 +24,8 @@
   - `WORKOS_LOGOUT_REDIRECT_URI`
 - Database TLS behavior must be configured explicitly; self-signed certificates require `DB_SSL_ALLOW_SELF_SIGNED=true`.
 - Stripe webhook verification requires configured Stripe secrets and raw request body support.
+- Site access codes are encrypted with AES-256-GCM before persistence. Normal job endpoints return only a configured marker; only the assigned driver's authenticated manifest may reveal the plaintext.
+- Access-code key rotation requires a re-encryption migration before the prior key is removed.
 
 ## Logging and audit
 - Every request should carry an `X-Request-ID`; the backend generates one when absent.
@@ -33,6 +35,7 @@
   - API key creation and revocation
   - webhook endpoint creation, pause/resume, secret rotation, and replay actions
 - Dispatch mutations should emit audit-friendly dispatch events with aggregate type, aggregate id, actor id, event type, and payload.
+- Global backend exceptions and authenticated client errors are sent to a bounded monitoring webhook after email, phone, token, and secret redaction.
 
 ## Environment expectations
 - `CORS_ORIGINS` must be explicitly configured in staging and production.
@@ -49,6 +52,8 @@
 ## Known gaps
 - Audit coverage exists for route lifecycle and assignment, but broader cross-module audit coverage is still incomplete.
 - Rate limiting is globally enabled, but endpoint-specific policy tuning still needs production calibration.
-- Dependency audit is clean as of the 2026-05-06 launch-readiness pass, but the repo still needs an explicit production lockfile/pinning strategy before a public launch.
+- The vulnerable React Router dependency has been removed. Trovan's project-owned router is limited to a fixed route table and application-controlled navigation; reassess it before adding more dynamic routing features.
+- Production dependencies must have zero critical/high advisories at every release. The lockfile and scoped overrides are part of the release candidate.
 - Backup/restore automation exists as scripts and runbooks, but restore drills still need scheduled execution evidence.
-- Provider provisioning still depends on real environment credentials for WorkOS, Stripe, Postmark, Twilio, and R2.
+- Provider provisioning still depends on real environment credentials for WorkOS, Stripe, Postmark, and R2. SMS/Twilio is disabled for the pilot.
+- Provider provisioning also depends on Mapbox, a contracted OSRM-compatible matrix endpoint, and a named error-monitoring receiver.

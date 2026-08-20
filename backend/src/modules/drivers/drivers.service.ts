@@ -311,8 +311,8 @@ export class DriversService {
       ...updateDriverDto,
       ...(updateDriverDto.status ? { status: this.normalizeStatus(updateDriverDto.status) } : {}),
       ...(updateDriverDto.licenseType ? { licenseClass: updateDriverDto.licenseType } : {}),
-      ...(updateDriverDto.assignedVehicleId
-        ? { currentVehicleId: updateDriverDto.assignedVehicleId }
+      ...(updateDriverDto.assignedVehicleId !== undefined
+        ? { currentVehicleId: updateDriverDto.assignedVehicleId || null }
         : {}),
       ...(updateDriverDto.notes
         ? {

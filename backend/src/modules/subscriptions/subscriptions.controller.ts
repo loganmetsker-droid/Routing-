@@ -114,6 +114,7 @@ export class SubscriptionsController {
     return this.subscriptionsService.cancelSubscription(
       id,
       req.user?.organizationId,
+      req.user?.userId,
     );
   }
 

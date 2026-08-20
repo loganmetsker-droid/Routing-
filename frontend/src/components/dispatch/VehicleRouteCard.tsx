@@ -68,8 +68,8 @@ export default function VehicleRouteCard({
     : [];
 
   const formatDistance = (distanceKm?: number) => {
-    if (!distanceKm) return '0 km';
-    return `${distanceKm.toFixed(1)} km`;
+    if (!distanceKm) return '0 mi';
+    return `${(distanceKm * 0.621371).toFixed(1)} mi`;
   };
 
   const formatDuration = (minutes?: number) => {
@@ -91,7 +91,17 @@ export default function VehicleRouteCard({
   return (
     <Card
       elevation={0}
+      role="button"
+      tabIndex={0}
+      aria-pressed={selected}
+      aria-label={hasRoute ? `Select route ${route?.id}` : 'Select unassigned vehicle'}
       onClick={() => onSelect?.(route?.id || null)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onSelect?.(route?.id || null);
+        }
+      }}
       sx={{
         bgcolor: alpha(theme.palette.background.paper, theme.palette.mode === 'dark' ? 0.84 : 0.9),
         border: '1.5px solid',
@@ -328,15 +338,20 @@ export default function VehicleRouteCard({
                 sx={{
                   display: 'flex',
                   alignItems: 'center',
-                  cursor: 'pointer',
                   userSelect: 'none',
                 }}
-                onClick={() => setExpanded((value) => !value)}
               >
                 <Typography variant="body2" sx={{ flex: 1 }}>
                   Jobs ({routeJobs.length})
                 </Typography>
-                <IconButton size="small">
+                <IconButton
+                  size="small"
+                  aria-label={expanded ? 'Collapse route jobs' : 'Expand route jobs'}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setExpanded((value) => !value);
+                  }}
+                >
                   {expanded ? <ExpandLess /> : <ExpandMore />}
                 </IconButton>
               </Box>

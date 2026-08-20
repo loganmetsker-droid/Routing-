@@ -1,4 +1,7 @@
-import { unwrapApiData } from '@shared/contracts';
+import {
+  assistedPilotPlanCatalog,
+  unwrapApiData,
+} from '@shared/contracts';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from './api.session';
 import { isPreview } from './api.preview';
@@ -47,7 +50,13 @@ const normalizePlan = (value: unknown): BillingPlanRecord => {
   return {
     plan: typeof record.plan === 'string' ? record.plan : 'starter',
     label: typeof record.label === 'string' ? record.label : 'Plan',
-    monthlyPriceUsd: Number(record.monthlyPriceUsd || 0),
+    monthlyPriceUsd:
+      typeof record.monthlyPriceUsd === 'number'
+        ? record.monthlyPriceUsd
+        : null,
+    billingCadence: record.billingCadence === 'month' ? 'month' : null,
+    salesAssisted: Boolean(record.salesAssisted),
+    selfServeEnabled: Boolean(record.selfServeEnabled),
     dispatcherSeats: Number(record.dispatcherSeats || 0),
     features: Array.isArray(record.features)
       ? record.features.filter(
@@ -67,6 +76,8 @@ const normalizeBillingOverview = (value: unknown): BillingOverviewRecord => {
         ? record.generatedAt
         : new Date().toISOString(),
     stripeConfigured: Boolean(record.stripeConfigured),
+    billingMode:
+      record.billingMode === 'self_serve' ? 'self_serve' : 'assisted_pilot',
     organizationId:
       typeof record.organizationId === 'string' ? record.organizationId : null,
     billingContactEmail:
@@ -83,6 +94,7 @@ const normalizeBillingOverview = (value: unknown): BillingOverviewRecord => {
       ? record.plans.map(normalizePlan)
       : [],
     controls: {
+      selfServeEnabled: Boolean(controls.selfServeEnabled),
       invoiceAutomationReady: Boolean(controls.invoiceAutomationReady),
       failedPaymentHandlingReady: Boolean(controls.failedPaymentHandlingReady),
       webhookConfigured: Boolean(controls.webhookConfigured),
@@ -100,58 +112,23 @@ export const getBillingOverview = async (): Promise<BillingOverviewRecord> => {
     return {
       generatedAt: new Date().toISOString(),
       stripeConfigured: false,
+      billingMode: 'assisted_pilot',
       organizationId: 'preview-org',
       billingContactEmail: 'billing@trovan.local',
       activeSubscription: null,
       subscriptions: [],
-      plans: [
-        {
-          plan: 'starter',
-          label: 'Starter',
-          monthlyPriceUsd: 149,
-          dispatcherSeats: 3,
-          features: [
-            'Dispatcher workspace',
-            'Driver PWA',
-            'Public tracking',
-            'Core analytics',
-          ],
-          stripePriceConfigured: false,
-        },
-        {
-          plan: 'professional',
-          label: 'Professional',
-          monthlyPriceUsd: 399,
-          dispatcherSeats: 15,
-          features: [
-            'Advanced analytics',
-            'Exception workflows',
-            'Operational audit history',
-            'Priority support',
-          ],
-          stripePriceConfigured: false,
-        },
-        {
-          plan: 'enterprise',
-          label: 'Enterprise',
-          monthlyPriceUsd: 999,
-          dispatcherSeats: 999,
-          features: [
-            'SSO-ready posture',
-            'Branding controls',
-            'Security visibility',
-            'Enterprise support',
-          ],
-          stripePriceConfigured: false,
-        },
-      ],
+      plans: assistedPilotPlanCatalog.map((plan) => ({
+        ...plan,
+        stripePriceConfigured: false,
+      })),
       controls: {
+        selfServeEnabled: false,
         invoiceAutomationReady: false,
         failedPaymentHandlingReady: false,
         webhookConfigured: false,
       },
       recommendations: [
-        'Configure Stripe before enabling self-serve billing.',
+        'Assisted-pilot billing is active. Public checkout and automated entitlements are intentionally disabled.',
       ],
     };
   }

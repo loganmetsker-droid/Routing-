@@ -11,6 +11,7 @@ const MOCK_USER = {
 };
 
 const now = Date.now();
+const marketingLeads = [];
 
 const customers = [
   {
@@ -486,6 +487,33 @@ const server = createServer(async (req, res) => {
         ...MOCK_USER,
         email: body?.email || MOCK_USER.email,
       },
+    });
+    return;
+  }
+
+  if (pathname === '/api/marketing-leads' && req.method === 'POST') {
+    const body = await readBody(req);
+    const existing = marketingLeads.find((lead) => lead.workEmail === body.workEmail);
+    if (existing) {
+      json(res, 201, {
+        id: existing.id,
+        duplicate: true,
+        notificationStatus: existing.notificationStatus,
+      });
+      return;
+    }
+    const lead = {
+      id: randomUUID(),
+      ...body,
+      status: 'new',
+      notificationStatus: 'skipped',
+      createdAt: new Date().toISOString(),
+    };
+    marketingLeads.unshift(lead);
+    json(res, 201, {
+      id: lead.id,
+      duplicate: false,
+      notificationStatus: lead.notificationStatus,
     });
     return;
   }

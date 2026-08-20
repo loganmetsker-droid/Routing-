@@ -28,10 +28,17 @@ type NotifyCustomerInput = {
   reason?: string | null;
 };
 
-type NotificationConfig = {
+export type CustomerNotificationPolicy = {
   emailEnabled: boolean;
   smsEnabled: boolean;
   replyToEmail?: string | null;
+  scheduledEnabled: boolean;
+  onTheWayEnabled: boolean;
+  onTheWayMinutesBefore: number;
+  onTheWayRequirePreviousCompletion: boolean;
+  completionEnabled: boolean;
+  failureEnabled: boolean;
+  completionVarianceThresholdMeters: number;
 };
 
 type BrandingConfig = {
@@ -63,7 +70,11 @@ export class NotificationsService {
   }
 
   private getSmsProvider() {
-    return this.configService.get<string>('TWILIO_ACCOUNT_SID') &&
+    const smsEnabled =
+      this.configService.get<string>('SMS_NOTIFICATIONS_ENABLED', 'false') ===
+      'true';
+    return smsEnabled &&
+      this.configService.get<string>('TWILIO_ACCOUNT_SID') &&
       this.configService.get<string>('TWILIO_AUTH_TOKEN') &&
       this.configService.get<string>('TWILIO_FROM_NUMBER')
       ? 'twilio'
@@ -99,7 +110,7 @@ export class NotificationsService {
 
   private getNotificationConfig(
     organization?: Organization | null,
-  ): NotificationConfig {
+  ): CustomerNotificationPolicy {
     const settings =
       organization?.settings &&
       typeof organization.settings === 'object' &&
@@ -120,14 +131,63 @@ export class NotificationsService {
           ? notifications.emailEnabled
           : true,
       smsEnabled:
-        typeof notifications.smsEnabled === 'boolean'
-          ? notifications.smsEnabled
-          : true,
+        this.configService.get<string>(
+          'SMS_NOTIFICATIONS_ENABLED',
+          'false',
+        ) === 'true' && notifications.smsEnabled === true,
       replyToEmail:
         typeof notifications.replyToEmail === 'string'
           ? notifications.replyToEmail
           : null,
+      scheduledEnabled:
+        typeof notifications.scheduledEnabled === 'boolean'
+          ? notifications.scheduledEnabled
+          : true,
+      onTheWayEnabled:
+        typeof notifications.onTheWayEnabled === 'boolean'
+          ? notifications.onTheWayEnabled
+          : true,
+      onTheWayMinutesBefore:
+        typeof notifications.onTheWayMinutesBefore === 'number'
+          ? Math.min(180, Math.max(5, Math.round(notifications.onTheWayMinutesBefore)))
+          : 30,
+      onTheWayRequirePreviousCompletion:
+        typeof notifications.onTheWayRequirePreviousCompletion === 'boolean'
+          ? notifications.onTheWayRequirePreviousCompletion
+          : true,
+      completionEnabled:
+        typeof notifications.completionEnabled === 'boolean'
+          ? notifications.completionEnabled
+          : true,
+      failureEnabled:
+        typeof notifications.failureEnabled === 'boolean'
+          ? notifications.failureEnabled
+          : true,
+      completionVarianceThresholdMeters:
+        typeof notifications.completionVarianceThresholdMeters === 'number'
+          ? Math.min(2000, Math.max(25, Math.round(notifications.completionVarianceThresholdMeters)))
+          : 250,
     };
+  }
+
+  async getCustomerNotificationPolicy(
+    organizationId?: string | null,
+  ): Promise<CustomerNotificationPolicy> {
+    const organization = organizationId
+      ? await this.organizations.findOne({ where: { id: organizationId } })
+      : null;
+    return this.getNotificationConfig(organization);
+  }
+
+  private isEventEnabled(
+    eventType: NotificationEventType,
+    config: CustomerNotificationPolicy,
+  ) {
+    if (eventType === 'assignment') return config.scheduledEnabled;
+    if (eventType === 'en_route' || eventType === 'arriving_soon') return config.onTheWayEnabled;
+    if (eventType === 'delivered') return config.completionEnabled;
+    if (eventType === 'failed_delivery') return config.failureEnabled;
+    return true;
   }
 
   private buildMessage(
@@ -184,7 +244,7 @@ export class NotificationsService {
     subject: string,
     message: string,
     branding: BrandingConfig,
-    config: NotificationConfig,
+    config: CustomerNotificationPolicy,
   ) {
     const token = this.configService.get<string>('POSTMARK_SERVER_TOKEN');
     const fromAddress =
@@ -361,15 +421,29 @@ export class NotificationsService {
 
   async notifyCustomer(input: NotifyCustomerInput) {
     const [job, organization] = await Promise.all([
-      input.jobId ? this.jobs.findOne({ where: { id: input.jobId } }) : null,
+      input.jobId
+        ? this.jobs.findOne({
+            where: input.organizationId
+              ? { id: input.jobId, organizationId: input.organizationId }
+              : { id: input.jobId },
+          })
+        : null,
       input.organizationId
         ? this.organizations.findOne({ where: { id: input.organizationId } })
         : null,
     ]);
     const customer = input.customerId
-      ? await this.customers.findOne({ where: { id: input.customerId } })
+      ? await this.customers.findOne({
+          where: input.organizationId
+            ? { id: input.customerId, organizationId: input.organizationId }
+            : { id: input.customerId },
+        })
       : job?.customerId
-        ? await this.customers.findOne({ where: { id: job.customerId } })
+        ? await this.customers.findOne({
+            where: input.organizationId
+              ? { id: job.customerId, organizationId: input.organizationId }
+              : { id: job.customerId },
+          })
         : null;
 
     const branding = this.getOrganizationBranding(organization);
@@ -398,6 +472,19 @@ export class NotificationsService {
 
     const saved = await Promise.all(
       recipients.map(async ({ channel, enabled, recipient }) => {
+        const shouldDedupe = input.eventType !== 'eta_updated';
+        if (shouldDedupe && input.organizationId && input.routeId && input.jobId) {
+          const existing = await this.deliveries.findOne({
+            where: {
+              organizationId: input.organizationId,
+              routeId: input.routeId,
+              jobId: input.jobId,
+              eventType: input.eventType,
+              channel,
+            },
+          });
+          if (existing) return existing;
+        }
         const delivery = this.deliveries.create({
           organizationId: input.organizationId || null,
           routeId: input.routeId || null,
@@ -421,6 +508,12 @@ export class NotificationsService {
             supportPhone: branding.supportPhone,
           },
         });
+
+        if (!this.isEventEnabled(input.eventType, notificationConfig)) {
+          delivery.status = 'SKIPPED';
+          delivery.failureReason = `${input.eventType} notifications are disabled`;
+          return this.deliveries.save(delivery);
+        }
 
         if (!enabled) {
           delivery.status = 'SKIPPED';

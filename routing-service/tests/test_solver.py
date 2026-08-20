@@ -43,6 +43,9 @@ class SolverContractTest(unittest.TestCase):
         self.assertEqual(result.routes[0].vehicle_id, "vehicle-1")
         self.assertEqual(result.routes[0].ordered_stops[0].stop_id, "stop-1")
         self.assertEqual(result.unassigned_stop_ids, [])
+        self.assertEqual(result.provenance.solver, "google-or-tools")
+        self.assertEqual(result.provenance.matrix_mode, "estimated")
+        self.assertTrue(result.provenance.fallback_used)
 
     def test_balanced_objective_keeps_feasible_stops_assigned(self):
         request = OptimizeRequest(
@@ -87,6 +90,125 @@ class SolverContractTest(unittest.TestCase):
         self.assertEqual(
             [stop.stop_id for stop in result.routes[0].ordered_stops],
             ["stop-a", "stop-b"],
+        )
+
+    def test_solver_enforces_vehicle_eligibility_pallet_positions_and_first_stop(self):
+        request = OptimizeRequest(
+            plan_date=datetime(2026, 4, 10, 8, 0, 0),
+            vehicles=[
+                {
+                    "id": "small-vehicle",
+                    "start_lat": 39.0997,
+                    "start_lng": -94.5786,
+                    "capacity_weight": 5000,
+                    "capacity_volume": 25,
+                    "capacity_pallet_positions": 2,
+                    "max_route_minutes": 480,
+                },
+                {
+                    "id": "large-vehicle",
+                    "start_lat": 39.0997,
+                    "start_lng": -94.5786,
+                    "capacity_weight": 5000,
+                    "capacity_volume": 25,
+                    "capacity_pallet_positions": 10,
+                    "max_route_minutes": 480,
+                },
+            ],
+            stops=[
+                {
+                    "id": "must-go-first",
+                    "lat": 39.14,
+                    "lng": -94.60,
+                    "pallet_positions": 4,
+                    "allowed_vehicle_ids": ["large-vehicle"],
+                    "sequence_constraint": "first",
+                },
+                {
+                    "id": "routine-stop",
+                    "lat": 39.11,
+                    "lng": -94.57,
+                    "pallet_positions": 1,
+                    "allowed_vehicle_ids": ["large-vehicle"],
+                },
+            ],
+        )
+
+        result = solve_optimize_request(request)
+        large_route = next(
+            route for route in result.routes if route.vehicle_id == "large-vehicle"
+        )
+
+        self.assertEqual(result.unassigned_stop_ids, [])
+        self.assertEqual(
+            [stop.stop_id for stop in large_route.ordered_stops],
+            ["must-go-first", "routine-stop"],
+        )
+
+    def test_solver_reports_no_eligible_vehicle(self):
+        request = OptimizeRequest(
+            plan_date=datetime(2026, 4, 10, 8, 0, 0),
+            vehicles=[
+                {
+                    "id": "vehicle-1",
+                    "start_lat": 39.0997,
+                    "start_lng": -94.5786,
+                    "capacity_volume": 10,
+                }
+            ],
+            stops=[
+                {
+                    "id": "restricted-stop",
+                    "lat": 39.1097,
+                    "lng": -94.5686,
+                    "allowed_vehicle_ids": [],
+                }
+            ],
+        )
+
+        result = solve_optimize_request(request)
+
+        self.assertEqual(result.unassigned_stop_ids, ["restricted-stop"])
+        self.assertEqual(
+            result.unassigned_reasons["restricted-stop"],
+            ["NO_ELIGIBLE_VEHICLE"],
+        )
+
+    def test_solver_keeps_a_required_last_stop_at_the_end(self):
+        request = OptimizeRequest(
+            plan_date=datetime(2026, 4, 10, 8, 0, 0),
+            vehicles=[
+                {
+                    "id": "vehicle-1",
+                    "start_lat": 39.0997,
+                    "start_lng": -94.5786,
+                    "capacity_volume": 20,
+                    "max_route_minutes": 480,
+                }
+            ],
+            stops=[
+                {
+                    "id": "must-go-last",
+                    "lat": 39.105,
+                    "lng": -94.575,
+                    "service_minutes": 10,
+                    "sequence_constraint": "last",
+                },
+                {
+                    "id": "routine-stop",
+                    "lat": 39.14,
+                    "lng": -94.60,
+                    "service_minutes": 10,
+                },
+            ],
+        )
+
+        result = solve_optimize_request(request)
+
+        self.assertEqual(result.unassigned_stop_ids, [])
+        self.assertEqual(
+            [stop.stop_id for stop in result.routes[0].ordered_stops],
+            ["routine-stop", "must-go-last"],
         )
 
 

@@ -1,0 +1,2 @@
+customerName,deliveryAddress,timeWindowStart,timeWindowEnd,serviceDuration,weight,volume,palletLength,palletWidth,palletHeight,requiredEquipment,requiredCertifications,accessCode,gateInstructions,temperature,hazmat,handling
+Sample Receiver,"123 Example St, Kansas City, MO 64106",2026-08-24T09:00:00-05:00,2026-08-24T11:00:00-05:00,20,450,2.4,48,40,52,liftgate,,,Call receiving on arrival,ambient,false,Keep upright

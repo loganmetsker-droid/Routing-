@@ -1,101 +1,78 @@
-# Launch Readiness
+# Assisted-Pilot Launch Readiness
 
-Date: 2026-05-06
-Scope: `/Users/logan/Desktop/Routing`
-Verdict: **NO-GO for public paid SaaS launch**
+Date: 2026-08-06
 
-## Summary
+Scope: publicly marketed, manually approved paid pilots
 
-This pass moved the repo from local/demo hardening toward a real SaaS staging posture: reproducible npm installs, hosted frontend and routing-service declarations, stricter tenant scoping, DTO validation on dispatch/route-run mutations, webhook SSRF/DNS blocking, staging smoke tooling, and a Playwright launch audit that inventories and exercises primary UI controls.
+Current verdict: **NO-GO until the local, hosted, operations, security, and legal evidence below is green**
 
-The local codebase is materially healthier, and the routing-service now passes Python 3.11 plus Docker optimizer proof locally. Public launch is still blocked because hosted staging has not been deployed and proven with real WorkOS, Redis, database, Stripe test mode, email/SMS sandbox, storage, authenticated Socket.IO, public API keys, and provider-backed staging smoke.
+Trovan is not being prepared for self-serve general availability. Launch is $399/month, Scale is $899/month, Enterprise is custom, all onboarding is reviewed, Stripe billing is operator-managed, cancellation is effective at period end, SMS and trials are disabled, and no uptime SLA is offered.
 
-## Changes Closed In This Pass
+## Implemented release controls
 
-- Added `package-lock.json` to source control readiness by removing the lockfile ignore and switching Render build commands to `npm ci`.
-- Expanded `render.yaml` to include `trovan-backend`, `trovan-routing-service`, `trovan-frontend`, `trovan-postgres`, and `trovan-redis`; frontend is static-hosted with production Vite env placeholders and SPA rewrite/security headers, while backend receives database, Redis, routing-service, and generated JWT values from the Render service graph.
-- Added `docs/staging-setup.md` and `npm run launch:env-status` so hosted staging setup has a single env checklist before provider-backed smoke.
-- Replaced the root Docker Compose OSRM placeholder with the project FastAPI routing-service on port `8000`, matching backend route optimization expectations.
-- Added a routing-service URL resolver so backend planning/dispatch code supports explicit `ROUTING_SERVICE_URL`, legacy provider URL, and Render internal host/port wiring.
-- Fixed routing-service startup under Docker by avoiding SQLAlchemy's reserved `metadata` declarative attribute name.
-- Raised OR-Tools disjunction penalties so feasible stops are not dropped in `balanced` mode simply because span cost is cheaper than assignment.
-- Scoped drivers, vehicles, and customers REST/GraphQL flows by actor organization, including vehicle assignment checks for drivers.
-- Scoped subscription reads/cancel/create paths by actor organization, added a migration to attach `organization_id` to subscriptions, and backfilled from default organization memberships when available.
-- Scoped public API tracking telemetry reads through the route organization instead of vehicle id alone.
-- Replaced remaining dispatch and route-run inline `@Body()` object shapes with DTOs for validation.
-- Hardened outbound webhook targets with allowlist support plus DNS/private-IP blocking before create/update/dispatch/replay.
-- Added `npm run smoke:staging` for hosted staging health, metrics-token, strict CORS, protected API rejection, API key lifecycle, webhook SSRF rejection, Socket.IO dispatch/tracking, provider-env, and routing-service smoke evidence.
-- Extended the launch Playwright audit for hosted staging with `PLAYWRIGHT_SKIP_WEBSERVER=true`, bearer-token seeding, and strict optimizer mode.
-- Added a Playwright launch audit that renders desktop/mobile primary routes, saves route/control inventory evidence, fills customer/driver/vehicle/job forms, accounts for visible controls, and proves the preview optimizer path returns `optimized`, `live`, and non-fallback route data.
-- Moved launch audit evidence into untracked `.tmp/launch-audit/*` and stopped using tracked `.artifacts` paths for this suite.
-- Added launch runbooks for backup/restore and migration recovery, and updated deploy/rollback/provider-outage runbooks with exact staging verification commands.
+- One shared plan catalog preserves database keys while exposing Launch, Scale, and Enterprise consistently.
+- Public subscription creation is rejected unless `SELF_SERVE_BILLING_ENABLED=true`; the pilot configuration fixes it to false.
+- Lead request types are shared between frontend and backend, the primary action posts to `VITE_REST_API_URL`, and email is an error fallback.
+- Driver preview sessions clear auth/data/route state and seed an explicit dispatcher or driver identity.
+- Authentication configuration uses a bounded request and a visible retry/error state.
+- Pilot readiness treats database, Redis/worker, routing, WorkOS, Postmark, and R2 as critical; degraded readiness returns HTTP 503.
+- Render migrations run before deployment, not during application startup.
+- CI runs build, lint, backend/frontend/routing tests, empty-database migrations, dependency audit, and Playwright.
+- Promotion uses an immutable SHA, protected staging/production environments, Cloudflare frontend deployment, Render service deployment, and captured rollback versions.
+- Sitemap, robots, canonical, Open Graph, and Twitter metadata ship from the same frontend build; the sitemap has an explicit XML content type.
+- SMS is globally disabled unless explicitly enabled after the pilot.
+- The vulnerable React Router dependency has been removed. A small project-owned browser router now covers Trovan's fixed route table, navigation, parameters, and search parameters without the affected package.
+- Hosted optimization requires a contracted OSRM-compatible road-network matrix, emits solver/provider provenance, and refuses to publish estimated-fallback routes.
+- Hosted address lookup requires Mapbox; public Nominatim and public OSRM demo endpoints are explicitly local-only.
+- Operator and driver status is derived from backend readiness instead of hard-coded operational copy.
+- Assisted onboarding is backend-derived and shows the next blocked action for depot, fleet, jobs, optimization, dispatch, and proof.
+- Trovan Academy provides role-filtered, versioned training with persisted progress, one knowledge check per track, and a mobile Driver Quick Start.
+- Launch readiness now joins operational evidence, Champion/driver completion, and customer signoff in one tenant-scoped backend response.
+- The versioned Customer Launch Docket ships as real PDF, ZIP, and CSV downloads; captioned Academy clips and written articles remain the canonical in-product guidance.
+- Access codes use AES-256-GCM field encryption at rest and are revealed only in the authenticated driver manifest.
+- Backend and authenticated frontend failures are delivered to a configurable redacted monitoring webhook with release metadata.
 
-## Verified Checks
+## Required evidence
 
-Run with:
+### Local
 
-```sh
-export PATH="/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/bin:$PATH"
-```
+- [x] Reproducible `npm ci` and workspace production build.
+- [x] Frontend lint with zero warnings.
+- [x] Backend: 266 tests; frontend: 93 tests; routing service: 19 tests.
+- [x] Driver workflow: three consecutive isolated runs, two tests per run.
+- [x] Complete installed-Chrome Playwright suite: 89 passed, one hosted-only persistence test skipped, zero failures (2026-08-06).
+- [x] Full installed dependency audit and production-only audit both report zero vulnerabilities on 2026-08-06.
+- [x] Database migrations applied successfully.
+- [x] A recoverable local safety snapshot and a clean isolated candidate were produced; `release:check-scope --directory <candidate>` passed. Rebuild and re-run this check after the final source change.
 
-Passed on 2026-05-06:
+### Hosted staging
 
-- `npm ci`
-  - Passed; 953 packages audited, 0 vulnerabilities.
-- `npm run build --workspaces`
-  - Passed; backend Nest build and frontend Vite production build completed.
-- `npm run test --workspace=backend`
-  - Passed; 35 test files, 123 tests.
-- `npm run test --workspace=frontend -- --run`
-  - Passed; 6 test files, 8 tests.
-- `npm audit --workspaces --audit-level=moderate`
-  - Passed; 0 vulnerabilities.
-- `npm audit --workspaces --omit=dev --audit-level=moderate`
-  - Passed; 0 vulnerabilities.
-- `npm run check:backend-deps`
-  - Passed; NestJS and TypeORM dependency tree is consistent.
-- `npm run test --workspace=backend -- public-api.controller.spec.ts subscriptions.service.spec.ts route-runs.service.spec.ts`
-  - Passed; confirms subscription org scoping, public API telemetry scoping, and route-run tracking expectations.
-- `STAGING_SMOKE_ALLOW_PARTIAL=true STAGING_REQUIRE_PROVIDER_CHECKS=false npm run smoke:staging`
-  - Passed in scaffold mode; confirms the staging smoke runner executes and writes `.tmp/launch-audit/staging-smoke/staging-smoke-results.json`.
-- `PLAYWRIGHT_BASE_URL="http://127.0.0.1:5201" PLAYWRIGHT_FRONTEND_PORT="5201" PLAYWRIGHT_MOCK_API_PORT="3201" LAUNCH_AUDIT_API_URL="http://127.0.0.1:3201" LAUNCH_AUDIT_DIR=".tmp/launch-audit/playwright" PLAYWRIGHT_OUTPUT_DIR=".tmp/launch-audit/test-results" npm run launch:audit`
-  - Passed; 4 Playwright launch audit tests in 2.6 minutes.
-  - Evidence: `.tmp/launch-audit/playwright` and `.tmp/launch-audit/test-results`.
-  - Known warnings: React Router v7 future-flag warnings and Vite/Rolldown deprecation warnings. No console errors or unexpected HTTP 4xx/5xx were accepted by the suite.
-- `.tmp/routing-service-py311/bin/python -m pytest routing-service/tests`
-  - Passed; 5 routing-service tests under Python 3.11.0.
-  - Added app-startup coverage so SQLAlchemy model import failures are caught before container deploy.
-- `/Applications/Docker.app/Contents/Resources/bin/docker build -t trovan-routing-service:launch routing-service`
-  - Passed; production routing-service image builds from `python:3.11-slim`.
-- `curl -fsS http://127.0.0.1:18080/health`
-  - Passed against the Dockerized routing-service.
-- `ROUTING_SERVICE_URL=http://127.0.0.1:18080 npm run smoke:optimizer`
-  - Passed against the Dockerized routing-service.
-  - Evidence: `objectiveUsed=balanced`, `orderedStops=["stop-a","stop-b"]`, `warnings=[]`, `totalDistanceM=5768`, `totalDurationS=2065`.
+- backend health/runtime/readiness, optimizer, queue, and protected metrics
+- production geocoder plus road-network time/distance matrix provenance and representative route benchmarks; public Nominatim/OSRM demo services and straight-line estimates are not accepted as production routing inputs
+- WorkOS login/logout/expiry/revocation
+- two-organization tenant denial and fresh-session persistence
+- lead persistence, deduplication, throttle, operator readback, Postmark delivery, and status update
+- proof upload/download and R2 persistence
+- API-key lifecycle, webhook signature/replay/SSRF, Socket.IO authorization, and public tracking
+- assisted Stripe invoice/subscription, failed payment, period-end cancellation, and refund procedure without self-serve
 
-Still not certified locally:
+### Operations and approval
 
-- Backend readiness endpoints `/health`, `/health/runtime`, and `/health/readiness`
-  - Not certified against hosted staging because staging is not deployed/configured in this environment.
-- `npm run launch:env-status`
-  - Runs locally and redacts values, but currently reports missing Render API access, hosted staging URLs/auth, WorkOS test login, Stripe test secrets, webhook receiver, Postmark/Twilio sandbox values, and R2 test bucket credentials.
+- isolated Postgres restore, R2 recovery, rollback/incident exercise, and alert acknowledgement
+- repository security review with every critical/high closed
+- measured retention/deletion/export configuration
+- approved data inventory, subprocessors, privacy, legal, support, and signed-order-form wording
+- named launch owner approval
 
-## Launch Blockers
+Production promotion must use the exact staging SHA. Verify live readiness, WorkOS, lead/Postmark, XML sitemap, bundle hash, and absence of preview flags; then close the synthetic lead and remove test customer data before paid onboarding.
 
-- Deploy hosted staging from the updated blueprint and populate real staging env: WorkOS, `FRONTEND_URL`, `CORS_ORIGINS`, `METRICS_TOKEN`, Stripe test mode, webhook receiver, email/SMS sandbox, and object storage test bucket. The blueprint now provisions Postgres, Redis, routing-service host/port, and generated JWT wiring.
-- Deploy the Python 3.11 routing-service to hosted staging and run the same live optimizer smoke against `STAGING_ROUTING_SERVICE_URL`.
-- Run hosted staging Playwright with real WorkOS test login and no preview env (`VITE_AUTH_BYPASS` and `VITE_MOCK_PREVIEW` absent).
-- Prove authenticated Socket.IO connect/revocation expectations and organization-scoped dispatch/tracking events against staging.
-- Prove public API key create/revoke plus `x-api-key` calls against staging, including cross-org denial.
-- Prove webhook create/deliver/replay/rotate behavior against staging, including signature verification, response body cap, allowlist/private-IP rejection, and no redirect/private-IP SSRF path.
-- Prove Stripe test checkout and webhook flow if billing is included in launch.
-- Run `npm run staging:smoke` with real `STAGING_FRONTEND_URL`, `STAGING_BACKEND_URL`, `STAGING_ROUTING_SERVICE_URL`, `STAGING_AUTH_TOKEN`, `METRICS_TOKEN`, `ROUTING_SERVICE_INTERNAL_TOKEN`, WorkOS, Stripe, webhook receiver, Postmark, Twilio, and R2 sandbox env. Public launch remains NO-GO until this command exits 0 and writes sanitized `.tmp/launch-audit/staging-smoke/staging-smoke-result.json`.
-- Verify `/api/metrics` rejects unauthenticated requests when `METRICS_TOKEN` is set.
-- Verify production/staging disables Swagger unless explicitly enabled, uses strict CORS, hides validation internals, and avoids logging secrets/request bodies.
-- Finish backup/restore, migration, rollback, provider-failure, and incident runbooks before charging real customers.
+## Remaining improvement backlog
 
-## Go / No-Go
+These items do not change the assisted-pilot commercial boundary, but they should be completed before self-serve GA:
 
-Go for continued private staging hardening and internal pilot demos.
-
-No-go for public paid SaaS launch until hosted staging passes the full provider-backed smoke with live routing-service, tenant isolation, metrics protection, WorkOS, Stripe, Redis, storage, and webhook security verified.
+- Reassess whether the project-owned fixed-route router remains sufficient before adding dynamic routing requirements; any replacement must pass a fresh dependency audit.
+- Keep local-only route exception decisions, route-version display, draft save, autosave status, and route-order locking hidden until backed by durable transactions.
+- Split the large public-site and routing-workspace bundles further to improve first-load and route-change performance.
+- Approve retention and reporting ownership for the first-party pilot funnel before using it for customer-facing claims or longer-term product analytics.
+- Move DMARC from monitoring to quarantine after at least two weeks of clean delivery reports.
+- Publish deletion, export, and backup-retention timing only after the hosted restore drill provides measured values.

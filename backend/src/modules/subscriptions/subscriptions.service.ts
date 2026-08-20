@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -15,6 +16,8 @@ import {
 } from './entities/subscription.entity';
 import { StripeWebhookEvent } from './entities/stripe-webhook-event.entity';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
+import { assistedPilotPlanCatalog } from '../../../../shared/contracts';
+import { AuditService } from '../../common/audit/audit.service';
 
 type BillingActor = {
   userId?: string;
@@ -26,51 +29,10 @@ type BillingActor = {
 export class SubscriptionsService {
   private readonly logger = new Logger(SubscriptionsService.name);
   private stripe: Stripe;
-  private readonly planCatalog = [
-    {
-      plan: SubscriptionPlan.STARTER,
-      label: 'Starter',
-      monthlyPriceUsd: 149,
-      dispatcherSeats: 3,
-      features: [
-        'Dispatcher web workspace',
-        'Driver PWA',
-        'Public tracking links',
-        'Core analytics',
-      ],
-    },
-    {
-      plan: SubscriptionPlan.PROFESSIONAL,
-      label: 'Professional',
-      monthlyPriceUsd: 399,
-      dispatcherSeats: 15,
-      features: [
-        'Advanced analytics',
-        'Exception workflows',
-        'Route history and audit exports',
-        'Priority support',
-      ],
-    },
-    {
-      plan: SubscriptionPlan.ENTERPRISE,
-      label: 'Enterprise',
-      monthlyPriceUsd: 999,
-      dispatcherSeats: 999,
-      features: [
-        'SSO-ready deployment',
-        'Tenant branding controls',
-        'Audit and security posture visibility',
-        'Enterprise rollout support',
-      ],
-    },
-  ] as const;
-
-  // Price IDs from Stripe Dashboard
-  private readonly priceMap = {
-    [SubscriptionPlan.STARTER]: process.env.STRIPE_PRICE_STARTER,
-    [SubscriptionPlan.PROFESSIONAL]: process.env.STRIPE_PRICE_PROFESSIONAL,
-    [SubscriptionPlan.ENTERPRISE]: process.env.STRIPE_PRICE_ENTERPRISE,
-  };
+  private readonly planCatalog = assistedPilotPlanCatalog.map((plan) => ({
+    ...plan,
+    plan: plan.plan as SubscriptionPlan,
+  }));
 
   constructor(
     @InjectRepository(Subscription)
@@ -78,6 +40,7 @@ export class SubscriptionsService {
     @InjectRepository(StripeWebhookEvent)
     private readonly stripeWebhookEvents: Repository<StripeWebhookEvent>,
     private readonly configService: ConfigService,
+    private readonly audit?: AuditService,
   ) {
     const stripeSecretKey = this.configService.get<string>('STRIPE_SECRET_KEY');
 
@@ -98,6 +61,39 @@ export class SubscriptionsService {
     return Boolean(this.stripe);
   }
 
+  private isSelfServeBillingEnabled() {
+    return (
+      this.configService.get<string>('SELF_SERVE_BILLING_ENABLED', 'false') ===
+      'true'
+    );
+  }
+
+  private getStripePriceId(plan: SubscriptionPlan) {
+    if (plan === SubscriptionPlan.STARTER) {
+      return (
+        this.configService.get<string>('STRIPE_PRICE_LAUNCH') ||
+        this.configService.get<string>('STRIPE_PRICE_STARTER')
+      );
+    }
+    if (plan === SubscriptionPlan.PROFESSIONAL) {
+      return (
+        this.configService.get<string>('STRIPE_PRICE_SCALE') ||
+        this.configService.get<string>('STRIPE_PRICE_PROFESSIONAL')
+      );
+    }
+    return undefined;
+  }
+
+  private getSerializedPlans() {
+    const selfServeEnabled = this.isSelfServeBillingEnabled();
+    return this.planCatalog.map((plan) => ({
+      ...plan,
+      selfServeEnabled:
+        selfServeEnabled && plan.plan !== SubscriptionPlan.ENTERPRISE,
+      stripePriceConfigured: Boolean(this.getStripePriceId(plan.plan)),
+    }));
+  }
+
   private requireOrganizationId(organizationId?: string): string {
     if (!organizationId) {
       throw new BadRequestException('Billing operations require an organization context');
@@ -108,10 +104,10 @@ export class SubscriptionsService {
   getPlanCatalog() {
     return {
       stripeConfigured: this.isStripeConfigured(),
-      plans: this.planCatalog.map((plan) => ({
-        ...plan,
-        stripePriceConfigured: Boolean(this.priceMap[plan.plan]),
-      })),
+      billingMode: this.isSelfServeBillingEnabled()
+        ? 'self_serve'
+        : 'assisted_pilot',
+      plans: this.getSerializedPlans(),
     };
   }
 
@@ -141,21 +137,29 @@ export class SubscriptionsService {
       billingContactEmail: email || null,
       activeSubscription,
       subscriptions,
-      plans: this.planCatalog.map((plan) => ({
-        ...plan,
-        stripePriceConfigured: Boolean(this.priceMap[plan.plan]),
-      })),
+      billingMode: this.isSelfServeBillingEnabled()
+        ? 'self_serve'
+        : 'assisted_pilot',
+      plans: this.getSerializedPlans(),
       controls: {
-        invoiceAutomationReady: this.isStripeConfigured(),
-        failedPaymentHandlingReady: this.isStripeConfigured(),
+        selfServeEnabled: this.isSelfServeBillingEnabled(),
+        invoiceAutomationReady:
+          this.isSelfServeBillingEnabled() && this.isStripeConfigured(),
+        failedPaymentHandlingReady:
+          this.isStripeConfigured() &&
+          Boolean(this.configService.get<string>('STRIPE_WEBHOOK_SECRET')),
         webhookConfigured: Boolean(
           this.configService.get<string>('STRIPE_WEBHOOK_SECRET'),
         ),
       },
-      recommendations: this.isStripeConfigured()
-        ? []
+      recommendations: this.isSelfServeBillingEnabled()
+        ? this.isStripeConfigured()
+          ? []
+          : [
+              'Configure STRIPE_SECRET_KEY and Launch/Scale price IDs before enabling paid self-serve billing.',
+            ]
         : [
-            'Configure STRIPE_SECRET_KEY and plan price IDs before enabling paid self-serve billing.',
+            'Assisted-pilot billing is active. Public checkout and automated entitlements are intentionally disabled.',
           ],
     };
   }
@@ -167,8 +171,24 @@ export class SubscriptionsService {
     dto: CreateSubscriptionDto,
     actor: BillingActor = {},
   ): Promise<{ subscription: Subscription; clientSecret: string }> {
+    if (!this.isSelfServeBillingEnabled()) {
+      throw new ForbiddenException(
+        'Self-service billing is disabled. Contact Trovan to start or change an assisted pilot.',
+      );
+    }
     if (!this.stripe) {
       throw new Error('Stripe is not configured. Please set STRIPE_SECRET_KEY in environment variables.');
+    }
+    if (dto.plan === SubscriptionPlan.ENTERPRISE) {
+      throw new BadRequestException(
+        'Enterprise billing requires a signed custom order form.',
+      );
+    }
+    const stripePriceId = this.getStripePriceId(dto.plan);
+    if (!stripePriceId) {
+      throw new BadRequestException(
+        `Stripe price is not configured for ${dto.plan}`,
+      );
     }
 
     const organizationId = this.requireOrganizationId(actor.organizationId);
@@ -210,7 +230,7 @@ export class SubscriptionsService {
     // Create Stripe subscription
     const stripeSubscription = await this.stripe.subscriptions.create({
       customer: customer.id,
-      items: [{ price: this.priceMap[dto.plan] }],
+      items: [{ price: stripePriceId }],
       payment_behavior: 'default_incomplete',
       payment_settings: { save_default_payment_method: 'on_subscription' },
       expand: ['latest_invoice.payment_intent'],
@@ -277,6 +297,7 @@ export class SubscriptionsService {
   async cancelSubscription(
     id: string,
     organizationId?: string,
+    userId?: string,
   ): Promise<Subscription> {
     if (!this.stripe) {
       throw new Error('Stripe is not configured. Please set STRIPE_SECRET_KEY in environment variables.');
@@ -290,7 +311,22 @@ export class SubscriptionsService {
     });
 
     subscription.cancelAtPeriodEnd = true;
-    return this.subscriptionRepository.save(subscription);
+    const saved = await this.subscriptionRepository.save(subscription);
+    this.audit?.record({
+      actorId: userId || 'organization-operator',
+      actorType: 'user',
+      entityType: 'subscription',
+      entityId: saved.id,
+      action: 'pilot.funnel.cancellation-scheduled',
+      source: 'user',
+      newValue: {
+        cancelAtPeriodEnd: true,
+        plan: saved.plan,
+        currentPeriodEnd: saved.currentPeriodEnd,
+      },
+      metadata: { organizationId: saved.organizationId },
+    });
+    return saved;
   }
 
   /**

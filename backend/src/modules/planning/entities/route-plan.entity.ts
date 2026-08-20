@@ -2,6 +2,18 @@ import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateCol
 
 export type RoutePlanStatus = 'DRAFT' | 'READY' | 'PUBLISHED' | 'ARCHIVED';
 
+export type RoutePlanPublishDecision = {
+  id: string;
+  decision: 'accepted_risk' | 'resolved';
+  blockerCode: string;
+  reason: string;
+  actorId?: string | null;
+  jobId?: string | null;
+  groupId?: string | null;
+  warningIndex?: number | null;
+  createdAt: string;
+};
+
 @Entity('route_plans')
 export class RoutePlan {
   @PrimaryGeneratedColumn('uuid')
@@ -27,6 +39,9 @@ export class RoutePlan {
 
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   warnings: Array<string | Record<string, unknown>>;
+
+  @Column({ name: 'publish_decisions', type: 'jsonb', default: () => "'[]'::jsonb" })
+  publishDecisions: RoutePlanPublishDecision[];
 
   @Column({ name: 'created_by_user_id', type: 'uuid', nullable: true })
   createdByUserId?: string | null;

@@ -1,4 +1,5 @@
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd';
+import type { JobRoutingRequirements } from '@shared/contracts';
 import {
   forwardRef,
   useEffect,
@@ -12,6 +13,7 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   Divider,
   Drawer,
   InputAdornment,
@@ -29,8 +31,10 @@ import { StatusPill, type StatusPillTone } from '../../components/StatusPill';
 import { SurfacePanel } from '../../components/SurfacePanel';
 import type { DriverRecord, VehicleRecord } from '../../services/api.types';
 import type {
+  DriverFamiliarityResponse,
   PlannerRoutePlanGroup,
   PlannerRoutePlanStop,
+  RouteDriverFamiliarity,
 } from '../../services/plannerApi';
 
 export type LeftPanelTab = 'jobs' | 'routes' | 'vehicles';
@@ -60,6 +64,12 @@ export type PlannerJobRecord = {
   assignedRouteId?: string | null;
   priority?: string;
   status?: string;
+  estimatedDuration?: number;
+  weight?: number;
+  volume?: number;
+  timeWindowStart?: string;
+  timeWindowEnd?: string;
+  routingRequirements?: JobRoutingRequirements | null;
   deliveryLocation?: { lat?: number; lng?: number } | null;
   pickupLocation?: { lat?: number; lng?: number } | null;
 };
@@ -101,6 +111,9 @@ export type RoutingExceptionRecord = {
   status: RoutingExceptionStatus;
   reason?: string;
 };
+
+const formatFamiliarityBars = (bars: number) =>
+  `${'●'.repeat(bars)}${'○'.repeat(Math.max(0, 3 - bars))}`;
 
 const COMPACT_ROW_HEIGHT = 34;
 const COMPACT_ROW_VIRTUALIZATION_THRESHOLD = 24;
@@ -282,6 +295,14 @@ export function DensityToggle({
           px: 1.15,
           py: 0.65,
           textTransform: 'none',
+          fontWeight: 850,
+          '&.Mui-selected': {
+            bgcolor: 'primary.main',
+            color: 'primary.contrastText',
+            '&:hover': {
+              bgcolor: 'primary.dark',
+            },
+          },
         },
       }}
       aria-label="View density"
@@ -703,12 +724,14 @@ export function CompactStopRows({
   nextGroupId,
   recentMove,
   selectedStopId,
+  batchSelectedStopIdSet,
   selectedGroup,
   saving,
   isReadOnly = false,
   isDark,
   onSelectGroup,
   onSelectStop,
+  onToggleStopSelection,
   onMoveStop,
 }: {
   group: PlannerRouteGroupWithStops;
@@ -716,12 +739,14 @@ export function CompactStopRows({
   nextGroupId?: string | null;
   recentMove: RecentRouteMove | null;
   selectedStopId: string | null;
+  batchSelectedStopIdSet: Set<string>;
   selectedGroup: PlannerRouteGroupWithStops | null;
   saving: boolean;
   isReadOnly?: boolean;
   isDark: boolean;
   onSelectGroup: (groupId: string) => void;
   onSelectStop: (stopId: string) => void;
+  onToggleStopSelection: (stopId: string) => void;
   onMoveStop: (request: RouteStopMoveRequest) => void;
 }) {
   const isSelectedLane = group.id === selectedGroup?.id;
@@ -790,6 +815,7 @@ export function CompactStopRows({
           {(dragProvided, dragSnapshot) => {
             const isRecentlyMoved = recentMove?.stopId === stop.id;
             const isSelectedStop = selectedStopId === stop.id;
+            const isBatchSelected = batchSelectedStopIdSet.has(stop.id);
             const isMoveDisabled = saving || isReadOnly || Boolean(stop.isLocked);
             const moveStop = (targetGroupId: string, targetIndex: number) => {
               onSelectGroup(targetGroupId);
@@ -814,6 +840,7 @@ export function CompactStopRows({
                 data-testid="routing-compact-stop-row"
                 data-stop-id={stop.id}
                 data-stop-selected={isSelectedStop ? 'true' : 'false'}
+                data-stop-batch-selected={isBatchSelected ? 'true' : 'false'}
                 data-stop-locked={stop.isLocked ? 'true' : 'false'}
                 data-stop-order={index + 1}
                 sx={{
@@ -847,7 +874,7 @@ export function CompactStopRows({
                       : 'none',
                   transition: 'background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease, outline-color 180ms ease',
                   display: 'grid',
-                  gridTemplateColumns: '28px minmax(88px, 1.35fr) minmax(58px, 0.8fr) minmax(72px, 0.9fr) minmax(104px, auto)',
+                  gridTemplateColumns: '56px minmax(88px, 1.35fr) minmax(58px, 0.8fr) minmax(72px, 0.9fr) minmax(104px, auto)',
                   gap: 0.4,
                   alignItems: 'center',
                   px: 0.5,
@@ -856,6 +883,22 @@ export function CompactStopRows({
                 }}
               >
                 <Stack direction="row" spacing={0.2} alignItems="center" sx={{ minWidth: 0 }}>
+                  <Checkbox
+                    size="small"
+                    checked={isBatchSelected}
+                    disabled={isMoveDisabled}
+                    inputProps={{
+                      'aria-label': `Select ${stop.job?.customerName || stop.jobId} for batch move`,
+                    }}
+                    data-testid="routing-stop-batch-checkbox"
+                    onClick={(event) => event.stopPropagation()}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onChange={(event) => {
+                      event.stopPropagation();
+                      onToggleStopSelection(stop.id);
+                    }}
+                    sx={{ p: 0.1 }}
+                  />
                   <Button
                     size="small"
                     variant="text"
@@ -967,22 +1010,26 @@ function ComfortableStopCards({
   group,
   recentMove,
   selectedStopId,
+  batchSelectedStopIdSet,
   selectedGroup,
   saving,
   isReadOnly = false,
   isDark,
   onSelectGroup,
   onSelectStop,
+  onToggleStopSelection,
 }: {
   group: PlannerRouteGroupWithStops;
   recentMove: RecentRouteMove | null;
   selectedStopId: string | null;
+  batchSelectedStopIdSet: Set<string>;
   selectedGroup: PlannerRouteGroupWithStops | null;
   saving: boolean;
   isReadOnly?: boolean;
   isDark: boolean;
   onSelectGroup: (groupId: string) => void;
   onSelectStop: (stopId: string) => void;
+  onToggleStopSelection: (stopId: string) => void;
 }) {
   const isSelectedLane = group.id === selectedGroup?.id;
 
@@ -998,6 +1045,7 @@ function ComfortableStopCards({
           {(dragProvided, dragSnapshot) => {
             const isRecentlyMoved = recentMove?.stopId === stop.id;
             const isSelectedStop = selectedStopId === stop.id;
+            const isBatchSelected = batchSelectedStopIdSet.has(stop.id);
 
             return (
               <Box
@@ -1010,6 +1058,9 @@ function ComfortableStopCards({
                   onSelectStop(stop.id);
                 }}
                 data-testid="routing-stop-card"
+                data-stop-id={stop.id}
+                data-stop-batch-selected={isBatchSelected ? 'true' : 'false'}
+                data-stop-locked={stop.isLocked ? 'true' : 'false'}
                 sx={{
                   border: '1px solid',
                   borderColor: dragSnapshot.isDragging
@@ -1044,26 +1095,44 @@ function ComfortableStopCards({
                   borderRadius: 1,
                 }}
               >
-                <Stack spacing={0.3}>
-                  <Stack direction="row" justifyContent="space-between" gap={1}>
-                    <Typography variant="body2" noWrap sx={{ fontWeight: 750 }}>
-                      {stop.job?.customerName || stop.jobId}
-                    </Typography>
-                    {stop.isLocked ? (
-                      <Tooltip title="Stop is protected">
-                        <ProtectedStopGlyph />
-                      </Tooltip>
-                    ) : isRecentlyMoved ? (
-                      <StatusPill label="Moved" tone="accent" />
-                    ) : (
-                      <Typography variant="caption" color="text.secondary">
-                        {index + 1}
+                <Stack direction="row" spacing={0.7} alignItems="center">
+                  <Checkbox
+                    size="small"
+                    checked={isBatchSelected}
+                    disabled={saving || isReadOnly || stop.isLocked}
+                    inputProps={{
+                      'aria-label': `Select ${stop.job?.customerName || stop.jobId} for batch move`,
+                    }}
+                    data-testid="routing-stop-batch-checkbox"
+                    onClick={(event) => event.stopPropagation()}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onChange={(event) => {
+                      event.stopPropagation();
+                      onToggleStopSelection(stop.id);
+                    }}
+                    sx={{ p: 0.1 }}
+                  />
+                  <Stack spacing={0.3} sx={{ minWidth: 0, flex: 1 }}>
+                    <Stack direction="row" justifyContent="space-between" gap={1}>
+                      <Typography variant="body2" noWrap sx={{ fontWeight: 750 }}>
+                        {stop.job?.customerName || stop.jobId}
                       </Typography>
-                    )}
+                      {stop.isLocked ? (
+                        <Tooltip title="Stop is protected">
+                          <ProtectedStopGlyph />
+                        </Tooltip>
+                      ) : isRecentlyMoved ? (
+                        <StatusPill label="Moved" tone="accent" />
+                      ) : (
+                        <Typography variant="caption" color="text.secondary">
+                          {index + 1}
+                        </Typography>
+                      )}
+                    </Stack>
+                    <Typography variant="caption" color="text.secondary" noWrap>
+                      {stopLabel(stop)}
+                    </Typography>
                   </Stack>
-                  <Typography variant="caption" color="text.secondary" noWrap>
-                    {stopLabel(stop)}
-                  </Typography>
                 </Stack>
               </Box>
             );
@@ -1081,6 +1150,7 @@ export function RouteLaneEditorDrawer({
   visibleGroupedStops,
   selectedGroup,
   selectedStopId,
+  batchSelectedStopIds,
   setSelectedGroupId,
   setSelectedStopId,
   recentMove,
@@ -1090,6 +1160,10 @@ export function RouteLaneEditorDrawer({
   isReadOnly = false,
   onDragEnd,
   onMoveStop,
+  onToggleStopSelection,
+  onSetStopSelection,
+  onClearStopSelection,
+  onBatchMove,
   formatDistance,
 }: {
   isFullscreen?: boolean;
@@ -1098,6 +1172,7 @@ export function RouteLaneEditorDrawer({
   visibleGroupedStops: PlannerRouteGroupWithStops[];
   selectedGroup: PlannerRouteGroupWithStops | null;
   selectedStopId: string | null;
+  batchSelectedStopIds: string[];
   setSelectedGroupId: (groupId: string) => void;
   setSelectedStopId: (stopId: string) => void;
   recentMove: RecentRouteMove | null;
@@ -1107,11 +1182,31 @@ export function RouteLaneEditorDrawer({
   isReadOnly?: boolean;
   onDragEnd: (result: DropResult) => void;
   onMoveStop: (request: RouteStopMoveRequest) => void;
+  onToggleStopSelection: (stopId: string) => void;
+  onSetStopSelection: (stopIds: string[], selected: boolean) => void;
+  onClearStopSelection: () => void;
+  onBatchMove: (targetGroupId: string) => void;
   formatDistance: (distanceKm?: number | null) => string;
 }) {
   const isCollapsed = laneEditorMode === 'collapsed' && !isFullscreen;
   const laneCount = visibleGroupedStops.length;
   const stopCount = visibleGroupedStops.reduce((count, group) => count + group.stops.length, 0);
+  const batchSelectedStopIdSet = useMemo(
+    () => new Set(batchSelectedStopIds),
+    [batchSelectedStopIds],
+  );
+  const [batchTargetGroupId, setBatchTargetGroupId] = useState(
+    visibleGroupedStops[0]?.id || '',
+  );
+  const firstVisibleGroupId = visibleGroupedStops[0]?.id || '';
+  const isBatchTargetVisible = visibleGroupedStops.some(
+    (group) => group.id === batchTargetGroupId,
+  );
+
+  useEffect(() => {
+    if (batchTargetGroupId && isBatchTargetVisible) return;
+    setBatchTargetGroupId(firstVisibleGroupId);
+  }, [batchTargetGroupId, firstVisibleGroupId, isBatchTargetVisible]);
 
   return (
     <SurfacePanel
@@ -1122,7 +1217,8 @@ export function RouteLaneEditorDrawer({
       data-read-only={isReadOnly ? 'true' : 'false'}
       sx={{
         overflow: 'hidden',
-        height: isFullscreen ? '100%' : 'auto',
+        height: '100%',
+        width: isFullscreen ? '100%' : 'auto',
         display: 'flex',
         flexDirection: 'column',
       }}
@@ -1152,7 +1248,7 @@ export function RouteLaneEditorDrawer({
             size="small"
             exclusive
             value={isFullscreen ? 'fullscreen' : laneEditorMode}
-            onChange={(_, value) => value && setLaneEditorMode(value)}
+            onChange={(_, value) => setLaneEditorMode(value || (isFullscreen ? 'expanded' : laneEditorMode))}
             aria-label="Route lane drawer state"
             sx={{
               flex: '0 0 auto',
@@ -1188,6 +1284,67 @@ export function RouteLaneEditorDrawer({
           </ToggleButtonGroup>
         )}
       </Box>
+
+      {!isCollapsed && batchSelectedStopIds.length ? (
+        <Box
+          data-testid="routing-batch-move-toolbar"
+          sx={{
+            px: 1.5,
+            py: 0.9,
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+            bgcolor: alpha('#B97129', isDark ? 0.14 : 0.08),
+          }}
+        >
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            spacing={0.8}
+            alignItems={{ xs: 'stretch', sm: 'center' }}
+          >
+            <StatusPill
+              label={`${batchSelectedStopIds.length} selected`}
+              tone="accent"
+            />
+            <TextField
+              select
+              size="small"
+              label="Move selected to"
+              value={batchTargetGroupId}
+              onChange={(event) => setBatchTargetGroupId(event.target.value)}
+              data-testid="routing-batch-target-route"
+              sx={{ minWidth: { xs: '100%', sm: 210 } }}
+            >
+              {visibleGroupedStops.map((group) => (
+                <MenuItem key={group.id} value={group.id}>
+                  {group.label} · {group.stops.length} stops
+                </MenuItem>
+              ))}
+            </TextField>
+            <Button
+              size="small"
+              variant="contained"
+              disabled={saving || isReadOnly || !batchTargetGroupId}
+              onClick={() => onBatchMove(batchTargetGroupId)}
+              data-testid="routing-batch-move-submit"
+            >
+              Move {batchSelectedStopIds.length}{' '}
+              {batchSelectedStopIds.length === 1 ? 'stop' : 'stops'}
+            </Button>
+            <Button
+              size="small"
+              variant="text"
+              disabled={saving}
+              onClick={onClearStopSelection}
+              data-testid="routing-batch-move-clear"
+            >
+              Clear selection
+            </Button>
+            <Typography variant="caption" color="text.secondary">
+              Related pickup and delivery stops move together. Constraints are checked before saving.
+            </Typography>
+          </Stack>
+        </Box>
+      ) : null}
 
       {isCollapsed ? (
         <Box sx={{ p: 1.3 }}>
@@ -1242,6 +1399,12 @@ export function RouteLaneEditorDrawer({
                     const isRecentTarget = recentMove?.targetGroupId === group.id;
                     const isRecentSource = recentMove?.sourceGroupId === group.id;
                     const isSelectedLane = group.id === selectedGroup?.id;
+                    const movableStopIds = group.stops
+                      .filter((stop) => !stop.isLocked)
+                      .map((stop) => stop.id);
+                    const selectedMovableStopCount = movableStopIds.filter((stopId) =>
+                      batchSelectedStopIdSet.has(stopId),
+                    ).length;
 
                     return (
                       <Box
@@ -1314,6 +1477,31 @@ export function RouteLaneEditorDrawer({
                               </Typography>
                             </Box>
                             <Stack direction="row" spacing={0.65} alignItems="center">
+                              <Checkbox
+                                size="small"
+                                checked={
+                                  movableStopIds.length > 0 &&
+                                  selectedMovableStopCount === movableStopIds.length
+                                }
+                                indeterminate={
+                                  selectedMovableStopCount > 0 &&
+                                  selectedMovableStopCount < movableStopIds.length
+                                }
+                                disabled={saving || isReadOnly || !movableStopIds.length}
+                                inputProps={{
+                                  'aria-label': `Select all movable stops in ${group.label}`,
+                                }}
+                                data-testid="routing-lane-select-all"
+                                onClick={(event) => event.stopPropagation()}
+                                onChange={(event) => {
+                                  event.stopPropagation();
+                                  onSetStopSelection(
+                                    movableStopIds,
+                                    event.target.checked,
+                                  );
+                                }}
+                                sx={{ p: 0.1 }}
+                              />
                               {isRecentTarget ? <StatusPill label="Updated" tone="accent" /> : null}
                               <StatusPill
                                 label={`${group.stops.length} stops`}
@@ -1326,7 +1514,7 @@ export function RouteLaneEditorDrawer({
                             <Box
                               sx={{
                                 display: 'grid',
-                                gridTemplateColumns: '28px minmax(88px, 1.35fr) minmax(58px, 0.8fr) minmax(72px, 0.9fr) 24px',
+                                gridTemplateColumns: '56px minmax(88px, 1.35fr) minmax(58px, 0.8fr) minmax(72px, 0.9fr) 24px',
                                 gap: 0.4,
                                 px: 0.5,
                                 py: 0.45,
@@ -1354,12 +1542,14 @@ export function RouteLaneEditorDrawer({
                               nextGroupId={visibleGroupedStops[groupIndex + 1]?.id || null}
                               recentMove={recentMove}
                               selectedStopId={selectedStopId}
+                              batchSelectedStopIdSet={batchSelectedStopIdSet}
                               selectedGroup={selectedGroup}
                               saving={saving}
                               isReadOnly={isReadOnly}
                               isDark={isDark}
                               onSelectGroup={setSelectedGroupId}
                               onSelectStop={setSelectedStopId}
+                              onToggleStopSelection={onToggleStopSelection}
                               onMoveStop={onMoveStop}
                             />
                           ) : (
@@ -1367,12 +1557,14 @@ export function RouteLaneEditorDrawer({
                               group={group}
                               recentMove={recentMove}
                               selectedStopId={selectedStopId}
+                              batchSelectedStopIdSet={batchSelectedStopIdSet}
                               selectedGroup={selectedGroup}
                               saving={saving}
                               isReadOnly={isReadOnly}
                               isDark={isDark}
                               onSelectGroup={setSelectedGroupId}
                               onSelectStop={setSelectedStopId}
+                              onToggleStopSelection={onToggleStopSelection}
                             />
                           )}
                           {provided.placeholder}
@@ -1412,6 +1604,8 @@ export function ExceptionResolutionDrawer({
   open,
   exceptions,
   riskReasons,
+  canDecideExceptions,
+  showCapabilityNotice,
   saving,
   onClose,
   onResolve,
@@ -1424,6 +1618,8 @@ export function ExceptionResolutionDrawer({
   open: boolean;
   exceptions: RoutingExceptionRecord[];
   riskReasons: Record<string, string>;
+  canDecideExceptions: boolean;
+  showCapabilityNotice: boolean;
   saving: boolean;
   onClose: () => void;
   onResolve: (exceptionId: string) => void;
@@ -1475,6 +1671,18 @@ export function ExceptionResolutionDrawer({
             <StatusPill label={`${exceptions.filter((item) => item.status === 'resolved').length} resolved`} tone="success" />
             <StatusPill label={`${exceptions.filter((item) => item.status === 'accepted').length} accepted`} tone="info" />
           </Stack>
+          {!canDecideExceptions ? (
+            <Alert
+              severity="info"
+              icon={false}
+              data-testid="routing-exception-capability-notice"
+              sx={{ mt: 1.2 }}
+            >
+              {showCapabilityNotice
+                ? 'Exception decisions are preview-only until the exception decision API is enabled.'
+                : 'Exception decisions are read-only for this workspace.'}
+            </Alert>
+          ) : null}
         </Box>
 
         <Box sx={{ p: 1.5, overflowY: 'auto', flex: 1 }}>
@@ -1549,7 +1757,7 @@ export function ExceptionResolutionDrawer({
                                     label="Risk acceptance reason"
                                     value={riskReason}
                                     onChange={(event) => onRiskReasonChange(exception.id, event.target.value)}
-                                    disabled={!isOpen || saving}
+                                    disabled={!canDecideExceptions || !isOpen || saving}
                                     multiline
                                     minRows={2}
                                   />
@@ -1557,29 +1765,33 @@ export function ExceptionResolutionDrawer({
                                     <Button size="small" variant="outlined" onClick={() => onJumpToAffected(exception)}>
                                       Jump to affected {exception.stopId ? 'stop' : 'route'}
                                     </Button>
-                                    {exception.type === 'Missing driver' ? (
+                                    {canDecideExceptions && exception.type === 'Missing driver' ? (
                                       <Button size="small" variant="contained" onClick={() => onAssignDriver(exception.routeId)} disabled={!isOpen || saving}>
                                         Assign driver
                                       </Button>
                                     ) : null}
-                                    {exception.type === 'Missing vehicle' ? (
+                                    {canDecideExceptions && exception.type === 'Missing vehicle' ? (
                                       <Button size="small" variant="contained" onClick={() => onAssignVehicle(exception.routeId)} disabled={!isOpen || saving}>
                                         Assign vehicle
                                       </Button>
                                     ) : null}
                                     {exception.type !== 'Missing driver' && exception.type !== 'Missing vehicle' ? (
-                                      <Button size="small" variant="contained" onClick={() => onResolve(exception.id)} disabled={!isOpen || saving}>
-                                        Resolve exception
+                                      canDecideExceptions ? (
+                                        <Button size="small" variant="contained" onClick={() => onResolve(exception.id)} disabled={!isOpen || saving}>
+                                          Resolve exception
+                                        </Button>
+                                      ) : null
+                                    ) : null}
+                                    {canDecideExceptions ? (
+                                      <Button
+                                        size="small"
+                                        variant="text"
+                                        onClick={() => onAcceptRisk(exception.id)}
+                                        disabled={!isOpen || saving || riskReason.trim().length < 4}
+                                      >
+                                        Accept risk
                                       </Button>
                                     ) : null}
-                                    <Button
-                                      size="small"
-                                      variant="text"
-                                      onClick={() => onAcceptRisk(exception.id)}
-                                      disabled={!isOpen || saving || riskReason.trim().length < 4}
-                                    >
-                                      Accept risk
-                                    </Button>
                                   </Stack>
                                 </Stack>
                               </SurfacePanel>
@@ -1638,6 +1850,10 @@ export function RouteInspector({
   saving,
   vehicles,
   drivers,
+  driverFamiliarity,
+  driverFamiliarityContext,
+  driverFamiliarityLoading,
+  driverFamiliarityError,
   onUpdateAssignments,
   onToggleStopLock,
   onSetRouteOrderProtection,
@@ -1670,6 +1886,10 @@ export function RouteInspector({
   saving: boolean;
   vehicles: VehicleRecord[];
   drivers: DriverRecord[];
+  driverFamiliarity: RouteDriverFamiliarity | null;
+  driverFamiliarityContext: DriverFamiliarityResponse | null;
+  driverFamiliarityLoading: boolean;
+  driverFamiliarityError: boolean;
   onUpdateAssignments: (
     groupId: string,
     payload: { driverId?: string; vehicleId?: string },
@@ -1678,6 +1898,18 @@ export function RouteInspector({
   onSetRouteOrderProtection: (locked: boolean) => void;
 }) {
   const selectedRouteStops = selectedGroup?.stops ?? [];
+  const familiarityByDriverId = useMemo(
+    () => new Map(
+      (driverFamiliarity?.candidates || []).map((candidate) => [candidate.driverId, candidate]),
+    ),
+    [driverFamiliarity?.candidates],
+  );
+  const recommendedFamiliarity = driverFamiliarity?.candidates.find(
+    (candidate) => candidate.driverId === driverFamiliarity.recommendedDriverId,
+  ) || null;
+  const recommendedDriver = drivers.find(
+    (driver) => driver.id === driverFamiliarity?.recommendedDriverId,
+  );
   const lateRiskCount = selectedRouteStops.filter(hasStopLateRisk).length;
   const selectedRouteIssueCards = [
     unassignedCount > 0
@@ -1864,6 +2096,73 @@ export function RouteInspector({
 
           {inspectorTab === 'driver' ? (
             <Stack spacing={1.1}>
+              <SurfacePanel
+                variant="subtle"
+                padding={1.2}
+                data-testid="routing-driver-familiarity"
+              >
+                <Stack spacing={0.8}>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 850 }}>
+                      Driver familiarity
+                    </Typography>
+                    {driverFamiliarityContext?.source === 'preview_sample' ? (
+                      <StatusPill label="Preview sample" tone="info" />
+                    ) : null}
+                  </Stack>
+                  {driverFamiliarityLoading ? (
+                    <Typography variant="body2" color="text.secondary">
+                      Reviewing completed route history…
+                    </Typography>
+                  ) : driverFamiliarityError ? (
+                    <Alert severity="warning" icon={false}>
+                      Familiarity history is temporarily unavailable. Assign a driver manually.
+                    </Alert>
+                  ) : recommendedFamiliarity && recommendedDriver ? (
+                    <Stack spacing={0.7}>
+                      <Typography variant="body2" sx={{ fontWeight: 850 }}>
+                        Best history match: {[recommendedDriver.firstName, recommendedDriver.lastName].filter(Boolean).join(' ') || recommendedDriver.id}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        <Box component="span" aria-label={`${recommendedFamiliarity.bars} of 3 familiarity bars`} sx={{ color: 'warning.main', fontWeight: 900, letterSpacing: 1 }}>
+                          {formatFamiliarityBars(recommendedFamiliarity.bars)}
+                        </Box>
+                        {' '}• {recommendedFamiliarity.coveragePercent}% of located stops familiar • {recommendedFamiliarity.historicalRouteCount} completed routes • {recommendedFamiliarity.nearbyHistoricalVisitCount} nearby visits
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Based only on serviced stops within {driverFamiliarityContext?.radiusKm || 2} km during the previous {driverFamiliarityContext?.lookbackDays || 365} days. Route constraints still apply.
+                      </Typography>
+                      {selectedGroup.driverId !== recommendedDriver.id ? (
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          data-testid="routing-apply-familiar-driver"
+                          disabled={saving}
+                          onClick={() => onUpdateAssignments(selectedGroup.id, {
+                            driverId: recommendedDriver.id,
+                            vehicleId: selectedGroup.vehicleId || undefined,
+                          })}
+                        >
+                          Assign recommended driver
+                        </Button>
+                      ) : (
+                        <StatusPill label="Recommended driver assigned" tone="success" />
+                      )}
+                    </Stack>
+                  ) : (
+                    <Stack spacing={0.5}>
+                      <Typography variant="body2" sx={{ fontWeight: 800 }}>
+                        Learning this route area
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        {driverFamiliarity?.status === 'insufficient_route_locations'
+                          ? 'Geocode route stops before Trovan can compare them with completed work.'
+                          : `No driver yet meets the evidence threshold of ${driverFamiliarityContext?.thresholds.minimumCompletedRoutes || 2} completed routes and ${driverFamiliarityContext?.thresholds.minimumServicedStops || 5} serviced, located stops.`}
+                      </Typography>
+                    </Stack>
+                  )}
+                </Stack>
+              </SurfacePanel>
               <TextField
                 select
                 size="small"
@@ -1899,6 +2198,9 @@ export function RouteInspector({
                 {drivers.map((driver) => (
                   <MenuItem key={driver.id} value={driver.id}>
                     {[driver.firstName, driver.lastName].filter(Boolean).join(' ') || driver.id}
+                    {familiarityByDriverId.get(driver.id)?.eligible
+                      ? `  ${formatFamiliarityBars(familiarityByDriverId.get(driver.id)?.bars || 0)}`
+                      : ''}
                   </MenuItem>
                 ))}
               </TextField>
@@ -1959,6 +2261,7 @@ export function RouteInspector({
                       key={stop.id}
                       role="button"
                       tabIndex={0}
+                      aria-pressed={isSelectedStop}
                       onClick={() => setSelectedStopId(stop.id)}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {

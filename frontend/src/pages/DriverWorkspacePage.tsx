@@ -1,6 +1,6 @@
-import { ArrowForward, Chat, LocalShipping, Place } from '@mui/icons-material';
+import { ArrowForward, Chat, HelpOutline, LocalShipping, Place } from '@mui/icons-material';
 import { Box, Button, LinearProgress, Stack, Typography } from '@mui/material';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink } from '../router';
 import { StatusPill, type StatusPillTone } from '../components/StatusPill';
 import { SurfacePanel } from '../components/SurfacePanel';
 import { TopoShellBackground } from '../components/TopoShellBackground';
@@ -99,6 +99,16 @@ export default function DriverWorkspacePage() {
             <Typography variant="body2" color="text.secondary">
               {routes.length} assigned {routes.length === 1 ? 'route' : 'routes'}
             </Typography>
+            <Button
+              component={RouterLink}
+              to="/driver/help"
+              variant="outlined"
+              startIcon={<HelpOutline />}
+              fullWidth
+              sx={{ borderColor: 'rgba(255,255,255,0.22)', color: '#FFF8ED' }}
+            >
+              Driver Quick Start & Help
+            </Button>
           </Stack>
         </SurfacePanel>
 

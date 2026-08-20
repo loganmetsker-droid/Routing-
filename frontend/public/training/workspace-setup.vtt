@@ -1,0 +1,113 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:07.042
+Welcome to our instructional video on setting up the operating workspace for a practice route.
+
+2
+00:00:07.042 --> 00:00:14.083
+Today, we'll create the minimum essentials to simulate a full day of operations, from planning to delivery confirmation.
+
+3
+00:00:14.083 --> 00:00:21.125
+We won't migrate every record, just enough to prove a complete workflow.
+
+4
+00:00:21.125 --> 00:00:27.650
+Let's start in the Settings menu.
+
+5
+00:00:27.650 --> 00:00:34.175
+Ensure your organization's name, service timezone, primary depot, support contact, and customer-facing information are accurate.
+
+6
+00:00:34.175 --> 00:00:40.700
+The timezone is crucial as it affects appointment windows, planned arrivals, tracking, and event history.
+
+7
+00:00:40.700 --> 00:00:45.895
+Invite users with the least privileged role they need.
+
+8
+00:00:45.895 --> 00:00:51.090
+Owners and Admins manage the organization.
+
+9
+00:00:51.090 --> 00:00:56.285
+Dispatchers plan, publish, assign, dispatch, and resolve route changes.
+
+10
+00:00:56.285 --> 00:01:01.480
+Drivers use the mobile execution flow for their assigned work.
+
+11
+00:01:01.480 --> 00:01:06.675
+Viewers can inspect dashboards, tracking, proof, and reports without altering operational records.
+
+12
+00:01:06.675 --> 00:01:13.375
+Create a pilot Driver and verify their details.
+
+13
+00:01:13.375 --> 00:01:20.075
+This includes name, phone, email, license information, employment status, and any required certifications.
+
+14
+00:01:20.075 --> 00:01:26.775
+Then, create an available vehicle with realistic weight, volume, pallet, equipment, territory, and driver eligibility rules.
+
+15
+00:01:26.775 --> 00:01:33.475
+Inaccurate capacity can hinder the practice route's realism.
+
+16
+00:01:33.475 --> 00:01:39.975
+Add or import only the customers needed for the pilot route.
+
+17
+00:01:39.975 --> 00:01:46.475
+Verify their service addresses, contacts, receiver hours, site restrictions, and special instructions.
+
+18
+00:01:46.475 --> 00:01:52.975
+Never include passwords, tokens, or private access instructions in spreadsheets or support requests.
+
+19
+00:01:52.975 --> 00:01:59.475
+Sensitive access codes should only be entered in the approved secure field.
+
+20
+00:01:59.475 --> 00:02:04.544
+Once done, check the Academy readiness card.
+
+21
+00:02:04.544 --> 00:02:09.613
+Ensure the depot, active Driver, and ready vehicle steps are complete.
+
+22
+00:02:09.613 --> 00:02:14.681
+If any step remains incomplete, open its action and correct the underlying record.
+
+23
+00:02:14.681 --> 00:02:19.750
+Then, complete the knowledge check before proceeding to Route Operations.
+
+24
+00:02:19.750 --> 00:02:25.880
+Before moving forward, pause and verify the saved records.
+
+25
+00:02:25.880 --> 00:02:32.010
+Open the depot, user list, Driver, vehicle, and pilot customers.
+
+26
+00:02:32.010 --> 00:02:38.140
+Check status, role, timezone, capacity, contact, and instruction fields one more time.
+
+27
+00:02:38.140 --> 00:02:44.270
+This preventive measure ensures smooth operations and avoids false routing blockers during the practice day.
+
+28
+00:02:44.270 --> 00:02:50.400
+Return to the Academy only when the readiness card reflects the real setup.

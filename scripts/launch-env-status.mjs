@@ -8,31 +8,71 @@ const groups = {
       'STAGING_BACKEND_URL',
       'STAGING_ROUTING_SERVICE_URL',
       'STAGING_AUTH_TOKEN',
+      'STAGING_SECOND_ORG_AUTH_TOKEN',
+      'STAGING_DRIVER_AUTH_TOKEN',
       'METRICS_TOKEN',
     ],
   },
   workosSmoke: {
-    allOf: ['WORKOS_TEST_EMAIL', 'WORKOS_TEST_PASSWORD'],
+    allOf: [
+      'WORKOS_TEST_EMAIL',
+      'WORKOS_TEST_PASSWORD',
+      'STAGING_EXPIRED_AUTH_TOKEN',
+    ],
+  },
+  workosHosted: {
+    allOf: [
+      'WORKOS_CLIENT_ID',
+      'WORKOS_API_KEY',
+      'WORKOS_REDIRECT_URI',
+      'WORKOS_LOGOUT_REDIRECT_URI',
+    ],
+  },
+  routingProvider: {
+    allOf: [
+      'ROUTING_MATRIX_PROVIDER',
+      'ROUTING_MATRIX_BASE_URL',
+      'ROUTING_MATRIX_PROVIDER_LABEL',
+      'ROUTING_MATRIX_TOKEN',
+      'TROVAN_SOLVER_VERSION',
+    ],
+  },
+  geocodingProvider: {
+    allOf: ['GEOCODING_PROVIDER', 'GEOCODING_API_KEY'],
+  },
+  errorMonitoring: {
+    allOf: [
+      'ERROR_MONITORING_WEBHOOK_URL',
+      'ERROR_MONITORING_WEBHOOK_TOKEN',
+      'ERROR_MONITORING_TEST_READBACK_URL',
+      'ERROR_MONITORING_TEST_ACK_URL',
+    ],
+  },
+  accessCodeProtection: {
+    allOf: ['ACCESS_CODE_ENCRYPTION_KEY', 'ACCESS_CODE_KEY_VERSION'],
   },
   stripeSmoke: {
     allOf: [
       'STRIPE_SECRET_KEY',
       'STRIPE_WEBHOOK_SECRET',
-      'STRIPE_PRICE_STARTER',
-      'STRIPE_PRICE_PROFESSIONAL',
-      'STRIPE_PRICE_ENTERPRISE',
+      'STRIPE_PRICE_LAUNCH',
+      'STRIPE_PRICE_SCALE',
+      'STRIPE_ALLOW_TEST_EXERCISE',
     ],
   },
   webhookSmoke: {
     allOf: ['STAGING_WEBHOOK_RECEIVER_URL'],
   },
-  emailSmsSmoke: {
+  emailSmoke: {
     allOf: [
       'POSTMARK_SERVER_TOKEN',
       'POSTMARK_FROM_EMAIL',
-      'TWILIO_ACCOUNT_SID',
-      'TWILIO_AUTH_TOKEN',
-      'TWILIO_FROM_NUMBER',
+      'LEAD_INTAKE_EMAIL',
+      'LEAD_INTAKE_FROM_EMAIL',
+      'POSTMARK_BOUNCE_WEBHOOK_URL',
+      'POSTMARK_WEBHOOK_USERNAME',
+      'POSTMARK_WEBHOOK_PASSWORD',
+      'POSTMARK_BOUNCE_HASH_KEY',
     ],
   },
   storageSmoke: {

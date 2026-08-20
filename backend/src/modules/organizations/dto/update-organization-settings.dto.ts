@@ -65,6 +65,38 @@ export class UpdateOrganizationSettingsDto {
   defaultNotificationChannel?: 'email' | 'sms' | 'both';
 
   @IsOptional()
+  @IsBoolean()
+  notificationScheduledEnabled?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  notificationOnTheWayEnabled?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(5)
+  @Max(180)
+  notificationOnTheWayMinutesBefore?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  notificationOnTheWayRequirePreviousCompletion?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  notificationCompletionEnabled?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  notificationFailureEnabled?: boolean;
+
+  @IsOptional()
+  @IsInt()
+  @Min(25)
+  @Max(2000)
+  completionVarianceThresholdMeters?: number;
+
+  @IsOptional()
   @IsInt()
   @Min(7)
   @Max(3650)

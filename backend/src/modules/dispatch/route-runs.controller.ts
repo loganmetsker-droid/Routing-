@@ -22,6 +22,7 @@ import { getSafeProofDownloadContentType } from '../../common/files/proof-file.u
 import { RouteRunsService } from './route-runs.service';
 import {
   CreateDispatchExceptionDto,
+  DispatchRouteRunDto,
   ReassignRouteRunDto,
   RouteRunMessageDto,
   StopNoteDto,
@@ -108,7 +109,13 @@ export class RouteRunsController {
 
   @Post('route-runs/:id/dispatch')
   @Roles('OWNER', 'ADMIN', 'DISPATCHER')
-  dispatch(@Req() req: AuthenticatedRequest, @Param('id') routeId: string) { return this.routeRuns.dispatchRoute(routeId, req.user); }
+  dispatch(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') routeId: string,
+    @Body() body: DispatchRouteRunDto,
+  ) {
+    return this.routeRuns.dispatchRoute(routeId, body, req.user);
+  }
 
   @Post('route-runs/:id/start')
   @Roles('OWNER', 'ADMIN', 'DISPATCHER')

@@ -145,10 +145,7 @@ export const buildDispatchMapRoutes = ({
     ) as OpsMapRoute['stops'];
     const vehicle = route.vehicleId ? vehicleById.get(route.vehicleId) : null;
     const driver = route.driverId ? driverById.get(route.driverId) : null;
-    const currentLocation =
-      stops && stops[0]
-        ? { lat: stops[0].lat, lng: stops[0].lng }
-        : undefined;
+    const currentLocation = extractVehicleLocation(vehicle) || undefined;
 
     return {
       id: route.id,

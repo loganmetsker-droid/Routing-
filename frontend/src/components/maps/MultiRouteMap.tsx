@@ -1,14 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
-import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { MapContainer, Marker, Polygon, Polyline, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { Box, Chip, Paper, Typography } from '@mui/material';
+import { Box, Button, Chip, Paper, Stack, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { trovanColors } from '../../theme/designTokens';
+import { isPointInsidePolygon, type MapPoint } from './mapAreaSelection';
 import {
+  MapStyleToggle,
   MapFilmOverlay,
   mapFloatingPanelSx,
-  trovanMapLayer,
+  trovanMapLayers,
+  usePersistedTrovanMapStyle,
 } from './mapPresentation';
 
 import icon from 'leaflet/dist/images/marker-icon.png';
@@ -77,12 +80,10 @@ const createClusterIcon = ({
   L.divIcon({
     className: 'custom-route-cluster-marker',
     html: `
-      <button
-        type="button"
+      <div
+        aria-hidden="true"
         data-testid="routing-route-cluster-marker"
         data-route-label="${escapeHtml(label)}"
-        aria-label="${escapeHtml(`${label}, ${count} stops`)}"
-        title="${escapeHtml(`${label}: ${count} stops`)}"
         style="
           min-width: 52px;
           height: 34px;
@@ -105,7 +106,7 @@ const createClusterIcon = ({
       >
         <span style="font-size: 12px; letter-spacing: 0;">${escapeHtml(label)}</span>
         <span style="font-size: 11px; letter-spacing: 0;">${count} stops</span>
-      </button>
+      </div>
     `,
     iconSize: [58, 36],
     iconAnchor: [29, 18],
@@ -221,7 +222,61 @@ interface MultiRouteMapProps {
   selectedRouteId?: string | null;
   onRouteSelect?: (routeId: string | null) => void;
   displayMode?: MapDisplayMode;
-  distanceUnit?: 'mi' | 'km';
+  selectableJobs?: Array<MapPoint & { id: string; label: string; priority?: string }>;
+  selectedJobIds?: string[];
+  onAreaSelectionChange?: (jobIds: string[]) => void;
+}
+
+const createUnassignedJobIcon = (label: string, selected: boolean) =>
+  L.divIcon({
+    className: 'custom-unassigned-job-marker',
+    html: `<div data-testid="routing-unassigned-map-marker" title="${escapeHtml(label)}" style="width:${selected ? 25 : 19}px;height:${selected ? 25 : 19}px;border-radius:50%;background:${selected ? '#B97129' : '#6B7280'};border:3px solid #FFF8F1;box-shadow:${selected ? '0 0 0 4px rgba(185,113,41,.25)' : '0 3px 8px rgba(36,23,18,.22)'}"></div>`,
+    iconSize: selected ? [25, 25] : [19, 19],
+    iconAnchor: selected ? [12.5, 12.5] : [9.5, 9.5],
+  });
+
+function AreaSelectionController({
+  enabled,
+  onChange,
+  onComplete,
+}: {
+  enabled: boolean;
+  onChange: (points: MapPoint[]) => void;
+  onComplete: (points: MapPoint[]) => void;
+}) {
+  const pointsRef = useRef<MapPoint[]>([]);
+  const drawingRef = useRef(false);
+  const map = useMapEvents({
+    mousedown: (event) => {
+      if (!enabled) return;
+      drawingRef.current = true;
+      pointsRef.current = [{ lat: event.latlng.lat, lng: event.latlng.lng }];
+      onChange(pointsRef.current);
+    },
+    mousemove: (event) => {
+      if (!enabled || !drawingRef.current) return;
+      const nextPoint = { lat: event.latlng.lat, lng: event.latlng.lng };
+      const previousPoint = pointsRef.current.at(-1);
+      if (previousPoint && Math.abs(previousPoint.lat - nextPoint.lat) + Math.abs(previousPoint.lng - nextPoint.lng) < 0.0004) return;
+      pointsRef.current = [...pointsRef.current, nextPoint];
+      onChange(pointsRef.current);
+    },
+    mouseup: () => {
+      if (!enabled || !drawingRef.current) return;
+      drawingRef.current = false;
+      onComplete(pointsRef.current);
+    },
+  });
+
+  useEffect(() => {
+    if (enabled) map.dragging.disable();
+    else map.dragging.enable();
+    return () => {
+      map.dragging.enable();
+    };
+  }, [enabled, map]);
+
+  return null;
 }
 
 function FitBounds({ routes }: { routes: RouteData[] }) {
@@ -245,8 +300,13 @@ function FitBounds({ routes }: { routes: RouteData[] }) {
     });
 
     if (allPoints.length > 0) {
-      map.fitBounds(L.latLngBounds(allPoints), { padding: [38, 38], maxZoom: 14 });
+      map.fitBounds(L.latLngBounds(allPoints), {
+        animate: false,
+        padding: [38, 38],
+        maxZoom: 14,
+      });
     }
+
   }, [routes, map]);
 
   return null;
@@ -275,10 +335,17 @@ export default function MultiRouteMap({
   selectedRouteId,
   onRouteSelect,
   displayMode = 'all',
-  distanceUnit = 'km',
+  selectableJobs = [],
+  selectedJobIds = [],
+  onAreaSelectionChange,
 }: MultiRouteMapProps) {
   const [internalSelectedRoute, setInternalSelectedRoute] = useState<string | null>(null);
   const [zoom, setZoom] = useState(12);
+  const [mapStyle, setMapStyle] = usePersistedTrovanMapStyle();
+  const [isDrawingArea, setIsDrawingArea] = useState(false);
+  const [selectionPolygon, setSelectionPolygon] = useState<MapPoint[]>([]);
+  const selectedJobIdSet = useMemo(() => new Set(selectedJobIds), [selectedJobIds]);
+  const activeMapLayer = trovanMapLayers[mapStyle];
   const selectedRoute = selectedRouteId ?? internalSelectedRoute;
   const defaultCenter: [number, number] = [37.7749, -122.4194];
   const totalStops = useMemo(
@@ -337,9 +404,7 @@ export default function MultiRouteMap({
   const formatDistance = (distanceKm?: number) => {
     if (!Number.isFinite(distanceKm)) return 'N/A';
     const safeDistance = Number(distanceKm);
-    return distanceUnit === 'mi'
-      ? `${(safeDistance * 0.621371).toFixed(1)} mi`
-      : `${safeDistance.toFixed(1)} km`;
+    return `${(safeDistance * 0.621371).toFixed(1)} mi`;
   };
   const routeLabel = (route: RouteData) =>
     route.vehicle?.licensePlate ||
@@ -362,7 +427,35 @@ export default function MultiRouteMap({
   };
 
   return (
-    <Box sx={{ position: 'relative', height }} className="trovan-map">
+    <Box
+      sx={{
+        position: 'relative',
+        height,
+        '& .leaflet-tile-pane': {
+          filter: activeMapLayer.tileFilter,
+        },
+        '& .leaflet-overlay-pane': {
+          filter: 'saturate(1.08) contrast(1.05)',
+        },
+        '& .leaflet-tile': {
+          imageRendering: 'auto',
+        },
+        '& .leaflet-control-zoom': {
+          border: '1px solid rgba(60,64,67,0.18)',
+          boxShadow: '0 1px 4px rgba(60,64,67,0.24)',
+        },
+        '& .leaflet-control-zoom a': {
+          color: '#3C4043',
+          backgroundColor: '#FFFFFF',
+          borderBottomColor: 'rgba(60,64,67,0.14)',
+          fontWeight: 700,
+        },
+        '& .leaflet-control-zoom a:hover': {
+          backgroundColor: '#F8F9FA',
+        },
+      }}
+      className="trovan-map"
+    >
       <Box
         data-testid="routing-map-render-level"
         data-render-level={renderLevel}
@@ -391,6 +484,10 @@ export default function MultiRouteMap({
             {routes.map((route) => (
               <Box
                 key={route.id}
+                role="button"
+                tabIndex={0}
+                aria-pressed={selectedRoute === route.id}
+                aria-label={`Select route ${route.id}`}
                 sx={{
                   p: 1.2,
                   borderRadius: 1.25,
@@ -410,6 +507,12 @@ export default function MultiRouteMap({
                   },
                 }}
                 onClick={() => selectRoute(route.id)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    selectRoute(route.id);
+                  }
+                }}
               >
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.45 }}>
                   <Box
@@ -448,6 +551,48 @@ export default function MultiRouteMap({
         </Paper>
       ) : null}
 
+      <MapStyleToggle value={mapStyle} onChange={setMapStyle} />
+
+      {selectableJobs.length ? (
+        <Paper
+          sx={{
+            ...mapFloatingPanelSx,
+            position: 'absolute',
+            left: 58,
+            top: 58,
+            zIndex: 1000,
+            p: 0.75,
+          }}
+        >
+          <Stack direction="row" spacing={0.75} alignItems="center">
+            <Button
+              size="small"
+              variant={isDrawingArea ? 'contained' : 'outlined'}
+              data-testid="routing-map-draw-area"
+              aria-pressed={isDrawingArea}
+              onClick={() => {
+                setSelectionPolygon([]);
+                setIsDrawingArea((current) => !current);
+              }}
+            >
+              {isDrawingArea ? 'Drag around jobs' : 'Draw area'}
+            </Button>
+            {selectedJobIds.length ? (
+              <Button
+                size="small"
+                data-testid="routing-map-clear-area"
+                onClick={() => {
+                  setSelectionPolygon([]);
+                  onAreaSelectionChange?.([]);
+                }}
+              >
+                Clear {selectedJobIds.length}
+              </Button>
+            ) : null}
+          </Stack>
+        </Paper>
+      ) : null}
+
       <MapContainer
         attributionControl={false}
         center={getMapCenter()}
@@ -455,8 +600,57 @@ export default function MultiRouteMap({
         style={{ height: '100%', width: '100%' }}
         className="z-0"
       >
-        <TileLayer attribution={trovanMapLayer.attribution} url={trovanMapLayer.url} />
+        <TileLayer
+          key={`${mapStyle}-base`}
+          attribution={activeMapLayer.attribution}
+          url={activeMapLayer.url}
+        />
+        {activeMapLayer.labelUrl ? (
+          <TileLayer
+            key={`${mapStyle}-labels`}
+            url={activeMapLayer.labelUrl}
+            opacity={activeMapLayer.labelOpacity ?? 0.82}
+            zIndex={280}
+          />
+        ) : null}
         <MapZoomObserver onZoomChange={setZoom} />
+        <AreaSelectionController
+          enabled={isDrawingArea}
+          onChange={setSelectionPolygon}
+          onComplete={(polygon) => {
+            setSelectionPolygon(polygon);
+            setIsDrawingArea(false);
+            if (polygon.length < 3) {
+              onAreaSelectionChange?.([]);
+              return;
+            }
+            onAreaSelectionChange?.(
+              selectableJobs
+                .filter((job) => isPointInsidePolygon(job, polygon))
+                .map((job) => job.id),
+            );
+          }}
+        />
+        {selectionPolygon.length >= 2 ? (
+          <Polygon
+            positions={selectionPolygon.map((point) => [point.lat, point.lng])}
+            pathOptions={{ color: '#B97129', fillColor: '#B97129', fillOpacity: 0.16, weight: 3 }}
+          />
+        ) : null}
+        {selectableJobs.map((job) => (
+          <Marker
+            key={`unassigned-${job.id}`}
+            title={`Unassigned job: ${job.label}`}
+            position={[job.lat, job.lng]}
+            icon={createUnassignedJobIcon(job.label, selectedJobIdSet.has(job.id))}
+            zIndexOffset={selectedJobIdSet.has(job.id) ? 800 : 300}
+          >
+            <Popup>
+              <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>{job.label}</Typography>
+              <Typography variant="caption">Unassigned{job.priority ? ` • ${job.priority} priority` : ''}</Typography>
+            </Popup>
+          </Marker>
+        ))}
 
         {routes.map((route) => {
           const hasSelectedRoute = Boolean(selectedRoute);
@@ -556,15 +750,10 @@ export default function MultiRouteMap({
               />
             ) : null}
 
-            {route.vehicle && !(shouldClusterRoute && !isRouteSelected) && !routeIsHiddenForExceptions && displayMode !== 'density' ? (
+            {route.vehicle?.currentLocation && !(shouldClusterRoute && !isRouteSelected) && !routeIsHiddenForExceptions && displayMode !== 'density' ? (
               <Marker
-                position={
-                  route.vehicle.currentLocation
-                    ? [route.vehicle.currentLocation.lat, route.vehicle.currentLocation.lng]
-                    : route.stops?.length
-                      ? [route.stops[0].lat, route.stops[0].lng]
-                      : defaultCenter
-                }
+                title={`${route.vehicle.make} ${route.vehicle.model} on ${routeLabel(route)}`}
+                position={[route.vehicle.currentLocation.lat, route.vehicle.currentLocation.lng]}
                 icon={createVehicleIcon(route.color, isRouteMuted, isRouteSelected)}
                 opacity={simplifyUnrelated ? 0.16 : isRouteMuted ? 0.46 : 1}
                 eventHandlers={{
@@ -597,6 +786,7 @@ export default function MultiRouteMap({
 
             {shouldClusterRoute && !routeIsHiddenForExceptions ? (
               <Marker
+                title={`${routeLabel(route)} • ${stops.length} stops`}
                 position={routeCentroid(route)}
                 icon={createClusterIcon({
                   color: route.color,
@@ -633,6 +823,7 @@ export default function MultiRouteMap({
               return (
               <Marker
                 key={`${route.id}-stop-${originalIndex}`}
+                title={`${routeLabel(route)} stop ${originalIndex + 1}`}
                 position={[stop.lat, stop.lng]}
                 icon={createStopIcon({
                   index: originalIndex,
@@ -672,7 +863,7 @@ export default function MultiRouteMap({
         <FitBounds routes={routes} />
       </MapContainer>
 
-      <MapFilmOverlay />
+      <MapFilmOverlay variant={mapStyle} />
 
       {routes.length === 0 ? (
         <Box

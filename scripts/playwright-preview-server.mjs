@@ -34,6 +34,29 @@ function start(label, command, args, options = {}) {
   return child;
 }
 
+function run(label, command, args, options = {}) {
+  return new Promise((resolveRun, rejectRun) => {
+    const child = spawn(command, args, {
+      cwd: options.cwd || rootDir,
+      env: {
+        ...process.env,
+        ...options.env,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    child.stdout.on('data', (chunk) => process.stdout.write(`[${label}] ${chunk}`));
+    child.stderr.on('data', (chunk) => process.stderr.write(`[${label}] ${chunk}`));
+    child.on('error', rejectRun);
+    child.on('exit', (code, signal) => {
+      if (code === 0) {
+        resolveRun();
+        return;
+      }
+      rejectRun(new Error(`${label} exited with code ${code ?? signal}`));
+    });
+  });
+}
+
 function stopAll() {
   for (const child of children) {
     child.kill('SIGTERM');
@@ -89,23 +112,45 @@ if (!(await isReachable(`${mockApiUrl}/health`))) {
 }
 
 if (!(await isReachable(frontendUrl))) {
+  const frontendEnv = {
+    VITE_MOCK_PREVIEW: 'true',
+    VITE_AUTH_BYPASS: 'true',
+    VITE_ENABLE_SOCKETS: 'false',
+    FRONTEND_PORT: frontendPort,
+    VITE_FRONTEND_PORT: frontendPort,
+    VITE_API_URL: mockApiUrl,
+    VITE_REST_API_URL: mockApiUrl,
+    VITE_GRAPHQL_URL: `${mockApiUrl}/graphql`,
+    VITE_WS_URL: `ws://${host}:${mockApiPort}`,
+  };
+
+  await run(
+    'vite-build',
+    process.execPath,
+    ['../node_modules/vite/bin/vite.js', 'build', '--mode', 'test'],
+    {
+      cwd: resolve(rootDir, 'frontend'),
+      env: frontendEnv,
+    },
+  );
+
   start(
     'vite',
     process.execPath,
-    ['../node_modules/vite/bin/vite.js', '--host', host, '--port', frontendPort, '--strictPort'],
+    [
+      '../node_modules/vite/bin/vite.js',
+      'preview',
+      '--mode',
+      'test',
+      '--host',
+      host,
+      '--port',
+      frontendPort,
+      '--strictPort',
+    ],
     {
       cwd: resolve(rootDir, 'frontend'),
-      env: {
-        VITE_MOCK_PREVIEW: 'true',
-        VITE_AUTH_BYPASS: 'true',
-        VITE_ENABLE_SOCKETS: 'false',
-        FRONTEND_PORT: frontendPort,
-        VITE_FRONTEND_PORT: frontendPort,
-        VITE_API_URL: mockApiUrl,
-        VITE_REST_API_URL: mockApiUrl,
-        VITE_GRAPHQL_URL: `${mockApiUrl}/graphql`,
-        VITE_WS_URL: `ws://${host}:${mockApiPort}`,
-      },
+      env: frontendEnv,
     },
   );
 

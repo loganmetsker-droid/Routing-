@@ -28,6 +28,8 @@ export const queryKeys = {
   driverManifest: ['driver-manifest'] as const,
   publicTracking: (token: string) => ['public-tracking', token] as const,
   trackingOverview: ['tracking-overview'] as const,
+  trackingHistory: (vehicleId: string, hours: number) =>
+    ['tracking-history', vehicleId, hours] as const,
   trackingReadiness: ['tracking-readiness'] as const,
   trackingStatistics: ['tracking-statistics'] as const,
   dispatchBoard: ['dispatch-board'] as const,
@@ -38,6 +40,14 @@ export const queryKeys = {
   routeRunStopProofs: (stopId: string) => ['route-run-stop-proofs', stopId] as const,
   exceptions: ['exceptions'] as const,
   planner: (serviceDate: string) => ['planner', serviceDate] as const,
+  plannerPublishReadiness: (routePlanId: string) =>
+    ['planner-publish-readiness', routePlanId] as const,
+  plannerDriverFamiliarity: (routePlanId: string, routeShapeKey = '') =>
+    ['planner-driver-familiarity', routePlanId, routeShapeKey] as const,
+  onboardingCatalog: ['onboarding-catalog'] as const,
+  onboardingProgress: ['onboarding-progress'] as const,
+  onboardingReadiness: ['onboarding-readiness'] as const,
+  onboardingTeamProgress: ['onboarding-team-progress'] as const,
   routeVersions: (routeId: string) => ['route-versions', routeId] as const,
   rerouteHistory: (routeId: string) => ['reroute-history', routeId] as const,
 };

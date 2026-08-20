@@ -187,4 +187,25 @@ export class WorkosService {
       returnTo: this.getLogoutReturnTo(),
     });
   }
+
+  async checkAvailability(timeoutMs = 3_000) {
+    if (!this.workos) return false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        this.workos.userManagement.listUsers({ limit: 1 }),
+        new Promise((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error('WorkOS readiness probe timed out')),
+            timeoutMs,
+          );
+        }),
+      ]);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
 }

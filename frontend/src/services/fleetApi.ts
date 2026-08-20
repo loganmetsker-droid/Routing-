@@ -2,7 +2,7 @@ import { unwrapApiData, unwrapListItems } from '@shared/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { DriverRecord, VehicleRecord } from './api.types';
 import { apiFetch } from './api.session';
-import { isPreview, previewState } from './api.preview';
+import { isPreview, persistPreviewState, previewState } from './api.preview';
 import { clonePreview, isRecord } from './api.types';
 import { queryKeys } from './queryKeys';
 
@@ -42,6 +42,7 @@ const buildPreviewVehicle = (vehicle: Partial<VehicleRecord>): VehicleRecord => 
           : null,
     capacityVolumeM3:
       typeof vehicle.capacityVolumeM3 === 'number' ? vehicle.capacityVolumeM3 : null,
+    routingProfile: vehicle.routingProfile || null,
     metadata: {
       ...metadata,
       territoryRestriction:
@@ -75,6 +76,7 @@ const buildPreviewDriver = (driver: Partial<DriverRecord>): DriverRecord => {
     licenseNumber: driver.licenseNumber || '',
     licenseType: driver.licenseType || 'CLASS_C',
     assignedVehicleId: driver.assignedVehicleId || '',
+    certifications: driver.certifications || [],
     notes: driver.notes || (typeof metadata.notes === 'string' ? metadata.notes : ''),
     status: normalizeDriverStatus(driver.status),
   });
@@ -148,6 +150,9 @@ const sanitizeDriver = (driver: unknown): DriverRecord => {
         : typeof value.currentVehicleId === 'string'
           ? value.currentVehicleId
           : null,
+    certifications: Array.isArray(value.certifications)
+      ? value.certifications.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      : [],
     notes:
       typeof value.notes === 'string'
         ? value.notes
@@ -164,6 +169,7 @@ export const createVehicle = async (
   if (isPreview()) {
     const nextVehicle = buildPreviewVehicle(vehicle);
     previewState.vehicles.unshift(nextVehicle as unknown as (typeof previewState.vehicles)[number]);
+    persistPreviewState();
     return { vehicle: nextVehicle };
   }
   const response = await apiFetch('/api/vehicles', {
@@ -186,6 +192,7 @@ export const updateVehicle = async (
         id,
       });
       previewState.vehicles[index] = nextVehicle as unknown as (typeof previewState.vehicles)[number];
+      persistPreviewState();
       return { vehicle: nextVehicle };
     }
   }
@@ -199,6 +206,7 @@ export const updateVehicle = async (
 export const deleteVehicle = async (id: string): Promise<void> => {
   if (isPreview()) {
     previewState.vehicles = previewState.vehicles.filter((vehicle) => vehicle.id !== id);
+    persistPreviewState();
     return;
   }
   await apiFetch(`/api/vehicles/${id}`, { method: 'DELETE' });
@@ -210,6 +218,7 @@ export const createDriver = async (
   if (isPreview()) {
     const nextDriver = buildPreviewDriver(driver);
     previewState.drivers.unshift(nextDriver as unknown as (typeof previewState.drivers)[number]);
+    persistPreviewState();
     return { driver: nextDriver };
   }
 
@@ -233,6 +242,7 @@ export const updateDriver = async (
         id,
       });
       previewState.drivers[index] = nextDriver as unknown as (typeof previewState.drivers)[number];
+      persistPreviewState();
       return { driver: nextDriver };
     }
   }
@@ -247,6 +257,7 @@ export const updateDriver = async (
 export const deleteDriver = async (id: string): Promise<void> => {
   if (isPreview()) {
     previewState.drivers = previewState.drivers.filter((driver) => driver.id !== id);
+    persistPreviewState();
     return;
   }
 

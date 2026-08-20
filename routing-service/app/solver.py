@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
-import math
+import os
+import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Tuple
 
 from ortools.constraint_solver import pywrapcp, routing_enums_pb2
+
+from app.matrix import (
+    LatLng,
+    MatrixResult,
+    build_estimated_matrices,
+    calculate_distance_km,
+    resolve_route_matrices,
+)
 
 from app.schemas import (
     OptimizeRequest,
@@ -18,59 +27,28 @@ from app.schemas import (
 )
 
 
-LatLng = Tuple[float, float]
-
-
 def calculate_distance(loc1: LatLng, loc2: LatLng) -> float:
-    lat1, lon1 = loc1
-    lat2, lon2 = loc2
-    radius_km = 6371.0
-    lat1_rad = math.radians(lat1)
-    lat2_rad = math.radians(lat2)
-    dlon = math.radians(lon2 - lon1)
-    dlat = math.radians(lat2 - lat1)
-    a = (
-        math.sin(dlat / 2) ** 2
-        + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
-    )
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return radius_km * c
+    return calculate_distance_km(loc1, loc2)
 
 
 def create_distance_matrix(locations: List[LatLng]) -> List[List[int]]:
-    matrix = [[0] * len(locations) for _ in locations]
-    for i, origin in enumerate(locations):
-        for j, destination in enumerate(locations):
-            if i == j:
-                continue
-            matrix[i][j] = int(calculate_distance(origin, destination) * 1000)
-    return matrix
-
-
-def estimate_segment_speed_kph(km: float) -> float:
-    if km < 2:
-        return 20.0
-    if km < 8:
-        return 30.0
-    if km < 20:
-        return 42.0
-    return 58.0
+    return build_estimated_matrices(locations).distance_m
 
 
 def build_time_matrix(locations: List[LatLng]) -> List[List[int]]:
-    matrix: List[List[int]] = []
-    for i, origin in enumerate(locations):
-        row: List[int] = []
-        for j, destination in enumerate(locations):
-            if i == j:
-                row.append(0)
-                continue
-            km = calculate_distance(origin, destination)
-            speed_kph = estimate_segment_speed_kph(km)
-            seconds = int((km / speed_kph) * 3600)
-            row.append(seconds)
-        matrix.append(row)
-    return matrix
+    return build_estimated_matrices(locations).duration_s
+
+
+def _provenance(matrix: MatrixResult, started_at: float, location_count: int):
+    return {
+        "solver_version": os.getenv("TROVAN_SOLVER_VERSION", "ortools-v2"),
+        "matrix_provider": matrix.provider,
+        "matrix_mode": matrix.mode,
+        "fallback_used": matrix.fallback_used,
+        "solve_duration_ms": max(0, int((time.perf_counter() - started_at) * 1000)),
+        "coordinate_coverage_percent": 100.0,
+        "location_count": location_count,
+    }
 
 
 def create_time_callback(manager, time_matrix, service_seconds):
@@ -101,7 +79,9 @@ def disjunction_penalty(priority: int, objective: OptimizationObjective) -> int:
 
 
 def solve_optimize_request(request: OptimizeRequest) -> OptimizeResponse:
+    started_at = time.perf_counter()
     objective = normalize_objective(request.objective)
+    empty_matrix = build_estimated_matrices([])
 
     if not request.vehicles:
         return OptimizeResponse(
@@ -109,6 +89,7 @@ def solve_optimize_request(request: OptimizeRequest) -> OptimizeResponse:
             objective_used=objective,
             unassigned_stop_ids=[stop.id for stop in request.stops],
             warnings=["No vehicles were provided."],
+            provenance=_provenance(empty_matrix, started_at, 0),
         )
 
     if not request.stops:
@@ -117,6 +98,7 @@ def solve_optimize_request(request: OptimizeRequest) -> OptimizeResponse:
             objective_used=objective,
             unassigned_stop_ids=[],
             warnings=[],
+            provenance=_provenance(empty_matrix, started_at, 0),
         )
 
     num_vehicles = len(request.vehicles)
@@ -146,17 +128,20 @@ def solve_optimize_request(request: OptimizeRequest) -> OptimizeResponse:
     )
     routing = pywrapcp.RoutingModel(manager)
 
-    distance_matrix = create_distance_matrix(locations)
-    time_matrix = build_time_matrix(locations)
+    matrix_result = resolve_route_matrices(locations)
+    distance_matrix = matrix_result.distance_m
+    time_matrix = matrix_result.duration_s
     service_seconds = [0] * len(locations)
     weight_values = [0] * len(locations)
     demand_values = [0] * len(locations)
+    pallet_position_values = [0] * len(locations)
 
     for stop_idx, stop in enumerate(request.stops):
         node_idx = num_vehicles + stop_idx
         service_seconds[node_idx] = max(0, int(stop.service_minutes * 60))
         weight_values[node_idx] = max(0, int(stop.weight * 100))
         demand_values[node_idx] = max(0, int(stop.volume * 100))
+        pallet_position_values[node_idx] = max(0, int(stop.pallet_positions))
 
     def distance_callback(from_index, to_index):
         from_node = manager.IndexToNode(from_index)
@@ -238,6 +223,34 @@ def solve_optimize_request(request: OptimizeRequest) -> OptimizeResponse:
         "Weight",
     )
 
+    def pallet_position_callback(from_index):
+        from_node = manager.IndexToNode(from_index)
+        return pallet_position_values[from_node]
+
+    pallet_position_callback_index = routing.RegisterUnaryTransitCallback(
+        pallet_position_callback
+    )
+    routing.AddDimensionWithVehicleCapacity(
+        pallet_position_callback_index,
+        0,
+        [
+            max(0, int(vehicle.capacity_pallet_positions))
+            if vehicle.capacity_pallet_positions > 0
+            else max(1, sum(pallet_position_values))
+            for vehicle in request.vehicles
+        ],
+        True,
+        "PalletPositions",
+    )
+
+    routing.AddConstantDimension(
+        1,
+        max(1, num_stops + 1),
+        True,
+        "StopSequence",
+    )
+    stop_sequence_dimension = routing.GetDimensionOrDie("StopSequence")
+
     planning_epoch = request.plan_date
     for stop_idx, stop in enumerate(request.stops):
         index = manager.NodeToIndex(num_vehicles + stop_idx)
@@ -258,11 +271,39 @@ def solve_optimize_request(request: OptimizeRequest) -> OptimizeResponse:
         penalty = disjunction_penalty(stop.priority, objective)
         routing.AddDisjunction([index], penalty)
 
+        has_explicit_vehicle_eligibility = stop.allowed_vehicle_ids is not None
+        allowed_vehicle_ids = list(stop.allowed_vehicle_ids or [])
         if stop.locked_vehicle_id:
-            for vehicle_idx, vehicle in enumerate(request.vehicles):
-                if vehicle.id == stop.locked_vehicle_id:
-                    routing.SetAllowedVehiclesForIndex([vehicle_idx], index)
-                    break
+            has_explicit_vehicle_eligibility = True
+            allowed_vehicle_ids = [stop.locked_vehicle_id]
+        if has_explicit_vehicle_eligibility and not allowed_vehicle_ids:
+            routing.solver().Add(routing.ActiveVar(index) == 0)
+        elif allowed_vehicle_ids:
+            allowed_vehicle_indexes = [
+                vehicle_idx
+                for vehicle_idx, vehicle in enumerate(request.vehicles)
+                if vehicle.id in allowed_vehicle_ids
+            ]
+            if allowed_vehicle_indexes:
+                routing.SetAllowedVehiclesForIndex(allowed_vehicle_indexes, index)
+        if stop.sequence_constraint == "first":
+            stop_sequence_dimension.CumulVar(index).SetValue(1)
+        elif stop.sequence_constraint == "last":
+            candidate_vehicle_indexes = [
+                vehicle_idx
+                for vehicle_idx, vehicle in enumerate(request.vehicles)
+                if not allowed_vehicle_ids or vehicle.id in allowed_vehicle_ids
+            ]
+            end_matches = [
+                routing.solver().IsEqualCstVar(
+                    routing.NextVar(index), routing.End(vehicle_idx)
+                )
+                for vehicle_idx in candidate_vehicle_indexes
+            ]
+            if end_matches:
+                routing.solver().Add(
+                    routing.solver().Sum(end_matches) == routing.ActiveVar(index)
+                )
 
     search_parameters = pywrapcp.DefaultRoutingSearchParameters()
     search_parameters.first_solution_strategy = (
@@ -280,6 +321,7 @@ def solve_optimize_request(request: OptimizeRequest) -> OptimizeResponse:
             objective_used=objective,
             unassigned_stop_ids=[stop.id for stop in request.stops],
             warnings=["No feasible solution found."],
+            provenance=_provenance(matrix_result, started_at, len(locations)),
         )
 
     assigned_stop_ids: set[str] = set()
@@ -326,17 +368,38 @@ def solve_optimize_request(request: OptimizeRequest) -> OptimizeResponse:
     unassigned_stop_ids = [
         stop.id for stop in request.stops if stop.id not in assigned_stop_ids
     ]
-    warnings = []
+    warnings = [matrix_result.warning] if matrix_result.warning else []
+    unassigned_reasons: Dict[str, List[str]] = {}
     if unassigned_stop_ids:
         warnings.append(
             f"{len(unassigned_stop_ids)} stop(s) could not be assigned within current constraints."
         )
+        stop_by_id = {stop.id: stop for stop in request.stops}
+        vehicle_ids = {vehicle.id for vehicle in request.vehicles}
+        for stop_id in unassigned_stop_ids:
+            stop = stop_by_id[stop_id]
+            reasons: List[str] = []
+            if stop.allowed_vehicle_ids is not None and not (
+                set(stop.allowed_vehicle_ids) & vehicle_ids
+            ):
+                reasons.append("NO_ELIGIBLE_VEHICLE")
+            if stop.pallet_positions > 0 and all(
+                vehicle.capacity_pallet_positions > 0
+                and stop.pallet_positions > vehicle.capacity_pallet_positions
+                for vehicle in request.vehicles
+            ):
+                reasons.append("PALLET_POSITIONS_EXCEEDED")
+            if stop.sequence_constraint in {"first", "last"}:
+                reasons.append("STOP_SEQUENCE_CONSTRAINT")
+            unassigned_reasons[stop_id] = reasons or ["NO_FEASIBLE_ROUTE"]
 
     return OptimizeResponse(
         routes=routes,
         objective_used=objective,
         unassigned_stop_ids=unassigned_stop_ids,
         warnings=warnings,
+        unassigned_reasons=unassigned_reasons,
+        provenance=_provenance(matrix_result, started_at, len(locations)),
     )
 
 

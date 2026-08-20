@@ -1,5 +1,5 @@
-const CACHE_NAME = 'trovan-driver-shell-v5';
-const APP_ASSETS = ['/driver', '/manifest.webmanifest', '/trovan-mark.svg'];
+const CACHE_NAME = 'trovan-driver-shell-v6';
+const APP_ASSETS = ['/driver', '/manifest.webmanifest', '/brand/assets/trovan-app-icon.svg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -33,7 +33,7 @@ self.addEventListener('fetch', (event) => {
     requestUrl.pathname === '/driver' ||
     requestUrl.pathname.startsWith('/driver/') ||
     requestUrl.pathname === '/manifest.webmanifest' ||
-    requestUrl.pathname === '/trovan-mark.svg';
+    requestUrl.pathname === '/brand/assets/trovan-app-icon.svg';
 
   if (!isDriverShell) {
     return;

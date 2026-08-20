@@ -46,9 +46,9 @@ export class Route {
   @Field({ nullable: true })
   organizationId?: string;
 
-  @Column({ name: 'vehicle_id', type: 'uuid' })
+  @Column({ name: 'vehicle_id', type: 'uuid', nullable: true })
   @Field()
-  vehicleId: string;
+  vehicleId?: string | null;
 
   @ManyToOne(() => Vehicle, { onDelete: 'SET NULL' })
   @JoinColumn({ name: 'vehicle_id' })
@@ -58,11 +58,12 @@ export class Route {
   @Field({ nullable: true })
   driverId?: string;
 
-  @Column({ type: 'jsonb', comment: 'Array of job UUIDs in optimized order' })
+  @Column({ name: 'job_ids', type: 'jsonb', comment: 'Array of job UUIDs in optimized order' })
   @Field(() => [String])
   jobIds: string[];
 
   @Column({
+    name: 'route_data',
     type: 'jsonb',
     nullable: true,
     comment: 'Full route optimization response from routing-service',
@@ -88,6 +89,7 @@ export class Route {
   workflowStatus: RouteWorkflowStatus;
 
   @Column({
+    name: 'total_distance_km',
     type: 'decimal',
     precision: 10,
     scale: 2,
@@ -98,6 +100,7 @@ export class Route {
   totalDistanceKm?: number;
 
   @Column({
+    name: 'total_duration_minutes',
     type: 'decimal',
     precision: 10,
     scale: 2,
@@ -132,7 +135,7 @@ export class Route {
   @Field({ nullable: true })
   eta?: Date;
 
-  @Column({ type: 'int', default: 0 })
+  @Column({ name: 'job_count', type: 'int', default: 0 })
   @Field(() => Int)
   jobCount: number;
 
@@ -143,6 +146,18 @@ export class Route {
   @Column({ name: 'actual_start', type: 'timestamp with time zone', nullable: true })
   @Field({ nullable: true })
   actualStart?: Date;
+
+  @Column({ name: 'dispatched_at', type: 'timestamp with time zone', nullable: true })
+  @Field({ nullable: true })
+  dispatchedAt?: Date | null;
+
+  @Column({ name: 'dispatched_by_user_id', type: 'uuid', nullable: true })
+  @Field({ nullable: true })
+  dispatchedByUserId?: string | null;
+
+  @Column({ name: 'dispatch_note', type: 'text', nullable: true })
+  @Field({ nullable: true })
+  dispatchNote?: string | null;
 
   @Column({ name: 'completed_at', type: 'timestamp with time zone', nullable: true })
   @Field({ nullable: true })

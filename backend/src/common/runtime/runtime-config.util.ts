@@ -1,3 +1,6 @@
+import { getMissingGeocodingConfig } from '../routing/geocoding-config.util';
+import { parseAccessCodeKey } from '../security/access-code-crypto.service';
+
 export function isStrictRuntime(
   env: Partial<Pick<NodeJS.ProcessEnv, 'STRICT_ENV_VALIDATION' | 'NODE_ENV'>> = process.env,
 ) {
@@ -53,6 +56,38 @@ export function getMissingRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
   ) {
     missing.push('ROUTING_SERVICE_INTERNAL_TOKEN');
   }
+  if (
+    ['production', 'staging'].includes(env.NODE_ENV || '') &&
+    !String(env.ERROR_MONITORING_WEBHOOK_URL || '').trim()
+  ) {
+    missing.push('ERROR_MONITORING_WEBHOOK_URL');
+  }
+  if (['production', 'staging'].includes(env.NODE_ENV || '')) {
+    const postmarkRequirements = [
+      'POSTMARK_SERVER_TOKEN',
+      'POSTMARK_FROM_EMAIL',
+      'LEAD_INTAKE_EMAIL',
+      'LEAD_INTAKE_FROM_EMAIL',
+      'POSTMARK_WEBHOOK_USERNAME',
+      'POSTMARK_WEBHOOK_PASSWORD',
+    ];
+    for (const name of postmarkRequirements) {
+      if (!String(env[name] || '').trim()) missing.push(name);
+    }
+    if (String(env.POSTMARK_BOUNCE_HASH_KEY || '').length < 32) {
+      missing.push('POSTMARK_BOUNCE_HASH_KEY (at least 32 characters)');
+    }
+  }
+  if (['production', 'staging'].includes(env.NODE_ENV || '')) {
+    try {
+      parseAccessCodeKey(String(env.ACCESS_CODE_ENCRYPTION_KEY || ''));
+    } catch {
+      missing.push(
+        'ACCESS_CODE_ENCRYPTION_KEY (32-byte base64 or 64-char hex)',
+      );
+    }
+  }
+  missing.push(...getMissingGeocodingConfig(env));
 
   return missing;
 }

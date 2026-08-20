@@ -1,0 +1,109 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:06.469
+Driver Quick Start covers the complete mobile stop flow.
+
+2
+00:00:06.469 --> 00:00:12.938
+Use only your assigned work identity and route.
+
+3
+00:00:12.938 --> 00:00:19.406
+Before leaving, open the Driver workspace, confirm the vehicle, review the stop order, and read addresses, appointment times, access notes, and special instructions.
+
+4
+00:00:19.406 --> 00:00:25.875
+Contact Dispatch immediately if the route or vehicle does not match your assignment.
+
+5
+00:00:25.875 --> 00:00:31.281
+Start the route only when the vehicle is loaded and ready to leave.
+
+6
+00:00:31.281 --> 00:00:36.688
+At each destination, review the stop before entering the property.
+
+7
+00:00:36.688 --> 00:00:42.094
+Record arrival when you are physically at the stop.
+
+8
+00:00:42.094 --> 00:00:47.500
+Arrival is an operational timestamp, so do not tap it early from another location simply to move the screen forward.
+
+9
+00:00:47.500 --> 00:00:55.358
+Complete the service and capture every required proof item before departing.
+
+10
+00:00:55.358 --> 00:01:03.217
+Depending on the stop, proof can include a photo, signature, recipient name, note, and time or location context.
+
+11
+00:01:03.217 --> 00:01:11.075
+Make sure the image is clear, the recipient information is correct, and the proof is shown as saved before leaving the customer.
+
+12
+00:01:11.075 --> 00:01:17.444
+If the stop cannot be completed, use the exception path.
+
+13
+00:01:17.444 --> 00:01:23.813
+Choose the reason that describes what happened, add a useful note, and preserve customer impact.
+
+14
+00:01:23.813 --> 00:01:30.181
+Do not silently skip the stop.
+
+15
+00:01:30.181 --> 00:01:36.550
+Message Dispatch whenever the exception changes route timing, stop order, customer expectations, safety, access, or the ability to complete later work.
+
+16
+00:01:36.550 --> 00:01:44.933
+After the stop is resolved, record departure and continue to the next stop.
+
+17
+00:01:44.933 --> 00:01:53.317
+Finish the route only after every stop is completed, failed with a recorded reason, rescheduled, or otherwise resolved.
+
+18
+00:01:53.317 --> 00:02:01.700
+A clean route history lets Dispatch, support, and the customer Champion understand what happened without rebuilding the day from text messages.
+
+19
+00:02:01.700 --> 00:02:07.135
+Protect delivery data throughout the route.
+
+20
+00:02:07.135 --> 00:02:12.570
+Do not share sessions, access codes, proof images, customer details, or tracking links outside approved operational channels.
+
+21
+00:02:12.570 --> 00:02:18.005
+When support is needed, provide the route or stop identifier, the visible request ID, what you expected, and what happened.
+
+22
+00:02:18.005 --> 00:02:23.440
+Never include a password or token.
+
+23
+00:02:23.440 --> 00:02:28.875
+Complete the quick check now.
+
+24
+00:02:28.875 --> 00:02:36.156
+Now perform the practice task on the same device the Driver expects to use.
+
+25
+00:02:36.156 --> 00:02:43.438
+Open the route, review a stop, record arrival, capture sanitized practice proof, send a message or exception, and record departure.
+
+26
+00:02:43.438 --> 00:02:50.719
+Confirm that Dispatch can see each state change.
+
+27
+00:02:50.719 --> 00:02:58.000
+If a permission, camera, network, or proof problem appears, resolve it before production and record the answer in the customer team notes.

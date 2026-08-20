@@ -26,6 +26,7 @@ import { Job, JobStatus, JobPriority } from './entities/job.entity';
 import { CreateJobDto } from './dto/create-job.dto';
 import { ImportJobsDto } from './dto/import-jobs.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
+import { AccessCodeCryptoService } from '../../common/security/access-code-crypto.service';
 
 type AuthenticatedRequest = {
   user?: {
@@ -39,7 +40,17 @@ type AuthenticatedRequest = {
 @Controller('jobs')
 @ApiBearerAuth()
 export class JobsController {
-  constructor(private readonly jobsService: JobsService) {}
+  constructor(
+    private readonly jobsService: JobsService,
+    private readonly accessCodes: AccessCodeCryptoService,
+  ) {}
+
+  private maskJob(job: Job): Job {
+    return {
+      ...job,
+      routingRequirements: this.accessCodes.mask(job.routingRequirements),
+    } as Job;
+  }
 
   @Post()
   @ApiOperation({ summary: 'Create a new job' })
@@ -50,7 +61,7 @@ export class JobsController {
     @Body() createJobDto: CreateJobDto,
   ): Promise<{ job: Job }> {
     const job = await this.jobsService.create(createJobDto, req.user);
-    return { job };
+    return { job: this.maskJob(job) };
   }
 
   @Post('import')
@@ -61,7 +72,7 @@ export class JobsController {
     @Body() body: ImportJobsDto,
   ): Promise<{ jobs: Job[]; count: number }> {
     const jobs = await this.jobsService.importJobs(body.jobs ?? [], req.user);
-    return { jobs, count: jobs.length };
+    return { jobs: jobs.map((job) => this.maskJob(job)), count: jobs.length };
   }
 
   @Get()
@@ -84,7 +95,8 @@ export class JobsController {
     @Query('status') status?: string,
     @Query('priority') priority?: string,
   ): Promise<{ jobs: Job[] }> {
-    return this.jobsService.findAll(status, priority, undefined, undefined, undefined, req.user).then((jobs) => ({ jobs }));
+    return this.jobsService.findAll(status, priority, undefined, undefined, undefined, req.user)
+      .then((jobs) => ({ jobs: jobs.map((job) => this.maskJob(job)) }));
   }
 
   @Get('statistics')
@@ -115,7 +127,8 @@ export class JobsController {
   @ApiOperation({ summary: 'Get all pending jobs' })
   @ApiResponse({ status: 200, description: 'List of pending jobs', type: [Job] })
   findPending(@Req() req: AuthenticatedRequest): Promise<{ jobs: Job[] }> {
-    return this.jobsService.findPending(req.user).then((jobs) => ({ jobs }));
+    return this.jobsService.findPending(req.user)
+      .then((jobs) => ({ jobs: jobs.map((job) => this.maskJob(job)) }));
   }
 
   @Get('queue')
@@ -172,7 +185,8 @@ export class JobsController {
     @Query('start') start: string,
     @Query('end') end: string,
   ): Promise<Job[]> {
-    return this.jobsService.findByTimeWindow(new Date(start), new Date(end), req.user);
+    return this.jobsService.findByTimeWindow(new Date(start), new Date(end), req.user)
+      .then((jobs) => jobs.map((job) => this.maskJob(job)));
   }
 
   @Get(':id')
@@ -185,7 +199,7 @@ export class JobsController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<{ job: Job }> {
     const job = await this.jobsService.findOne(id, req.user);
-    return { job };
+    return { job: this.maskJob(job) };
   }
 
   @Put(':id')
@@ -199,7 +213,8 @@ export class JobsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateJobDto: UpdateJobDto,
   ): Promise<{ job: Job }> {
-    return this.jobsService.update(id, updateJobDto, req.user).then((job) => ({ job }));
+    return this.jobsService.update(id, updateJobDto, req.user)
+      .then((job) => ({ job: this.maskJob(job) }));
   }
 
   @Patch(':id')
@@ -213,7 +228,8 @@ export class JobsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateJobDto: UpdateJobDto,
   ): Promise<{ job: Job }> {
-    return this.jobsService.update(id, updateJobDto, req.user).then((job) => ({ job }));
+    return this.jobsService.update(id, updateJobDto, req.user)
+      .then((job) => ({ job: this.maskJob(job) }));
   }
 
   @Delete(':id')

@@ -128,6 +128,17 @@ export function TrovanAnalyticsIcon(props: SvgIconProps) {
   );
 }
 
+export function TrovanPodIcon(props: SvgIconProps) {
+  return (
+    <LineIcon {...props}>
+      <path d="M6.2 4.2h8.7l2.9 3v12.6H6.2z" />
+      <path d="M14.8 4.4v3h2.8" />
+      <path d="M8.8 13.2 11 15.4l4.2-5" />
+      <path d="M8.7 18h6.8" />
+    </LineIcon>
+  );
+}
+
 export function TrovanSettingsIcon(props: SvgIconProps) {
   return (
     <LineIcon {...props}>

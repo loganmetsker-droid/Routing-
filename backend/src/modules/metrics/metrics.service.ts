@@ -153,7 +153,7 @@ export class MetricsService implements OnModuleInit {
           v.fuel_type,
           MAX(t.odometer) - MIN(t.odometer) AS distance_km,
           (
-            SELECT t1."fuelLevel"
+            SELECT t1.fuel_level
             FROM telemetry t1
             WHERE t1.vehicle_id = t.vehicle_id
               AND t1.timestamp >= NOW() - INTERVAL '24 hours'
@@ -161,7 +161,7 @@ export class MetricsService implements OnModuleInit {
             LIMIT 1
           ) AS initial_fuel,
           (
-            SELECT t2."fuelLevel"
+            SELECT t2.fuel_level
             FROM telemetry t2
             WHERE t2.vehicle_id = t.vehicle_id
               AND t2.timestamp >= NOW() - INTERVAL '24 hours'
@@ -171,7 +171,7 @@ export class MetricsService implements OnModuleInit {
         FROM telemetry t
         INNER JOIN vehicles v ON v.id = t.vehicle_id
         WHERE t.timestamp >= NOW() - INTERVAL '24 hours'
-          AND t."fuelLevel" IS NOT NULL
+          AND t.fuel_level IS NOT NULL
         GROUP BY t.vehicle_id, v.fuel_type
       )
       SELECT

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
+  Alert,
   Box,
   Button,
   Chip,
@@ -7,6 +8,8 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
+  FormControlLabel,
   Grid,
   MenuItem,
   Stack,
@@ -18,16 +21,20 @@ import {
   TableRow,
   TextField,
   Typography,
+  Switch,
 } from '@mui/material';
 import { PageHeader } from '../components/PageHeader';
 import { SurfacePanel } from '../components/SurfacePanel';
 import LoadingState from '../components/ui/LoadingState';
 import type { VehicleRecord } from '../services/api.types';
+import type { FleetOperatingRule, VehicleRoutingProfile } from '@shared/contracts';
 import {
   useCreateVehicleMutation,
   useUpdateVehicleMutation,
   useVehiclesQuery,
+  useDriversQuery,
 } from '../services/fleetApi';
+import { useRoutesQuery } from '../services/dispatchApi';
 
 const VEHICLE_TYPES = [
   'car',
@@ -59,7 +66,31 @@ const VEHICLE_TYPE_ALIASES: Record<string, keyof typeof VEHICLE_META> = {
   semi_tractor: 'semi_truck',
 };
 
-const DASHBOARD_VEHICLE_TYPES = ['cargo_van', 'box_truck', 'straight_truck', 'semi_truck'] as const;
+const POUNDS_PER_KILOGRAM = 2.2046226218;
+const CUBIC_FEET_PER_CUBIC_METER = 35.3146667;
+
+const kilogramsToPounds = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed * POUNDS_PER_KILOGRAM : null;
+};
+
+const poundsToKilograms = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed / POUNDS_PER_KILOGRAM : undefined;
+};
+
+const cubicMetersToFeet = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed * CUBIC_FEET_PER_CUBIC_METER : null;
+};
+
+const cubicFeetToMeters = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed / CUBIC_FEET_PER_CUBIC_METER : undefined;
+};
+
+const roundedDisplay = (value: number | null) =>
+  value === null ? '' : String(Math.round(value * 10) / 10);
 
 const normalizeVehicleType = (value: string | null | undefined): keyof typeof VEHICLE_META => {
   const normalized = String(value || 'box_truck').trim().toLowerCase();
@@ -78,30 +109,137 @@ const emptyForm = {
   status: 'AVAILABLE',
   vin: '',
   fuelType: 'DIESEL',
-  capacity: 1000,
   volumeCapacity: '',
   weightCapacity: '',
   territoryRestriction: '',
   maxRouteMinutes: '',
+  interiorLengthIn: '',
+  interiorWidthIn: '',
+  interiorHeightIn: '',
+  doorHeightIn: '',
+  maxPalletPositions: '',
+  maxPalletWeightLb: '',
+  maxStackHeightIn: '',
+  maxStackLevels: '',
+  features: '',
+  handlingCapabilities: '',
+  blockedDriverIds: [] as string[],
+  allowedDriverIds: [] as string[],
+  operatingRules: [] as FleetOperatingRule[],
 };
+
+const optionalNumericField = (value: string) => {
+  if (!value.trim()) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+};
+
+const commaSeparatedValues = (value: string) =>
+  Array.from(
+    new Set(
+      value
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  );
+
+const routingProfileFor = (vehicle: VehicleRecord): VehicleRoutingProfile =>
+  vehicle.routingProfile || {};
 
 export default function VehiclesPage() {
   const vehiclesQuery = useVehiclesQuery();
+  const driversQuery = useDriversQuery();
+  const routesQuery = useRoutesQuery();
   const createVehicleMutation = useCreateVehicleMutation();
   const updateVehicleMutation = useUpdateVehicleMutation();
   const vehicles = vehiclesQuery.data ?? [];
+  const drivers = driversQuery.data ?? [];
+  const routes = routesQuery.data ?? [];
   const loading = vehiclesQuery.isLoading;
   const [filter, setFilter] = useState('all');
+  const [fleetSearch, setFleetSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [fleetSort, setFleetSort] = useState('exceptions');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<VehicleRecord | null>(null);
   const [formData, setFormData] = useState(emptyForm);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const activeRoutes = useMemo(
+    () => routes.filter(
+      (route) => !['completed', 'cancelled'].includes(String(route.status).toLowerCase()),
+    ),
+    [routes],
+  );
+  const routeByVehicleId = useMemo(
+    () => new Map(activeRoutes.map((route) => [route.vehicleId, route])),
+    [activeRoutes],
+  );
+  const driverById = useMemo(
+    () => new Map(drivers.map((driver) => [driver.id, driver])),
+    [drivers],
+  );
+  const exceptionCountByVehicleId = useMemo(
+    () => new Map(
+      activeRoutes.map((route) => [
+        route.vehicleId,
+        (route.planningWarnings?.length || 0) + (route.exceptionCategory ? 1 : 0),
+      ]),
+    ),
+    [activeRoutes],
+  );
+  const vehicleCountByType = useMemo(() => {
+    const counts = new Map<string, number>();
+    vehicles.forEach((vehicle) => {
+      const type = normalizeVehicleType(vehicle.vehicleType || vehicle.type);
+      counts.set(type, (counts.get(type) || 0) + 1);
+    });
+    return counts;
+  }, [vehicles]);
 
   const visibleVehicles = useMemo(() => {
-    if (filter === 'all') return vehicles;
-    return vehicles.filter(
-      (vehicle) => normalizeVehicleType(vehicle.vehicleType || vehicle.type) === filter,
-    );
-  }, [filter, vehicles]);
+    const query = fleetSearch.trim().toLowerCase();
+    return vehicles
+      .filter(
+        (vehicle) =>
+          filter === 'all' ||
+          normalizeVehicleType(vehicle.vehicleType || vehicle.type) === filter,
+      )
+      .filter((vehicle) => {
+        const route = routeByVehicleId.get(vehicle.id);
+        const driver = route?.driverId ? driverById.get(route.driverId) : null;
+        if (statusFilter === 'active_route' && !route) return false;
+        if (statusFilter === 'exceptions' && !exceptionCountByVehicleId.get(vehicle.id)) return false;
+        if (
+          !['all', 'active_route', 'exceptions'].includes(statusFilter) &&
+          String(vehicle.status).toLowerCase() !== statusFilter
+        ) return false;
+        if (!query) return true;
+        return [
+          vehicle.make,
+          vehicle.model,
+          vehicle.licensePlate,
+          vehicle.vehicleType,
+          driver?.firstName,
+          driver?.lastName,
+        ].some((value) => String(value || '').toLowerCase().includes(query));
+      })
+      .sort((left, right) => {
+        if (fleetSort === 'exceptions') {
+          return (exceptionCountByVehicleId.get(right.id) || 0) -
+            (exceptionCountByVehicleId.get(left.id) || 0);
+        }
+        if (fleetSort === 'route_state') {
+          return Number(Boolean(routeByVehicleId.get(right.id))) - Number(Boolean(routeByVehicleId.get(left.id)));
+        }
+        if (fleetSort === 'pallet_capacity') {
+          return Number(routingProfileFor(right).cargo?.maxPalletPositions || 0) -
+            Number(routingProfileFor(left).cargo?.maxPalletPositions || 0);
+        }
+        return `${left.make} ${left.model}`.localeCompare(`${right.make} ${right.model}`);
+      });
+  }, [driverById, exceptionCountByVehicleId, filter, fleetSearch, fleetSort, routeByVehicleId, statusFilter, vehicles]);
 
   const openCreate = () => {
     setEditingVehicle(null);
@@ -110,6 +248,8 @@ export default function VehiclesPage() {
   };
 
   const openEdit = (vehicle: VehicleRecord) => {
+    const routingProfile = routingProfileFor(vehicle);
+    const cargo = routingProfile.cargo || {};
     setEditingVehicle(vehicle);
     setFormData({
       make: vehicle.make || '',
@@ -120,29 +260,39 @@ export default function VehiclesPage() {
       status: vehicle.status || 'AVAILABLE',
       vin: vehicle.vin || '',
       fuelType: vehicle.fuelType || 'DIESEL',
-      capacity: vehicle.capacity || 1000,
-      volumeCapacity:
-        vehicle.volumeCapacity === null || vehicle.volumeCapacity === undefined
-          ? ''
-          : String(vehicle.volumeCapacity),
-      weightCapacity:
-        vehicle.weightCapacity === null || vehicle.weightCapacity === undefined
-          ? ''
-          : String(vehicle.weightCapacity),
+      volumeCapacity: roundedDisplay(
+        cubicMetersToFeet(vehicle.capacityVolumeM3 ?? vehicle.volumeCapacity),
+      ),
+      weightCapacity: roundedDisplay(
+        kilogramsToPounds(vehicle.capacityWeightKg ?? vehicle.weightCapacity),
+      ),
       territoryRestriction: vehicle.territoryRestriction || '',
       maxRouteMinutes:
         vehicle.maxRouteMinutes === null || vehicle.maxRouteMinutes === undefined
           ? ''
           : String(vehicle.maxRouteMinutes),
+      interiorLengthIn: cargo.interiorLengthIn ? String(cargo.interiorLengthIn) : '',
+      interiorWidthIn: cargo.interiorWidthIn ? String(cargo.interiorWidthIn) : '',
+      interiorHeightIn: cargo.interiorHeightIn ? String(cargo.interiorHeightIn) : '',
+      doorHeightIn: cargo.doorHeightIn ? String(cargo.doorHeightIn) : '',
+      maxPalletPositions: cargo.maxPalletPositions ? String(cargo.maxPalletPositions) : '',
+      maxPalletWeightLb: cargo.maxPalletWeightLb ? String(cargo.maxPalletWeightLb) : '',
+      maxStackHeightIn: cargo.maxStackHeightIn ? String(cargo.maxStackHeightIn) : '',
+      maxStackLevels: cargo.maxStackLevels ? String(cargo.maxStackLevels) : '',
+      features: (routingProfile.features || []).join(', '),
+      handlingCapabilities: (routingProfile.handlingCapabilities || []).join(', '),
+      blockedDriverIds: [...(routingProfile.blockedDriverIds || [])],
+      allowedDriverIds: [...(routingProfile.allowedDriverIds || [])],
+      operatingRules: [...(routingProfile.operatingRules || [])],
     });
     setDialogOpen(true);
   };
 
   const handleSubmit = async () => {
     const parsedVolumeCapacity =
-      formData.volumeCapacity === '' ? undefined : Number(formData.volumeCapacity);
+      formData.volumeCapacity === '' ? undefined : cubicFeetToMeters(formData.volumeCapacity);
     const parsedWeightCapacity =
-      formData.weightCapacity === '' ? undefined : Number(formData.weightCapacity);
+      formData.weightCapacity === '' ? undefined : poundsToKilograms(formData.weightCapacity);
     const parsedMaxRouteMinutes =
       formData.maxRouteMinutes === '' ? undefined : Number(formData.maxRouteMinutes);
     const payload = {
@@ -152,14 +302,30 @@ export default function VehiclesPage() {
       licensePlate: formData.licensePlate,
       vehicleType: formData.vehicleType,
       status: formData.status,
-      vin: formData.vin,
+      vin: formData.vin.trim() || undefined,
       fuelType: formData.fuelType,
-      capacity: formData.capacity,
       capacityWeightKg: parsedWeightCapacity,
       capacityVolumeM3: parsedVolumeCapacity,
       metadata: {
         territoryRestriction: formData.territoryRestriction || undefined,
         maxRouteMinutes: parsedMaxRouteMinutes,
+      },
+      routingProfile: {
+        cargo: {
+          interiorLengthIn: optionalNumericField(formData.interiorLengthIn),
+          interiorWidthIn: optionalNumericField(formData.interiorWidthIn),
+          interiorHeightIn: optionalNumericField(formData.interiorHeightIn),
+          doorHeightIn: optionalNumericField(formData.doorHeightIn),
+          maxPalletPositions: optionalNumericField(formData.maxPalletPositions),
+          maxPalletWeightLb: optionalNumericField(formData.maxPalletWeightLb),
+          maxStackHeightIn: optionalNumericField(formData.maxStackHeightIn),
+          maxStackLevels: optionalNumericField(formData.maxStackLevels),
+        },
+        features: commaSeparatedValues(formData.features),
+        handlingCapabilities: commaSeparatedValues(formData.handlingCapabilities),
+        blockedDriverIds: formData.blockedDriverIds,
+        allowedDriverIds: formData.allowedDriverIds,
+        operatingRules: formData.operatingRules,
       },
     };
 
@@ -173,6 +339,7 @@ export default function VehiclesPage() {
         await createVehicleMutation.mutateAsync(payload);
       }
       setDialogOpen(false);
+      setNotice(editingVehicle ? 'Vehicle updated.' : 'Vehicle added.');
     } catch (error) {
       console.error('Failed to save vehicle', error);
     }
@@ -184,22 +351,102 @@ export default function VehiclesPage() {
 
   return (
     <Box>
-      <PageHeader eyebrow="Resources" title="Vehicles" subtitle="Fleet semantics now reflect actual routing operations, not a tiny generic CRUD grid." actions={<Button variant="contained" onClick={openCreate}>Add Vehicle</Button>} />
+      <PageHeader eyebrow="Resources" title="Vehicles" subtitle="Fleet capacity, readiness, and route eligibility." actions={<Button variant="contained" onClick={openCreate}>Add Vehicle</Button>} />
+      {notice ? (
+        <Alert severity="success" onClose={() => setNotice(null)} sx={{ mb: 1.2 }}>
+          {notice}
+        </Alert>
+      ) : null}
 
-      <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 2 }}>
-        <Chip clickable label="All" color={filter === 'all' ? 'primary' : 'default'} onClick={() => setFilter('all')} />
-        {VEHICLE_TYPES.map((type) => <Chip key={type} clickable label={VEHICLE_META[type].label} color={filter === type ? 'primary' : 'default'} onClick={() => setFilter(type)} />)}
+      <Stack direction={{ xs: 'column', lg: 'row' }} spacing={1} sx={{ mb: 1.5 }}>
+        <TextField
+          size="small"
+          label="Search fleet"
+          placeholder="Vehicle, plate, driver"
+          value={fleetSearch}
+          onChange={(event) => setFleetSearch(event.target.value)}
+          sx={{ minWidth: { lg: 260 } }}
+        />
+        <TextField
+          select
+          size="small"
+          label="Operating state"
+          value={statusFilter}
+          onChange={(event) => setStatusFilter(event.target.value)}
+          sx={{ minWidth: { lg: 190 } }}
+        >
+          <MenuItem value="all">All states</MenuItem>
+          <MenuItem value="active_route">Active route</MenuItem>
+          <MenuItem value="exceptions">Active exceptions</MenuItem>
+          <MenuItem value="available">Available</MenuItem>
+          <MenuItem value="in_route">In route</MenuItem>
+          <MenuItem value="maintenance">Maintenance</MenuItem>
+          <MenuItem value="off_duty">Off duty</MenuItem>
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Sort"
+          value={fleetSort}
+          onChange={(event) => setFleetSort(event.target.value)}
+          sx={{ minWidth: { lg: 190 } }}
+        >
+          <MenuItem value="exceptions">Exceptions first</MenuItem>
+          <MenuItem value="route_state">Active routes first</MenuItem>
+          <MenuItem value="pallet_capacity">Pallet capacity</MenuItem>
+          <MenuItem value="name">Vehicle name</MenuItem>
+        </TextField>
+      </Stack>
+      <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 2 }}>
+        <Chip clickable aria-pressed={filter === 'all'} label={`All ${vehicles.length}`} color={filter === 'all' ? 'primary' : 'default'} onClick={() => setFilter('all')} />
+        {VEHICLE_TYPES.map((type) => (
+          <Chip
+            key={type}
+            clickable
+            aria-pressed={filter === type}
+            label={`${VEHICLE_META[type].label} ${vehicleCountByType.get(type) || 0}`}
+            color={filter === type ? 'primary' : 'default'}
+            onClick={() => setFilter(type)}
+          />
+        ))}
       </Stack>
 
       <Grid container spacing={2.5} sx={{ mb: 2.5 }}>
-        {DASHBOARD_VEHICLE_TYPES.map((type) => (
-          <Grid item xs={12} md={6} xl={3} key={type}>
+        {[
+          {
+            label: 'Available now',
+            value: vehicles.filter((vehicle) => String(vehicle.status).toLowerCase() === 'available').length,
+            detail: `${vehicles.length} total vehicles`,
+          },
+          {
+            label: 'Active routes',
+            value: activeRoutes.length,
+            detail: `${activeRoutes.reduce((sum, route) => sum + (route.jobIds?.length || route.jobCount || 0), 0)} planned stops`,
+          },
+          {
+            label: 'Active exceptions',
+            value: Array.from(exceptionCountByVehicleId.values()).reduce((sum, count) => sum + count, 0),
+            detail: 'Sorted to the top by default',
+          },
+          {
+            label: 'Load-fit ready',
+            value: vehicles.filter((vehicle) =>
+              Boolean(
+                vehicle.capacityWeightKg &&
+                vehicle.capacityVolumeM3 &&
+                routingProfileFor(vehicle).cargo?.maxPalletPositions,
+              ),
+            ).length,
+            detail: 'Weight, volume, and pallet limits set',
+          },
+        ].map((metric) => (
+          <Grid item xs={12} sm={6} xl={3} key={metric.label}>
             <SurfacePanel>
-              <Typography variant="subtitle2" color="text.secondary">{VEHICLE_META[type].label}</Typography>
+              <Typography variant="subtitle2" color="text.secondary">{metric.label}</Typography>
               <Typography variant="h4" sx={{ mt: 1 }}>
-                {vehicles.filter((vehicle) => normalizeVehicleType(vehicle.vehicleType || vehicle.type) === type).length}
+                {metric.value}
               </Typography>
-              <Typography variant="body2" color="text.secondary">{VEHICLE_META[type].weight} • {VEHICLE_META[type].volume}</Typography>
+              <Typography variant="body2" color="text.secondary">{metric.detail}</Typography>
             </SurfacePanel>
           </Grid>
         ))}
@@ -208,7 +455,7 @@ export default function VehiclesPage() {
       <SurfacePanel sx={{ p: 0, overflow: 'hidden' }}>
         <Box sx={{ px: 2.5, py: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
           <Typography variant="h5">Fleet Directory</Typography>
-          <Typography variant="body2" color="text.secondary">Vehicle types, capacities, and operational attributes are ready for richer fleet rules.</Typography>
+          <Typography variant="body2" color="text.secondary">Vehicle type, capacity, status, and operational attributes from saved fleet records.</Typography>
         </Box>
         <TableContainer>
           <Table>
@@ -217,6 +464,8 @@ export default function VehiclesPage() {
                 <TableCell>Vehicle</TableCell>
                 <TableCell>Type</TableCell>
                 <TableCell>Operational profile</TableCell>
+                <TableCell>Current route</TableCell>
+                <TableCell>Exceptions</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell>Actions</TableCell>
               </TableRow>
@@ -225,6 +474,13 @@ export default function VehiclesPage() {
               {visibleVehicles.map((vehicle) => {
                 const key = normalizeVehicleType(vehicle.vehicleType || vehicle.type);
                 const meta = VEHICLE_META[key];
+                const routingProfile = routingProfileFor(vehicle);
+                const configuredRuleCount = (routingProfile.operatingRules || []).filter(
+                  (rule) => rule.active !== false,
+                ).length;
+                const route = routeByVehicleId.get(vehicle.id);
+                const driver = route?.driverId ? driverById.get(route.driverId) : null;
+                const exceptionCount = exceptionCountByVehicleId.get(vehicle.id) || 0;
                 return (
                   <TableRow key={vehicle.id} hover>
                     <TableCell>
@@ -236,10 +492,45 @@ export default function VehiclesPage() {
                     <TableCell>{meta.label}</TableCell>
                     <TableCell>
                       <Stack spacing={0.25}>
-                        <Typography variant="body2">Weight: {vehicle.weightCapacity || meta.weight}</Typography>
-                        <Typography variant="body2">Volume: {vehicle.volumeCapacity || meta.volume}</Typography>
+                        <Typography variant="body2">Weight: {vehicle.capacityWeightKg ? `${Math.round(Number(vehicle.capacityWeightKg) * POUNDS_PER_KILOGRAM).toLocaleString()} lb` : meta.weight}</Typography>
+                        <Typography variant="body2">Volume: {vehicle.capacityVolumeM3 ? `${Math.round(Number(vehicle.capacityVolumeM3) * CUBIC_FEET_PER_CUBIC_METER).toLocaleString()} cu ft` : meta.volume}</Typography>
                         <Typography variant="caption" color="text.secondary">{vehicle.territoryRestriction || 'Territory open'} • {vehicle.maxRouteMinutes || 'Route duration ready'}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {routingProfile.cargo?.maxPalletPositions
+                            ? `${routingProfile.cargo.maxPalletPositions} pallet positions`
+                            : 'Pallet fit pending'}
+                          {' • '}
+                          {configuredRuleCount
+                            ? `${configuredRuleCount} operating ${configuredRuleCount === 1 ? 'rule' : 'rules'}`
+                            : 'No vehicle rules'}
+                        </Typography>
                       </Stack>
+                    </TableCell>
+                    <TableCell>
+                      {route ? (
+                        <Stack spacing={0.25}>
+                          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                            {String(route.workflowStatus || route.status).replace(/_/g, ' ')}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {driver
+                              ? `${driver.firstName} ${driver.lastName}`
+                              : 'Driver unassigned'}
+                            {' • '}
+                            {route.jobIds?.length || route.jobCount || 0} stops
+                          </Typography>
+                        </Stack>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">At depot / unassigned</Typography>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        size="small"
+                        color={exceptionCount ? 'warning' : 'success'}
+                        variant={exceptionCount ? 'filled' : 'outlined'}
+                        label={exceptionCount ? `${exceptionCount} active` : 'Clear'}
+                      />
                     </TableCell>
                     <TableCell>
                       <Stack direction="row" spacing={1} flexWrap="wrap">
@@ -268,12 +559,106 @@ export default function VehiclesPage() {
             <Grid item xs={12} md={4}><TextField select label="Vehicle type" value={formData.vehicleType} onChange={(event) => setFormData((current) => ({ ...current, vehicleType: event.target.value }))} fullWidth>{VEHICLE_TYPES.map((type) => <MenuItem key={type} value={type}>{VEHICLE_META[type].label}</MenuItem>)}</TextField></Grid>
             <Grid item xs={12} md={4}><TextField select label="Status" value={formData.status} onChange={(event) => setFormData((current) => ({ ...current, status: event.target.value }))} fullWidth><MenuItem value="AVAILABLE">Available</MenuItem><MenuItem value="IN_ROUTE">In route</MenuItem><MenuItem value="MAINTENANCE">Maintenance</MenuItem><MenuItem value="OFF_DUTY">Off duty</MenuItem></TextField></Grid>
             <Grid item xs={12} md={4}><TextField label="Fuel type" value={formData.fuelType} onChange={(event) => setFormData((current) => ({ ...current, fuelType: event.target.value }))} fullWidth /></Grid>
-            <Grid item xs={12} md={4}><TextField label="Capacity" type="number" value={formData.capacity} onChange={(event) => setFormData((current) => ({ ...current, capacity: Number(event.target.value) }))} fullWidth /></Grid>
-            <Grid item xs={12} md={4}><TextField label="Volume capacity" value={formData.volumeCapacity} onChange={(event) => setFormData((current) => ({ ...current, volumeCapacity: event.target.value }))} fullWidth /></Grid>
-            <Grid item xs={12} md={4}><TextField label="Weight capacity" value={formData.weightCapacity} onChange={(event) => setFormData((current) => ({ ...current, weightCapacity: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={6}><TextField label="Volume capacity (cu ft)" type="number" value={formData.volumeCapacity} onChange={(event) => setFormData((current) => ({ ...current, volumeCapacity: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={6}><TextField label="Payload capacity (lb)" type="number" value={formData.weightCapacity} onChange={(event) => setFormData((current) => ({ ...current, weightCapacity: event.target.value }))} fullWidth /></Grid>
             <Grid item xs={12} md={6}><TextField label="Territory restriction" value={formData.territoryRestriction} onChange={(event) => setFormData((current) => ({ ...current, territoryRestriction: event.target.value }))} fullWidth /></Grid>
             <Grid item xs={12} md={6}><TextField label="Max route minutes" value={formData.maxRouteMinutes} onChange={(event) => setFormData((current) => ({ ...current, maxRouteMinutes: event.target.value }))} fullWidth /></Grid>
           </Grid>
+
+          <Divider />
+          <Box>
+            <Typography variant="h6">Cargo envelope and pallet fit</Typography>
+            <Typography variant="body2" color="text.secondary">
+              These measurements power rough floor-position and stack-height estimates. They are planning guidance, not an axle-weight or securement certification.
+            </Typography>
+          </Box>
+          <Grid container spacing={2} data-testid="vehicle-cargo-profile-fields">
+            <Grid item xs={6} md={3}><TextField label="Interior length (in)" type="number" value={formData.interiorLengthIn} onChange={(event) => setFormData((current) => ({ ...current, interiorLengthIn: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={6} md={3}><TextField label="Interior width (in)" type="number" value={formData.interiorWidthIn} onChange={(event) => setFormData((current) => ({ ...current, interiorWidthIn: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={6} md={3}><TextField label="Interior height (in)" type="number" value={formData.interiorHeightIn} onChange={(event) => setFormData((current) => ({ ...current, interiorHeightIn: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={6} md={3}><TextField label="Door height (in)" type="number" value={formData.doorHeightIn} onChange={(event) => setFormData((current) => ({ ...current, doorHeightIn: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={6} md={3}><TextField label="Pallet positions" type="number" value={formData.maxPalletPositions} onChange={(event) => setFormData((current) => ({ ...current, maxPalletPositions: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={6} md={3}><TextField label="Max pallet weight (lb)" type="number" value={formData.maxPalletWeightLb} onChange={(event) => setFormData((current) => ({ ...current, maxPalletWeightLb: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={6} md={3}><TextField label="Max stack height (in)" type="number" value={formData.maxStackHeightIn} onChange={(event) => setFormData((current) => ({ ...current, maxStackHeightIn: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={6} md={3}><TextField label="Max stack levels" type="number" value={formData.maxStackLevels} onChange={(event) => setFormData((current) => ({ ...current, maxStackLevels: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={6}><TextField label="Vehicle features" helperText="Comma-separated: liftgate, pallet jack, side door" value={formData.features} onChange={(event) => setFormData((current) => ({ ...current, features: event.target.value }))} fullWidth /></Grid>
+            <Grid item xs={12} md={6}><TextField label="Handling capabilities" helperText="Comma-separated: refrigerated, frozen, hazmat" value={formData.handlingCapabilities} onChange={(event) => setFormData((current) => ({ ...current, handlingCapabilities: event.target.value }))} fullWidth /></Grid>
+          </Grid>
+
+          <Divider />
+          <Box>
+            <Typography variant="h6">Driver eligibility</Typography>
+            <Typography variant="body2" color="text.secondary">
+              Use an allow list for dedicated equipment or a block list for specific driver–vehicle exceptions.
+            </Typography>
+          </Box>
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={6}>
+              <TextField
+                select
+                label="Only allow these drivers"
+                value={formData.allowedDriverIds}
+                onChange={(event) => setFormData((current) => ({ ...current, allowedDriverIds: typeof event.target.value === 'string' ? event.target.value.split(',') : event.target.value }))}
+                SelectProps={{ multiple: true }}
+                fullWidth
+              >
+                {drivers.map((driver) => <MenuItem key={driver.id} value={driver.id}>{driver.firstName} {driver.lastName}</MenuItem>)}
+              </TextField>
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                select
+                label="Never assign these drivers"
+                value={formData.blockedDriverIds}
+                onChange={(event) => setFormData((current) => ({ ...current, blockedDriverIds: typeof event.target.value === 'string' ? event.target.value.split(',') : event.target.value }))}
+                SelectProps={{ multiple: true }}
+                fullWidth
+              >
+                {drivers.map((driver) => <MenuItem key={driver.id} value={driver.id}>{driver.firstName} {driver.lastName}</MenuItem>)}
+              </TextField>
+            </Grid>
+          </Grid>
+
+          <Divider />
+          <Stack spacing={1.25} data-testid="vehicle-operating-rules">
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} justifyContent="space-between" alignItems={{ sm: 'center' }}>
+              <Box>
+                <Typography variant="h6">Vehicle operating rules</Typography>
+                <Typography variant="body2" color="text.secondary">Write handling or operating instructions for review. Use the structured capacity, feature, and driver fields above for rules that must block an assignment automatically.</Typography>
+              </Box>
+              <Button
+                variant="outlined"
+                onClick={() => setFormData((current) => ({
+                  ...current,
+                  operatingRules: [
+                    ...current.operatingRules,
+                    {
+                      id: `vehicle-rule-${Date.now()}`,
+                      label: '',
+                      instruction: '',
+                      severity: 'warning',
+                      active: true,
+                    },
+                  ],
+                }))}
+              >
+                Add rule
+              </Button>
+            </Stack>
+            {formData.operatingRules.map((rule, index) => (
+              <Grid container spacing={1.5} key={rule.id} alignItems="center">
+                <Grid item xs={12} md={3}><TextField label="Rule name" value={rule.label} onChange={(event) => setFormData((current) => ({ ...current, operatingRules: current.operatingRules.map((item, itemIndex) => itemIndex === index ? { ...item, label: event.target.value } : item) }))} fullWidth /></Grid>
+                <Grid item xs={12} md={5}><TextField label="Instruction" value={rule.instruction} onChange={(event) => setFormData((current) => ({ ...current, operatingRules: current.operatingRules.map((item, itemIndex) => itemIndex === index ? { ...item, instruction: event.target.value } : item) }))} fullWidth /></Grid>
+                <Grid item xs={6} md={2}><TextField select label="Severity" value={rule.severity} onChange={(event) => setFormData((current) => ({ ...current, operatingRules: current.operatingRules.map((item, itemIndex) => itemIndex === index ? { ...item, severity: event.target.value as FleetOperatingRule['severity'] } : item) }))} fullWidth><MenuItem value="warning">Advisory</MenuItem><MenuItem value="hard">Required review</MenuItem></TextField></Grid>
+                <Grid item xs={6} md={2}>
+                  <Stack direction="row" alignItems="center" justifyContent="space-between">
+                    <FormControlLabel control={<Switch checked={rule.active !== false} onChange={(event) => setFormData((current) => ({ ...current, operatingRules: current.operatingRules.map((item, itemIndex) => itemIndex === index ? { ...item, active: event.target.checked } : item) }))} />} label="Active" />
+                    <Button color="error" size="small" onClick={() => setFormData((current) => ({ ...current, operatingRules: current.operatingRules.filter((_, itemIndex) => itemIndex !== index) }))}>Remove</Button>
+                  </Stack>
+                </Grid>
+              </Grid>
+            ))}
+          </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)}>Cancel</Button>

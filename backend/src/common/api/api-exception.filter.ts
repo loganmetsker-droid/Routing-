@@ -10,10 +10,13 @@ import { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
 import { errorEnvelope } from '../../../../shared/contracts';
 import { sanitizePath } from '../http/request-logging.middleware';
+import { ErrorMonitoringService } from '../monitoring/error-monitoring.service';
 
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(ApiExceptionFilter.name);
+
+  constructor(private readonly monitoring?: ErrorMonitoringService) {}
 
   catch(exception: unknown, host: ArgumentsHost) {
     if (host.getType() !== 'http') {
@@ -64,6 +67,21 @@ export class ApiExceptionFilter implements ExceptionFilter {
       this.logger.error(
         `Unhandled ${request.method} ${safePath} (${requestId}): ${String(exception)}`,
       );
+    }
+
+    if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      this.monitoring?.capture({
+        source: 'backend',
+        name: exception instanceof Error ? exception.name : 'UnhandledError',
+        message: exception instanceof Error ? exception.message : String(exception),
+        stack: exception instanceof Error ? exception.stack : undefined,
+        context: {
+          requestId,
+          method: request.method,
+          path: safePath,
+          status,
+        },
+      });
     }
 
     const envelope = errorEnvelope(code, message, String(requestId));

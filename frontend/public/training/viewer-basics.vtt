@@ -1,0 +1,85 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:06.375
+Viewer Basics explains how to use the system without changing route day records.
+
+2
+00:00:06.375 --> 00:00:12.750
+Viewer access is intentionally read only.
+
+3
+00:00:12.750 --> 00:00:19.125
+Use the Dashboard to understand active routes, jobs waiting, route risk, and daily readiness.
+
+4
+00:00:19.125 --> 00:00:25.500
+If an operational value must change, contact an Owner, Admin, or Dispatcher rather than looking for a workaround.
+
+5
+00:00:25.500 --> 00:00:33.167
+Open route and tracking views to understand planned work, Driver progress, estimated arrival, completed stops, and exceptions.
+
+6
+00:00:33.167 --> 00:00:40.833
+Treat customer location, delivery status, tracking links, and Driver information as operationally sensitive.
+
+7
+00:00:40.833 --> 00:00:48.500
+Share information only through the company channels approved for the route day.
+
+8
+00:00:48.500 --> 00:00:56.375
+Use Proof of Delivery to verify that required delivery evidence is attached to the correct stop.
+
+9
+00:00:56.375 --> 00:01:04.250
+Depending on policy, the record may include a photo, signature, recipient, note, and timestamps.
+
+10
+00:01:04.250 --> 00:01:12.125
+A Viewer can inspect this evidence but should contact Dispatch or an Admin when a record appears incomplete or incorrect.
+
+11
+00:01:12.125 --> 00:01:20.600
+Use Reports to review service, efficiency, utilization, route history, and proof completion.
+
+12
+00:01:20.600 --> 00:01:29.075
+Compare trends with the actual operating context.
+
+13
+00:01:29.075 --> 00:01:37.550
+A single route can be affected by appointments, weather, access, vehicle constraints, or customer changes, so use the event and exception record when interpreting a surprising result.
+
+14
+00:01:37.550 --> 00:01:46.692
+When requesting help, provide the organization, page, route or job identifier, expected result, observed result, visible request ID, and a redacted screenshot.
+
+15
+00:01:46.692 --> 00:01:55.833
+Do not include passwords, tokens, access codes, signatures, or unrelated customer details.
+
+16
+00:01:55.833 --> 00:02:04.975
+The public support hub also contains searchable answers for common workflow questions.
+
+17
+00:02:04.975 --> 00:02:13.737
+Complete the Viewer knowledge check to confirm the role boundary.
+
+18
+00:02:13.737 --> 00:02:22.500
+Viewer training is optional for launch readiness, but it gives supervisors and customer service teams a safe way to use route visibility without creating accidental route changes.
+
+19
+00:02:22.500 --> 00:02:32.142
+Practice locating one active route, one tracking record, one proof artifact, and one report without changing any data.
+
+20
+00:02:32.142 --> 00:02:41.783
+If the information does not answer the business question, record the question and ask the appropriate Dispatcher or Admin.
+
+21
+00:02:41.783 --> 00:02:51.425
+Viewer access is most useful when supervisors and customer service teams know exactly where to look and exactly when an operational owner must step in.

@@ -1,29 +1,18 @@
 import { expect, test, type Page } from '@playwright/test';
+import { preparePreviewSession } from './helpers/preview-session';
 
 const authToken =
-  process.env.LAUNCH_AUDIT_AUTH_TOKEN || process.env.STAGING_AUTH_TOKEN || '';
+  process.env.STAGING_DRIVER_AUTH_TOKEN ||
+  process.env.LAUNCH_AUDIT_DRIVER_AUTH_TOKEN ||
+  process.env.LAUNCH_AUDIT_AUTH_TOKEN ||
+  process.env.STAGING_AUTH_TOKEN ||
+  '';
 
 async function gotoReady(page: Page, routePath: string) {
-  await page.addInitScript(() => {
-    window.localStorage.setItem('authToken', 'preview-auth-bypass');
-    window.localStorage.setItem(
-      'trovan-preview-auth-user',
-      JSON.stringify({
-        id: 'preview-driver-user',
-        email: 'anna.quinn@trovan.local',
-        role: 'driver',
-        roles: ['DRIVER'],
-        authProvider: 'local-config',
-        organizationId: 'preview-org',
-        sessionId: 'preview-session',
-      }),
-    );
+  await preparePreviewSession(page, {
+    role: 'driver',
+    authToken,
   });
-  if (authToken) {
-    await page.addInitScript((token) => {
-      window.localStorage.setItem('authToken', token);
-    }, authToken);
-  }
   await page.goto(routePath, { waitUntil: 'domcontentloaded', timeout: 20_000 });
   await page.locator('#root').waitFor({ state: 'visible', timeout: 10_000 });
   await page.waitForLoadState('networkidle', { timeout: 12_000 }).catch(() => {});

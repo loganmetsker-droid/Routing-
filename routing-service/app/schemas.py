@@ -28,6 +28,8 @@ class VehicleInput(BaseModel):
     end_lng: Optional[float] = None
     capacity_weight: float = 0
     capacity_volume: float = 0
+    capacity_pallet_positions: int = 0
+    driver_id: Optional[str] = None
     max_route_minutes: int = 480
 
 
@@ -42,6 +44,9 @@ class StopInput(BaseModel):
     weight: float = 0
     volume: float = 0
     locked_vehicle_id: Optional[str] = None
+    allowed_vehicle_ids: Optional[List[str]] = None
+    pallet_positions: int = 0
+    sequence_constraint: Literal["any", "first", "last"] = "any"
 
 
 class OptimizeRequest(BaseModel):
@@ -70,8 +75,21 @@ class RouteOutput(BaseModel):
     total_duration_s: float
 
 
+class OptimizationProvenance(BaseModel):
+    solver: str = "google-or-tools"
+    solver_version: str
+    matrix_provider: str
+    matrix_mode: Literal["road_network", "estimated"]
+    fallback_used: bool
+    solve_duration_ms: int
+    coordinate_coverage_percent: float
+    location_count: int
+
+
 class OptimizeResponse(BaseModel):
     routes: List[RouteOutput]
     objective_used: OptimizationObjective = "distance"
     unassigned_stop_ids: List[str] = Field(default_factory=list)
     warnings: List[str] = Field(default_factory=list)
+    unassigned_reasons: dict[str, List[str]] = Field(default_factory=dict)
+    provenance: OptimizationProvenance

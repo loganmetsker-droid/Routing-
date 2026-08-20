@@ -1,6 +1,6 @@
 """SQLAlchemy models matching the PostgreSQL database schema."""
 
-from sqlalchemy import Column, String, Integer, Float, DateTime, JSON, Numeric
+from sqlalchemy import Column, DateTime, Integer, JSON, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
 from geoalchemy2 import Geography
 from app.database import Base
@@ -19,6 +19,7 @@ class Vehicle(Base):
     vehicle_type = Column(String(50))
     capacity_weight_kg = Column(Numeric(10, 2))
     capacity_volume_m3 = Column(Numeric(10, 2))
+    routing_profile = Column(JSON)
     fuel_type = Column(String(20))
     status = Column(String(20))
     current_location = Column(Geography('POINT', srid=4326))

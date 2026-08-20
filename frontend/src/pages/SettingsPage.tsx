@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link as RouterLink } from 'react-router-dom';
+import { Link as RouterLink } from '../router';
+import { AssistedPilotChecklist } from '../components/AssistedPilotChecklist';
 import type { SvgIconComponent } from '@mui/icons-material';
 import {
   ApartmentOutlined as ApartmentOutlinedIcon,
@@ -203,6 +204,7 @@ function SettingsSectionButton({
   return (
     <Button
       fullWidth
+      aria-pressed={active}
       onClick={() => onSelect(section.id)}
       startIcon={<Icon fontSize="small" />}
       sx={{
@@ -266,18 +268,25 @@ export default function SettingsPage() {
   const [slug, setSlug] = useState('');
   const [timezone, setTimezone] = useState('UTC');
   const [brandName, setBrandName] = useState('');
-  const [primaryColor, setPrimaryColor] = useState('#1F1A17');
+  const [primaryColor, setPrimaryColor] = useState('#0B1324');
   const [accentColor, setAccentColor] = useState('#C87441');
   const [supportEmail, setSupportEmail] = useState('');
   const [supportPhone, setSupportPhone] = useState('');
   const [trackingHeadline, setTrackingHeadline] = useState('');
   const [trackingSubtitle, setTrackingSubtitle] = useState('');
   const [notificationEmailEnabled, setNotificationEmailEnabled] = useState(true);
-  const [notificationSmsEnabled, setNotificationSmsEnabled] = useState(true);
+  const [notificationSmsEnabled, setNotificationSmsEnabled] = useState(false);
   const [notificationReplyToEmail, setNotificationReplyToEmail] = useState('');
   const [defaultNotificationChannel, setDefaultNotificationChannel] = useState<
     'email' | 'sms' | 'both'
-  >('both');
+  >('email');
+  const [notificationScheduledEnabled, setNotificationScheduledEnabled] = useState(true);
+  const [notificationOnTheWayEnabled, setNotificationOnTheWayEnabled] = useState(true);
+  const [notificationOnTheWayMinutesBefore, setNotificationOnTheWayMinutesBefore] = useState('30');
+  const [notificationOnTheWayRequirePreviousCompletion, setNotificationOnTheWayRequirePreviousCompletion] = useState(true);
+  const [notificationCompletionEnabled, setNotificationCompletionEnabled] = useState(true);
+  const [notificationFailureEnabled, setNotificationFailureEnabled] = useState(true);
+  const [completionVarianceThresholdMeters, setCompletionVarianceThresholdMeters] = useState('250');
   const [auditRetentionDays, setAuditRetentionDays] = useState('365');
   const [operationalRetentionDays, setOperationalRetentionDays] = useState('365');
   const [workosOrganizationId, setWorkosOrganizationId] = useState('');
@@ -343,6 +352,7 @@ export default function SettingsPage() {
   const auditOverview = auditOverviewQuery.data ?? null;
   const billingOverview = billingOverviewQuery.data ?? null;
   const notificationsOverview = notificationsOverviewQuery.data ?? null;
+  const smsReady = notificationsOverview?.controls.smsReady === true;
   const platformOverview = platformOverviewQuery.data ?? null;
   const apiKeys = apiKeysQuery.data ?? [];
   const webhooks = webhooksQuery.data ?? [];
@@ -360,7 +370,7 @@ export default function SettingsPage() {
       return;
     }
     setBrandName(branding?.brandName || currentOrganization.name || '');
-    setPrimaryColor(branding?.primaryColor || '#1F1A17');
+    setPrimaryColor(branding?.primaryColor || '#0B1324');
     setAccentColor(branding?.accentColor || '#C87441');
     setSupportEmail(branding?.supportEmail || '');
     setSupportPhone(branding?.supportPhone || '');
@@ -370,9 +380,20 @@ export default function SettingsPage() {
         'Follow the route live, monitor stop progress, and review delivery proof once the run completes.',
     );
     setNotificationEmailEnabled(notifications?.emailEnabled ?? true);
-    setNotificationSmsEnabled(notifications?.smsEnabled ?? true);
+    setNotificationSmsEnabled(notifications?.smsEnabled ?? false);
     setNotificationReplyToEmail(notifications?.replyToEmail || '');
-    setDefaultNotificationChannel(notifications?.defaultChannel || 'both');
+    setDefaultNotificationChannel(notifications?.defaultChannel || 'email');
+    setNotificationScheduledEnabled(notifications?.scheduledEnabled ?? true);
+    setNotificationOnTheWayEnabled(notifications?.onTheWayEnabled ?? true);
+    setNotificationOnTheWayMinutesBefore(String(notifications?.onTheWayMinutesBefore ?? 30));
+    setNotificationOnTheWayRequirePreviousCompletion(
+      notifications?.onTheWayRequirePreviousCompletion ?? true,
+    );
+    setNotificationCompletionEnabled(notifications?.completionEnabled ?? true);
+    setNotificationFailureEnabled(notifications?.failureEnabled ?? true);
+    setCompletionVarianceThresholdMeters(
+      String(notifications?.completionVarianceThresholdMeters ?? 250),
+    );
     setAuditRetentionDays(String(retention?.auditDays ?? 365));
     setOperationalRetentionDays(String(retention?.operationalDays ?? 365));
     setWorkosOrganizationId(identity?.workosOrganizationId || '');
@@ -460,6 +481,24 @@ export default function SettingsPage() {
   const handleSettingsSave = async () => {
     setError(null);
     setNotice(null);
+    const onTheWayMinutesBefore = Number(notificationOnTheWayMinutesBefore);
+    const varianceThresholdMeters = Number(completionVarianceThresholdMeters);
+    if (
+      !Number.isInteger(onTheWayMinutesBefore) ||
+      onTheWayMinutesBefore < 5 ||
+      onTheWayMinutesBefore > 180
+    ) {
+      setError('On-the-way timing must be a whole number from 5 to 180 minutes.');
+      return;
+    }
+    if (
+      !Number.isInteger(varianceThresholdMeters) ||
+      varianceThresholdMeters < 25 ||
+      varianceThresholdMeters > 2000
+    ) {
+      setError('Completion variance threshold must be a whole number from 25 to 2,000 meters.');
+      return;
+    }
     try {
       await updateSettingsMutation.mutateAsync({
         brandName,
@@ -470,9 +509,16 @@ export default function SettingsPage() {
         trackingHeadline,
         trackingSubtitle,
         notificationEmailEnabled,
-        notificationSmsEnabled,
+        notificationSmsEnabled: smsReady ? notificationSmsEnabled : false,
         notificationReplyToEmail,
-        defaultNotificationChannel,
+        defaultNotificationChannel: smsReady ? defaultNotificationChannel : 'email',
+        notificationScheduledEnabled,
+        notificationOnTheWayEnabled,
+        notificationOnTheWayMinutesBefore: onTheWayMinutesBefore,
+        notificationOnTheWayRequirePreviousCompletion,
+        notificationCompletionEnabled,
+        notificationFailureEnabled,
+        completionVarianceThresholdMeters: varianceThresholdMeters,
         auditRetentionDays: Number(auditRetentionDays),
         operationalRetentionDays: Number(operationalRetentionDays),
         workosOrganizationId,
@@ -927,6 +973,10 @@ export default function SettingsPage() {
                   <Typography variant="h5" component="div">
                     Customer notifications
                   </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.75 }}>
+                    Choose when customers hear from dispatch. Each one-time event is logged and
+                    protected from duplicate sends.
+                  </Typography>
                   <Stack spacing={1.25} sx={{ mt: 1.5 }}>
                     <FormControlLabel
                       control={
@@ -935,17 +985,24 @@ export default function SettingsPage() {
                           onChange={(event) => setNotificationEmailEnabled(event.target.checked)}
                         />
                       }
-                      label="Email notifications"
+                      label="Email delivery"
                     />
                     <FormControlLabel
                       control={
                         <Switch
                           checked={notificationSmsEnabled}
                           onChange={(event) => setNotificationSmsEnabled(event.target.checked)}
+                          disabled={!smsReady}
                         />
                       }
-                      label="SMS notifications"
+                      label="SMS delivery"
                     />
+                    {!smsReady ? (
+                      <Alert severity="info">
+                        SMS is disabled for the assisted-pilot launch. Email events remain available
+                        and auditable.
+                      </Alert>
+                    ) : null}
                     <TextField
                       fullWidth
                       label="Reply-to email"
@@ -963,10 +1020,107 @@ export default function SettingsPage() {
                         )
                       }
                     >
-                      <MenuItem value="both">Both</MenuItem>
                       <MenuItem value="email">Email</MenuItem>
-                      <MenuItem value="sms">SMS</MenuItem>
+                      <MenuItem value="sms" disabled={!smsReady}>SMS</MenuItem>
+                      <MenuItem value="both" disabled={!smsReady}>Both</MenuItem>
                     </TextField>
+                    <Typography variant="subtitle2" sx={{ pt: 0.75 }}>
+                      Event timing
+                    </Typography>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={notificationScheduledEnabled}
+                          onChange={(event) =>
+                            setNotificationScheduledEnabled(event.target.checked)
+                          }
+                          data-testid="notification-scheduled-enabled"
+                        />
+                      }
+                      label="Delivery scheduled"
+                    />
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={notificationOnTheWayEnabled}
+                          onChange={(event) =>
+                            setNotificationOnTheWayEnabled(event.target.checked)
+                          }
+                          data-testid="notification-on-the-way-enabled"
+                        />
+                      }
+                      label="Driver on the way"
+                    />
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Send on-the-way email this many minutes before ETA"
+                      value={notificationOnTheWayMinutesBefore}
+                      onChange={(event) =>
+                        setNotificationOnTheWayMinutesBefore(event.target.value)
+                      }
+                      disabled={!notificationOnTheWayEnabled}
+                      inputProps={{
+                        min: 5,
+                        max: 180,
+                        step: 1,
+                        'data-testid': 'notification-on-the-way-minutes',
+                      }}
+                      helperText="5–180 minutes before the planned arrival."
+                    />
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={notificationOnTheWayRequirePreviousCompletion}
+                          onChange={(event) =>
+                            setNotificationOnTheWayRequirePreviousCompletion(event.target.checked)
+                          }
+                          disabled={!notificationOnTheWayEnabled}
+                          data-testid="notification-require-previous-stop"
+                        />
+                      }
+                      label="Wait for the previous stop to finish"
+                    />
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={notificationCompletionEnabled}
+                          onChange={(event) =>
+                            setNotificationCompletionEnabled(event.target.checked)
+                          }
+                          data-testid="notification-completion-enabled"
+                        />
+                      }
+                      label="Delivery completed"
+                    />
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={notificationFailureEnabled}
+                          onChange={(event) =>
+                            setNotificationFailureEnabled(event.target.checked)
+                          }
+                          data-testid="notification-failure-enabled"
+                        />
+                      }
+                      label="Delivery failed or needs attention"
+                    />
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Completion location review threshold (meters)"
+                      value={completionVarianceThresholdMeters}
+                      onChange={(event) =>
+                        setCompletionVarianceThresholdMeters(event.target.value)
+                      }
+                      inputProps={{
+                        min: 25,
+                        max: 2000,
+                        step: 25,
+                        'data-testid': 'completion-variance-threshold',
+                      }}
+                      helperText="Open an exception when fresh vehicle telemetry is farther away."
+                    />
                   </Stack>
                 </SurfacePanel>
               </Grid>
@@ -1223,7 +1377,8 @@ export default function SettingsPage() {
                 Billing readiness
               </Typography>
               <Typography variant="body2" component="div" color="text.secondary" sx={{ mt: 1 }}>
-                Billing exposes the truth first: plan catalog, current readiness, and whether Stripe webhooks are actually wired.
+                Trovan is using assisted-pilot billing. Public checkout and automated
+                entitlements stay disabled until a later self-serve release.
               </Typography>
               <Grid container spacing={1.5} sx={{ mt: 0.5 }}>
                 <Grid item xs={12} md={4}>
@@ -1244,7 +1399,9 @@ export default function SettingsPage() {
                       <ListItemText
                         primary="Invoice automation"
                         secondary={
-                          billingOverview?.controls.invoiceAutomationReady ? 'Ready' : 'Blocked'
+                          billingOverview?.controls.invoiceAutomationReady
+                            ? 'Ready'
+                            : 'Intentionally off'
                         }
                       />
                     </ListItem>
@@ -1270,11 +1427,26 @@ export default function SettingsPage() {
                             color="text.secondary"
                             sx={{ mt: 0.75 }}
                           >
-                            ${plan.monthlyPriceUsd}/month •{' '}
+                            {plan.monthlyPriceUsd === null
+                              ? 'Custom terms'
+                              : `$${plan.monthlyPriceUsd}/${plan.billingCadence || 'month'}`}{' '}
+                            •{' '}
                             {plan.dispatcherSeats === 999
                               ? 'Unlimited'
                               : plan.dispatcherSeats}{' '}
                             dispatcher seats
+                          </Typography>
+                          <Typography
+                            variant="caption"
+                            component="div"
+                            color="text.secondary"
+                            sx={{ mt: 0.5, fontWeight: 800 }}
+                          >
+                            {plan.salesAssisted
+                              ? 'Reviewed onboarding • no public checkout'
+                              : plan.selfServeEnabled
+                                ? 'Self-service available'
+                                : 'Sales-assisted'}
                           </Typography>
                           <List dense disablePadding sx={{ mt: 1 }}>
                             {plan.features.slice(0, 4).map((feature) => (
@@ -1290,7 +1462,12 @@ export default function SettingsPage() {
                 </Grid>
               </Grid>
               {(billingOverview?.recommendations ?? []).length > 0 ? (
-                <Alert severity="warning" sx={{ mt: 2 }}>
+                <Alert
+                  severity={
+                    billingOverview?.controls.selfServeEnabled ? 'warning' : 'info'
+                  }
+                  sx={{ mt: 2 }}
+                >
                   {(billingOverview?.recommendations ?? []).join(' ')}
                 </Alert>
               ) : null}
@@ -1683,6 +1860,8 @@ export default function SettingsPage() {
           </>
         }
       />
+
+      <AssistedPilotChecklist />
 
       {error ? <Alert severity="error">{error}</Alert> : null}
       {notice ? <Alert severity="success">{notice}</Alert> : null}

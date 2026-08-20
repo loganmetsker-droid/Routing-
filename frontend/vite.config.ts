@@ -76,18 +76,17 @@ export default defineConfig(({ mode }) => {
               return 'vendor-ui';
             }
             if (
-              id.includes('leaflet') ||
-              id.includes('react-leaflet')
+              id.includes('/react/') ||
+              id.includes('/react-dom/') ||
+              id.includes('/scheduler/') ||
+              id.includes('/use-sync-external-store/')
             ) {
-              return 'vendor-maps';
+              return 'vendor-react';
             }
-            if (
-              id.includes('@tanstack/react-query') ||
-              id.includes('react-router-dom')
-            ) {
-              return 'vendor-app';
+            if (id.includes('react-router')) {
+              return 'vendor-router';
             }
-            return 'vendor-core';
+            return undefined;
           },
         },
       },

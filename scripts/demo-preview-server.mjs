@@ -11,6 +11,27 @@ const indexPath = join(distDir, 'index.html');
 const port = parsePort(process.env.DEMO_PREVIEW_PORT || process.env.PORT || '5186');
 const host = process.env.DEMO_PREVIEW_HOST || process.env.HOST || '127.0.0.1';
 const allowNetworkBind = process.env.DEMO_PREVIEW_ALLOW_NETWORK === '1';
+const previewRole = process.env.DEMO_PREVIEW_ROLE === 'dispatcher' ? 'dispatcher' : 'driver';
+const previewAuthUser = previewRole === 'dispatcher'
+  ? {
+      id: 'preview-user',
+      email: 'preview@trovan.local',
+      role: 'dispatcher',
+      roles: ['DISPATCHER'],
+      authProvider: 'local-config',
+      organizationId: 'preview-org',
+      sessionId: 'preview-session',
+    }
+  : {
+      id: 'preview-driver-user',
+      email: 'anna.quinn@trovan.local',
+      role: 'driver',
+      roles: ['DRIVER'],
+      authProvider: 'local-config',
+      organizationId: 'preview-org',
+      sessionId: 'preview-session',
+    };
+const previewAuthUserLiteral = JSON.stringify(JSON.stringify(previewAuthUser));
 
 if (!isLoopbackHost(host) && !allowNetworkBind) {
   console.error(
@@ -41,15 +62,7 @@ const previewBootstrap = String.raw`
       if (!window.localStorage.getItem('authToken')) {
         window.localStorage.setItem('authToken', 'preview-auth-bypass');
       }
-      window.localStorage.setItem('trovan-preview-auth-user', JSON.stringify({
-        id: 'preview-driver-user',
-        email: 'anna.quinn@trovan.local',
-        role: 'driver',
-        roles: ['DRIVER'],
-        authProvider: 'local-config',
-        organizationId: 'preview-org',
-        sessionId: 'preview-session'
-      }));
+      window.localStorage.setItem('trovan-preview-auth-user', ${previewAuthUserLiteral});
       window.__TROVAN_LOCAL_DEMO_PREVIEW__ = true;
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations()
@@ -284,6 +297,7 @@ server.on('error', (error) => {
 
 server.listen(port, host, () => {
   console.log(`Trovan demo preview serving frontend/dist at http://${host}:${port}`);
+  console.log(`Preview identity: ${previewRole}`);
   console.log(`SPA deep links are available, for example http://${host}:${port}/routing`);
 });
 

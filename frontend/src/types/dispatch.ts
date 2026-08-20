@@ -1,5 +1,8 @@
+import type { JobRoutingRequirements, VehicleRoutingProfile } from '@shared/contracts';
+
 export interface DispatchJob {
   id: string;
+  customerId?: string | null;
   customerName: string;
   deliveryAddress?: string;
   pickupAddress?: string;
@@ -8,6 +11,10 @@ export interface DispatchJob {
   timeWindowStart?: string;
   timeWindowEnd?: string;
   estimatedDuration?: number;
+  weight?: number;
+  volume?: number;
+  quantity?: number;
+  routingRequirements?: JobRoutingRequirements | null;
   status: string;
   priority?: string;
   assignedRouteId?: string | null;
@@ -67,15 +74,25 @@ export interface DispatchVehicle {
   currentLocation?: { lat: number; lng: number } | null;
   status: string;
   capacity?: number;
+  capacityWeightKg?: number | null;
+  capacityVolumeM3?: number | null;
+  routingProfile?: VehicleRoutingProfile | null;
 }
 
 export interface DispatchDriver {
   id: string;
   firstName?: string;
   lastName?: string;
+  email?: string;
+  phone?: string;
+  licenseNumber?: string;
+  licenseType?: string;
   status?: string;
+  currentVehicleId?: string | null;
+  assignedVehicleId?: string | null;
   currentHours?: number;
   maxHours?: number;
+  certifications?: string[];
 }
 
 export interface DispatchPlannerSelection {

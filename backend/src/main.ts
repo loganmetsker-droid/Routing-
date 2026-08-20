@@ -105,6 +105,9 @@ function validateRuntimeConfig(logger: Logger) {
 async function bootstrap() {
   preloadEnvFiles();
   const { AppModule } = await import('./app.module');
+  const { ErrorMonitoringService } = await import(
+    './common/monitoring/error-monitoring.service'
+  );
   const logger = new Logger('Bootstrap');
   validateRuntimeConfig(logger);
   logger.log(`Runtime summary: ${JSON.stringify(getConfigSummary())}`);
@@ -132,7 +135,7 @@ async function bootstrap() {
     }),
   );
 
-  app.useGlobalFilters(new ApiExceptionFilter());
+  app.useGlobalFilters(new ApiExceptionFilter(app.get(ErrorMonitoringService)));
   app.useGlobalInterceptors(new ApiResponseInterceptor());
 
   // Global prefix for all routes

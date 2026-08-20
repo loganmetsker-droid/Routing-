@@ -594,6 +594,27 @@ export class OrganizationsService {
         ...(dto.defaultNotificationChannel !== undefined
           ? { defaultChannel: dto.defaultNotificationChannel }
           : {}),
+        ...(dto.notificationScheduledEnabled !== undefined
+          ? { scheduledEnabled: dto.notificationScheduledEnabled }
+          : {}),
+        ...(dto.notificationOnTheWayEnabled !== undefined
+          ? { onTheWayEnabled: dto.notificationOnTheWayEnabled }
+          : {}),
+        ...(dto.notificationOnTheWayMinutesBefore !== undefined
+          ? { onTheWayMinutesBefore: dto.notificationOnTheWayMinutesBefore }
+          : {}),
+        ...(dto.notificationOnTheWayRequirePreviousCompletion !== undefined
+          ? { onTheWayRequirePreviousCompletion: dto.notificationOnTheWayRequirePreviousCompletion }
+          : {}),
+        ...(dto.notificationCompletionEnabled !== undefined
+          ? { completionEnabled: dto.notificationCompletionEnabled }
+          : {}),
+        ...(dto.notificationFailureEnabled !== undefined
+          ? { failureEnabled: dto.notificationFailureEnabled }
+          : {}),
+        ...(dto.completionVarianceThresholdMeters !== undefined
+          ? { completionVarianceThresholdMeters: dto.completionVarianceThresholdMeters }
+          : {}),
       },
       retention: {
         ...currentRetention,

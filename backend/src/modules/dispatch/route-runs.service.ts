@@ -7,6 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { FindOptionsWhere, In, Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { AuditService } from '../../common/audit/audit.service';
 import { Route, RouteStatus, RouteWorkflowStatus } from './entities/route.entity';
 import { RouteAssignment } from './entities/route-assignment.entity';
@@ -28,6 +29,7 @@ import { resolveProofUploadMimeType } from '../../common/files/proof-file.util';
 import { MAX_JWT_BEARER_TOKEN_LENGTH } from '../auth/strategies/jwt.strategy';
 import type {
   DriverManifestResponse,
+  DispatchReadiness,
   PresentedRouteRunStop,
   PublicTrackingResponse,
   RouteRunMessagesResponse,
@@ -40,12 +42,17 @@ import type {
   RouteRunStopTimelineResponse,
 } from './dispatch.types';
 import { NotificationDelivery } from '../notifications/entities/notification-delivery.entity';
+import { AccessCodeCryptoService } from '../../common/security/access-code-crypto.service';
 
 type Actor = {
   userId?: string;
   organizationId?: string;
   roles?: string[];
   email?: string;
+};
+
+type DispatchRoutePayload = {
+  note?: string | null;
 };
 
 type UploadedProofFile = {
@@ -56,6 +63,40 @@ type UploadedProofFile = {
 };
 
 type ProofRequirement = 'required' | 'optional' | 'not_required';
+
+type CompletionLocationEvidence = {
+  status: 'within_range' | 'attention' | 'unavailable';
+  thresholdMeters: number;
+  varianceMeters: number | null;
+  targetLocation: { lat: number; lng: number } | null;
+  completionLocation: { lat: number; lng: number } | null;
+  telemetryAt: string | null;
+  reason: string | null;
+};
+
+const TERMINAL_STOP_STATUSES = new Set([
+  'SERVICED',
+  'FAILED',
+  'RESCHEDULED',
+  'SKIPPED',
+]);
+const COMPLETION_TELEMETRY_MAX_AGE_MS = 5 * 60 * 1000;
+
+function distanceMeters(
+  left: { lat: number; lng: number },
+  right: { lat: number; lng: number },
+) {
+  const radians = (degrees: number) => (degrees * Math.PI) / 180;
+  const earthRadiusMeters = 6_371_000;
+  const latDelta = radians(right.lat - left.lat);
+  const lngDelta = radians(right.lng - left.lng);
+  const leftLat = radians(left.lat);
+  const rightLat = radians(right.lat);
+  const haversine =
+    Math.sin(latDelta / 2) ** 2 +
+    Math.cos(leftLat) * Math.cos(rightLat) * Math.sin(lngDelta / 2) ** 2;
+  return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+}
 
 @Injectable()
 export class RouteRunsService {
@@ -102,6 +143,8 @@ export class RouteRunsService {
     private readonly jobStops?: Repository<JobStop>,
     @Optional()
     private readonly proofStorage?: ProofStorageService,
+    @Optional()
+    private readonly accessCodes?: AccessCodeCryptoService,
   ) {}
 
   private routeWhere(
@@ -340,10 +383,17 @@ export class RouteRunsService {
     return stops.map((stop) => {
       const job = jobsById.get(stop.jobId);
       const jobStop = jobStopsById.get(stop.jobStopId);
+      const siteRequirements = job?.routingRequirements?.site || {};
+      const revealedAccessCode =
+        this.accessCodes?.reveal(job?.routingRequirements) ||
+        siteRequirements.accessCode ||
+        null;
       const instructions = [
         jobStop?.notes,
         job?.specialInstructions,
         job?.notes,
+        job?.routingRequirements?.handlingRequirement,
+        job?.routingRequirements?.temperatureRequirement,
       ]
         .filter((item): item is string => Boolean(item && String(item).trim()))
         .map((item) => item.trim())
@@ -362,6 +412,19 @@ export class RouteRunsService {
           address: jobStop?.address || job?.deliveryAddress || job?.pickupAddress || null,
           location,
           instructions: instructions || null,
+          access:
+            revealedAccessCode ||
+            siteRequirements.accessNotes ||
+            siteRequirements.gateInstructions
+              ? {
+                  code: revealedAccessCode,
+                  codeRequired: Boolean(siteRequirements.accessCodeRequired),
+                  notes: siteRequirements.accessNotes || null,
+                  gateInstructions: siteRequirements.gateInstructions || null,
+                }
+              : null,
+          handlingInstructions:
+            job?.routingRequirements?.handlingRequirement || null,
           timeWindowStart:
             (jobStop?.timeWindowStart || job?.timeWindowStart)?.toISOString?.() || null,
           timeWindowEnd:
@@ -458,6 +521,82 @@ export class RouteRunsService {
       throw new NotFoundException(`Route run stop not found: ${stopId}`);
     }
     return stop;
+  }
+
+  private buildDispatchReadiness(
+    route: Route,
+    stops: RouteRunStop[],
+    exceptions: DispatchException[],
+  ): DispatchReadiness {
+    const blockers: DispatchReadiness['blockers'] = [];
+    const routeId = route.id;
+    const routeStatus = String(route.status || '').toLowerCase();
+
+    if (['in_progress', 'completed', 'cancelled'].includes(routeStatus)) {
+      blockers.push({
+        code: 'ROUTE_NOT_EDITABLE',
+        message: 'Only planned or ready routes can be sent to a driver.',
+        severity: 'blocking',
+        routeId,
+      });
+    }
+
+    if (!route.driverId) {
+      blockers.push({
+        code: 'MISSING_DRIVER',
+        message: 'Assign a driver before dispatch.',
+        severity: 'blocking',
+        routeId,
+      });
+    }
+
+    if (!route.vehicleId) {
+      blockers.push({
+        code: 'MISSING_VEHICLE',
+        message: 'Assign a vehicle before dispatch.',
+        severity: 'blocking',
+        routeId,
+      });
+    }
+
+    if (stops.length === 0) {
+      blockers.push({
+        code: 'NO_STOPS',
+        message: 'Add at least one stop before dispatch.',
+        severity: 'blocking',
+        routeId,
+      });
+    }
+
+    exceptions
+      .filter((exception) => String(exception.status || '').toUpperCase() === 'OPEN')
+      .forEach((exception) => {
+        blockers.push({
+          code: 'OPEN_EXCEPTION',
+          message: `${exception.code}: ${exception.message}`,
+          severity: 'blocking',
+          routeId,
+          exceptionId: exception.id,
+        });
+      });
+
+    return {
+      ready: blockers.length === 0,
+      blockers,
+    };
+  }
+
+  private async getDispatchReadiness(route: Route, actor?: Actor) {
+    const [stops, exceptions] = await Promise.all([
+      this.routeRunStops.find({
+        where: this.stopListWhere(route.id, route.organizationId || actor?.organizationId),
+      }),
+      this.exceptions.find({
+        where: this.exceptionRouteWhere(route.id, route.organizationId || actor?.organizationId),
+      }),
+    ]);
+
+    return this.buildDispatchReadiness(route, stops, exceptions);
   }
 
   private getTrackingBaseUrl() {
@@ -576,6 +715,143 @@ export class RouteRunsService {
     });
   }
 
+  private async getCompletionLocationEvidence(
+    stop: RouteRunStop,
+    route: Route,
+    completedAt = new Date(),
+  ): Promise<CompletionLocationEvidence> {
+    const policy = this.notificationsService
+      ? await this.notificationsService.getCustomerNotificationPolicy(
+          route.organizationId || stop.organizationId,
+        )
+      : null;
+    const thresholdMeters = policy?.completionVarianceThresholdMeters || 250;
+    if (!this.jobStops) {
+      return {
+        status: 'unavailable',
+        thresholdMeters,
+        varianceMeters: null,
+        targetLocation: null,
+        completionLocation: null,
+        telemetryAt: null,
+        reason: 'Job-stop locations are unavailable',
+      };
+    }
+    const organizationId = route.organizationId || stop.organizationId || undefined;
+    const targetStop = await this.jobStops.findOne({
+      where: organizationId
+        ? { id: stop.jobStopId, organizationId }
+        : { id: stop.jobStopId },
+    });
+    const targetLocation = this.normalizeStopLocation(targetStop?.location);
+    if (!targetLocation) {
+      return {
+        status: 'unavailable',
+        thresholdMeters,
+        varianceMeters: null,
+        targetLocation: null,
+        completionLocation: null,
+        telemetryAt: null,
+        reason: 'The planned stop does not have verified coordinates',
+      };
+    }
+    const telemetry = await this.getLatestTelemetryForVehicle(
+      route.vehicleId,
+      organizationId,
+    );
+    const completionLocation = this.normalizeStopLocation(telemetry?.location);
+    const telemetryAt = telemetry?.timestamp ? new Date(telemetry.timestamp) : null;
+    if (!completionLocation || !telemetryAt) {
+      return {
+        status: 'unavailable',
+        thresholdMeters,
+        varianceMeters: null,
+        targetLocation: { lat: targetLocation.latitude, lng: targetLocation.longitude },
+        completionLocation: null,
+        telemetryAt: null,
+        reason: 'No vehicle telemetry was available at completion',
+      };
+    }
+    if (Math.abs(completedAt.getTime() - telemetryAt.getTime()) > COMPLETION_TELEMETRY_MAX_AGE_MS) {
+      return {
+        status: 'unavailable',
+        thresholdMeters,
+        varianceMeters: null,
+        targetLocation: { lat: targetLocation.latitude, lng: targetLocation.longitude },
+        completionLocation: { lat: completionLocation.latitude, lng: completionLocation.longitude },
+        telemetryAt: telemetryAt.toISOString(),
+        reason: 'Vehicle telemetry was older than five minutes at completion',
+      };
+    }
+    const varianceMeters = Math.round(distanceMeters(
+      { lat: targetLocation.latitude, lng: targetLocation.longitude },
+      { lat: completionLocation.latitude, lng: completionLocation.longitude },
+    ));
+    return {
+      status: varianceMeters > thresholdMeters ? 'attention' : 'within_range',
+      thresholdMeters,
+      varianceMeters,
+      targetLocation: { lat: targetLocation.latitude, lng: targetLocation.longitude },
+      completionLocation: { lat: completionLocation.latitude, lng: completionLocation.longitude },
+      telemetryAt: telemetryAt.toISOString(),
+      reason: null,
+    };
+  }
+
+  private async processRouteTimedNotifications(route: Route, now = new Date()) {
+    if (!this.notificationsService || !route.organizationId) return 0;
+    const policy = await this.notificationsService.getCustomerNotificationPolicy(
+      route.organizationId,
+    );
+    if (!policy.onTheWayEnabled) return 0;
+    const stops = await this.routeRunStops.find({
+      where: { routeId: route.id, organizationId: route.organizationId },
+      order: { stopSequence: 'ASC' },
+    });
+    let created = 0;
+    for (const [index, stop] of stops.entries()) {
+      if (TERMINAL_STOP_STATUSES.has(stop.status) || !stop.plannedArrival) continue;
+      const minutesUntilArrival =
+        (new Date(stop.plannedArrival).getTime() - now.getTime()) / 60_000;
+      if (minutesUntilArrival > policy.onTheWayMinutesBefore) continue;
+      if (
+        policy.onTheWayRequirePreviousCompletion &&
+        stops.slice(0, index).some((previous) => !TERMINAL_STOP_STATUSES.has(previous.status))
+      ) {
+        continue;
+      }
+      await this.notifyRouteJobs(
+        route,
+        'en_route',
+        {
+          routeRunStopId: stop.id,
+          jobId: stop.jobId,
+          eta: new Date(stop.plannedArrival).toISOString(),
+        },
+      );
+      created += 1;
+      if (policy.onTheWayRequirePreviousCompletion) break;
+    }
+    return created;
+  }
+
+  @Cron(CronExpression.EVERY_MINUTE, {
+    name: 'customer-on-the-way-notifications',
+    timeZone: 'UTC',
+  })
+  async processTimedCustomerNotifications(now = new Date()) {
+    if (!this.notificationsService) return { processedRoutes: 0, eligibleStops: 0 };
+    const routes = await this.routes.find({
+      where: { status: RouteStatus.IN_PROGRESS },
+      order: { plannedStart: 'ASC' },
+    });
+    let eligibleStops = 0;
+    for (const route of routes) {
+      eligibleStops += await this.processRouteTimedNotifications(route, now);
+    }
+    return { processedRoutes: routes.length, eligibleStops };
+  }
+
   async board(actor?: Actor): Promise<RouteRunsBoardResponse> {
     const organizationId = actor?.organizationId;
     const routes = await this.routes.find({
@@ -591,11 +867,34 @@ export class RouteRunsService {
           where: { routeId: In(routeIds), status: 'OPEN' },
         })
       : [];
+    const stopsByRoute = stops.reduce<Record<string, RouteRunStop[]>>((acc, stop) => {
+      acc[stop.routeId] = [...(acc[stop.routeId] || []), stop];
+      return acc;
+    }, {});
+    const exceptionsByRoute = exceptions.reduce<Record<string, DispatchException[]>>(
+      (acc, exception) => {
+        if (!exception.routeId) return acc;
+        acc[exception.routeId] = [...(acc[exception.routeId] || []), exception];
+        return acc;
+      },
+      {},
+    );
+    const dispatchReadiness = Object.fromEntries(
+      routes.map((route) => [
+        route.id,
+        this.buildDispatchReadiness(
+          route,
+          stopsByRoute[route.id] || [],
+          exceptionsByRoute[route.id] || [],
+        ),
+      ]),
+    );
     return {
       ok: true,
       routes,
       routeRunStops: stops,
       exceptions,
+      dispatchReadiness,
     };
   }
 
@@ -651,24 +950,52 @@ export class RouteRunsService {
           order: { createdAt: 'ASC' },
         })
       : [];
+    const vehicle = this.vehicles && route.vehicleId
+      ? await this.vehicles.findOne({
+          where: route.organizationId || actor?.organizationId
+            ? {
+                id: route.vehicleId,
+                organizationId: route.organizationId || actor?.organizationId,
+              }
+            : { id: route.vehicleId },
+        })
+      : null;
     return {
       ok: true,
       routeRun: route,
+      vehicleOperatingRules: (vehicle?.routingProfile?.operatingRules || [])
+        .filter((rule) => rule.active !== false),
       stops: await this.enrichStops(stops, route.organizationId || actor?.organizationId || null),
       exceptions,
       stopEvents,
       proofArtifacts,
       notificationDeliveries,
       messages,
+      dispatchReadiness: this.buildDispatchReadiness(route, stops, exceptions),
     };
   }
 
-  async dispatchRoute(routeId: string, actor?: Actor) {
+  async dispatchRoute(routeId: string, payload: DispatchRoutePayload = {}, actor?: Actor) {
     const route = await this.getAccessibleRoute(routeId, actor);
+    const readiness = await this.getDispatchReadiness(route, actor);
+    if (!readiness.ready) {
+      throw new BadRequestException({
+        message: 'Route is not ready to dispatch',
+        blockers: readiness.blockers,
+      });
+    }
+    const note = String(payload.note || '').trim();
+    const dispatchedAt = new Date();
     route.status = RouteStatus.ASSIGNED;
     route.workflowStatus = RouteWorkflowStatus.READY_FOR_DISPATCH;
+    route.dispatchedAt = dispatchedAt;
+    route.dispatchedByUserId = actor?.userId || null;
+    route.dispatchNote = note || null;
     await this.routes.save(route);
-    this.audit.record({ actorId: actor?.userId || 'system', actorType: 'user', entityType: 'route_run', entityId: routeId, action: 'route-run.dispatched', source: 'user', newValue: { status: route.status }, metadata: { organizationId: actor?.organizationId } });
+    if (note) {
+      await this.createRouteMessage(route.id, { body: note }, actor);
+    }
+    this.audit.record({ actorId: actor?.userId || 'system', actorType: 'user', entityType: 'route_run', entityId: routeId, action: 'route-run.dispatched', source: 'user', newValue: { status: route.status, workflowStatus: route.workflowStatus, dispatchedAt, dispatchedByUserId: route.dispatchedByUserId, dispatchNote: route.dispatchNote }, metadata: { organizationId: actor?.organizationId } });
     await this.notifyRouteJobs(route, 'assignment', {}, actor);
     await this.emitWebhookEvent(route, 'route.published', {
       routeRun: route,
@@ -692,7 +1019,7 @@ export class RouteRunsService {
       newValue: { status: route.status, workflowStatus: route.workflowStatus, actualStart: route.actualStart },
       metadata: { organizationId: route.organizationId || actor?.organizationId },
     });
-    await this.notifyRouteJobs(route, 'en_route', {}, actor);
+    await this.processRouteTimedNotifications(route);
     await this.emitWebhookEvent(route, 'route-run.started', {
       routeRun: route,
     });
@@ -723,7 +1050,22 @@ export class RouteRunsService {
 
   async reassign(routeId: string, payload: { driverId?: string; vehicleId?: string; reason?: string }, actor?: Actor) {
     const route = await this.getAccessibleRoute(routeId, actor);
-    if (payload.driverId !== undefined) route.driverId = payload.driverId || null;
+    if (payload.driverId !== undefined) {
+      route.driverId = payload.driverId || null;
+      if (!payload.vehicleId && route.driverId && this.drivers) {
+        const driver = await this.drivers.findOne({
+          where: route.organizationId || actor?.organizationId
+            ? {
+                id: route.driverId,
+                organizationId: route.organizationId || actor?.organizationId,
+              }
+            : { id: route.driverId },
+        });
+        if (driver?.currentVehicleId) {
+          route.vehicleId = driver.currentVehicleId;
+        }
+      }
+    }
     if (payload.vehicleId !== undefined && payload.vehicleId) route.vehicleId = payload.vehicleId;
     await this.routes.save(route);
     await this.routeAssignments.save(this.routeAssignments.create({
@@ -789,17 +1131,37 @@ export class RouteRunsService {
   async markServiced(stopId: string, actor?: Actor) {
     const currentStop = await this.getStop(stopId, actor);
     await this.assertRequiredProof(currentStop);
-    const stop = await this.transitionStop(stopId, 'SERVICED', actor);
     const route = await this.getRoute(
-      stop.routeId,
-      stop.organizationId || actor?.organizationId || undefined,
+      currentStop.routeId,
+      currentStop.organizationId || actor?.organizationId || undefined,
     );
+    const completedAt = new Date();
+    const completionLocationEvidence = await this.getCompletionLocationEvidence(
+      currentStop,
+      route,
+      completedAt,
+    );
+    const stop = await this.transitionStop(stopId, 'SERVICED', actor, {
+      completionLocationEvidence,
+    });
+    if (completionLocationEvidence.status === 'attention') {
+      await this.exceptions.save(this.exceptions.create({
+        organizationId: stop.organizationId || actor?.organizationId || null,
+        routeId: stop.routeId,
+        routeRunStopId: stop.id,
+        code: 'COMPLETION_LOCATION_VARIANCE',
+        message: `Completion was recorded ${completionLocationEvidence.varianceMeters} m from the planned stop.`,
+        status: 'OPEN',
+        details: completionLocationEvidence,
+      }));
+    }
     await this.notifyRouteJobs(
       route,
       'delivered',
       { routeRunStopId: stop.id, jobId: stop.jobId },
       actor,
     );
+    await this.processRouteTimedNotifications(route);
     await this.emitWebhookEvent(route, 'stop.serviced', { stop });
     return { ok: true, stop };
   }

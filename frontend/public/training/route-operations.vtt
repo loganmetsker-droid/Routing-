@@ -1,0 +1,117 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:07.425
+Route Operations guides you through a single route day, from import to proof.
+
+2
+00:00:07.425 --> 00:00:14.850
+Begin with the job import template in the Customer Launch Docket.
+
+3
+00:00:14.850 --> 00:00:22.275
+Mandatory fields are customer name and delivery address.
+
+4
+00:00:22.275 --> 00:00:29.700
+Add time windows, service duration, load dimensions, required equipment, driver rules, access instructions, temperature, hazmat, and handling details only if they impact the real route.
+
+5
+00:00:29.700 --> 00:00:35.300
+Import one representative day and inspect the preview before saving.
+
+6
+00:00:35.300 --> 00:00:40.900
+Rectify duplicate rows, incomplete addresses, conflicting appointment windows, inconsistent units, and missing routing constraints.
+
+7
+00:00:40.900 --> 00:00:46.500
+After import, open job readiness.
+
+8
+00:00:46.500 --> 00:00:52.100
+Every pilot job requires a routable pickup or delivery location.
+
+9
+00:00:52.100 --> 00:00:57.700
+Address missing location data before optimization.
+
+10
+00:00:57.700 --> 00:01:04.819
+Open Routing and create the route draft.
+
+11
+00:01:04.819 --> 00:01:11.938
+Verify the intended service date, depot, jobs, vehicles, Drivers, and optimization objective.
+
+12
+00:01:11.938 --> 00:01:19.056
+Examine every unassigned job and blocker.
+
+13
+00:01:19.056 --> 00:01:26.175
+Resolve capacity, pallet fit, appointment, equipment, certification, driver, territory, access, temperature, or hazmat conflicts with specific solutions, not silent overrides.
+
+14
+00:01:26.175 --> 00:01:32.030
+Review optimizer provenance before publication.
+
+15
+00:01:32.030 --> 00:01:37.885
+A hosted pilot route must use provider-backed road network inputs.
+
+16
+00:01:37.885 --> 00:01:43.740
+The system identifies the solver, matrix provider and mode, coverage, solve time, fallback state, and warnings.
+
+17
+00:01:43.740 --> 00:01:49.595
+A simulated preview or straight line fallback is not acceptable for production readiness evidence.
+
+18
+00:01:49.595 --> 00:01:55.450
+Rectify the provider or data issue and run the plan again.
+
+19
+00:01:55.450 --> 00:02:01.875
+When the draft is ready, publish it and open Dispatch.
+
+20
+00:02:01.875 --> 00:02:08.300
+Assign the trained pilot Driver and eligible vehicle, confirm dispatch readiness, and release the practice route.
+
+21
+00:02:08.300 --> 00:02:14.725
+During execution, monitor stop status, Driver messages, timing, and exceptions.
+
+22
+00:02:14.725 --> 00:02:21.150
+Keep route changes and decisions within the system to maintain a complete operational record.
+
+23
+00:02:21.150 --> 00:02:28.094
+After the Driver services a stop, open Proof of Delivery.
+
+24
+00:02:28.094 --> 00:02:35.038
+Confirm the required photo, signature, recipient, note, and timestamps are persisted for that stop.
+
+25
+00:02:35.038 --> 00:02:41.981
+Resolve every failed or skipped stop with a reason and owner.
+
+26
+00:02:41.981 --> 00:02:48.925
+The readiness card completes only when the organization has imported jobs, a provider-backed route, a dispatched practice route, and a proof artifact.
+
+27
+00:02:48.925 --> 00:02:58.550
+Use the practice route as a rehearsal, not a demo shortcut.
+
+28
+00:02:58.550 --> 00:03:08.175
+Ask the Dispatcher to explain why the route is provider-backed, why each vehicle and Driver are eligible, what the top blocker would look like, and where the final proof appears.
+
+29
+00:03:08.175 --> 00:03:17.800
+If the explanation relies on a spreadsheet or private text message, move that information into the appropriate system record before considering the route operations track complete.

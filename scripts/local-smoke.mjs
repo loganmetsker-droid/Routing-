@@ -1,10 +1,10 @@
 import net from 'node:net';
 import process from 'node:process';
 
-const backendUrl = process.env.BACKEND_SMOKE_URL || 'http://127.0.0.1:3000/health/ping';
-const frontendUrl = process.env.FRONTEND_SMOKE_URL || 'http://127.0.0.1:5184/';
+const backendUrl = process.env.BACKEND_SMOKE_URL || 'http://127.0.0.1:3000/api/health/ping';
+const frontendUrl = process.env.FRONTEND_SMOKE_URL || 'http://127.0.0.1:5194/';
 const readinessUrl =
-  process.env.READINESS_SMOKE_URL || 'http://127.0.0.1:3000/health/readiness';
+  process.env.READINESS_SMOKE_URL || 'http://127.0.0.1:3000/api/health/readiness';
 const dbHost = process.env.DATABASE_HOST || '127.0.0.1';
 const dbPort = Number(process.env.DATABASE_PORT || '5432');
 const redisHost = process.env.REDIS_HOST || '127.0.0.1';

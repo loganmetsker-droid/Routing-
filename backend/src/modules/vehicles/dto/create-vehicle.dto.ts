@@ -10,6 +10,7 @@ import {
   Max,
   Length,
   IsDateString,
+  IsObject,
 } from 'class-validator';
 
 export enum VehicleType {
@@ -97,6 +98,37 @@ export class CreateVehicleDto {
   @IsNumber()
   @Min(0)
   capacityVolumeM3?: number;
+
+  @ApiProperty({
+    description:
+      'Cargo geometry, pallet positions, equipment/features, driver eligibility, and operating rules',
+    required: false,
+    example: {
+      cargo: {
+        interiorLengthIn: 240,
+        interiorWidthIn: 96,
+        interiorHeightIn: 96,
+        doorHeightIn: 90,
+        maxPalletPositions: 10,
+        maxStackLevels: 2,
+      },
+      features: ['liftgate', 'pallet jack'],
+      blockedDriverIds: [],
+      operatingRules: [
+        {
+          id: 'no-glass-stack',
+          label: 'Glass handling',
+          instruction: 'Do not double-stack glass pallets.',
+          severity: 'hard',
+          active: true,
+        },
+      ],
+    },
+  })
+  @Field(() => GraphQLJSON, { nullable: true })
+  @IsOptional()
+  @IsObject()
+  routingProfile?: Record<string, any>;
 
   @ApiProperty({
     enum: FuelType,

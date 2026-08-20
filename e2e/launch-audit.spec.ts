@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Response } from '@playwright/test';
 
 const auditRoot =
   process.env.LAUNCH_AUDIT_DIR ||
@@ -12,23 +12,6 @@ const strictOptimizer = process.env.LAUNCH_AUDIT_STRICT_OPTIMIZER === 'true';
 const authToken =
   process.env.LAUNCH_AUDIT_AUTH_TOKEN || process.env.STAGING_AUTH_TOKEN || '';
 const authHeaders = authToken ? { Authorization: `Bearer ${authToken}` } : {};
-
-const primaryRoutes = [
-  { slug: 'public-launch', path: '/' },
-  { slug: 'dashboard', path: '/dashboard' },
-  { slug: 'jobs', path: '/jobs' },
-  { slug: 'routing', path: '/routing' },
-  { slug: 'dispatch', path: '/dispatch' },
-  { slug: 'exceptions', path: '/exceptions' },
-  { slug: 'tracking', path: '/tracking' },
-  { slug: 'drivers', path: '/drivers' },
-  { slug: 'vehicles', path: '/vehicles' },
-  { slug: 'customers', path: '/customers' },
-  { slug: 'analytics', path: '/analytics' },
-  { slug: 'settings', path: '/settings' },
-  { slug: 'driver-workspace', path: '/driver' },
-  { slug: 'public-tracking', path: '/track/demo-token' },
-];
 
 const publicMarketingRoutes = [
   { path: '/', heading: /Plan the route\. Run the day\. Prove every stop/i },
@@ -51,7 +34,54 @@ const publicMarketingRoutes = [
   { path: '/legal/terms', heading: /Terms/i },
   { path: '/legal/cookies', heading: /Cookie/i },
   { path: '/legal/exercise-rights', heading: /Privacy Rights Request/i },
-  { path: '/resources/downloads', heading: /Downloads/i },
+  {
+    path: '/resources/downloads',
+    heading: /Everything a customer needs to implement Trovan/i,
+  },
+];
+
+const primaryRoutes = [
+  { slug: 'public-launch', path: '/' },
+  { slug: 'public-platform', path: '/platform' },
+  { slug: 'public-plan', path: '/platform/plan' },
+  { slug: 'public-dispatch', path: '/platform/dispatch' },
+  { slug: 'public-drive', path: '/platform/drive' },
+  { slug: 'public-track', path: '/platform/track' },
+  { slug: 'public-proof', path: '/platform/proof' },
+  { slug: 'public-demo', path: '/demo' },
+  { slug: 'public-pricing', path: '/pricing' },
+  { slug: 'public-testimonials', path: '/testimonials' },
+  { slug: 'public-security', path: '/security' },
+  { slug: 'public-resources', path: '/resources' },
+  { slug: 'public-support', path: '/support' },
+  { slug: 'public-company', path: '/company' },
+  { slug: 'public-mission', path: '/mission' },
+  { slug: 'public-careers', path: '/careers' },
+  { slug: 'public-privacy', path: '/legal/privacy' },
+  { slug: 'public-terms', path: '/legal/terms' },
+  { slug: 'public-cookies', path: '/legal/cookies' },
+  { slug: 'public-rights', path: '/legal/exercise-rights' },
+  { slug: 'public-downloads', path: '/resources/downloads' },
+  { slug: 'login', path: '/login' },
+  { slug: 'dashboard', path: '/dashboard' },
+  { slug: 'jobs', path: '/jobs' },
+  { slug: 'routing', path: '/routing' },
+  { slug: 'dispatch', path: '/dispatch' },
+  { slug: 'route-run-detail', path: '/route-runs/route-alpha-001' },
+  { slug: 'exceptions', path: '/exceptions' },
+  { slug: 'tracking', path: '/tracking' },
+  { slug: 'drivers', path: '/drivers' },
+  { slug: 'vehicles', path: '/vehicles' },
+  { slug: 'customers', path: '/customers' },
+  { slug: 'proof-of-delivery', path: '/pod' },
+  { slug: 'analytics', path: '/analytics' },
+  { slug: 'settings', path: '/settings' },
+  { slug: 'academy', path: '/academy' },
+  { slug: 'academy-start-here', path: '/academy/start-here' },
+  { slug: 'driver-workspace', path: '/driver' },
+  { slug: 'driver-help', path: '/driver/help' },
+  { slug: 'driver-route-run', path: '/driver/route-runs/route-alpha-001' },
+  { slug: 'public-tracking', path: '/track/demo-token' },
 ];
 
 const viewports = [
@@ -71,9 +101,9 @@ const interactiveSelector = [
   '[role="switch"]',
 ].join(',');
 
-const destructiveControl = /\b(delete|revoke|rotate|logout|archive|remove|discard|reset)\b/i;
+const destructiveControl = /\b(delete|revoke|rotate|logout|archive|remove|discard)\b/i;
 const lifecycleControl =
-  /\b(assign|reassign|save driver|dispatch|start|complete|cancel|fail|reschedule|proof|resolve|route exception|replay|publish)\b/i;
+  /\b(assign|reassign|save driver|dispatch|start|complete|cancel|fail|reschedule|proof|resolve|route exception|replay|publish|location)\b/i;
 
 type AuditIssue = {
   scope: string;
@@ -99,10 +129,23 @@ async function collectInteractiveInventory(page: Page) {
       .map((element, index) => {
         const htmlElement = element as HTMLElement;
         const box = htmlElement.getBoundingClientRect();
+        const className =
+          typeof htmlElement.className === 'string' ? htmlElement.className : '';
+        const mapContainer = className.includes('leaflet-marker-icon')
+          ? htmlElement.closest('.leaflet-container')
+          : null;
+        const mapBox = mapContainer?.getBoundingClientRect();
+        const withinMapViewport =
+          !mapBox ||
+          (box.right > mapBox.left &&
+            box.left < mapBox.right &&
+            box.bottom > mapBox.top &&
+            box.top < mapBox.bottom);
         const aria = htmlElement.getAttribute('aria-label') || '';
         const label =
           aria ||
           htmlElement.innerText ||
+          htmlElement.getAttribute('title') ||
           htmlElement.getAttribute('placeholder') ||
           htmlElement.getAttribute('name') ||
           htmlElement.getAttribute('type') ||
@@ -113,24 +156,93 @@ async function collectInteractiveInventory(page: Page) {
           htmlElement.getAttribute('aria-disabled') === 'true';
         return {
           index,
-          className:
-            typeof htmlElement.className === 'string'
-              ? htmlElement.className
-              : '',
+          className,
           tag: element.tagName.toLowerCase(),
           role: htmlElement.getAttribute('role') || null,
+          href: htmlElement.getAttribute('href') || null,
           type: htmlElement.getAttribute('type') || null,
           label: label.trim().replace(/\s+/g, ' ').slice(0, 180),
           disabled,
+          selected:
+            htmlElement.getAttribute('aria-pressed') === 'true' ||
+            htmlElement.getAttribute('aria-selected') === 'true' ||
+            htmlElement.getAttribute('aria-checked') === 'true' ||
+            htmlElement.classList.contains('Mui-selected'),
           visible:
             box.width > 0 &&
             box.height > 0 &&
+            withinMapViewport &&
             getComputedStyle(htmlElement).visibility !== 'hidden' &&
             getComputedStyle(htmlElement).display !== 'none',
         };
       })
       .filter((item) => item.visible),
   );
+}
+
+async function collectOutcomeSignals(page: Page) {
+  return page.evaluate(() => {
+    const visible = (element: Element) => {
+      const htmlElement = element as HTMLElement;
+      const box = htmlElement.getBoundingClientRect();
+      const style = getComputedStyle(htmlElement);
+      return box.width > 0 && box.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+    };
+    const compactText = (element: Element) =>
+      ((element as HTMLElement).innerText || element.textContent || '')
+        .trim()
+        .replace(/\s+/g, ' ')
+        .slice(0, 240);
+    const text = (document.querySelector('#root') as HTMLElement | null)?.innerText || '';
+    let textHash = 0;
+    for (let index = 0; index < text.length; index += 1) {
+      textHash = (textHash * 31 + text.charCodeAt(index)) >>> 0;
+    }
+    const selected = Array.from(
+      document.querySelectorAll('[aria-pressed="true"], [aria-selected="true"], [aria-checked="true"]'),
+    )
+      .filter(visible)
+      .map(compactText)
+      .slice(0, 30);
+    const expanded = Array.from(document.querySelectorAll('[aria-expanded="true"]'))
+      .filter(visible)
+      .map(compactText)
+      .slice(0, 30);
+    const overlays = Array.from(
+      document.querySelectorAll('[role="dialog"], [role="menu"], [role="alert"], [role="status"], .MuiPopover-root, .MuiSnackbar-root, .leaflet-popup'),
+    )
+      .filter(visible)
+      .map(compactText)
+      .slice(0, 30);
+    const values = Array.from(document.querySelectorAll('input, select, textarea'))
+      .filter(visible)
+      .map((element) => {
+        const input = element as HTMLInputElement;
+        return `${input.getAttribute('aria-label') || input.getAttribute('name') || input.id}:${input.value}:${input.checked}`;
+      })
+      .slice(0, 40);
+    const mapState = Array.from(document.querySelectorAll('.leaflet-map-pane, .leaflet-zoom-animated'))
+      .map((element) => `${element.getAttribute('class')}:${element.getAttribute('style') || ''}`)
+      .slice(0, 20);
+    const storage = Object.keys(window.localStorage)
+      .filter((key) => key.startsWith('trovan.'))
+      .sort()
+      .map((key) => `${key}:${window.localStorage.getItem(key)}`)
+      .slice(0, 20);
+
+    return {
+      url: window.location.href,
+      theme: document.documentElement.dataset.theme || '',
+      textLength: text.length,
+      textHash,
+      selected,
+      expanded,
+      overlays,
+      values,
+      mapState,
+      storage,
+    };
+  });
 }
 
 async function gotoReady(
@@ -152,7 +264,9 @@ async function gotoReady(
     await page.waitForLoadState('networkidle', { timeout: 12_000 }).catch(() => {});
   }
   await expect(page.getByText(/Workspace Failed To Render/i)).toHaveCount(0);
-  await expect(page.getByText(/Preview mode is enabled/i)).toHaveCount(0);
+  if (routePath !== '/login') {
+    await expect(page.getByText(/Preview mode is enabled/i)).toHaveCount(0);
+  }
 }
 
 function installFailureCollectors(page: Page, issues: AuditIssue[], scope: string) {
@@ -196,19 +310,11 @@ async function clickAuditableControls(page: Page, routePath: string) {
       });
       continue;
     }
-    if (item.tag === 'a') {
+    if (item.tag === 'a' && item.role !== 'button') {
       clicked.push({
         ...item,
         result: 'skipped',
         reason: 'navigation link covered by primary route render audit',
-      });
-      continue;
-    }
-    if (String(item.className || '').includes('leaflet-marker-icon')) {
-      clicked.push({
-        ...item,
-        result: 'skipped',
-        reason: 'map marker interaction covered by route/map workflow tests',
       });
       continue;
     }
@@ -224,39 +330,98 @@ async function clickAuditableControls(page: Page, routePath: string) {
       });
       continue;
     }
-    await gotoReady(page, routePath, { settle: false });
-    const controls = page.locator(interactiveSelector);
-    if ((await controls.count()) <= item.index) {
-      clicked.push({ ...item, result: 'skipped', reason: 'control moved after reload' });
+    if (String(item.className || '').includes('leaflet-')) {
+      clicked.push({
+        ...item,
+        result: 'skipped',
+        reason: 'covered by dedicated map interaction proof',
+      });
       continue;
     }
-    const target = controls.nth(item.index);
-    try {
-      await target.click({ timeout: 2_000 });
-      await page.keyboard.press('Escape').catch(() => {});
-      clicked.push({ ...item, result: 'clicked' });
-    } catch (error) {
-      try {
-        await target.dispatchEvent('click', undefined, { timeout: 1_000 });
-        await page.keyboard.press('Escape').catch(() => {});
-        clicked.push({
-          ...item,
-          result: 'clicked-via-dispatch',
-          reason:
-            error instanceof Error
-              ? `Playwright click timed out; dispatched click event instead: ${error.message}`
-              : `Playwright click timed out; dispatched click event instead: ${String(error)}`,
-        });
-      } catch (dispatchError) {
-        clicked.push({
-          ...item,
-          result: 'failed',
-          reason:
-            dispatchError instanceof Error
-              ? dispatchError.message
-              : String(dispatchError),
-        });
+    const isLeafletControl = String(item.className || '').includes('leaflet-');
+    const isLeafletMarker = String(item.className || '').includes('leaflet-marker-icon');
+    await gotoReady(page, routePath, { settle: false });
+    if (isLeafletControl) {
+      await page.waitForTimeout(1_200);
+    }
+    const refreshedInventory = await collectInteractiveInventory(page);
+    const sameControl = (candidate: (typeof refreshedInventory)[number]) =>
+      candidate.tag === item.tag &&
+      candidate.role === item.role &&
+      candidate.type === item.type &&
+      candidate.href === item.href &&
+      candidate.label === item.label;
+    const originalOccurrence = inventory
+      .slice(0, inventory.indexOf(item))
+      .filter(sameControl).length;
+    const refreshedItem = refreshedInventory
+      .filter(sameControl)
+      .at(originalOccurrence);
+    const controls = page.locator(interactiveSelector);
+    if (!refreshedItem || (await controls.count()) <= refreshedItem.index) {
+      clicked.push({
+        ...item,
+        result: 'failed',
+        reason: 'control was not present after deterministic route reload',
+      });
+      continue;
+    }
+    const target = controls.nth(refreshedItem.index);
+    const apiResponses: Array<{ status: number; url: string }> = [];
+    const responseListener = (response: Response) => {
+      if (response.url().includes('/api/')) {
+        apiResponses.push({ status: response.status(), url: response.url() });
       }
+    };
+    try {
+      const before = await collectOutcomeSignals(page);
+      page.on('response', responseListener);
+      let downloadProof: { suggestedFilename: string } | null = null;
+      let interaction = 'pointer-click';
+      if (/^Export$/i.test(label)) {
+        const [download] = await Promise.all([
+          page.waitForEvent('download'),
+          target.click({ timeout: 5_000, noWaitAfter: true }),
+        ]);
+        downloadProof = { suggestedFilename: download.suggestedFilename() };
+      } else {
+        if (isLeafletControl) {
+          await target.click({ timeout: 5_000, force: isLeafletMarker, noWaitAfter: true });
+          interaction = isLeafletMarker
+            ? 'forced-pointer-click-for-animated-map-marker'
+            : 'pointer-click-for-map-control';
+        } else {
+          await target.click({ timeout: 5_000, noWaitAfter: true });
+        }
+      }
+      await page.waitForTimeout(isLeafletControl ? 1_000 : 180);
+      page.off('response', responseListener);
+      const after = await collectOutcomeSignals(page);
+      await page.keyboard.press('Escape').catch(() => {});
+      const changed = JSON.stringify(before) !== JSON.stringify(after);
+      const successfulApiResponse = apiResponses.some((response) => response.status >= 200 && response.status < 400);
+      clicked.push({
+        ...item,
+        result: changed || successfulApiResponse || item.selected || downloadProof ? 'clicked-and-proven' : 'failed',
+        reason:
+          changed || successfulApiResponse || downloadProof
+            ? 'observable UI, navigation, storage, map, or API outcome'
+            : item.selected
+              ? 'selected control remained selected after an idempotent click'
+              : 'click produced no observable UI, navigation, storage, map, or API outcome',
+        before,
+        after,
+        apiResponses,
+        downloadProof,
+        interaction,
+      });
+    } catch (error) {
+      page.off('response', responseListener);
+      clicked.push({
+        ...item,
+        result: 'failed',
+        reason: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
@@ -264,19 +429,24 @@ async function clickAuditableControls(page: Page, routePath: string) {
 }
 
 test.describe('launch UI audit', () => {
+  test.describe.configure({ timeout: 900_000 });
   test('public launch route audit flow is interactive', async ({ page }) => {
     await gotoReady(page, '/');
 
     await expect(page.getByRole('heading', { name: /Plan the route\. Run the day\. Prove every stop/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /^Book demo$/i }).first()).toBeVisible();
-    await expect(page.getByRole('button', { name: /^Get a free route audit$/i }).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: /^Watch a Demo$/i }).first()).toBeVisible();
     await expect(page.getByLabel(/Route audit preview/i)).toHaveCount(0);
     await expect(page.getByText(/Start with one real route day/i)).toHaveCount(0);
     await expect(page.getByText(/Ready routes|Needs review|Live ETAs/i)).toHaveCount(0);
 
-    await page.getByRole('button', { name: /^Get a free route audit$/i }).first().click();
+    await page.getByRole('button', { name: /^Book demo$/i }).first().click();
     await expect(page.getByRole('dialog', { name: /Talk to Trovan/i })).toBeVisible();
-    await expect(page.getByRole('combobox', { name: /Request type/i })).toContainText('Route audit');
+    const requestType = page.getByRole('combobox', { name: /Request type/i });
+    await expect(requestType).toContainText('Book demo');
+    await requestType.click();
+    await page.getByRole('option', { name: 'Route audit' }).click();
+    await expect(requestType).toContainText('Route audit');
     await page.getByRole('combobox', { name: /Fleet size/i }).click();
     await expect(page.getByRole('option', { name: '300+ / Custom' })).toBeVisible();
     await page.keyboard.press('Escape');
@@ -284,7 +454,7 @@ test.describe('launch UI audit', () => {
     await page.getByLabel(/Work email/i).fill('ops@example.com');
     await page.getByLabel(/Company/i).fill('Example Delivery');
     await page.getByLabel(/Optional notes/i).fill('Spreadsheet and map tabs');
-    await page.getByRole('button', { name: /Prepare request email|Send request/i }).click();
+    await page.getByRole('button', { name: /^Send request$/i }).click();
     await expect(page.getByTestId('request-success')).toBeVisible();
     await expect(page.getByText(/captured locally/i)).toHaveCount(0);
   });
@@ -295,6 +465,28 @@ test.describe('launch UI audit', () => {
     await page.getByRole('button', { name: /^Book demo$/i }).first().click();
     await expect(page.getByRole('dialog', { name: /Talk to Trovan/i })).toBeVisible();
     await expect(page.getByRole('combobox', { name: /Request type/i })).toContainText('Book demo');
+  });
+
+  test('lead intake failure preserves the request and offers an explicit email fallback', async ({ page }) => {
+    await page.route('**/api/marketing-leads', (route) => route.fulfill({
+      status: 503,
+      contentType: 'application/json',
+      body: JSON.stringify({ message: 'Lead intake temporarily unavailable' }),
+    }));
+    await gotoReady(page, '/pricing');
+
+    await page.getByRole('button', { name: /^Book ROI walkthrough$/i }).click();
+    await page.getByLabel(/Name/i).fill('Fallback Operator');
+    await page.getByLabel(/Work email/i).fill('fallback@example.com');
+    await page.getByLabel(/Company/i).fill('Fallback Logistics');
+    await page.getByRole('button', { name: /^Send request$/i }).click();
+
+    await expect(page.getByRole('alert').filter({ hasText: /could not send the request automatically/i })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Email instead/i })).toHaveAttribute(
+      'href',
+      /^mailto:sales@trytrovan\.com/,
+    );
+    await expect(page.getByLabel(/Work email/i)).toHaveValue('fallback@example.com');
   });
 
   test('homepage does not expose the old route audit calculator', async ({ page }) => {
@@ -309,11 +501,14 @@ test.describe('launch UI audit', () => {
     await gotoReady(page, '/');
 
     await page.locator('#pricing').scrollIntoViewIfNeeded();
-    await expect(page.getByText(/Launch onboarding is currently reviewed before activation/i)).toBeVisible();
+    await expect(page.getByText(/For local delivery teams proving route discipline/i)).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Request Launch setup$/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /^Start Starter$/i })).toHaveCount(0);
     await page.getByRole('button', { name: /^Request Launch setup$/i }).click();
     await expect(page.getByRole('dialog', { name: /Talk to Trovan/i })).toBeVisible();
-    await expect(page.getByRole('combobox', { name: /Request type/i })).toContainText('Implementation');
+    await expect(page.getByRole('combobox', { name: /Request type/i })).toContainText(
+      'Implementation planning',
+    );
   });
 
   test('pricing page has a semantic page heading', async ({ page }) => {
@@ -470,11 +665,41 @@ test.describe('launch UI audit', () => {
     await expect(page.getByText('46 stops imported', { exact: true })).toBeVisible();
   });
 
-  test('demo page uses short motion proof and connected route lines', async ({ page }) => {
+  test('demo page uses the current product recording and connected route lines', async ({ page }) => {
     await gotoReady(page, '/demo');
 
     await expect(page.getByText(/Product walkthrough video/i)).toBeVisible();
-    await expect(page.getByTestId('route-rebalance-staged-animation')).toBeVisible();
+    const productTour = page.getByLabel(/Trovan full route day product walkthrough video/i);
+    await expect(productTour).toBeVisible();
+    await expect(productTour.locator('source')).toHaveAttribute('src', '/marketing/trovan-product-tour.mp4');
+    await expect(productTour).toHaveAttribute('poster', '/marketing/trovan-product-tour-poster.webp');
+    await expect(productTour.locator('track[kind="captions"]')).toHaveAttribute(
+      'src',
+      '/marketing/trovan-product-tour.vtt',
+    );
+
+    await productTour.evaluate(async (video) => {
+      const media = video as HTMLVideoElement;
+      if (media.readyState < HTMLMediaElement.HAVE_METADATA) {
+        await new Promise<void>((resolve, reject) => {
+          media.addEventListener('loadedmetadata', () => resolve(), { once: true });
+          media.addEventListener('error', () => reject(media.error), { once: true });
+          media.load();
+        });
+      }
+    });
+    const mediaProof = await productTour.evaluate((video) => {
+      const media = video as HTMLVideoElement;
+      return {
+        duration: media.duration,
+        width: media.videoWidth,
+        height: media.videoHeight,
+      };
+    });
+    expect(mediaProof.duration).toBeGreaterThan(30);
+    expect(mediaProof.duration).toBeLessThan(60);
+    expect(mediaProof.width).toBe(1280);
+    expect(mediaProof.height).toBe(800);
 
     const routePreview = page.getByLabel('Actual connected route preview');
     await expect(routePreview).toBeVisible();
@@ -522,7 +747,7 @@ test.describe('launch UI audit', () => {
     await expect(page.getByText(/live route-day system/i)).toHaveCount(0);
     await expect(page.getByText(/live operating system/i)).toBeVisible();
     await expect(page.getByText(/Plans, route lanes, driver assignments, map context/i)).toBeVisible();
-    await expect(page.getByText(/Trovan uses real product workflows/i)).toBeVisible();
+    await expect(page.getByText(/Trovan sells one operating promise/i)).toBeVisible();
     await expect(page.getByText(/No fake customer logos|Until named references|website reads like/i)).toHaveCount(0);
     await expect(page.locator('[data-motion="scroll-reveal"]')).toHaveCount(3);
   });
@@ -562,6 +787,72 @@ test.describe('launch UI audit', () => {
       );
       expect(imagesLoaded).toBe(true);
     }
+  });
+
+  test('homepage uses distinct current product captures instead of legacy mockups', async ({ page }) => {
+    await gotoReady(page, '/');
+
+    const productImages = page.locator('img[src^="/marketing/product-"]');
+    const sources = await productImages.evaluateAll((images) =>
+      images.map((image) => image.getAttribute('src')).filter((source): source is string => Boolean(source)),
+    );
+    expect(new Set(sources).size).toBeGreaterThanOrEqual(4);
+    expect(sources).toContain('/marketing/product-routing.png');
+    expect(sources).toContain('/marketing/product-dashboard.png');
+    expect(sources.some((source) => /hero-route|routing-workspace|dispatch-board/.test(source))).toBe(false);
+
+    for (let index = 0; index < await productImages.count(); index += 1) {
+      await productImages.nth(index).scrollIntoViewIfNeeded();
+    }
+    await expect.poll(() =>
+      productImages.evaluateAll((images) =>
+        images.every((image) => image instanceof HTMLImageElement && image.complete && image.naturalWidth > 0),
+      ),
+    ).toBe(true);
+
+    await expect.poll(() =>
+      productImages.first().evaluate((image) => (image as HTMLImageElement).currentSrc),
+    ).toMatch(/\/marketing\/product-routing-(640|768)\.webp$/);
+  });
+
+  test('public metadata, crawler controls, and social preview are launch-ready', async ({ page }) => {
+    await gotoReady(page, '/demo');
+
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://trytrovan.com/demo');
+    await expect(page.locator('meta[property="og:title"]')).toHaveAttribute('content', /TryTrovan Demo/i);
+    await expect(page.locator('meta[property="og:image"]')).toHaveAttribute(
+      'content',
+      'https://trytrovan.com/marketing/product-routing.webp',
+    );
+    await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute('content', 'summary_large_image');
+
+    const robots = await page.request.get('/robots.txt');
+    expect(robots.ok()).toBe(true);
+    expect(await robots.text()).toContain('Sitemap: https://trytrovan.com/sitemap.xml');
+
+    const sitemap = await page.request.get('/sitemap.xml');
+    expect(sitemap.ok()).toBe(true);
+    const sitemapBody = await sitemap.text();
+    expect(sitemapBody).toContain('<loc>https://trytrovan.com/</loc>');
+    expect(sitemapBody).toContain('<loc>https://trytrovan.com/demo</loc>');
+    expect(sitemapBody).not.toContain('/dashboard');
+  });
+
+  test('homepage defers the full product-tour download until the recording approaches the viewport', async ({ page }) => {
+    const productTourRequests: string[] = [];
+    page.on('request', (request) => {
+      if (request.url().endsWith('/marketing/trovan-product-tour.mp4')) {
+        productTourRequests.push(request.url());
+      }
+    });
+
+    await gotoReady(page, '/', { settle: false });
+    await page.waitForTimeout(700);
+    expect(productTourRequests).toHaveLength(0);
+
+    const recording = page.getByLabel(/Trovan product tour recording from dashboard through customer tracking/i);
+    await recording.scrollIntoViewIfNeeded();
+    await expect.poll(() => productTourRequests.length).toBeGreaterThan(0);
   });
 
   test('public marketing screenshots are framed without side cropping', async ({ page }) => {
@@ -608,8 +899,78 @@ test.describe('launch UI audit', () => {
     expect(issues).toEqual([]);
   });
 
-  test('accounts for visible controls on every primary route', async ({ page }) => {
+  test('activates every visible map control and marker with observable outcomes', async ({ page }) => {
     test.setTimeout(420_000);
+    const mapRoutes = primaryRoutes.filter((route) =>
+      ['dashboard', 'routing', 'dispatch', 'exceptions', 'tracking', 'customers', 'proof-of-delivery'].includes(route.slug),
+    );
+    const checks: Array<Record<string, unknown>> = [];
+
+    for (const route of mapRoutes) {
+      await gotoReady(page, route.path, { settle: false });
+      await page.waitForTimeout(1_200);
+      const targets = await page
+        .locator('.leaflet-control-zoom-in, .leaflet-control-zoom-out, .leaflet-marker-icon[role="button"]')
+        .evaluateAll((elements) =>
+          elements
+            .filter((element) => {
+              const className = element.getAttribute('class') || '';
+              if (!className.includes('leaflet-marker-icon')) return true;
+              const box = element.getBoundingClientRect();
+              const mapBox = element.closest('.leaflet-container')?.getBoundingClientRect();
+              return Boolean(
+                mapBox &&
+                  box.right > mapBox.left &&
+                  box.left < mapBox.right &&
+                  box.bottom > mapBox.top &&
+                  box.top < mapBox.bottom,
+              );
+            })
+            .map((element) => ({
+              title: element.getAttribute('title') || element.getAttribute('aria-label') || element.textContent?.trim() || '',
+              className: element.getAttribute('class') || '',
+              html: element.outerHTML,
+            })),
+        );
+
+      for (const mapTarget of targets) {
+        expect(
+          mapTarget.title,
+          `${route.slug}: every interactive map target must have an accessible name: ${mapTarget.html}`,
+        ).not.toBe('');
+        const target = page.getByTitle(mapTarget.title, { exact: true }).first();
+        await expect(target).toBeVisible();
+        const before = await collectOutcomeSignals(page);
+        const marker = mapTarget.className.includes('leaflet-marker-icon');
+        if (marker) {
+          await target.press('Enter');
+        } else {
+          await target.click();
+        }
+        await page.waitForTimeout(marker ? 400 : 650);
+        const after = await collectOutcomeSignals(page);
+        expect(JSON.stringify(after), `${route.slug}: ${mapTarget.title}`).not.toBe(JSON.stringify(before));
+        checks.push({
+          route: route.slug,
+          control: mapTarget.title,
+          kind: marker ? 'marker' : 'zoom',
+          interaction: marker ? 'keyboard-activation-for-map-marker' : 'pointer-click',
+          status: 'passed',
+        });
+      }
+    }
+
+    const proofRoot = path.join(process.cwd(), '.codex', 'launch-audit');
+    mkdirSync(proofRoot, { recursive: true });
+    writeFileSync(
+      path.join(proofRoot, 'map-control-proof.json'),
+      `${JSON.stringify({ generatedAt: new Date().toISOString(), status: 'passed', checks }, null, 2)}\n`,
+      'utf8',
+    );
+  });
+
+  test('accounts for visible controls on every primary route', async ({ page }) => {
+    test.setTimeout(900_000);
     const results: Record<string, unknown> = {};
     const issues: AuditIssue[] = [];
     installFailureCollectors(page, issues, 'control-clicks');
@@ -621,10 +982,70 @@ test.describe('launch UI audit', () => {
 
     writeAuditJson('control-click-results.json', results);
     writeAuditJson('control-click-issues.json', issues);
-    const failedClicks = Object.values(results)
-      .flatMap((value) => value as Array<Record<string, unknown>>)
+    const controls = Object.values(results)
+      .flatMap((value) => value as Array<Record<string, unknown>>);
+    const failedClicks = controls
       .filter((item) => item.result === 'failed');
+    const buttonControls = controls.filter((item) =>
+      item.tag === 'button' || ['button', 'tab'].includes(String(item.role || '')),
+    );
+    const directlyProvenButtons = buttonControls.filter(
+      (item) => item.result === 'clicked-and-proven',
+    );
+    const workflowProvenButtons = buttonControls.filter((item) =>
+      ['covered by workflow-specific route tests', 'covered by dedicated map interaction proof'].includes(String(item.reason || '')),
+    );
+    const disabledButtons = buttonControls.filter((item) => item.disabled === true);
+    const unaccountedEnabledButtons = buttonControls.filter(
+      (item) =>
+        item.disabled !== true &&
+        item.result !== 'clicked-and-proven' &&
+        !['covered by workflow-specific route tests', 'covered by dedicated map interaction proof'].includes(String(item.reason || '')),
+    );
+    const resultCounts = controls.reduce<Record<string, number>>((counts, item) => {
+      const result = String(item.result || 'unknown');
+      counts[result] = (counts[result] || 0) + 1;
+      return counts;
+    }, {});
+    const skipReasons = controls
+      .filter((item) => item.result === 'skipped')
+      .reduce<Record<string, number>>((counts, item) => {
+        const reason = String(item.reason || 'unspecified');
+        counts[reason] = (counts[reason] || 0) + 1;
+        return counts;
+      }, {});
+    const proofRoot = path.join(process.cwd(), '.codex', 'launch-audit');
+    mkdirSync(proofRoot, { recursive: true });
+    writeFileSync(
+      path.join(proofRoot, 'control-proof.json'),
+      `${JSON.stringify({
+        generatedAt: new Date().toISOString(),
+        status:
+          failedClicks.length || issues.length || unaccountedEnabledButtons.length
+            ? 'failed'
+            : 'passed',
+        routes: primaryRoutes.length,
+        controls: controls.length,
+        buttons: {
+          total: buttonControls.length,
+          directlyProven: directlyProvenButtons.length,
+          workflowProven: workflowProvenButtons.length,
+          disabledAtInitialState: disabledButtons.length,
+          unaccountedEnabled: unaccountedEnabledButtons.length,
+        },
+        resultCounts,
+        skipReasons,
+        workflowEvidence: [
+          'e2e/launch-audit.spec.ts: primary navigation, forms, route rendering, optimization',
+          'e2e/product-ui.spec.ts: lifecycle, dispatch, exception, and route-state actions',
+          'e2e/launch-audit.spec.ts: every visible Leaflet zoom control and interactive marker',
+          'e2e/live-persistence.spec.ts: account sign-out/sign-in and durable customer mutation',
+        ],
+      }, null, 2)}\n`,
+      'utf8',
+    );
     expect(failedClicks).toEqual([]);
+    expect(unaccountedEnabledButtons).toEqual([]);
     expect(issues).toEqual([]);
   });
 
@@ -650,14 +1071,15 @@ test.describe('launch UI audit', () => {
     await page.getByLabel(/^phone$/i).fill('(555) 010-4600');
     await page.getByLabel(/license number/i).fill(`LA-${unique}`);
     await page.getByRole('button', { name: /save driver/i }).click();
-    await expect(page.getByText(`Launch Driver ${unique}`)).toBeVisible();
+    await expect(page.locator('tbody').getByText(`Launch Driver ${unique}`)).toBeVisible();
 
     await gotoReady(page, '/vehicles');
     await page.getByRole('button', { name: /add vehicle/i }).click();
     await page.getByLabel(/^make$/i).fill('Launch');
     await page.getByLabel(/^model$/i).fill(`Van ${unique}`);
     await page.getByLabel(/license plate/i).fill(`LA-${unique}`.slice(0, 12));
-    await page.getByLabel(/^capacity$/i).fill('2200');
+    await page.getByLabel(/payload capacity \(lb\)/i).fill('2200');
+    await page.getByLabel(/volume capacity \(cu ft\)/i).fill('180');
     await page.getByRole('button', { name: /save vehicle/i }).click();
     await expect(page.getByText(`Launch Van ${unique}`)).toBeVisible();
 
@@ -666,7 +1088,7 @@ test.describe('launch UI audit', () => {
     await page.getByLabel(/customer name/i).fill(`Launch Audit Customer ${unique}`);
     await page.getByLabel(/delivery address/i).fill('1040 River Market St, Kansas City, MO 64106');
     await page.getByRole('button', { name: /^create job$/i }).click();
-    await expect(page.getByText(/job added to the queue/i)).toBeVisible();
+    await expect(page.getByRole('alert')).toContainText(/Job added with routing constraints and readiness context/i);
   });
 
   test('proves route optimization path returns live optimized output', async ({ request }) => {

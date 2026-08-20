@@ -1,0 +1,52 @@
+{
+  "generatedAt": "2026-08-19T19:49:03.626Z",
+  "pipeline": "Real-interface capture + server-local AI narration + Kokoro TTS + ffmpeg",
+  "narrationModel": "Mistral-Nemo-Instruct-2407-Q4_K_M.gguf",
+  "voiceEngine": "kokoro-onnx",
+  "voice": "af_heart",
+  "narrationBrandPolicy": "The brand name is omitted from synthesized narration and captions; neutral references use the platform or the training academy.",
+  "visualPolicy": "Playwright-recorded sanitized walkthroughs with visible cursor movement and real clicks; no generative UI footage.",
+  "modules": [
+    {
+      "key": "start-here",
+      "title": "Start Here: Own the Rollout",
+      "durationSeconds": 180.5,
+      "paragraphCount": 7,
+      "endingHoldSeconds": 4.35
+    },
+    {
+      "key": "workspace-setup",
+      "title": "Set Up the Operating Workspace",
+      "durationSeconds": 180.5,
+      "paragraphCount": 7,
+      "endingHoldSeconds": 10.1
+    },
+    {
+      "key": "route-operations",
+      "title": "Plan, Dispatch, and Prove a Route Day",
+      "durationSeconds": 197.77,
+      "paragraphCount": 7
+    },
+    {
+      "key": "driver-quick-start",
+      "title": "Driver Quick Start",
+      "durationSeconds": 180.5,
+      "paragraphCount": 7,
+      "endingHoldSeconds": 2.5
+    },
+    {
+      "key": "go-live",
+      "title": "Complete Launch Readiness",
+      "durationSeconds": 194.63,
+      "paragraphCount": 7
+    },
+    {
+      "key": "viewer-basics",
+      "title": "Viewer Basics",
+      "durationSeconds": 180.5,
+      "paragraphCount": 7,
+      "endingHoldSeconds": 9.07
+    }
+  ],
+  "minimumLessonDurationSeconds": 180.5
+}

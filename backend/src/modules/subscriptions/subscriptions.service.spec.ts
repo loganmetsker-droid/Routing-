@@ -70,10 +70,51 @@ describe('SubscriptionsService', () => {
     });
 
     expect(plans.stripeConfigured).toBe(false);
+    expect(plans.billingMode).toBe('assisted_pilot');
     expect(plans.plans).toHaveLength(3);
+    expect(plans.plans.map((plan) => plan.label)).toEqual([
+      'Launch',
+      'Scale',
+      'Enterprise',
+    ]);
+    expect(plans.plans.map((plan) => plan.monthlyPriceUsd)).toEqual([
+      399,
+      899,
+      null,
+    ]);
+    expect(plans.plans.every((plan) => plan.selfServeEnabled === false)).toBe(
+      true,
+    );
     expect(overview.stripeConfigured).toBe(false);
     expect(overview.activeSubscription?.id).toBe('sub-1');
-    expect(overview.recommendations[0]).toContain('Configure STRIPE_SECRET_KEY');
+    expect(overview.controls.selfServeEnabled).toBe(false);
+    expect(overview.recommendations[0]).toContain('Assisted-pilot billing');
+  });
+
+  it('rejects subscription creation while assisted-pilot billing is active', async () => {
+    const service = createService(
+      createRepo(),
+      {
+        get: (key: string, defaultValue?: string) =>
+          key === 'SELF_SERVE_BILLING_ENABLED' ? 'false' : defaultValue,
+      } as ConfigService,
+    );
+
+    await expect(
+      service.createSubscription(
+        {
+          userId: 'user-1',
+          email: 'owner@example.com',
+          plan: SubscriptionPlan.STARTER,
+          paymentMethodId: 'pm_test',
+        },
+        {
+          userId: 'user-1',
+          email: 'owner@example.com',
+          organizationId: 'org-1',
+        },
+      ),
+    ).rejects.toThrow('Self-service billing is disabled');
   });
 
   it('keeps subscription reads scoped to the actor organization', async () => {

@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { Box, Grid, Stack, Typography } from '@mui/material';
+import { useState, type ReactNode } from 'react';
+import { Box, Button, Grid, Stack, Typography } from '@mui/material';
 import { alpha, useTheme } from '@mui/material/styles';
 import { PageHeader } from '../components/PageHeader';
 import { StatusPill } from '../components/StatusPill';
@@ -89,6 +89,7 @@ function ModuleHeader({
 export default function AnalyticsPage() {
   const analyticsQuery = useAnalyticsOverviewQuery();
   const analytics = analyticsQuery.data ?? null;
+  const [viewMode, setViewMode] = useState<'overview' | 'details'>('overview');
 
   if (analyticsQuery.isLoading) {
     return <LoadingState label="Loading analytics overview..." minHeight="50vh" />;
@@ -98,6 +99,19 @@ export default function AnalyticsPage() {
   const exceptionBreakdown = analytics?.exceptionStatusBreakdown ?? [];
   const maxRouteCount = Math.max(...routeBreakdown.map((item) => item.count), 1);
   const maxExceptionCount = Math.max(...exceptionBreakdown.map((item) => item.count), 1);
+  const hasServicedStops = (analytics?.workload.servicedStops ?? 0) > 0;
+  const hasProofSignal = (analytics?.serviceLevel.proofCaptureRate ?? 0) > 0;
+  const handleExport = () => {
+    const blob = new Blob([JSON.stringify(analytics ?? {}, null, 2)], {
+      type: 'application/json;charset=utf-8;',
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'trovan-analytics-overview.json';
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <Stack spacing={1.75}>
@@ -105,6 +119,20 @@ export default function AnalyticsPage() {
         eyebrow="Intelligence"
         title="Analytics"
         subtitle="Service-level, fleet readiness, and route pressure arranged as an operator intelligence workspace."
+        actions={
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+            <StatusPill label={`${viewMode === 'overview' ? 'Overview' : 'Detailed'} view`} tone="accent" />
+            <Button
+              variant="outlined"
+              onClick={() => setViewMode((current) => (current === 'overview' ? 'details' : 'overview'))}
+            >
+              View
+            </Button>
+            <Button variant="contained" onClick={handleExport}>
+              Export
+            </Button>
+          </Stack>
+        }
       />
 
       <Grid container spacing={1.5}>
@@ -112,7 +140,7 @@ export default function AnalyticsPage() {
           <KpiTile
             label="On-time rate"
             value={`${analytics?.serviceLevel.onTimeRate ?? 0}%`}
-            meta="Arrival performance"
+            meta={hasServicedStops ? 'Arrival performance' : 'No completed timing data'}
             tone="success"
           />
         </Grid>
@@ -120,7 +148,7 @@ export default function AnalyticsPage() {
           <KpiTile
             label="Proof capture"
             value={`${analytics?.serviceLevel.proofCaptureRate ?? 0}%`}
-            meta="Stops with proof"
+            meta={hasProofSignal ? 'Stops with proof' : 'No proof captured yet'}
             tone="success"
           />
         </Grid>
@@ -186,7 +214,7 @@ export default function AnalyticsPage() {
                         label="Average distance"
                         value={analytics?.operations.averageRouteDistanceKm ?? 0}
                         max={Math.max((analytics?.operations.averageRouteDistanceKm ?? 0) * 1.3, 1)}
-                        meta={`${analytics?.operations.averageRouteDistanceKm ?? 0} km`}
+                        meta={`${((analytics?.operations.averageRouteDistanceKm ?? 0) * 0.621371).toFixed(1)} mi`}
                       />
                       <BarRow
                         label="Average duration"
@@ -210,7 +238,9 @@ export default function AnalyticsPage() {
                       {analytics?.serviceLevel.onTimeRate ?? 0}%
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35 }}>
-                      Routes are landing close to planned service windows.
+                      {hasServicedStops
+                        ? 'Routes are landing close to planned service windows.'
+                        : 'No completed stop timing has been captured for this workspace yet.'}
                     </Typography>
                   </SurfacePanel>
                 </Grid>
@@ -221,7 +251,9 @@ export default function AnalyticsPage() {
                       {analytics?.serviceLevel.proofCaptureRate ?? 0}%
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 0.35 }}>
-                      Proof collection stays strong when drivers remain in guided flows.
+                      {hasProofSignal
+                        ? 'Proof collection stays strong when drivers remain in guided flows.'
+                        : 'Proof metrics will populate from completed driver stop records.'}
                     </Typography>
                   </SurfacePanel>
                 </Grid>

@@ -9,11 +9,8 @@ type RoadRouteResponse = {
   }>;
 };
 
-const DEFAULT_ROAD_ROUTE_BASE_URL = 'https://router.project-osrm.org/route/v1/driving';
-
 const roadRouteBaseUrl =
-  (import.meta.env.VITE_ROAD_ROUTE_BASE_URL as string | undefined)?.replace(/\/$/, '') ||
-  DEFAULT_ROAD_ROUTE_BASE_URL;
+  (import.meta.env.VITE_ROAD_ROUTE_BASE_URL as string | undefined)?.replace(/\/$/, '') || '';
 
 const roundCoordinate = (value: number) => Number(value.toFixed(6));
 
@@ -39,11 +36,14 @@ const toValidRoadRouteCoordinates = (value: unknown): RoadRoutePoint[] => {
 export const fetchRoadRoutePolyline = async (
   points: RoadRoutePoint[],
   signal?: AbortSignal,
+  baseUrlOverride?: string,
 ): Promise<RoadRoutePoint[] | null> => {
   if (points.length < 2) return null;
+  const baseUrl = (baseUrlOverride || roadRouteBaseUrl).replace(/\/$/, '');
+  if (!baseUrl) return null;
 
   const coordinatePath = getRoadRouteSignature(points);
-  const url = `${roadRouteBaseUrl}/${coordinatePath}?overview=full&geometries=geojson&continue_straight=false`;
+  const url = `${baseUrl}/${coordinatePath}?overview=full&geometries=geojson&continue_straight=false`;
   const response = await fetch(url, {
     headers: { Accept: 'application/json' },
     signal,

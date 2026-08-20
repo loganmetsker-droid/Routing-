@@ -7,6 +7,7 @@ import { WorkosService } from '../../common/integrations/workos.service';
 import { OrganizationsService } from '../organizations/organizations.service';
 import { AuthSession } from './entities/auth-session.entity';
 import { sanitizeSessionContext, SessionContext } from './session-context.util';
+import { AuditService } from '../../common/audit/audit.service';
 
 type AuthUser = {
   id: string;
@@ -37,6 +38,7 @@ export class AuthService {
     private readonly workosService: WorkosService,
     @InjectRepository(AuthSession)
     private readonly authSessions: Repository<AuthSession>,
+    private readonly audit?: AuditService,
   ) {}
 
   private decodeJwtClaims(token: string) {
@@ -90,6 +92,17 @@ export class AuthService {
       membershipId: user.membershipId,
     };
     const accessToken = await this.jwtService.signAsync(payload);
+
+    this.audit?.record({
+      actorId: user.id,
+      actorType: 'user',
+      entityType: 'auth_session',
+      entityId: session.id,
+      action: 'pilot.activation.login',
+      source: authProvider === 'workos' ? 'integration' : 'user',
+      newValue: { authProvider, roles: user.roles },
+      metadata: { organizationId: user.organizationId },
+    });
 
     return {
       accessToken,

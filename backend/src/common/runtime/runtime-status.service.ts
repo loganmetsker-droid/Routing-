@@ -94,6 +94,12 @@ export class RuntimeStatusService {
 
     return {
       startedAt: this.startedAt,
+      release: {
+        sha:
+          process.env.RENDER_GIT_COMMIT ||
+          process.env.GIT_SHA ||
+          'unknown',
+      },
       envSource: process.env.TROVAN_ENV_SOURCES || 'process-environment',
       nodeEnv: process.env.NODE_ENV || 'development',
       authMode,
@@ -137,7 +143,22 @@ export class RuntimeStatusService {
           configured: Boolean(
             process.env.POSTMARK_SERVER_TOKEN &&
               (process.env.POSTMARK_FROM_EMAIL ||
-                process.env.NOTIFICATION_FROM_EMAIL),
+                process.env.NOTIFICATION_FROM_EMAIL) &&
+              process.env.POSTMARK_WEBHOOK_USERNAME &&
+              process.env.POSTMARK_WEBHOOK_PASSWORD &&
+              String(process.env.POSTMARK_BOUNCE_HASH_KEY || '').length >= 32,
+          ),
+        },
+        leadIntake: {
+          persistenceConfigured: Boolean(
+            process.env.DATABASE_URL ||
+              process.env.DATABASE_HOST ||
+              process.env.DB_HOST,
+          ),
+          operatorNotificationConfigured: Boolean(
+            process.env.POSTMARK_SERVER_TOKEN &&
+              process.env.LEAD_INTAKE_EMAIL &&
+              process.env.LEAD_INTAKE_FROM_EMAIL,
           ),
         },
         twilio: {

@@ -5,6 +5,7 @@ const nodeCommand =
   process.env.PLAYWRIGHT_NODE ||
   '/Users/logan/Desktop/Local LLM/.local/node-v24.15.0-darwin-arm64/bin/node';
 const skipWebServer = process.env.PLAYWRIGHT_SKIP_WEBSERVER === 'true';
+const browserChannel = process.env.PLAYWRIGHT_CHANNEL?.trim();
 
 export default defineConfig({
   testDir: './e2e',
@@ -27,6 +28,7 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
+        ...(browserChannel ? { channel: browserChannel } : {}),
       },
     },
   ],

@@ -2,6 +2,7 @@ import { unwrapApiData } from '@shared/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from './queryKeys';
 import {
+  ApiError,
   apiFetchResponse,
   clearAuthToken as clearStoredAuthToken,
   getAuthToken as getStoredAuthToken,
@@ -12,32 +13,11 @@ import {
   type AuthConfigurationRecord,
   type AuthSessionRecord,
 } from './api.types';
+import { getTrovanDataMode, usesPreviewDataMode } from './dataMode';
 
-const AUTH_BYPASS =
-  import.meta.env.VITE_AUTH_BYPASS === 'true' ||
-  import.meta.env.VITE_MOCK_PREVIEW === 'true';
 const AUTH_BYPASS_TOKEN = 'preview-auth-bypass';
 const AUTH_PREVIEW_USER_KEY = 'trovan-preview-auth-user';
 const PREVIEW_DRIVER_EMAIL = 'anna.quinn@trovan.local';
-
-const isLocalPreviewHost = () =>
-  typeof window !== 'undefined' &&
-  new Set(['localhost', '127.0.0.1', '[::1]']).has(window.location.hostname);
-
-const hasLocalDemoPreviewBootstrap = () =>
-  typeof window !== 'undefined' &&
-  Boolean((window as unknown as { __TROVAN_LOCAL_DEMO_PREVIEW__?: boolean })
-    .__TROVAN_LOCAL_DEMO_PREVIEW__);
-
-const hasLiveAuthOverride = () => {
-  if (typeof window === 'undefined') return false;
-  return new URLSearchParams(window.location.search).get('auth') === 'live';
-};
-
-const isLocalPreviewEnabled = () =>
-  typeof window !== 'undefined' &&
-  !hasLiveAuthOverride() &&
-  (hasLocalDemoPreviewBootstrap() || (isLocalPreviewHost() && AUTH_BYPASS));
 
 export type ApiRequestOptions = RequestInit & {
   skipAuth?: boolean;
@@ -60,6 +40,11 @@ export type LoginResponse = {
   expiresIn: string;
   sessionId?: string;
   user: AuthUser;
+};
+
+export type SessionValidationState = {
+  status: 'valid' | 'invalid' | 'transient';
+  error?: unknown;
 };
 
 const getAuthToken = (): string | null => getStoredAuthToken();
@@ -209,7 +194,7 @@ const normalizeAuthSession = (value: unknown): AuthSessionRecord => {
   };
 };
 
-export const isAuthBypassed = () => isLocalPreviewEnabled();
+export const isAuthBypassed = () => usesPreviewDataMode(getTrovanDataMode());
 
 export const setAuthToken = (token: string | null) => {
   setStoredAuthToken(token);
@@ -393,15 +378,31 @@ export const logout = async (): Promise<void> => {
 };
 
 export const validateSession = async (): Promise<boolean> => {
-  if (isAuthBypassed()) return true;
-  if (!isAuthenticated()) return false;
+  const state = await validateSessionState();
+  return state.status !== 'invalid';
+};
+
+export const validateSessionState = async (): Promise<SessionValidationState> => {
+  if (isAuthBypassed()) return { status: 'valid' };
+  if (!isAuthenticated()) return { status: 'invalid' };
 
   try {
     await getSession();
-    return true;
-  } catch {
+    return { status: 'valid' };
+  } catch (error) {
+    if (error instanceof ApiError) {
+      if (error.status === 401 || error.status === 403) {
+        clearAuthSession();
+        return { status: 'invalid', error };
+      }
+
+      if (error.status === 408 || error.status === 429 || error.status >= 500) {
+        return { status: 'transient', error };
+      }
+    }
+
     clearAuthSession();
-    return false;
+    return { status: 'invalid', error };
   }
 };
 
@@ -409,6 +410,8 @@ export const useAuthConfigQuery = () =>
   useQuery({
     queryKey: queryKeys.authConfig,
     queryFn: getAuthConfig,
+    retry: false,
+    staleTime: 30_000,
   });
 
 export const useAuthSessionsQuery = () =>

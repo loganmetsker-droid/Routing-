@@ -9,8 +9,9 @@ services:
     name: trovan-backend
     runtime: node
     plan: standard
-    autoDeployTrigger: commit
+    autoDeployTrigger: off
     buildCommand: npm ci --include=dev && npm run build --workspace=backend
+    preDeployCommand: npm run migrate --workspace=backend
     startCommand: npm run start:prod --workspace=backend
     healthCheckPath: /health/readiness
     envVars:
@@ -30,6 +31,14 @@ services:
         value: "false"
       - key: QUEUE_REQUIRED
         value: "true"
+      - key: ENABLE_SCHEDULER
+        value: "1"
+      - key: LAUNCH_PROFILE
+        value: assisted-pilot
+      - key: SELF_SERVE_BILLING_ENABLED
+        value: "false"
+      - key: SMS_NOTIFICATIONS_ENABLED
+        value: "false"
       - key: ROUTING_SERVICE_HOSTPORT
         fromService:
           name: trovan-routing-service
@@ -37,6 +46,22 @@ services:
           property: hostport
       - key: ROUTING_SERVICE_INTERNAL_TOKEN
         sync: false
+      - key: GEOCODING_PROVIDER
+        value: mapbox
+      - key: GEOCODING_API_KEY
+        sync: false
+      - key: GEOCODING_COUNTRY
+        value: us
+      - key: GEOCODING_TIMEOUT_MS
+        value: "5000"
+      - key: ERROR_MONITORING_WEBHOOK_URL
+        sync: false
+      - key: ERROR_MONITORING_WEBHOOK_TOKEN
+        sync: false
+      - key: ACCESS_CODE_ENCRYPTION_KEY
+        sync: false
+      - key: ACCESS_CODE_KEY_VERSION
+        value: pilot-v1
       - key: FRONTEND_URL
         sync: false
       - key: CORS_ORIGINS
@@ -68,21 +93,23 @@ services:
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
-      - key: STRIPE_PRICE_STARTER
+      - key: STRIPE_PRICE_LAUNCH
         sync: false
-      - key: STRIPE_PRICE_PROFESSIONAL
-        sync: false
-      - key: STRIPE_PRICE_ENTERPRISE
+      - key: STRIPE_PRICE_SCALE
         sync: false
       - key: POSTMARK_SERVER_TOKEN
         sync: false
       - key: POSTMARK_FROM_EMAIL
         sync: false
-      - key: TWILIO_ACCOUNT_SID
+      - key: POSTMARK_WEBHOOK_USERNAME
         sync: false
-      - key: TWILIO_AUTH_TOKEN
+      - key: POSTMARK_WEBHOOK_PASSWORD
         sync: false
-      - key: TWILIO_FROM_NUMBER
+      - key: POSTMARK_BOUNCE_HASH_KEY
+        sync: false
+      - key: LEAD_INTAKE_EMAIL
+        sync: false
+      - key: LEAD_INTAKE_FROM_EMAIL
         sync: false
       - key: STORAGE_MODE
         value: r2
@@ -100,7 +127,7 @@ services:
     runtime: docker
     rootDir: routing-service
     plan: standard
-    autoDeployTrigger: commit
+    autoDeployTrigger: off
     healthCheckPath: /health
     envVars:
       - key: LOG_LEVEL
@@ -111,42 +138,22 @@ services:
         sync: false
       - key: ROUTING_SERVICE_MAX_BODY_BYTES
         value: "1048576"
+      - key: ROUTING_MATRIX_PROVIDER
+        value: osrm
+      - key: ROUTING_MATRIX_BASE_URL
+        sync: false
+      - key: ROUTING_MATRIX_PROVIDER_LABEL
+        value: contracted-osrm
+      - key: ROUTING_MATRIX_TOKEN
+        sync: false
+      - key: ROUTING_MATRIX_TIMEOUT_SECONDS
+        value: "8"
+      - key: ROUTING_MATRIX_ALLOW_FALLBACK
+        value: "false"
+      - key: TROVAN_SOLVER_VERSION
+        value: ortools-v2-road-matrix
       - key: CORS_ORIGINS
         sync: false
-
-  - type: web
-    name: trovan-frontend
-    runtime: static
-    plan: standard
-    autoDeployTrigger: commit
-    buildCommand: npm ci --include=dev && npm run build --workspace=frontend
-    staticPublishPath: frontend/dist
-    headers:
-      - path: /*
-        name: X-Frame-Options
-        value: DENY
-      - path: /*
-        name: X-Content-Type-Options
-        value: nosniff
-      - path: /*
-        name: Referrer-Policy
-        value: strict-origin-when-cross-origin
-      - path: /*
-        name: Permissions-Policy
-        value: camera=(), microphone=(), geolocation=()
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
-    envVars:
-      - key: VITE_REST_API_URL
-        sync: false
-      - key: VITE_API_URL
-        sync: false
-      - key: VITE_WS_URL
-        sync: false
-      - key: VITE_ENABLE_SOCKETS
-        value: "true"
 
 databases:
   - name: trovan-postgres

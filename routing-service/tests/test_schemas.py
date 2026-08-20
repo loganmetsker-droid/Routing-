@@ -36,6 +36,34 @@ class OptimizeSchemaTest(unittest.TestCase):
         self.assertEqual(request.stops[0].locked_vehicle_id, "vehicle-1")
         self.assertEqual(request.stops[0].service_minutes, 15)
 
+    def test_optimize_request_accepts_fleet_constraints(self):
+        request = OptimizeRequest(
+            plan_date=datetime(2026, 4, 10, 8, 0, 0),
+            vehicles=[
+                {
+                    "id": "vehicle-1",
+                    "start_lat": 39.0997,
+                    "start_lng": -94.5786,
+                    "capacity_pallet_positions": 10,
+                    "driver_id": "driver-1",
+                }
+            ],
+            stops=[
+                {
+                    "id": "stop-1",
+                    "lat": 39.1200,
+                    "lng": -94.5800,
+                    "allowed_vehicle_ids": ["vehicle-1"],
+                    "pallet_positions": 4,
+                    "sequence_constraint": "first",
+                }
+            ],
+        )
+
+        self.assertEqual(request.vehicles[0].capacity_pallet_positions, 10)
+        self.assertEqual(request.stops[0].allowed_vehicle_ids, ["vehicle-1"])
+        self.assertEqual(request.stops[0].sequence_constraint, "first")
+
 
 if __name__ == "__main__":
     unittest.main()

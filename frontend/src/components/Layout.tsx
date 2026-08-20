@@ -1,9 +1,10 @@
-import { Outlet, useNavigate } from 'react-router-dom';
+import type { ReactNode } from 'react';
+import { useNavigate } from '../router';
 import AppShell from '../layout/AppShell';
 import { clearAuthSession, logout } from '../services/api';
 import ErrorBoundary from './ui/ErrorBoundary';
 
-export function Layout() {
+export function Layout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
 
   const handleLogout = async () => {
@@ -27,7 +28,7 @@ export function Layout() {
           title="Page Render Error"
           message="This page failed to render. Reload to retry after the shell recovers."
         >
-          <Outlet />
+          {children}
         </ErrorBoundary>
       </AppShell>
     </ErrorBoundary>

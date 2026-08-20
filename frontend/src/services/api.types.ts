@@ -92,6 +92,8 @@ export type RouteRecord = Omit<SharedRoute, 'routeData' | 'polyline'> & {
   estimatedCapacity?: number;
   optimizedAt?: string;
   dispatchedAt?: string;
+  dispatchedByUserId?: string | null;
+  dispatchNote?: string | null;
   completedAt?: string;
 };
 
@@ -256,6 +258,25 @@ export type TrackingLocationsSnapshot = {
   vehicles: TrackingVehicleLocation[];
   timestamp: string;
   count: number;
+  summary?: {
+    activeVehicles: number;
+    staleVehicles: number;
+    totalVehiclesInOrganization: number;
+  };
+};
+
+export type TrackingVehicleHistory = {
+  vehicleId: string;
+  organizationId?: string;
+  rangeHours: number;
+  count: number;
+  pointLimit: number;
+  pointLimitReached: boolean;
+  order: 'ascending';
+  source: 'telemetry' | 'preview';
+  oldestAt?: string;
+  newestAt?: string;
+  history: TrackingVehicleLocation[];
 };
 
 export type TrackingStatistics = {
@@ -364,6 +385,13 @@ export type OrganizationSettingsRecord = {
     smsEnabled?: boolean;
     replyToEmail?: string;
     defaultChannel?: 'email' | 'sms' | 'both';
+    scheduledEnabled?: boolean;
+    onTheWayEnabled?: boolean;
+    onTheWayMinutesBefore?: number;
+    onTheWayRequirePreviousCompletion?: boolean;
+    completionEnabled?: boolean;
+    failureEnabled?: boolean;
+    completionVarianceThresholdMeters?: number;
   };
   retention?: {
     auditDays?: number;
@@ -700,7 +728,10 @@ export type BillingSubscriptionRecord = {
 export type BillingPlanRecord = {
   plan: string;
   label: string;
-  monthlyPriceUsd: number;
+  monthlyPriceUsd: number | null;
+  billingCadence: 'month' | null;
+  salesAssisted: boolean;
+  selfServeEnabled: boolean;
   dispatcherSeats: number;
   features: string[];
   stripePriceConfigured: boolean;
@@ -709,12 +740,14 @@ export type BillingPlanRecord = {
 export type BillingOverviewRecord = {
   generatedAt: string;
   stripeConfigured: boolean;
+  billingMode: 'assisted_pilot' | 'self_serve';
   organizationId?: string | null;
   billingContactEmail?: string | null;
   activeSubscription?: BillingSubscriptionRecord | null;
   subscriptions: BillingSubscriptionRecord[];
   plans: BillingPlanRecord[];
   controls: {
+    selfServeEnabled: boolean;
     invoiceAutomationReady: boolean;
     failedPaymentHandlingReady: boolean;
     webhookConfigured: boolean;

@@ -1,0 +1,53 @@
+name: Trovan Production Monitor
+
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    name: Public Health And Discovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify frontend, API, auth config, and sitemap
+        env:
+          PRODUCTION_FRONTEND_URL: ${{ vars.PRODUCTION_FRONTEND_URL }}
+          PRODUCTION_BACKEND_URL: ${{ vars.PRODUCTION_BACKEND_URL }}
+          PRODUCTION_ROUTING_SERVICE_URL: ${{ vars.PRODUCTION_ROUTING_SERVICE_URL }}
+          METRICS_TOKEN: ${{ secrets.METRICS_TOKEN }}
+        run: |
+          curl -fsS --max-time 20 "$PRODUCTION_FRONTEND_URL" > /dev/null
+          curl -fsS --max-time 20 "$PRODUCTION_BACKEND_URL/health/readiness" > /dev/null
+          curl -fsS --max-time 20 "$PRODUCTION_BACKEND_URL/api/auth/config" > /dev/null
+          curl -fsS --max-time 20 "$PRODUCTION_ROUTING_SERVICE_URL/health" |
+            jq -e '.status == "healthy" and .matrixMode == "road_network" and .releaseSha != "unknown"' > /dev/null
+          unauthenticated_metrics_status="$(
+            curl -sS -o /dev/null -w '%{http_code}' --max-time 20 \
+              "$PRODUCTION_BACKEND_URL/api/metrics"
+          )"
+          case "$unauthenticated_metrics_status" in
+            401|403) ;;
+            *)
+              echo "metrics endpoint is not protected: HTTP $unauthenticated_metrics_status"
+              exit 1
+              ;;
+          esac
+          curl -fsS --max-time 20 \
+            -H "x-metrics-token: $METRICS_TOKEN" \
+            "$PRODUCTION_BACKEND_URL/api/metrics" > /dev/null
+          content_type="$(
+            curl -fsSI --max-time 20 "$PRODUCTION_FRONTEND_URL/sitemap.xml" |
+              tr -d '\r' |
+              awk -F': ' 'tolower($1) == "content-type" { print tolower($2) }'
+          )"
+          case "$content_type" in
+            *xml*) ;;
+            *)
+              echo "sitemap.xml has unexpected content type: $content_type"
+              exit 1
+              ;;
+          esac
+          curl -fsS --max-time 20 "$PRODUCTION_FRONTEND_URL/sitemap.xml" |
+            grep -q '<urlset'

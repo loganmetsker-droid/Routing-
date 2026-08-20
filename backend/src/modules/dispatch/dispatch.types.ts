@@ -12,6 +12,7 @@ import type { ProofArtifact } from './entities/proof-artifact.entity';
 import type { RouteRunMessage } from './entities/route-run-message.entity';
 import type { Vehicle } from '../vehicles/entities/vehicle.entity';
 import type { NotificationDelivery } from '../notifications/entities/notification-delivery.entity';
+import type { FleetOperatingRule } from '../../../../shared/contracts';
 
 export type DispatchActorContext = {
   userId?: string | null;
@@ -110,6 +111,7 @@ export type RouteRunsBoardResponse = {
   routes: Route[];
   routeRunStops: RouteRunStop[];
   exceptions: DispatchException[];
+  dispatchReadiness?: Record<string, DispatchReadiness>;
 };
 
 export type RouteRunsListResponse = {
@@ -124,6 +126,13 @@ export type RouteRunStopPresentation = {
   address?: string | null;
   location?: { latitude: number; longitude: number } | null;
   instructions?: string | null;
+  access?: {
+    code?: string | null;
+    codeRequired: boolean;
+    notes?: string | null;
+    gateInstructions?: string | null;
+  } | null;
+  handlingInstructions?: string | null;
   timeWindowStart?: string | null;
   timeWindowEnd?: string | null;
 };
@@ -162,15 +171,35 @@ export type RouteRunMessageSummary = {
   lastMessageAt?: string | null;
 };
 
+export type DispatchReadinessBlocker = {
+  code:
+    | 'MISSING_DRIVER'
+    | 'MISSING_VEHICLE'
+    | 'NO_STOPS'
+    | 'OPEN_EXCEPTION'
+    | 'ROUTE_NOT_EDITABLE';
+  message: string;
+  severity: 'blocking';
+  routeId: string;
+  exceptionId?: string | null;
+};
+
+export type DispatchReadiness = {
+  ready: boolean;
+  blockers: DispatchReadinessBlocker[];
+};
+
 export type RouteRunsDetailResponse = {
   ok: true;
   routeRun: Route;
+  vehicleOperatingRules?: FleetOperatingRule[];
   stops: PresentedRouteRunStop[];
   exceptions: DispatchException[];
   stopEvents: StopEvent[];
   proofArtifacts: ProofArtifact[];
   notificationDeliveries: NotificationDelivery[];
   messages?: RouteRunMessage[];
+  dispatchReadiness?: DispatchReadiness;
 };
 
 export type RouteRunsExceptionsResponse = {

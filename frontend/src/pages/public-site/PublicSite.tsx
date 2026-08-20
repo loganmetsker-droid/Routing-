@@ -8,7 +8,7 @@ import {
   useRef,
   useState,
 } from 'react';
-import { Link as RouterLink, useLocation } from 'react-router-dom';
+import { Link as RouterLink, useLocation } from '../../router';
 import {
   Alert,
   Box,
@@ -30,6 +30,7 @@ import {
   Stack,
   TextField,
   Typography,
+  useMediaQuery,
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import {
@@ -48,7 +49,8 @@ import {
 } from '@mui/icons-material';
 import { TopoShellBackground } from '../../components/TopoShellBackground';
 import { trovanRoutePalette } from '../../components/maps/mapPresentation';
-import { trovanColors, trovanTypography } from '../../theme/designTokens';
+import { trovanBrandAssets, trovanColors, trovanTypography } from '../../theme/designTokens';
+import { implementationTroubleshooting } from '@shared/contracts';
 import {
   type AuditInputs,
   type FleetSizeKey,
@@ -68,7 +70,7 @@ import {
   securityControlCopy,
   securityControls,
   supportTopics,
-  testimonialProofItems,
+  supportFaqs,
   workflowPages,
 } from './publicSiteData';
 
@@ -80,6 +82,7 @@ type RequestFormState = {
   exactFleetSize: string;
   requestType: RequestType;
   notes: string;
+  website: string;
 };
 
 type CookiePreferences = typeof cookiePreferenceDefaults;
@@ -88,7 +91,13 @@ const COOKIE_STORAGE_KEY = 'trovan-cookie-preferences';
 const sectionWidth = 'min(1180px, calc(100% - 32px))';
 const BOOK_DEMO_CTA = 'Book demo';
 const ROUTE_AUDIT_CTA = 'Get a free route audit';
-const PRODUCT_WALKTHROUGH_CTA = 'Watch product walkthrough';
+const PRODUCT_WALKTHROUGH_CTA = 'Watch a Demo';
+const PRODUCT_TOUR_VIDEO_SRC = '/marketing/trovan-product-tour.mp4';
+const PRODUCT_TOUR_POSTER_SRC = '/marketing/trovan-product-tour-poster.webp';
+const PRODUCT_TOUR_CAPTIONS_SRC = '/marketing/trovan-product-tour.vtt';
+const PUBLIC_SITE_ORIGIN = 'https://trytrovan.com';
+const SOCIAL_PREVIEW_URL = `${PUBLIC_SITE_ORIGIN}/marketing/product-routing.webp`;
+const LEAD_SUBMISSION_TIMEOUT_MS = 10_000;
 
 function normalizePathname(pathname: string) {
   if (pathname !== '/' && pathname.endsWith('/')) {
@@ -176,14 +185,47 @@ function getPageSeo(pathname: string) {
   return seo[pathname] ?? seo['/'];
 }
 
-function upsertMetaDescription(description: string) {
-  let meta = document.querySelector('meta[name="description"]');
+function upsertMeta(selector: string, attribute: 'name' | 'property', key: string, content: string) {
+  let meta = document.querySelector<HTMLMetaElement>(selector);
   if (!meta) {
     meta = document.createElement('meta');
-    meta.setAttribute('name', 'description');
+    meta.setAttribute(attribute, key);
     document.head.appendChild(meta);
   }
-  meta.setAttribute('content', description);
+  meta.setAttribute('content', content);
+}
+
+function upsertCanonicalLink(href: string) {
+  let link = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
+  if (!link) {
+    link = document.createElement('link');
+    link.rel = 'canonical';
+    document.head.appendChild(link);
+  }
+  link.href = href;
+}
+
+function updatePublicSeoMetadata(pathname: string, title: string, description: string) {
+  const canonicalUrl = new URL(pathname, PUBLIC_SITE_ORIGIN).toString();
+  upsertMeta('meta[name="description"]', 'name', 'description', description);
+  upsertMeta('meta[property="og:type"]', 'property', 'og:type', 'website');
+  upsertMeta('meta[property="og:site_name"]', 'property', 'og:site_name', 'Trovan');
+  upsertMeta('meta[property="og:title"]', 'property', 'og:title', title);
+  upsertMeta('meta[property="og:description"]', 'property', 'og:description', description);
+  upsertMeta('meta[property="og:url"]', 'property', 'og:url', canonicalUrl);
+  upsertMeta('meta[property="og:image"]', 'property', 'og:image', SOCIAL_PREVIEW_URL);
+  upsertMeta('meta[name="twitter:card"]', 'name', 'twitter:card', 'summary_large_image');
+  upsertMeta('meta[name="twitter:title"]', 'name', 'twitter:title', title);
+  upsertMeta('meta[name="twitter:description"]', 'name', 'twitter:description', description);
+  upsertMeta('meta[name="twitter:image"]', 'name', 'twitter:image', SOCIAL_PREVIEW_URL);
+  upsertCanonicalLink(canonicalUrl);
+}
+
+function productWebpStem(imageSrc: string) {
+  if (!imageSrc.startsWith('/marketing/product-') || !imageSrc.endsWith('.png')) {
+    return undefined;
+  }
+  return imageSrc.slice(0, -4);
 }
 
 function buildAuditNotes(inputs: AuditInputs) {
@@ -206,6 +248,15 @@ function buildRequestMailtoHref(form: RequestFormState, intakeEmail: string) {
   const body = encodeURIComponent(lines.join('\n'));
 
   return `mailto:${intakeEmail}?subject=${subject}&body=${body}`;
+}
+
+function getLeadIntakeUrl() {
+  const webhookUrl = import.meta.env.VITE_LEAD_INTAKE_WEBHOOK_URL?.trim();
+  if (webhookUrl) return webhookUrl;
+
+  const apiUrl = (import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_API_URL)?.trim();
+  if (!apiUrl) return '';
+  return `${apiUrl.replace(/\/+$/, '').replace(/\/api$/, '')}/api/marketing-leads`;
 }
 
 function readCookiePreferences(): CookiePreferences {
@@ -250,9 +301,10 @@ function RequestModal({
     exactFleetSize: '',
     requestType: defaults.requestType,
     notes: defaults.notes ?? '',
+    website: '',
   });
   const intakeEmail = import.meta.env.VITE_LEAD_INTAKE_EMAIL || 'sales@trytrovan.com';
-  const intakeWebhookUrl = import.meta.env.VITE_LEAD_INTAKE_WEBHOOK_URL || '';
+  const intakeWebhookUrl = getLeadIntakeUrl();
   const isPreviewCapture = import.meta.env.DEV || import.meta.env.VITE_MOCK_PREVIEW === 'true';
   const mailtoHref = useMemo(() => buildRequestMailtoHref(form, intakeEmail), [form, intakeEmail]);
 
@@ -269,6 +321,7 @@ function RequestModal({
       exactFleetSize: '',
       requestType: defaults.requestType,
       notes: defaults.notes ?? '',
+      website: '',
     });
   }, [defaults, open]);
 
@@ -281,21 +334,27 @@ function RequestModal({
     setSubmitError('');
 
     if (!intakeWebhookUrl) {
-      setSubmitted(true);
+      setSubmitError(
+        'Online request delivery is temporarily unavailable. Use the email option below so Trovan can follow up.',
+      );
       return;
     }
 
     try {
       setSubmitting(true);
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), LEAD_SUBMISSION_TIMEOUT_MS);
       const response = await fetch(intakeWebhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           source: 'trytrovan.com',
-          submittedAt: new Date().toISOString(),
+          pagePath: window.location.pathname,
           ...form,
+          exactFleetSize: form.exactFleetSize ? Number(form.exactFleetSize) : undefined,
         }),
-      });
+      }).finally(() => window.clearTimeout(timeout));
       if (!response.ok) {
         throw new Error(`Request failed with status ${response.status}`);
       }
@@ -320,7 +379,7 @@ function RequestModal({
           <Stack spacing={2} sx={{ my: 1 }}>
             <Alert severity={intakeWebhookUrl ? 'success' : 'info'} data-testid="request-success">
               {intakeWebhookUrl
-                ? 'Thanks. Your request was sent and Trovan will follow up with next steps.'
+                ? 'Thanks. Your request is securely in Trovan’s follow-up queue. A member of the team will respond with next steps.'
                 : isPreviewCapture
                   ? 'Preview request saved for QA. No customer email was sent from this environment.'
                   : 'Your request details are ready. Send them to Trovan sales to complete the request.'}
@@ -338,7 +397,7 @@ function RequestModal({
             </Typography>
             {isPreviewCapture && !intakeWebhookUrl ? (
               <Alert severity="info">
-                Preview intake is not connected to email or CRM. Configure VITE_LEAD_INTAKE_WEBHOOK_URL before production automation.
+                Preview intake is not connected to the lead API or CRM. Configure VITE_REST_API_URL or a dedicated VITE_LEAD_INTAKE_WEBHOOK_URL before production automation.
               </Alert>
             ) : null}
             <TextField label="Name" required fullWidth value={form.name} onChange={(event) => updateForm('name', event.target.value)} />
@@ -371,6 +430,15 @@ function RequestModal({
               onChange={(event) => updateForm('notes', event.target.value)}
               placeholder="Current tools, markets served, route volume, timing, or what the demo should focus on."
             />
+            <TextField
+              label="Website"
+              value={form.website}
+              onChange={(event) => updateForm('website', event.target.value)}
+              autoComplete="off"
+              inputProps={{ tabIndex: -1 }}
+              sx={{ position: 'absolute', left: '-10000px', width: 1, height: 1, overflow: 'hidden' }}
+              aria-hidden="true"
+            />
             {submitError ? (
               <Alert severity="error">
                 {submitError}
@@ -380,7 +448,7 @@ function RequestModal({
               </Alert>
             ) : null}
             <Button type="submit" variant="contained" size="large" disabled={submitting}>
-              {submitting ? 'Sending...' : intakeWebhookUrl ? 'Send request' : 'Prepare request email'}
+              {submitting ? 'Sending...' : 'Send request'}
             </Button>
           </Stack>
         )}
@@ -449,26 +517,22 @@ function CookiePreferencesModal({
   );
 }
 
-function BrandMark() {
+function BrandLockup({ width = 184 }: { width?: number }) {
+  const height = Math.round((width * 260) / 1120);
   return (
     <Box
+      component="img"
+      src={trovanBrandAssets.logoHorizontal}
+      alt="Trovan Dispatch"
+      width={width}
+      height={height}
       sx={{
-        width: 36,
-        height: 36,
-        borderRadius: 1,
-        display: 'grid',
-        placeItems: 'center',
-        color: '#FFF8ED',
-        border: `1px solid ${alpha(trovanColors.copper[300], 0.42)}`,
-        bgcolor: alpha(trovanColors.copper[600], 0.84),
-        boxShadow: '0 12px 28px rgba(169,99,33,0.24)',
-        fontFamily: trovanTypography.uiFontFamily,
-        fontWeight: 900,
-        fontSize: 18,
+        width,
+        height,
+        display: 'block',
+        filter: `drop-shadow(0 12px 28px ${alpha(trovanColors.copper[700], 0.22)})`,
       }}
-    >
-      T
-    </Box>
+    />
   );
 }
 
@@ -590,11 +654,7 @@ function MegaMenuCard({
   );
 }
 
-function PublicHeader({
-  onBookDemo,
-}: {
-  onBookDemo: () => void;
-}) {
+function PublicHeader({ onOpenRequest }: { onOpenRequest: (requestType: RequestType) => void }) {
   const [productAnchor, setProductAnchor] = useState<HTMLElement | null>(null);
   const [solutionsAnchor, setSolutionsAnchor] = useState<HTMLElement | null>(null);
   const [resourcesAnchor, setResourcesAnchor] = useState<HTMLElement | null>(null);
@@ -618,13 +678,23 @@ function PublicHeader({
     { label: 'Mission', href: '/mission' },
     { label: 'Careers', href: '/careers' },
   ];
-  const mobileLinks = [
-    { label: 'Platform overview', href: '/platform' },
-    ...workflowPages.map((item) => ({ label: item.navLabel, href: item.path })),
-    ...solutionMenuItems.map((item) => ({ label: item.label, href: item.href })),
-    ...primaryLinks,
-    ...resourceMegaMenuItems.map((item) => ({ label: item.label, href: item.href })),
-    ...companyLinks,
+  const mobileSections = [
+    {
+      title: 'Route overview',
+      links: [{ label: 'Platform overview', href: '/platform' }, ...workflowPages.map((item) => ({ label: item.navLabel, href: item.path }))],
+    },
+    {
+      title: 'Who it is for',
+      links: solutionMenuItems.map((item) => ({ label: item.label, href: item.href })),
+    },
+    {
+      title: 'Go deeper',
+      links: [...primaryLinks, ...resourceMegaMenuItems.map((item) => ({ label: item.label, href: item.href }))],
+    },
+    {
+      title: 'Company',
+      links: companyLinks,
+    },
   ];
 
   return (
@@ -640,11 +710,8 @@ function PublicHeader({
       }}
     >
       <Box sx={{ width: sectionWidth, mx: 'auto', minHeight: 68, display: 'flex', alignItems: 'center', gap: 1.2 }}>
-        <Box component={RouterLink} to="/" aria-label="Trovan home" sx={{ display: 'flex', alignItems: 'center', gap: 1.1, mr: 'auto', textDecoration: 'none' }}>
-          <BrandMark />
-          <Typography sx={{ color: '#FFF8ED', fontFamily: trovanTypography.brandFontFamily, fontSize: 25 }}>
-            Trovan
-          </Typography>
+        <Box component={RouterLink} to="/" aria-label="Trovan home" sx={{ display: 'flex', alignItems: 'center', mr: 'auto', textDecoration: 'none' }}>
+          <BrandLockup />
         </Box>
 
         <Stack component="nav" direction="row" spacing={0.5} sx={{ display: { xs: 'none', lg: 'flex' } }} aria-label="Main navigation">
@@ -667,11 +734,15 @@ function PublicHeader({
           </Button>
         </Stack>
 
-        <Button component={RouterLink} to="/login" variant="outlined" sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>
-          Sign in
-        </Button>
-        <Button variant="contained" onClick={onBookDemo} sx={{ display: { xs: 'none', sm: 'inline-flex' } }}>
+        <Button
+          variant="contained"
+          onClick={() => onOpenRequest('Book demo')}
+          sx={{ display: { xs: 'none', sm: 'inline-flex' } }}
+        >
           {BOOK_DEMO_CTA}
+        </Button>
+        <Button component="a" href="/login" variant="outlined" sx={{ display: { xs: 'none', md: 'inline-flex' } }}>
+          Sign in
         </Button>
         <IconButton aria-label="Open navigation" onClick={() => setMobileOpen(true)} sx={{ display: { xs: 'inline-flex', lg: 'none' }, color: '#FFF8ED' }}>
           <MenuRoundedIcon />
@@ -759,23 +830,37 @@ function PublicHeader({
       <Drawer anchor="right" open={mobileOpen} onClose={() => setMobileOpen(false)}>
         <Box sx={{ width: 310, p: 2.5, bgcolor: trovanColors.black[950], color: '#FFF8ED', minHeight: '100%' }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between">
-            <Stack direction="row" spacing={1} alignItems="center">
-              <BrandMark />
-              <Typography sx={{ fontFamily: trovanTypography.brandFontFamily, fontSize: 24 }}>Trovan</Typography>
-            </Stack>
+            <BrandLockup width={154} />
             <IconButton aria-label="Close navigation" onClick={() => setMobileOpen(false)} sx={{ color: '#FFF8ED' }}>
               <CloseRoundedIcon />
             </IconButton>
           </Stack>
-          <Stack spacing={1} sx={{ mt: 3 }}>
-            {mobileLinks.map((item) => (
-              <Button key={`${item.href}-${item.label}`} component={RouterLink} to={item.href} onClick={closeMenus} sx={{ justifyContent: 'flex-start', color: '#FFF8ED' }}>
-                {item.label}
-              </Button>
+          <Stack spacing={1.5} sx={{ mt: 3 }}>
+            {mobileSections.map((section) => (
+              <Box key={section.title} sx={{ p: 1.2, borderRadius: 1.5, border: `1px solid ${alpha('#FFF8ED', 0.1)}`, bgcolor: alpha('#FFF8ED', 0.04) }}>
+                <Typography sx={{ px: 1, color: trovanColors.copper[200], fontWeight: 900, fontSize: 12, textTransform: 'uppercase' }}>
+                  {section.title}
+                </Typography>
+                <Stack spacing={0.2} sx={{ mt: 0.8 }}>
+                  {section.links.map((item) => (
+                    <Button key={`${section.title}-${item.href}-${item.label}`} component={RouterLink} to={item.href} onClick={closeMenus} sx={{ justifyContent: 'flex-start', color: '#FFF8ED' }}>
+                      {item.label}
+                    </Button>
+                  ))}
+                </Stack>
+              </Box>
             ))}
             <Divider sx={{ borderColor: alpha('#FFF8ED', 0.15), my: 1 }} />
-            <Button component={RouterLink} to="/login" onClick={closeMenus} variant="outlined">Sign in</Button>
-            <Button onClick={() => { closeMenus(); onBookDemo(); }} variant="contained">{BOOK_DEMO_CTA}</Button>
+            <Button
+              variant="contained"
+              onClick={() => {
+                closeMenus();
+                onOpenRequest('Book demo');
+              }}
+            >
+              {BOOK_DEMO_CTA}
+            </Button>
+            <Button component="a" href="/login" onClick={closeMenus} variant="outlined">Sign in</Button>
           </Stack>
         </Box>
       </Drawer>
@@ -795,10 +880,7 @@ function PublicFooter({
       <Box sx={{ width: sectionWidth, mx: 'auto' }}>
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '0.9fr 1.4fr' }, gap: 4 }}>
           <Box>
-            <Stack direction="row" spacing={1.2} alignItems="center">
-              <BrandMark />
-              <Typography sx={{ fontFamily: trovanTypography.brandFontFamily, fontSize: 28 }}>Trovan</Typography>
-            </Stack>
+            <BrandLockup width={172} />
             <Typography sx={{ mt: 2, color: alpha('#FFF8ED', 0.68), maxWidth: 430 }}>
               Route planning, dispatch, driver execution, customer tracking, and proof for delivery and distribution operators.
             </Typography>
@@ -847,11 +929,11 @@ function MarketingShell({
 }) {
   return (
     <Box data-testid="public-site-shell" sx={{ minHeight: '100vh', bgcolor: trovanColors.stone[0], color: trovanColors.black[950] }}>
-      <PublicHeader onBookDemo={() => onOpenRequest('Book demo')} />
+      <PublicHeader onOpenRequest={(requestType) => onOpenRequest(requestType)} />
       <Box component="main">{children}</Box>
       <PublicFooter
         onCookiePreferences={onCookiePreferences}
-        onContact={() => onOpenRequest('Sales question')}
+        onContact={() => onOpenRequest('Book demo')}
       />
     </Box>
   );
@@ -871,12 +953,14 @@ function SectionHeader({
   body,
   dark = false,
   titleComponent,
+  titleSx,
 }: {
   kicker?: string;
   title: string;
   body: string;
   dark?: boolean;
   titleComponent?: ElementType;
+  titleSx?: Record<string, unknown>;
 }) {
   const TitleComponent: ElementType = titleComponent ?? 'h2';
 
@@ -884,7 +968,7 @@ function SectionHeader({
     <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" spacing={3} sx={{ mb: 3.5 }}>
       <Box sx={{ maxWidth: 720 }}>
         {kicker ? <Kicker dark={dark}>{kicker}</Kicker> : null}
-        <Typography component={TitleComponent} variant="h2" sx={{ mt: kicker ? 0.8 : 0, fontFamily: trovanTypography.brandFontFamily, fontSize: { xs: 38, md: 56 }, lineHeight: 1 }}>
+        <Typography component={TitleComponent} variant="h2" sx={{ mt: kicker ? 0.8 : 0, fontFamily: trovanTypography.brandFontFamily, fontSize: { xs: 38, md: 56 }, lineHeight: 1, ...titleSx }}>
           {title}
         </Typography>
       </Box>
@@ -986,6 +1070,8 @@ function MarketingScreenshotFrame({
 }) {
   const isMobile = variant === 'mobile';
   const aspectRatio = isMobile ? '9 / 13' : variant === 'map' ? '16 / 10' : '16 / 10';
+  const generatedWebpStem = imageWebpSrc ? undefined : productWebpStem(imageSrc);
+  const imageSizes = isMobile ? '(max-width: 600px) 84vw, 350px' : '(max-width: 900px) 94vw, 980px';
   return (
     <Box
       data-testid="product-app-frame"
@@ -1015,15 +1101,32 @@ function MarketingScreenshotFrame({
           }}
         >
           {imageAvifSrc ? <source srcSet={imageAvifSrc} type="image/avif" /> : null}
-          {imageWebpSrc ? <source srcSet={imageWebpSrc} type="image/webp" /> : null}
+          {generatedWebpStem ? (
+            <>
+              <source
+                media="(max-width: 600px)"
+                srcSet={`${generatedWebpStem}-640.webp 640w, ${generatedWebpStem}-768.webp 768w`}
+                sizes={isMobile ? '84vw' : '94vw'}
+                type="image/webp"
+              />
+              <source
+                srcSet={`${generatedWebpStem}-768.webp 768w, ${generatedWebpStem}.webp 1440w`}
+                sizes={imageSizes}
+                type="image/webp"
+              />
+            </>
+          ) : imageWebpSrc ? <source srcSet={imageWebpSrc} sizes={imageSizes} type="image/webp" /> : null}
           <Box
             component="img"
             src={imageSrc}
             srcSet={`${imageSrc} 1x`}
-            sizes={isMobile ? '(max-width: 600px) 84vw, 350px' : '(max-width: 900px) 94vw, 980px'}
+            sizes={imageSizes}
             alt={imageAlt}
             loading={priority ? 'eager' : 'lazy'}
             decoding="async"
+            fetchPriority={priority ? 'high' : 'auto'}
+            width={isMobile ? 390 : 1440}
+            height={isMobile ? 844 : 900}
             sx={{
               display: 'block',
               width: '100%',
@@ -1156,6 +1259,277 @@ function MobileAppProofFrame({ src, alt }: { src: string; alt: string }) {
         <Typography sx={{ mt: 1.2, color: alpha('#FFF8ED', 0.68), lineHeight: 1.55 }}>
           Stops, proof, notes, and dispatch context stay readable in a focused mobile route view.
         </Typography>
+      </Box>
+    </Box>
+  );
+}
+
+function TrackingProofFrame() {
+  return (
+    <Box
+      aria-label="Customer tracking preview"
+      sx={{
+        borderRadius: 2,
+        bgcolor: '#151210',
+        border: `1px solid ${alpha(trovanColors.copper[300], 0.16)}`,
+        boxShadow: '0 30px 90px rgba(0,0,0,0.32)',
+        overflow: 'hidden',
+      }}
+    >
+      <ProductFrameHeader detail="Customer tracking page" />
+      <Box sx={{ p: { xs: 1.2, md: 1.6 }, bgcolor: trovanColors.black[900] }}>
+        <Box
+          sx={{
+            borderRadius: 2.2,
+            bgcolor: '#FFFDF8',
+            overflow: 'hidden',
+            minHeight: { xs: 360, md: 420 },
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: '0.95fr 1.05fr' },
+          }}
+        >
+          <Box
+            sx={{
+              p: 2.2,
+              background: `linear-gradient(180deg, ${alpha(trovanColors.copper[100], 0.7)}, #FFFDF8 48%)`,
+              borderRight: { xs: 'none', md: `1px solid ${alpha(trovanColors.black[900], 0.08)}` },
+              borderBottom: { xs: `1px solid ${alpha(trovanColors.black[900], 0.08)}`, md: 'none' },
+            }}
+          >
+            <Typography sx={{ color: trovanColors.copper[700], fontWeight: 900, fontSize: 12, textTransform: 'uppercase' }}>
+              Customer tracking
+            </Typography>
+            <Typography variant="h4" sx={{ mt: 0.8, fontWeight: 900, color: trovanColors.black[950], lineHeight: 1.08 }}>
+              Your delivery is on the way
+            </Typography>
+            <Typography sx={{ mt: 1, color: alpha(trovanColors.black[900], 0.68), lineHeight: 1.5 }}>
+              Customers see the ETA, route progress, and proof status without calling dispatch.
+            </Typography>
+
+            <Stack spacing={1} sx={{ mt: 2 }}>
+              {[
+                ['Route status', 'Out for delivery'],
+                ['ETA window', '11:20 AM - 11:45 AM'],
+                ['Current stop', '2 of 8 completed'],
+                ['Proof status', 'Photo + note after drop-off'],
+              ].map(([label, value]) => (
+                <Box
+                  key={label}
+                  sx={{
+                    p: 1.2,
+                    borderRadius: 1.2,
+                    bgcolor: '#FFFFFF',
+                    border: `1px solid ${alpha(trovanColors.black[900], 0.08)}`,
+                  }}
+                >
+                  <Typography sx={{ color: alpha(trovanColors.black[900], 0.54), fontSize: 12, fontWeight: 800 }}>
+                    {label}
+                  </Typography>
+                  <Typography sx={{ mt: 0.35, color: trovanColors.black[950], fontWeight: 900 }}>
+                    {value}
+                  </Typography>
+                </Box>
+              ))}
+            </Stack>
+          </Box>
+
+          <Box sx={{ p: 2.2, display: 'grid', alignContent: 'start', gap: 1.2, bgcolor: '#FFFFFF' }}>
+            {[
+              ['10:42 AM', 'Driver left the previous stop'],
+              ['11:08 AM', 'Delivery window confirmed'],
+              ['11:26 AM', 'Driver is 9 minutes away'],
+              ['Next', 'Photo proof and drop-off note appear here'],
+            ].map(([time, event], index) => (
+              <Box
+                key={`${time}-${event}`}
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: '72px 1fr',
+                  gap: 1.1,
+                  alignItems: 'start',
+                  p: 1.15,
+                  borderRadius: 1.2,
+                  bgcolor: index === 2 ? alpha(trovanColors.copper[50], 0.78) : trovanColors.stone[0],
+                  border: `1px solid ${alpha(trovanColors.black[900], 0.08)}`,
+                }}
+              >
+                <Typography sx={{ color: trovanColors.copper[700], fontSize: 12, fontWeight: 900 }}>{time}</Typography>
+                <Typography sx={{ color: trovanColors.black[950], lineHeight: 1.4 }}>{event}</Typography>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+function DispatchWorkflowFrame() {
+  return (
+    <Box
+      aria-label="Dispatch workflow preview"
+      data-testid="product-app-frame"
+      sx={{
+        borderRadius: 2,
+        bgcolor: '#151210',
+        border: `1px solid ${alpha(trovanColors.copper[300], 0.16)}`,
+        boxShadow: '0 30px 90px rgba(0,0,0,0.32)',
+        overflow: 'hidden',
+      }}
+    >
+      <ProductFrameHeader detail="Dispatch workflow" />
+      <Box sx={{ p: { xs: 1.2, md: 1.6 }, bgcolor: trovanColors.black[900] }}>
+        <Box sx={{ display: 'grid', gap: 1.2 }}>
+          <Box sx={{ p: 1.2, borderRadius: 1.5, bgcolor: alpha('#FFF8ED', 0.04), border: `1px solid ${alpha('#FFF8ED', 0.08)}` }}>
+            <Typography sx={{ color: trovanColors.copper[200], fontWeight: 900, fontSize: 12, textTransform: 'uppercase' }}>
+              Live board
+            </Typography>
+            <Typography sx={{ mt: 0.45, color: '#FFF8ED', fontWeight: 900 }}>
+              Dispatch sees multiple route lanes, active assignments, and the current route detail together.
+            </Typography>
+            <Box
+              component="img"
+              src="/marketing/product-dispatch.png"
+              alt="Current Trovan dispatch board with unassigned jobs, active routes, live map, and exception communications"
+              loading="lazy"
+              decoding="async"
+              sx={{ display: 'block', width: '100%', mt: 1, borderRadius: 1.2, border: `1px solid ${alpha('#FFF8ED', 0.08)}`, objectFit: 'contain', objectPosition: 'top center' }}
+            />
+          </Box>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1.2 }}>
+            <Box sx={{ p: 1.2, borderRadius: 1.5, bgcolor: alpha('#FFF8ED', 0.04), border: `1px solid ${alpha('#FFF8ED', 0.08)}` }}>
+              <Typography sx={{ color: trovanColors.copper[200], fontWeight: 900, fontSize: 12, textTransform: 'uppercase' }}>
+                Jobs waiting
+              </Typography>
+              <Typography sx={{ mt: 0.45, color: '#FFF8ED', fontWeight: 900 }}>
+                The queue shows the work already staged for routing and dispatch.
+              </Typography>
+              <Box
+                component="img"
+                src="/marketing/jobs-queue.png"
+                alt="Trovan jobs queue showing staged work already in the routing system"
+                loading="lazy"
+                decoding="async"
+                sx={{ display: 'block', width: '100%', mt: 1, borderRadius: 1.2, border: `1px solid ${alpha('#FFF8ED', 0.08)}`, objectFit: 'contain', objectPosition: 'top center' }}
+              />
+            </Box>
+            <Box sx={{ p: 1.2, borderRadius: 1.5, bgcolor: alpha('#FFF8ED', 0.04), border: `1px solid ${alpha('#FFF8ED', 0.08)}` }}>
+              <Typography sx={{ color: trovanColors.copper[200], fontWeight: 900, fontSize: 12, textTransform: 'uppercase' }}>
+                Exception context
+              </Typography>
+              <Typography sx={{ mt: 0.45, color: '#FFF8ED', fontWeight: 900 }}>
+                Route issues stay attached to the lane, not in a separate text thread.
+              </Typography>
+              <Box
+                component="img"
+                src="/marketing/dispatch-exceptions.png"
+                alt="Trovan exception queue showing route risk, operator actions, and route context"
+                loading="lazy"
+                decoding="async"
+                sx={{ display: 'block', width: '100%', mt: 1, borderRadius: 1.2, border: `1px solid ${alpha('#FFF8ED', 0.08)}`, objectFit: 'contain', objectPosition: 'top center' }}
+              />
+            </Box>
+          </Box>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+            {[
+              '6 jobs visible in queue',
+              '4 route lanes on screen',
+              'exceptions tied to the route record',
+            ].map((badge) => (
+              <Box key={badge} sx={{ px: 1.1, py: 0.7, borderRadius: 999, bgcolor: alpha(trovanColors.copper[300], 0.14), color: trovanColors.copper[100], fontSize: 11, fontWeight: 900 }}>
+                {badge}
+              </Box>
+            ))}
+          </Stack>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+function PlatformOverviewFrame() {
+  return (
+    <Box
+      aria-label="Platform overview preview"
+      data-testid="product-app-frame"
+      sx={{
+        borderRadius: 2,
+        bgcolor: '#151210',
+        border: `1px solid ${alpha(trovanColors.copper[300], 0.16)}`,
+        boxShadow: '0 30px 90px rgba(0,0,0,0.32)',
+        overflow: 'hidden',
+      }}
+    >
+      <ProductFrameHeader detail="Platform overview" />
+      <Box sx={{ p: { xs: 1.2, md: 1.6 }, bgcolor: trovanColors.black[900], display: 'grid', gap: 1.2 }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1.2 }}>
+          <Box sx={{ p: 1.2, borderRadius: 1.5, bgcolor: alpha('#FFF8ED', 0.04), border: `1px solid ${alpha('#FFF8ED', 0.08)}` }}>
+            <Typography sx={{ color: trovanColors.copper[200], fontWeight: 900, fontSize: 12, textTransform: 'uppercase' }}>
+              Planning
+            </Typography>
+            <Typography sx={{ mt: 0.45, color: '#FFF8ED', fontWeight: 900 }}>
+              Build, balance, and review routes before dispatch takes over.
+            </Typography>
+            <Box
+              component="img"
+              src="/marketing/product-routing-exceptions.png"
+              alt="Current Trovan route planning workspace showing route exceptions, stops, and publish-ready totals"
+              loading="lazy"
+              decoding="async"
+              sx={{ display: 'block', width: '100%', mt: 1, borderRadius: 1.2, border: `1px solid ${alpha('#FFF8ED', 0.08)}`, objectFit: 'contain', objectPosition: 'top center' }}
+            />
+          </Box>
+          <Box sx={{ p: 1.2, borderRadius: 1.5, bgcolor: alpha('#FFF8ED', 0.04), border: `1px solid ${alpha('#FFF8ED', 0.08)}` }}>
+            <Typography sx={{ color: trovanColors.copper[200], fontWeight: 900, fontSize: 12, textTransform: 'uppercase' }}>
+              Dispatch
+            </Typography>
+            <Typography sx={{ mt: 0.45, color: '#FFF8ED', fontWeight: 900 }}>
+              Run active routes, watch the queue, and resolve issues in one view.
+            </Typography>
+            <Box
+              component="img"
+              src="/marketing/product-dispatch.png"
+              alt="Current Trovan dispatch board with unassigned jobs, active routes, live map, and exception communications"
+              loading="lazy"
+              decoding="async"
+              sx={{ display: 'block', width: '100%', mt: 1, borderRadius: 1.2, border: `1px solid ${alpha('#FFF8ED', 0.08)}`, objectFit: 'contain', objectPosition: 'top center' }}
+            />
+          </Box>
+        </Box>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 1.2 }}>
+          <Box sx={{ p: 1.2, borderRadius: 1.5, bgcolor: alpha('#FFF8ED', 0.04), border: `1px solid ${alpha('#FFF8ED', 0.08)}` }}>
+            <Typography sx={{ color: trovanColors.copper[200], fontWeight: 900, fontSize: 12, textTransform: 'uppercase' }}>
+              Tracking
+            </Typography>
+            <Typography sx={{ mt: 0.45, color: '#FFF8ED', fontWeight: 900 }}>
+              Keep support and customers aligned with live route progress.
+            </Typography>
+            <Box
+              component="img"
+              src="/marketing/product-tracking.png"
+              alt="Current Trovan tracking workspace showing live telemetry and route visibility"
+              loading="lazy"
+              decoding="async"
+              sx={{ display: 'block', width: '100%', mt: 1, borderRadius: 1.2, border: `1px solid ${alpha('#FFF8ED', 0.08)}`, objectFit: 'contain', objectPosition: 'top center' }}
+            />
+          </Box>
+          <Box sx={{ p: 1.2, borderRadius: 1.5, bgcolor: alpha('#FFF8ED', 0.04), border: `1px solid ${alpha('#FFF8ED', 0.08)}` }}>
+            <Typography sx={{ color: trovanColors.copper[200], fontWeight: 900, fontSize: 12, textTransform: 'uppercase' }}>
+              Proof
+            </Typography>
+            <Typography sx={{ mt: 0.45, color: '#FFF8ED', fontWeight: 900 }}>
+              Review notes, timestamps, and delivery evidence after every stop.
+            </Typography>
+            <Box
+              component="img"
+              src="/marketing/product-proof.png"
+              alt="Current Trovan proof-of-delivery workspace with delivery status, route links, filters, and evidence details"
+              loading="lazy"
+              decoding="async"
+              sx={{ display: 'block', width: '100%', mt: 1, borderRadius: 1.2, border: `1px solid ${alpha('#FFF8ED', 0.08)}`, objectFit: 'contain', objectPosition: 'top center' }}
+            />
+          </Box>
+        </Box>
       </Box>
     </Box>
   );
@@ -1442,9 +1816,9 @@ function RouteLinePreview({
 
         <Box sx={{ p: 1.2, bgcolor: dark ? alpha('#0A0705', 0.92) : trovanColors.stone[25] }}>
           <ScreenshotFrame
-            src="/marketing/routing-multistop-workspace-dotted.png"
-            alt="Actual Trovan multi-stop route planning map with three colored lanes and thirty connected stops"
-            caption="Actual routing UI: 3 lanes / 30 connected stops"
+            src="/marketing/product-routing-all-routes.png"
+            alt="Current Trovan all-routes planning map with unassigned jobs, route summaries, and connected map context"
+            caption="Current routing UI: jobs, lanes, constraints, and map context"
             fit="contain"
           />
         </Box>
@@ -1958,178 +2332,83 @@ function RouteLinePreview({
 }
 
 function RouteMotionVideo() {
-  const motionBadges = ['Planned route', 'Exception detected', 'Rebalanced route'];
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const [paused, setPaused] = useState(false);
-  const [inView, setInView] = useState(true);
-  const animationPlayState = paused || !inView ? 'paused' : 'running';
+  const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
+  const sectionRef = useRef<HTMLDivElement | null>(null);
+  const [shouldLoadVideo, setShouldLoadVideo] = useState(false);
 
   useEffect(() => {
-    const node = containerRef.current;
-    if (!node || typeof IntersectionObserver === 'undefined') return undefined;
-    const observer = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), { threshold: 0.28 });
-    observer.observe(node);
+    if (shouldLoadVideo) return undefined;
+    const section = sectionRef.current;
+    if (!section || !('IntersectionObserver' in window)) {
+      setShouldLoadVideo(true);
+      return undefined;
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        setShouldLoadVideo(true);
+        observer.disconnect();
+      },
+      { rootMargin: '320px 0px' },
+    );
+    observer.observe(section);
     return () => observer.disconnect();
-  }, []);
-
-  const overlay = (
-    <Box
-      data-testid="route-rebalance-staged-animation"
-      sx={{
-        position: 'absolute',
-        inset: 0,
-        '--play-state': animationPlayState,
-        '@keyframes trovan-state-planned': {
-          '0%, 28%': { opacity: 1 },
-          '34%, 100%': { opacity: 0 },
-        },
-        '@keyframes trovan-state-exception': {
-          '0%, 30%': { opacity: 0 },
-          '38%, 58%': { opacity: 1 },
-          '66%, 100%': { opacity: 0 },
-        },
-        '@keyframes trovan-state-rebalanced': {
-          '0%, 60%': { opacity: 0 },
-          '70%, 100%': { opacity: 1 },
-        },
-        '@keyframes trovan-route-pulse': {
-          '0%, 32%': { opacity: 0.2 },
-          '44%, 58%': { opacity: 0.82 },
-          '74%, 100%': { opacity: 0.42 },
-        },
-        '@keyframes trovan-stop-pulse': {
-          '0%, 62%': { opacity: 0, boxShadow: `0 0 0 0 ${alpha(trovanColors.copper[300], 0.0)}` },
-          '72%, 92%': { opacity: 1, boxShadow: `0 0 0 10px ${alpha(trovanColors.copper[300], 0.28)}` },
-          '100%': { opacity: 0.82, boxShadow: `0 0 0 4px ${alpha(trovanColors.copper[300], 0.14)}` },
-        },
-        '@media (prefers-reduced-motion: reduce)': {
-          '& [data-state="planned"], & [data-state="exception"]': { animation: 'none', opacity: 0 },
-          '& [data-state="rebalanced"], & [data-route-overlay="after"], & [data-stop-highlight="true"]': { animation: 'none', opacity: 1 },
-        },
-      }}
-    >
-      <Box
-        component="svg"
-        viewBox="0 0 100 100"
-        aria-hidden="true"
-        sx={{ position: 'absolute', inset: '9% 5% 18% 5%', width: '90%', height: '73%' }}
-      >
-        <path
-          data-route-overlay="before"
-          d="M18 26 C34 19 49 22 62 32 C74 42 82 38 92 29"
-          fill="none"
-          stroke={alpha(trovanColors.copper[300], 0.86)}
-          strokeWidth="1.7"
-          strokeLinecap="round"
-          strokeDasharray="2.8 1"
-          style={{ animation: 'trovan-route-pulse 7.6s ease-in-out infinite', animationPlayState }}
-        />
-        <path
-          data-route-overlay="after"
-          d="M16 61 C29 53 41 56 53 64 C64 72 74 62 87 54"
-          fill="none"
-          stroke={alpha('#64A170', 0.86)}
-          strokeWidth="1.7"
-          strokeLinecap="round"
-          strokeDasharray="2.8 1"
-          style={{ animation: 'trovan-state-rebalanced 7.6s ease-in-out infinite', animationPlayState }}
-        />
-      </Box>
-      {[
-        ['planned', 'State A', 'Planned route', 'Routes are ready before dispatch.'],
-        ['exception', 'State B', 'Exception detected', 'Late-risk stop needs a cleaner lane.'],
-        ['rebalanced', 'State C', 'Rebalanced route', 'Lane counts and route path update together.'],
-      ].map(([state, label, title, body]) => (
-        <Box
-          key={state}
-          data-state={state}
-          sx={{
-            position: 'absolute',
-            left: { xs: 14, md: 22 },
-            bottom: { xs: 14, md: 22 },
-            maxWidth: 310,
-            px: 1.4,
-            py: 1,
-            borderRadius: 1,
-            bgcolor: alpha('#0A0705', 0.86),
-            color: '#FFF8ED',
-            border: `1px solid ${alpha('#FFF8ED', 0.16)}`,
-            boxShadow: '0 18px 42px rgba(0,0,0,0.28)',
-            opacity: state === 'planned' ? 1 : 0,
-            animation:
-              state === 'planned'
-                ? 'trovan-state-planned 7.6s ease-in-out infinite'
-                : state === 'exception'
-                  ? 'trovan-state-exception 7.6s ease-in-out infinite'
-                  : 'trovan-state-rebalanced 7.6s ease-in-out infinite',
-            animationPlayState,
-          }}
-        >
-          <Typography sx={{ color: trovanColors.copper[200], fontWeight: 900, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0 }}>
-            {label}
-          </Typography>
-          <Typography sx={{ mt: 0.25, fontWeight: 950, lineHeight: 1.2 }}>{title}</Typography>
-          <Typography sx={{ mt: 0.4, color: alpha('#FFF8ED', 0.7), fontSize: 12.5, lineHeight: 1.35 }}>{body}</Typography>
-        </Box>
-      ))}
-      <Box
-        data-stop-highlight="true"
-        sx={{
-          position: 'absolute',
-          right: { xs: '17%', md: '19%' },
-          top: { xs: '43%', md: '42%' },
-          width: 36,
-          height: 36,
-          borderRadius: 999,
-          border: `3px solid ${trovanColors.copper[200]}`,
-          opacity: 0,
-          animation: 'trovan-stop-pulse 7.6s ease-in-out infinite',
-          animationPlayState,
-        }}
-      />
-    </Box>
-  );
+  }, [shouldLoadVideo]);
 
   return (
-    <Box sx={{ py: { xs: 7, md: 9 }, bgcolor: trovanColors.stone[25], color: trovanColors.black[950] }}>
+    <Box ref={sectionRef} sx={{ py: { xs: 7, md: 9 }, bgcolor: trovanColors.stone[25], color: trovanColors.black[950] }}>
       <Box sx={{ width: sectionWidth, mx: 'auto', display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '0.72fr 1.28fr' }, gap: 3, alignItems: 'center' }}>
         <Box>
-          <Kicker>Product motion</Kicker>
+          <Kicker>Real product recording</Kicker>
           <Typography variant="h2" sx={{ mt: 1, fontFamily: trovanTypography.brandFontFamily, fontSize: { xs: 38, md: 52 }, lineHeight: 1 }}>
-            Adjust the route day while the map stays clear.
+            See the route day move through the actual Trovan UI.
           </Typography>
           <Typography sx={{ mt: 1.5, color: alpha(trovanColors.black[900], 0.68), fontSize: 18, lineHeight: 1.55 }}>
-            Trovan keeps the base route picture stable while changed stops, affected lanes, and route updates are highlighted.
+            This 35-second tour was recorded from the current product preview. It moves from the operations dashboard through planning, dispatch, route execution, tracking, proof, and the customer status page.
           </Typography>
-          <Stack direction="row" flexWrap="wrap" gap={1} sx={{ mt: 2.4 }}>
-            {motionBadges.map((label) => (
-              <Box key={label} sx={{ px: 1.2, py: 0.8, borderRadius: 999, bgcolor: '#FFFFFF', border: `1px solid ${alpha(trovanColors.black[900], 0.1)}`, fontSize: 13, fontWeight: 900 }}>
-                {label}
-              </Box>
+          <Stack spacing={1} sx={{ mt: 2.2 }}>
+            {[
+              'Current Trovan screens—not recreated marketing mockups.',
+              'Chapter labels explain what each team sees during the route day.',
+              'Muted playback, controls, captions, and a reduced-motion-safe poster.',
+            ].map((item) => (
+              <Stack key={item} direction="row" spacing={1} alignItems="flex-start">
+                <CheckRoundedIcon sx={{ color: trovanColors.semantic.success, fontSize: 18, mt: '2px' }} />
+                <Typography sx={{ color: alpha(trovanColors.black[900], 0.72), lineHeight: 1.5 }}>{item}</Typography>
+              </Stack>
             ))}
           </Stack>
         </Box>
-        <Box
-          ref={containerRef}
-          onMouseEnter={() => setPaused(true)}
-          onMouseLeave={() => setPaused(false)}
-          sx={{
-            '&:focus-within': {
-              outline: `3px solid ${alpha(trovanColors.copper[500], 0.28)}`,
-              outlineOffset: 4,
-              borderRadius: 2,
-            },
-          }}
-        >
-          <MarketingScreenshotFrame
-            title="Route rebalance state"
-            caption="Changed stops and affected lanes highlighted."
-            imageSrc="/marketing/trovan-route-rebalance-poster.png"
-            imageAlt="Trovan routing workspace with a staged route rebalance overlay showing affected stops and lanes"
-            variant="map"
-            badges={paused ? ['Paused on hover'] : ['Overlay animation']}
-            overlay={overlay}
-          />
+        <Box sx={{ borderRadius: 2, bgcolor: '#151210', border: `1px solid ${alpha(trovanColors.copper[300], 0.16)}`, boxShadow: '0 30px 90px rgba(0,0,0,0.32)', overflow: 'hidden' }}>
+          <ProductFrameHeader detail="Recorded in the current Trovan preview" />
+          <Box
+            component="video"
+            controls
+            autoPlay={shouldLoadVideo && !reduceMotion}
+            muted
+            loop
+            playsInline
+            preload={shouldLoadVideo ? 'metadata' : 'none'}
+            poster={PRODUCT_TOUR_POSTER_SRC}
+            aria-label="Trovan product tour recording from dashboard through customer tracking"
+            sx={{ display: 'block', width: '100%', aspectRatio: '16 / 10', bgcolor: '#0C0907' }}
+          >
+            {shouldLoadVideo ? <source src={PRODUCT_TOUR_VIDEO_SRC} type="video/mp4" /> : null}
+            <track kind="captions" src={PRODUCT_TOUR_CAPTIONS_SRC} srcLang="en" label="English" />
+            Your browser does not support the Trovan product-tour video.
+          </Box>
+          <Stack
+            direction="row"
+            spacing={0.8}
+            flexWrap="wrap"
+            sx={{ p: 1.4, borderTop: `1px solid ${alpha('#FFF8ED', 0.12)}` }}
+          >
+            {['Dashboard', 'Planning', 'Dispatch', 'Execution', 'Tracking', 'Proof', 'Customer view'].map((chapter) => (
+              <Box key={chapter} sx={{ px: 1, py: 0.45, borderRadius: 999, color: alpha('#FFF8ED', 0.78), border: `1px solid ${alpha('#FFF8ED', 0.16)}`, fontSize: 11, fontWeight: 900 }}>
+                {chapter}
+              </Box>
+            ))}
+          </Stack>
         </Box>
       </Box>
     </Box>
@@ -2147,13 +2426,13 @@ function ConnectedRouteProofSection() {
           Rebalance routes without losing operational context.
         </Typography>
         <Typography sx={{ mt: 1.4, color: alpha(trovanColors.black[900], 0.68), fontSize: 18, lineHeight: 1.55 }}>
-          When routes change, dispatchers can see the affected stops, route lanes, and map context before publishing the update.
+          See the impacted stops, route lanes, and map context before you publish a route change.
         </Typography>
       </Box>
       <Box sx={{ mt: 2.2 }}>
         <ScreenshotFrame
-          src="/marketing/routing-multistop-workspace-dotted.png"
-          alt="Actual Trovan multi-stop route planning map with three colored lanes and thirty connected stops"
+          src="/marketing/product-routing-all-routes.png"
+          alt="Current Trovan all-routes planning map with unassigned jobs, route summaries, and connected map context"
           caption="Route planning workspace"
         />
       </Box>
@@ -2183,26 +2462,28 @@ function ProductProofTabs() {
 
   return (
     <Box sx={{ mt: 4, display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '0.42fr 0.58fr' }, gap: 3, alignItems: 'stretch' }}>
-      <Box sx={{ display: 'grid', gap: 1.2, alignContent: 'start' }} role="tablist" aria-label="Product proof">
-        {tabs.map((tab, index) => (
-          <Button
-            key={tab.key}
-            id={`product-proof-tab-${tab.key}`}
-            role="tab"
-            aria-selected={activeKey === tab.key}
-            aria-controls={`product-proof-panel-${tab.key}`}
-            tabIndex={activeKey === tab.key ? 0 : -1}
-            onClick={() => setActiveKey(tab.key)}
-            onKeyDown={(event) => handleProductTabKeyDown(event, index)}
-            variant={activeKey === tab.key ? 'contained' : 'outlined'}
-            sx={{ justifyContent: 'space-between', minHeight: 54, color: activeKey === tab.key ? '#FFFFFF' : trovanColors.black[900], borderColor: alpha(trovanColors.black[900], 0.24), '&:hover': { borderColor: trovanColors.copper[500] } }}
-            endIcon={<ArrowForwardRoundedIcon />}
-          >
-            {tab.navLabel}
-          </Button>
-        ))}
+      <Box sx={{ display: 'grid', gap: 1.2, alignContent: 'start' }}>
+        <Box sx={{ display: 'grid', gap: 1.2 }} role="tablist" aria-label="Product proof">
+          {tabs.map((tab, index) => (
+            <Button
+              key={tab.key}
+              id={`product-proof-tab-${tab.key}`}
+              role="tab"
+              aria-selected={activeKey === tab.key}
+              aria-controls={`product-proof-panel-${tab.key}`}
+              tabIndex={activeKey === tab.key ? 0 : -1}
+              onClick={() => setActiveKey(tab.key)}
+              onKeyDown={(event) => handleProductTabKeyDown(event, index)}
+              variant={activeKey === tab.key ? 'contained' : 'outlined'}
+              sx={{ justifyContent: 'space-between', minHeight: 54, color: activeKey === tab.key ? '#FFFFFF' : trovanColors.black[900], borderColor: alpha(trovanColors.black[900], 0.24), '&:hover': { borderColor: trovanColors.copper[500] } }}
+              endIcon={<ArrowForwardRoundedIcon />}
+            >
+              {tab.navLabel}
+            </Button>
+          ))}
+        </Box>
         <Box id={panelId} role="tabpanel" aria-labelledby={`product-proof-tab-${activeTab.key}`} tabIndex={0} sx={{ mt: 2, p: 2, borderRadius: 1.5, bgcolor: '#FFFFFF', border: `1px solid ${alpha(trovanColors.black[900], 0.1)}` }}>
-          <Typography variant="h5" sx={{ fontWeight: 900 }}>{productProofTitle(activeTab.key)}</Typography>
+          <Typography variant="h5" component="h3" sx={{ fontWeight: 900 }}>{productProofTitle(activeTab.key)}</Typography>
           <List dense sx={{ mt: 1 }}>
             {activeTab.capabilities.map((capability) => (
               <ListItem key={capability} disableGutters>
@@ -2216,12 +2497,19 @@ function ProductProofTabs() {
           </Button>
         </Box>
       </Box>
-      <ScreenshotFrame
-        src={activeTab.image}
-        alt={activeTab.imageAlt}
-        caption={activeTab.key === 'drive' ? 'Driver mobile app' : `${activeTab.navLabel} workspace`}
-        fit="contain"
-      />
+      {activeTab.key === 'drive' ? (
+        <MobileAppProofFrame src={activeTab.image} alt={activeTab.imageAlt} />
+      ) : activeTab.key === 'dispatch' ? (
+        <DispatchWorkflowFrame />
+      ) : activeTab.key === 'track' ? (
+        <TrackingProofFrame />
+      ) : (
+        <ScreenshotFrame
+          src={activeTab.image}
+          alt={activeTab.imageAlt}
+          caption={`${activeTab.navLabel} workspace`}
+        />
+      )}
     </Box>
   );
 }
@@ -2231,6 +2519,12 @@ function QuickProductDemo() {
   const [running, setRunning] = useState(false);
   const active = quickDemoSteps[activeIndex];
   const activeWorkflow = workflowPages.find((item) => item.key === active.key) ?? workflowPages[0];
+  const quickDemoImage = active.key === 'plan'
+    ? '/marketing/product-routing-exceptions.png'
+    : activeWorkflow.image;
+  const quickDemoImageAlt = active.key === 'plan'
+    ? 'Current Trovan route planning workspace showing route exceptions, stops, and publish-ready totals'
+    : activeWorkflow.imageAlt;
   const progressPercent = ((activeIndex + 1) / quickDemoSteps.length) * 100;
 
   useEffect(() => {
@@ -2375,8 +2669,8 @@ function QuickProductDemo() {
           >
             <Box>
               <ScreenshotFrame
-                src={activeWorkflow.image}
-                alt={activeWorkflow.imageAlt}
+                src={quickDemoImage}
+                alt={quickDemoImageAlt}
                 caption={`${active.label} view`}
                 fit="contain"
               />
@@ -2417,9 +2711,9 @@ function HeroProductShowcase() {
     <MarketingScreenshotFrame
       title="Route-day command center"
       caption="Route map, selected lane, and publish-ready route context."
-      imageSrc="/marketing/hero-route-command-center-v2.png"
-      imageAvifSrc="/marketing/hero-route-command-center-v2.avif"
-      imageAlt="Trovan route-day command center cropped to show the map, selected route, route lanes, and publish-ready context"
+      imageSrc="/marketing/product-routing.png"
+      imageWebpSrc="/marketing/product-routing-768.webp"
+      imageAlt="Current Trovan route planning workspace with unassigned jobs, route lanes, map context, and publish controls"
       variant="map"
       priority
       badges={['30 jobs planned', '3 routes balanced', '0 unassigned']}
@@ -2467,8 +2761,12 @@ function RoiCalculator() {
   const weeklyLaborSavings =
     inputs.routesPerDay * inputs.deliveryDaysPerWeek * (inputs.estimatedMinutesSavedPerRoute / 60) * inputs.avgDriverHourlyCost;
   const monthlyLaborSavings = weeklyLaborSavings * 4.33;
+  const effectiveMilesSavedPerRoute = Math.min(
+    inputs.estimatedMilesSavedPerRoute,
+    inputs.avgMilesPerRoute,
+  );
   const weeklyMileageSavings =
-    inputs.routesPerDay * inputs.deliveryDaysPerWeek * inputs.estimatedMilesSavedPerRoute * inputs.costPerMile;
+    inputs.routesPerDay * inputs.deliveryDaysPerWeek * effectiveMilesSavedPerRoute * inputs.costPerMile;
   const monthlyMileageSavings = weeklyMileageSavings * 4.33;
   const monthlyFailedDeliverySavings =
     inputs.failedDeliveryCost * inputs.failedDeliveriesAvoidedPerWeek * 4.33;
@@ -2550,6 +2848,11 @@ function RoiCalculator() {
             />
           ))}
         </Box>
+        {inputs.estimatedMilesSavedPerRoute > inputs.avgMilesPerRoute ? (
+          <Alert severity="warning" sx={{ mt: 1.4 }}>
+            Estimated miles saved is capped at the average miles per route so savings cannot exceed the route itself.
+          </Alert>
+        ) : null}
       </Box>
 
       <Box sx={{ p: 2.4, borderRadius: 1.6, bgcolor: trovanColors.black[950], color: '#FFF8ED', border: `1px solid ${alpha(trovanColors.copper[300], 0.18)}`, boxShadow: '0 22px 64px rgba(31,26,23,0.18)' }}>
@@ -2609,10 +2912,16 @@ function PricingSection({
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2 }}>
           {pricingPlans.map((plan) => (
             <Box key={plan.name} sx={{ p: 2.4, borderRadius: 1.6, border: `1px solid ${plan.featured ? alpha(trovanColors.copper[500], 0.48) : alpha(trovanColors.black[900], 0.13)}`, bgcolor: plan.featured ? alpha(trovanColors.copper[50], 0.8) : '#FFFFFF', boxShadow: plan.featured ? '0 24px 64px rgba(169,99,33,0.16)' : 'none' }}>
-              <Typography variant="h5" sx={{ fontWeight: 900 }}>{plan.name}</Typography>
-              <Typography sx={{ mt: 1, fontSize: 40, fontWeight: 900 }}>{plan.price}</Typography>
+              <Typography variant="h5" component="h3" sx={{ fontWeight: 900 }}>{plan.name}</Typography>
+              <Stack direction="row" alignItems="baseline" spacing={0.5} sx={{ mt: 1 }}>
+                <Typography sx={{ fontSize: 40, fontWeight: 900 }}>{plan.price}</Typography>
+                {plan.cadence ? (
+                  <Typography sx={{ color: alpha(trovanColors.black[900], 0.62), fontWeight: 800 }}>
+                    {plan.cadence}
+                  </Typography>
+                ) : null}
+              </Stack>
               <Typography sx={{ color: alpha(trovanColors.black[900], 0.66), minHeight: 48 }}>{plan.body}</Typography>
-              {plan.helperText ? <Alert severity="info" icon={false} sx={{ mt: 1.5, py: 0.75 }}>{plan.helperText}</Alert> : null}
               <Divider sx={{ my: 2 }} />
               <Stack spacing={1}>
                 {plan.features.map((feature) => (
@@ -2651,20 +2960,348 @@ function FinalCta({ onOpenRequest, title = 'Watch a full route day in Trovan' }:
   );
 }
 
-const homepageProofCards = [
+type HomepageProofCard = {
+  key: 'plan' | 'dispatch' | 'proof';
+  title: string;
+  body: string;
+  metric: string;
+  accent: string;
+  glow: string;
+  surface: string;
+};
+
+const homepageProofCards: HomepageProofCard[] = [
   {
+    key: 'plan',
     title: 'Planning sees risk before dispatch',
     body: 'Operators see unassigned work, route density, capacity pressure, and late-risk stops before the plan reaches the road.',
+    metric: '7 review flags',
+    accent: trovanColors.copper[600],
+    glow: alpha(trovanColors.copper[300], 0.22),
+    surface: `linear-gradient(135deg, ${alpha(trovanColors.copper[50], 0.96)} 0%, #FFFFFF 58%)`,
   },
   {
+    key: 'dispatch',
     title: 'Dispatch sees progress without chasing drivers',
     body: 'Route lanes, driver status, exceptions, and same-day changes stay visible in one repeated-action board.',
+    metric: '4 live lanes',
+    accent: trovanRoutePalette[1] ?? '#4E7BFF',
+    glow: alpha(trovanRoutePalette[1] ?? '#4E7BFF', 0.2),
+    surface: `linear-gradient(135deg, ${alpha(trovanRoutePalette[1] ?? '#4E7BFF', 0.09)} 0%, #FFFFFF 58%)`,
   },
   {
+    key: 'proof',
     title: 'Managers see proof after every stop',
     body: 'Driver notes, ETA context, proof, no-proof decisions, and route events remain attached to the route record.',
+    metric: 'Proof tied to route',
+    accent: trovanColors.semantic.success,
+    glow: alpha(trovanColors.semantic.success, 0.2),
+    surface: `linear-gradient(135deg, ${alpha(trovanColors.semantic.success, 0.08)} 0%, #FFFFFF 58%)`,
   },
 ];
+
+function HomepageProofVisual({ card }: { card: HomepageProofCard }) {
+  if (card.key === 'plan') {
+    return (
+      <Box
+        sx={{
+          position: 'relative',
+          p: 1.5,
+          borderRadius: 1.4,
+          bgcolor: alpha('#FFFFFF', 0.86),
+          border: `1px solid ${alpha(card.accent, 0.14)}`,
+          overflow: 'hidden',
+          '@keyframes trovan-plan-scan': {
+            '0%': { transform: 'translateX(-120%)' },
+            '100%': { transform: 'translateX(120%)' },
+          },
+        }}
+      >
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            width: '42%',
+            background: `linear-gradient(90deg, transparent, ${alpha(card.accent, 0.12)}, transparent)`,
+            '@media (prefers-reduced-motion: no-preference)': {
+              animation: 'trovan-plan-scan 2.8s linear infinite',
+            },
+          }}
+        />
+        <Stack spacing={1} sx={{ position: 'relative', zIndex: 1 }}>
+          <Box sx={{ p: 1.05, borderRadius: 1.15, bgcolor: '#FFFFFF', border: `1px solid ${alpha(card.accent, 0.12)}` }}>
+            <Stack direction="row" justifyContent="space-between" spacing={1} alignItems="center">
+              <Box>
+                <Typography sx={{ color: alpha(trovanColors.black[900], 0.58), fontSize: 11, fontWeight: 900, textTransform: 'uppercase' }}>
+                  Selected route
+                </Typography>
+                <Typography sx={{ color: trovanColors.black[950], fontWeight: 900 }}>DEN-220 Run 2</Typography>
+              </Box>
+              <Box sx={{ px: 0.8, py: 0.35, borderRadius: 999, bgcolor: alpha(card.accent, 0.1), color: trovanColors.copper[800], fontSize: 11, fontWeight: 900 }}>
+                Before publish
+              </Box>
+            </Stack>
+          </Box>
+          {[
+            ['Omega Medical', 'Unassigned work', 'Needs lane'],
+            ['North cluster', 'Route density', 'Review'],
+            ['Stop 14', 'Late-risk stop', '11:40 AM'],
+          ].map(([label, signal, status]) => (
+            <Box key={label} sx={{ p: 1, borderRadius: 1.1, bgcolor: '#FFFFFF', border: `1px solid ${alpha(card.accent, 0.1)}`, display: 'grid', gridTemplateColumns: '1fr auto', gap: 1, alignItems: 'center' }}>
+              <Box>
+                <Typography sx={{ color: trovanColors.black[950], fontWeight: 800 }}>{label}</Typography>
+                <Typography sx={{ color: alpha(trovanColors.black[900], 0.62), fontSize: 12 }}>{signal}</Typography>
+              </Box>
+              <Box sx={{ px: 0.8, py: 0.35, borderRadius: 999, bgcolor: alpha(card.accent, 0.1), color: trovanColors.copper[800], fontSize: 11, fontWeight: 900, whiteSpace: 'nowrap' }}>{status}</Box>
+            </Box>
+          ))}
+          <Box sx={{ p: 1.1, borderRadius: 1.1, bgcolor: alpha(card.accent, 0.07), border: `1px solid ${alpha(card.accent, 0.12)}` }}>
+            <Typography sx={{ color: alpha(trovanColors.black[900], 0.58), fontSize: 11, fontWeight: 900, textTransform: 'uppercase' }}>
+              Planner review
+            </Typography>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={0.8} sx={{ mt: 0.8 }}>
+              {['3 lanes balanced', '1 stop at risk', 'Dispatch not notified yet'].map((item) => (
+                <Box key={item} sx={{ flex: 1, px: 0.8, py: 0.65, borderRadius: 0.9, bgcolor: '#FFFFFF', color: trovanColors.black[950], fontSize: 11, fontWeight: 800, border: `1px solid ${alpha(card.accent, 0.1)}` }}>
+                  {item}
+                </Box>
+              ))}
+            </Stack>
+          </Box>
+        </Stack>
+      </Box>
+    );
+  }
+
+  if (card.key === 'dispatch') {
+    return (
+      <Box
+        sx={{
+          p: 1.5,
+          borderRadius: 1.4,
+          bgcolor: alpha('#FFFFFF', 0.88),
+          border: `1px solid ${alpha(card.accent, 0.14)}`,
+          '@keyframes trovan-dispatch-focus': {
+            '0%, 24%': { opacity: 1, transform: 'translateY(0)', borderColor: alpha(card.accent, 0.28), boxShadow: `0 0 0 3px ${alpha(card.accent, 0.1)}` },
+            '33%, 100%': { opacity: 0.78, transform: 'translateY(0)', borderColor: alpha(card.accent, 0.1), boxShadow: 'none' },
+          },
+          '@keyframes trovan-dispatch-alert': {
+            '0%, 100%': { transform: 'scale(1)', opacity: 0.82 },
+            '50%': { transform: 'scale(1.04)', opacity: 1 },
+          },
+          '@keyframes trovan-dispatch-log': {
+            '0%, 24%': { opacity: 0.45 },
+            '33%, 57%': { opacity: 1 },
+            '66%, 100%': { opacity: 0.45 },
+          },
+        }}
+      >
+        <Stack spacing={1}>
+          <Stack direction="row" spacing={0.8} sx={{ flexWrap: 'wrap' }}>
+            {['Driver status', 'Open exceptions', 'Same-day changes'].map((item) => (
+              <Box key={item} sx={{ px: 0.9, py: 0.45, borderRadius: 999, bgcolor: alpha(card.accent, 0.08), border: `1px solid ${alpha(card.accent, 0.12)}`, color: trovanColors.black[950], fontSize: 11, fontWeight: 800 }}>
+                {item}
+              </Box>
+            ))}
+          </Stack>
+          {[
+            ['Route lane A', 'Anna Quinn checked in', 'Driver live', 'stable'],
+            ['Route lane B', 'Delay exception raised', 'Open exception', 'alert'],
+            ['Route lane C', 'Stop 7 completed', 'Proof incoming', 'proof'],
+          ].map(([label, sublabel, badge, kind], index) => (
+            <Box
+              key={label}
+              sx={{
+                p: 1,
+                borderRadius: 1.1,
+                bgcolor: '#FFFFFF',
+                border: `1px solid ${alpha(card.accent, 0.1)}`,
+                '@media (prefers-reduced-motion: no-preference)': {
+                  animation: 'trovan-dispatch-focus 6s ease-in-out infinite',
+                  animationDelay: `${index * 2}s`,
+                },
+              }}
+            >
+              <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
+                <Box>
+                  <Typography sx={{ color: trovanColors.black[950], fontWeight: 800 }}>{label}</Typography>
+                  <Typography sx={{ color: alpha(trovanColors.black[900], 0.62), fontSize: 12 }}>{sublabel}</Typography>
+                </Box>
+                <Box
+                  sx={{
+                    px: 0.8,
+                    py: 0.35,
+                    borderRadius: 999,
+                    bgcolor: kind === 'alert' ? alpha('#D95C45', 0.12) : kind === 'proof' ? alpha(trovanColors.semantic.success, 0.12) : alpha(card.accent, 0.1),
+                    color: kind === 'alert' ? '#9F3427' : kind === 'proof' ? '#166534' : card.accent,
+                    fontSize: 11,
+                    fontWeight: 900,
+                    whiteSpace: 'nowrap',
+                    '@media (prefers-reduced-motion: no-preference)': kind === 'alert' ? { animation: 'trovan-dispatch-alert 1.8s ease-in-out infinite' } : undefined,
+                  }}
+                >
+                  {badge}
+                </Box>
+              </Stack>
+              <Box sx={{ mt: 0.9, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 0.6 }}>
+                {[
+                  'Lane visible',
+                  kind === 'alert' ? 'Driver waiting' : 'Driver assigned',
+                  kind === 'proof' ? 'Proof syncing' : kind === 'alert' ? 'Exception open' : 'ETA current',
+                  'Dispatch updated',
+                ].map((item, itemIndex) => (
+                  <Box
+                    key={item}
+                    sx={{
+                      px: 0.55,
+                      py: 0.55,
+                      borderRadius: 0.8,
+                      bgcolor: itemIndex === 2 && kind === 'alert' ? alpha('#D95C45', 0.1) : alpha(card.accent, 0.06),
+                      color: itemIndex === 2 && kind === 'alert' ? '#9F3427' : alpha(trovanColors.black[900], 0.82),
+                      fontSize: 10,
+                      fontWeight: 800,
+                      textAlign: 'center',
+                    }}
+                  >
+                    {item}
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+          ))}
+          <Box sx={{ p: 1, borderRadius: 1.1, bgcolor: alpha(card.accent, 0.06), border: `1px solid ${alpha(card.accent, 0.1)}` }}>
+            <Typography sx={{ color: alpha(trovanColors.black[900], 0.58), fontSize: 11, fontWeight: 900, textTransform: 'uppercase' }}>
+              Dispatch activity
+            </Typography>
+            <Stack spacing={0.55} sx={{ mt: 0.75 }}>
+              {[
+                'Anna Quinn checked in on Route lane A',
+                'Delay exception opened on Route lane B',
+                'Stop 7 completed on Route lane C',
+              ].map((item, index) => (
+                <Box
+                  key={item}
+                  sx={{
+                    px: 0.8,
+                    py: 0.7,
+                    borderRadius: 0.8,
+                    bgcolor: '#FFFFFF',
+                    color: trovanColors.black[950],
+                    fontSize: 11,
+                    fontWeight: 700,
+                    border: `1px solid ${alpha(card.accent, 0.08)}`,
+                    '@media (prefers-reduced-motion: no-preference)': {
+                      animation: 'trovan-dispatch-log 6s ease-in-out infinite',
+                      animationDelay: `${index * 2}s`,
+                    },
+                  }}
+                >
+                  {item}
+                </Box>
+              ))}
+            </Stack>
+          </Box>
+        </Stack>
+      </Box>
+    );
+  }
+
+  return (
+    <Box
+      sx={{
+        p: 1.5,
+        borderRadius: 1.4,
+        bgcolor: alpha('#FFFFFF', 0.88),
+        border: `1px solid ${alpha(card.accent, 0.14)}`,
+        '@keyframes trovan-proof-pan': {
+          '0%, 22%': { transform: 'translateY(0)' },
+          '33%, 55%': { transform: 'translateY(-64px)' },
+          '66%, 88%': { transform: 'translateY(-128px)' },
+          '100%': { transform: 'translateY(0)' },
+        },
+        '@keyframes trovan-proof-row': {
+          '0%, 22%': { borderColor: alpha(card.accent, 0.24), boxShadow: `0 0 0 4px ${alpha(card.accent, 0.08)}` },
+          '33%, 100%': { borderColor: alpha(card.accent, 0.1), boxShadow: 'none' },
+        },
+        '@keyframes trovan-proof-dot': {
+          '0%, 22%': { transform: 'scale(1)', opacity: 1 },
+          '33%, 100%': { transform: 'scale(0.82)', opacity: 0.45 },
+        },
+      }}
+    >
+      <Box sx={{ display: 'grid', gridTemplateColumns: '22px 1fr', gap: 1, alignItems: 'start' }}>
+        <Stack spacing={0} sx={{ pt: 0.2 }}>
+          {[0, 1, 2].map((index) => (
+            <Box key={index} sx={{ width: 22, display: 'grid', justifyItems: 'center' }}>
+              <Box
+                sx={{
+                  width: 12,
+                  height: 12,
+                  borderRadius: 999,
+                  bgcolor: card.accent,
+                  '@media (prefers-reduced-motion: no-preference)': {
+                    animation: 'trovan-proof-dot 6s ease-in-out infinite',
+                    animationDelay: `${index * 2}s`,
+                  },
+                }}
+              />
+              {index < 2 ? <Box sx={{ width: 2, minHeight: 52, bgcolor: alpha(card.accent, 0.22) }} /> : null}
+            </Box>
+          ))}
+        </Stack>
+        <Box sx={{ overflow: 'hidden', height: 188 }}>
+          <Stack
+            spacing={1}
+            sx={{
+              '@media (prefers-reduced-motion: no-preference)': {
+                animation: 'trovan-proof-pan 6s ease-in-out infinite',
+              },
+            }}
+          >
+            {[
+              ['Stop completed', '11:24 AM'],
+              ['Photo proof attached', '1 image + note'],
+              ['Route record updated', 'Proof visible to ops'],
+            ].map(([label, meta], index) => (
+              <Box
+                key={label}
+                sx={{
+                  p: 1,
+                  borderRadius: 1.1,
+                  bgcolor: '#FFFFFF',
+                  border: `1px solid ${alpha(card.accent, 0.1)}`,
+                  minHeight: 56,
+                  '@media (prefers-reduced-motion: no-preference)': {
+                    animation: 'trovan-proof-row 6s ease-in-out infinite',
+                    animationDelay: `${index * 2}s`,
+                  },
+                }}
+              >
+                <Stack direction="row" justifyContent="space-between" spacing={1}>
+                  <Typography sx={{ color: trovanColors.black[950], fontWeight: 800 }}>{label}</Typography>
+                  <Typography sx={{ color: alpha(trovanColors.black[900], 0.72), fontSize: 12, fontWeight: 800 }}>{meta}</Typography>
+                </Stack>
+              </Box>
+            ))}
+          </Stack>
+        </Box>
+      </Box>
+      <Stack spacing={1} sx={{ mt: 1 }}>
+        <Box sx={{ mt: 0.4, p: 1, borderRadius: 1.1, bgcolor: alpha(card.accent, 0.08), border: `1px solid ${alpha(card.accent, 0.12)}`, display: 'grid', gridTemplateColumns: '1fr auto', gap: 1, alignItems: 'center' }}>
+          <Box>
+            <Typography sx={{ color: alpha(trovanColors.black[900], 0.58), fontSize: 11, fontWeight: 900, textTransform: 'uppercase' }}>
+              Audit trail
+            </Typography>
+            <Typography sx={{ color: trovanColors.black[950], fontWeight: 800 }}>Driver note, ETA snapshot, and proof event remain on the route.</Typography>
+          </Box>
+          <Box sx={{ px: 0.8, py: 0.4, borderRadius: 999, bgcolor: '#FFFFFF', color: '#166534', fontSize: 11, fontWeight: 900, whiteSpace: 'nowrap' }}>
+            Route-linked
+          </Box>
+        </Box>
+      </Stack>
+    </Box>
+  );
+}
 
 function HomepageProofStory() {
   return (
@@ -2675,18 +3312,23 @@ function HomepageProofStory() {
           title="Route days run better when every team sees the same route-day picture."
           body="Trovan sells one operating promise: plan the route, run the day, and prove every stop without rebuilding the truth from spreadsheets, text threads, and end-of-day guesses."
         />
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 1.5 }}>
+        <Box sx={{ display: 'grid', gap: 1.5 }}>
           {homepageProofCards.map((card, index) => (
             <Box
               key={card.title}
               data-motion="scroll-reveal"
               sx={{
-                minHeight: 192,
-                p: 2.2,
-                borderRadius: 1.4,
-                bgcolor: index === 0 ? alpha(trovanColors.copper[50], 0.78) : '#FFFFFF',
+                minHeight: 260,
+                p: { xs: 2.1, md: 2.4 },
+                borderRadius: 1.6,
+                bgcolor: '#FFFFFF',
+                background: card.surface,
                 border: `1px solid ${alpha(trovanColors.black[900], 0.1)}`,
-                boxShadow: index === 0 ? '0 18px 48px rgba(169,99,33,0.1)' : 'none',
+                boxShadow: `0 18px 48px ${card.glow}`,
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', lg: '0.92fr 1.08fr' },
+                gap: 2.2,
+                alignItems: 'center',
                 transition: 'transform 220ms ease, border-color 220ms ease, box-shadow 220ms ease',
                 '@media (prefers-reduced-motion: no-preference)': {
                   animation: 'trovan-proof-rise 640ms ease both',
@@ -2696,22 +3338,53 @@ function HomepageProofStory() {
                   from: { opacity: 0.72, transform: 'translateY(14px)' },
                   to: { opacity: 1, transform: 'translateY(0)' },
                 },
+                '@keyframes trovan-proof-pulse': {
+                  '0%, 100%': { transform: 'scaleX(0.72)', opacity: 0.72 },
+                  '50%': { transform: 'scaleX(1)', opacity: 1 },
+                },
+                '@keyframes trovan-proof-float': {
+                  '0%, 100%': { transform: 'translateY(0)' },
+                  '50%': { transform: 'translateY(-4px)' },
+                },
                 '&:hover': {
-                  transform: 'translateY(-3px)',
-                  borderColor: alpha(trovanColors.copper[500], 0.42),
-                  boxShadow: '0 18px 42px rgba(31,26,23,0.08)',
+                  transform: 'translateY(-5px)',
+                  borderColor: alpha(card.accent, 0.42),
+                  boxShadow: `0 26px 56px ${card.glow}`,
                 },
               }}
             >
-              <Typography sx={{ color: trovanColors.copper[700], fontWeight: 900, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0 }}>
-                0{index + 1}
-              </Typography>
-              <Typography variant="h5" sx={{ mt: 1, fontWeight: 900, lineHeight: 1.18 }}>
-                {card.title}
-              </Typography>
-              <Typography sx={{ mt: 1, color: alpha(trovanColors.black[900], 0.68), lineHeight: 1.5 }}>
-                {card.body}
-              </Typography>
+              <Box>
+                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                  <Typography sx={{ color: trovanColors.copper[700], fontWeight: 900, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0 }}>
+                    0{index + 1}
+                  </Typography>
+                  <Box
+                    sx={{
+                      px: 1,
+                      py: 0.55,
+                      borderRadius: 999,
+                      bgcolor: alpha(card.accent, 0.12),
+                      color: card.accent,
+                      fontSize: 11,
+                      fontWeight: 900,
+                      border: `1px solid ${alpha(card.accent, 0.18)}`,
+                      '@media (prefers-reduced-motion: no-preference)': {
+                        animation: 'trovan-proof-float 2.8s ease-in-out infinite',
+                        animationDelay: `${index * 160}ms`,
+                      },
+                    }}
+                  >
+                    {card.metric}
+                  </Box>
+                </Stack>
+                <Typography variant="h4" component="h3" sx={{ mt: 1, fontWeight: 900, lineHeight: 1.08, fontSize: { xs: 30, md: 36 } }}>
+                  {card.title}
+                </Typography>
+                <Typography sx={{ mt: 1, color: alpha(trovanColors.black[900], 0.68), lineHeight: 1.55, fontSize: { xs: 17, md: 18 } }}>
+                  {card.body}
+                </Typography>
+              </Box>
+              <HomepageProofVisual card={card} />
             </Box>
           ))}
         </Box>
@@ -2735,16 +3408,12 @@ function HomepageProofStory() {
               <Typography sx={{ mt: 1.4, color: alpha('#FFF8ED', 0.72), fontSize: 18, lineHeight: 1.58 }}>
                 Plans, route lanes, driver assignments, map context, and stop-level proof stay connected from draft to delivery.
               </Typography>
-              <Alert severity="info" icon={false} sx={{ mt: 2.4, bgcolor: alpha(trovanColors.copper[100], 0.14), color: '#FFF8ED', border: `1px solid ${alpha(trovanColors.copper[100], 0.24)}` }}>
-                Trovan uses real product workflows and realistic route scenarios so buyers can see how planning, dispatch, driver execution, and proof stay connected.
-              </Alert>
             </Box>
           </Box>
           <ScreenshotFrame
-            src="/marketing/routing-workspace.png"
-            alt="Trovan route planning workspace with imported stops, draft lanes, and connected route map"
-            caption="Full planning workspace"
-            fit="contain"
+            src="/marketing/product-dashboard.png"
+            alt="Trovan operations dashboard showing live routes, jobs waiting, route risk, and daily readiness"
+            caption="Route-day dashboard"
           />
         </Box>
       </Box>
@@ -2770,8 +3439,8 @@ function HomePage({ onOpenRequest }: { onOpenRequest: (requestType: RequestType,
               <Button variant="contained" size="large" onClick={() => onOpenRequest('Book demo')}>
                 {BOOK_DEMO_CTA}
               </Button>
-              <Button variant="outlined" size="large" onClick={() => onOpenRequest('Route audit')}>
-                {ROUTE_AUDIT_CTA}
+              <Button component={RouterLink} to="/demo" variant="outlined" size="large" endIcon={<ArrowForwardRoundedIcon />}>
+                {PRODUCT_WALKTHROUGH_CTA}
               </Button>
             </Stack>
             <Typography sx={{ mt: 1.6, color: alpha('#FFF8ED', 0.66), fontSize: 15.5, lineHeight: 1.45, maxWidth: 620 }}>
@@ -2808,7 +3477,7 @@ function HomePage({ onOpenRequest }: { onOpenRequest: (requestType: RequestType,
               <Box key={item.path} component={RouterLink} to={item.path} sx={{ minHeight: 188, p: 2, borderRadius: 1, bgcolor: '#FFFFFF', border: `1px solid ${alpha(trovanColors.black[900], 0.1)}`, color: trovanColors.black[950], textDecoration: 'none', display: 'grid', alignContent: 'space-between', transition: 'transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease', '&:hover': { transform: 'translateY(-3px)', borderColor: alpha(trovanColors.copper[500], 0.5), boxShadow: '0 18px 40px rgba(31,26,23,0.08)' } }}>
                 <Box>
                   <item.icon sx={{ color: trovanColors.copper[700] }} />
-                  <Typography variant="h6" sx={{ mt: 1.2, fontWeight: 900 }}>{item.navLabel}</Typography>
+                  <Typography variant="h6" component="h3" sx={{ mt: 1.2, fontWeight: 900 }}>{item.navLabel}</Typography>
                   <Typography sx={{ mt: 0.8, color: alpha(trovanColors.black[900], 0.66), fontSize: 14 }}>{item.outcome}</Typography>
                 </Box>
                 <Typography sx={{ mt: 1.4, color: trovanColors.copper[700], fontSize: 13, fontWeight: 900 }}>{workflowCtaLabel(item.key)}</Typography>
@@ -2846,7 +3515,7 @@ function SecurityStrip() {
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.4 }}>
           {securityControls.map((item) => (
             <Box key={item.title} sx={{ p: 2, borderRadius: 1.4, border: `1px solid ${alpha('#FFF8ED', 0.12)}`, bgcolor: alpha('#FFF8ED', 0.045) }}>
-              <Typography variant="h6" sx={{ color: '#FFF8ED', fontWeight: 850 }}>{item.title}</Typography>
+              <Typography variant="h6" component="h3" sx={{ color: '#FFF8ED', fontWeight: 850 }}>{item.title}</Typography>
               <Typography sx={{ mt: 0.7, color: alpha('#FFF8ED', 0.68) }}>{item.body}</Typography>
             </Box>
           ))}
@@ -2861,18 +3530,23 @@ function ScenarioPreview() {
     <Box sx={{ bgcolor: trovanColors.stone[0], py: { xs: 7, md: 9 } }}>
       <Box sx={{ width: sectionWidth, mx: 'auto' }}>
         <SectionHeader
-          kicker="Scenario proof"
-          title="Built for route-day problems your team already knows."
-          body="These scenarios show the operational moments Trovan is built around: planning handoff, dispatch visibility, customer status, and proof after delivery."
+          kicker="Buyer clarity"
+          title="What buyers usually want to confirm before rollout."
+          body="Keep this section simple: what the team sees before the route leaves, what dispatch sees during the day, and what proof exists after completion."
         />
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2 }}>
-          {testimonialProofItems.map((item) => (
-            <Box key={item.title} sx={{ p: 2.4, borderRadius: 1.5, bgcolor: '#FFFFFF', border: `1px solid ${alpha(trovanColors.black[900], 0.1)}` }}>
-              <Typography sx={{ color: trovanColors.copper[700], fontWeight: 900 }}>{item.outcome}</Typography>
-              <Typography variant="h5" sx={{ mt: 1, fontWeight: 900 }}>{item.title}</Typography>
-              <Typography sx={{ mt: 1, color: alpha(trovanColors.black[900], 0.68) }}>{item.body}</Typography>
-            </Box>
-          ))}
+        <Box sx={{ p: 2.6, borderRadius: 1.6, bgcolor: '#FFFFFF', border: `1px solid ${alpha(trovanColors.black[900], 0.1)}` }}>
+          <Stack spacing={1.2}>
+            {[
+              'Planning stays tied to route lanes, map context, and publish-ready decisions.',
+              'Dispatch can run the day from one board instead of bouncing between tools.',
+              'Drivers, customers, and proof records stay attached to the same route history.',
+            ].map((item) => (
+              <Stack key={item} direction="row" spacing={1.1} alignItems="flex-start">
+                <CheckRoundedIcon sx={{ color: trovanColors.semantic.success, fontSize: 18, mt: '2px' }} />
+                <Typography sx={{ color: alpha(trovanColors.black[900], 0.72), lineHeight: 1.55 }}>{item}</Typography>
+              </Stack>
+            ))}
+          </Stack>
         </Box>
       </Box>
     </Box>
@@ -2886,12 +3560,13 @@ function PlatformPage({ onOpenRequest }: { onOpenRequest: (requestType: RequestT
         kicker="Platform"
         title="Trovan platform for delivery and distribution route days"
         body="Plan work, dispatch routes, guide drivers, track customers, and preserve proof from one last-mile operating picture."
-        image="/marketing/public-launch.png"
-        imageAlt="Trovan public launch and product workspace screenshot"
+        image="/marketing/product-dashboard.png"
+        imageAlt="Current Trovan operations dashboard with live map, route performance, exceptions, and savings metrics"
         primaryCta={BOOK_DEMO_CTA}
         secondaryCta={PRODUCT_WALKTHROUGH_CTA}
         onPrimary={() => onOpenRequest('Book demo')}
         secondaryHref="/demo"
+        media={<PlatformOverviewFrame />}
       />
       <Box sx={{ py: { xs: 7, md: 9 }, bgcolor: trovanColors.stone[25] }}>
         <Box sx={{ width: sectionWidth, mx: 'auto' }}>
@@ -2978,12 +3653,17 @@ function WorkflowPageView({ onOpenRequest }: { onOpenRequest: (requestType: Requ
         secondaryCta={PRODUCT_WALKTHROUGH_CTA}
         secondaryHref="/demo"
         onPrimary={() => onOpenRequest('Book demo')}
-        media={workflow.key === 'drive' ? <MobileAppProofFrame src={workflow.image} alt={workflow.imageAlt} /> : undefined}
+        media={workflow.key === 'drive' ? <MobileAppProofFrame src={workflow.image} alt={workflow.imageAlt} /> : workflow.key === 'dispatch' ? <DispatchWorkflowFrame /> : undefined}
       />
       <Box sx={{ py: { xs: 7, md: 9 }, bgcolor: trovanColors.stone[0] }}>
         <Box sx={{ width: sectionWidth, mx: 'auto', display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '0.9fr 1.1fr' }, gap: 4, alignItems: 'start' }}>
           <Box>
-            <SectionHeader kicker="Operating problem" title={workflow.problem} body={workflow.outcome} />
+            <SectionHeader
+              kicker="Operating problem"
+              title={workflow.problem}
+              body={workflow.outcome}
+              titleSx={{ fontSize: { xs: 32, md: 44 }, lineHeight: { xs: 1.02, md: 1.04 }, maxWidth: 640 }}
+            />
             <Button variant="contained" onClick={() => onOpenRequest('Book demo')}>Book demo</Button>
           </Box>
           <Box sx={{ display: 'grid', gap: 1.4 }}>
@@ -2996,81 +3676,39 @@ function WorkflowPageView({ onOpenRequest }: { onOpenRequest: (requestType: Requ
           </Box>
         </Box>
       </Box>
-      <Box sx={{ py: { xs: 6, md: 7 }, bgcolor: trovanColors.stone[25] }}>
-        <Box sx={{ width: sectionWidth, mx: 'auto', display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 1.5 }}>
-          {workflow.metrics.map((metric) => (
-            <Box key={metric.label} sx={{ p: 2, borderRadius: 1.5, bgcolor: '#FFFFFF', border: `1px solid ${alpha(trovanColors.black[900], 0.1)}` }}>
-              <Typography sx={{ color: alpha(trovanColors.black[900], 0.62), fontWeight: 800, fontSize: 13 }}>{metric.label}</Typography>
-              <Typography sx={{ mt: 0.6, fontSize: 30, fontWeight: 900 }}>{metric.value}</Typography>
-            </Box>
-          ))}
-        </Box>
-      </Box>
       <FinalCta onOpenRequest={(requestType) => onOpenRequest(requestType)} />
     </>
   );
 }
 
 const demoVideoChapters = [
-  'Import stops',
-  'Optimize routes',
-  'Dispatch drivers',
-  'Watch route progress',
-  'Rebalance changes',
-  'Driver proof',
+  'Operations dashboard',
+  'Route planning',
+  'Dispatch board',
+  'Route execution',
+  'Live tracking',
+  'Proof of delivery',
   'Customer tracking',
-  'Route summary',
 ];
 
-function DemoVideoSection({ onOpenRequest }: { onOpenRequest: (requestType: RequestType) => void }) {
-  const demoVideoSrc = '/demo/trovan-route-day-demo.mp4';
-  const videoAvailable = false;
-
+function DemoVideoSection() {
   return (
     <Box sx={{ py: { xs: 7, md: 9 }, bgcolor: trovanColors.stone[0], color: trovanColors.black[950] }}>
       <Box sx={{ width: sectionWidth, mx: 'auto', display: 'grid', gridTemplateColumns: { xs: '1fr', lg: '1.18fr 0.82fr' }, gap: 3, alignItems: 'stretch' }}>
         <Box sx={{ borderRadius: 1.6, bgcolor: '#151210', border: `1px solid ${alpha(trovanColors.black[900], 0.14)}`, boxShadow: '0 24px 70px rgba(31,26,23,0.14)', overflow: 'hidden' }}>
           <ProductFrameHeader detail="Product walkthrough video" />
-          {videoAvailable ? (
-            <Box
-              component="video"
-              controls
-              playsInline
-              preload="metadata"
-              aria-label="Trovan full route day product walkthrough video"
-              sx={{ display: 'block', width: '100%', aspectRatio: '16 / 9', bgcolor: '#0C0907' }}
-            >
-              <source src={demoVideoSrc} type="video/mp4" />
-            </Box>
-          ) : (
-            <Box
-              sx={{
-                minHeight: { xs: 300, md: 430 },
-                display: 'grid',
-                placeItems: 'center',
-                px: 3,
-                textAlign: 'center',
-                color: '#FFF8ED',
-                bgcolor: '#0C0907',
-                borderTop: `1px solid ${alpha('#FFF8ED', 0.08)}`,
-              }}
-            >
-              <Box sx={{ maxWidth: 520 }}>
-                <Typography sx={{ color: trovanColors.copper[200], fontWeight: 900, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0 }}>
-                  Demo video coming soon
-                </Typography>
-                <Typography variant="h3" sx={{ mt: 1, fontFamily: trovanTypography.brandFontFamily, fontSize: { xs: 34, md: 46 }, lineHeight: 1 }}>
-                  Drop the edited walkthrough into /public/demo/
-                </Typography>
-                <Typography sx={{ mt: 1.3, color: alpha('#FFF8ED', 0.68), lineHeight: 1.55 }}>
-                  Expected file: public/demo/trovan-route-day-demo.mp4. Until that file exists, this page stays honest and routes buyers to a live demo.
-                </Typography>
-                <Button variant="contained" onClick={() => onOpenRequest('Book demo')} sx={{ mt: 2.4 }}>
-                  {BOOK_DEMO_CTA}
-                </Button>
-              </Box>
-            </Box>
-          )}
+          <Box
+            component="video"
+            controls
+            playsInline
+            preload="metadata"
+            poster={PRODUCT_TOUR_POSTER_SRC}
+            aria-label="Trovan full route day product walkthrough video"
+            sx={{ display: 'block', width: '100%', aspectRatio: '16 / 10', bgcolor: '#0C0907' }}
+          >
+            <source src={PRODUCT_TOUR_VIDEO_SRC} type="video/mp4" />
+            <track kind="captions" src={PRODUCT_TOUR_CAPTIONS_SRC} srcLang="en" label="English" />
+          </Box>
         </Box>
         <Box sx={{ p: 2.4, borderRadius: 1.6, bgcolor: '#FFFFFF', border: `1px solid ${alpha(trovanColors.black[900], 0.1)}` }}>
           <Typography sx={{ color: trovanColors.copper[700], fontWeight: 900, fontSize: 13, textTransform: 'uppercase', letterSpacing: 0 }}>
@@ -3107,14 +3745,14 @@ function DemoPage({ onOpenRequest }: { onOpenRequest: (requestType: RequestType)
         kicker="Product walkthrough"
         title="Watch a full route day in Trovan."
         body="See how a team imports stops, builds routes, dispatches drivers, tracks progress, handles changes, and captures proof."
-        image="/marketing/hero-route-command-center-v2.png"
-        imageAlt="Trovan route-day command center cropped to show the map, selected route, route lanes, and publish-ready context"
+        image="/marketing/product-routing.png"
+        imageAlt="Current Trovan route planning workspace with unassigned jobs, route lanes, map context, and publish controls"
         primaryCta={BOOK_DEMO_CTA}
         secondaryCta="See pricing"
         secondaryHref="/pricing"
         onPrimary={() => onOpenRequest('Book demo')}
       />
-      <DemoVideoSection onOpenRequest={onOpenRequest} />
+      <DemoVideoSection />
       <RouteMotionVideo />
       <QuickProductDemo />
       <Box sx={{ py: { xs: 7, md: 9 }, bgcolor: trovanColors.stone[25] }}>
@@ -3162,11 +3800,17 @@ function DemoPage({ onOpenRequest }: { onOpenRequest: (requestType: RequestType)
                 {workflowCtaLabel(active.key)}
               </Button>
             </Box>
-            <ScreenshotFrame
-              src={active.key === 'plan' ? '/marketing/routing-workspace.png' : active.image}
-              alt={active.imageAlt}
-              caption={`${active.navLabel} tour`}
-            />
+            {active.key === 'drive' ? (
+              <MobileAppProofFrame src={active.image} alt={active.imageAlt} />
+            ) : active.key === 'track' ? (
+              <TrackingProofFrame />
+            ) : (
+              <ScreenshotFrame
+                src={active.image}
+                alt={active.imageAlt}
+                caption={`${active.navLabel} tour`}
+              />
+            )}
           </Box>
         </Box>
       </Box>
@@ -3283,10 +3927,33 @@ function ResourcesPage() {
 }
 
 function DownloadsPage() {
+  const downloads = [
+    { title: 'Customer Launch Docket', body: 'The complete versioned handoff packet: guide, checklists, runbooks, role matrix, KPI templates, quick references, and import files.', href: '/downloads/trovan-customer-launch-docket-v1.zip', label: 'Download ZIP' },
+    { title: 'Launch Docket PDF', body: 'Print-ready customer implementation guide with the seven-day plan, practice-route checklist, escalation matrix, FAQ, and signoff.', href: '/downloads/trovan-customer-launch-docket-v1.pdf', label: 'Download PDF' },
+    { title: 'Job import CSV template', body: 'A sanitized route-day template using the supported minimum and common routing-constraint fields.', href: '/downloads/trovan-job-import-template.csv', label: 'Download CSV' },
+    { title: 'Implementation roster', body: 'Customer Champion, user, role, driver, vehicle, depot, escalation, and training-completion worksheet.', href: '/downloads/trovan-implementation-roster.csv', label: 'Download CSV' },
+    { title: 'Driver Quick Start', body: 'A mobile-friendly one-page reference for route start, arrival, proof, exceptions, messages, and departure.', href: '/downloads/trovan-driver-quick-start-v1.pdf', label: 'Download PDF' },
+    { title: 'KPI review template', body: 'Week-one and day-30 measurements for planning time, mileage, late risk, failed deliveries, proof completion, and support demand.', href: '/downloads/trovan-launch-kpi-template.csv', label: 'Download CSV' },
+  ];
   return (
     <>
-      <SimpleHero kicker="Downloads" title="Downloads and public resources" body="Use web resources first: route audit checklist, implementation readiness, policy center, and workflow pages." />
-      <CardGrid items={downloadCards} />
+      <SimpleHero kicker="Customer launch docket" title="Everything a customer needs to implement Trovan" body="Download the complete packet or use individual quick-reference files. Academy articles remain the current source of truth." />
+      <Box sx={{ py: { xs: 7, md: 9 }, bgcolor: trovanColors.stone[25] }}>
+        <Box sx={{ width: sectionWidth, mx: 'auto', display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' }, gap: 2 }}>
+          {downloads.map((item) => (
+            <Box key={item.title} sx={{ p: 2.4, borderRadius: 1.6, bgcolor: '#FFFFFF', border: `1px solid ${alpha(trovanColors.black[900], 0.1)}` }}>
+              <ArticleRoundedIcon sx={{ color: trovanColors.copper[700] }} />
+              <Typography variant="h5" sx={{ mt: 1.2, fontWeight: 900 }}>{item.title}</Typography>
+              <Typography sx={{ mt: 1, color: alpha(trovanColors.black[900], 0.68) }}>{item.body}</Typography>
+              <Button component="a" href={item.href} download variant="contained" sx={{ mt: 2 }}>{item.label}</Button>
+            </Box>
+          ))}
+        </Box>
+        <Box sx={{ width: sectionWidth, mx: 'auto', mt: 3 }}>
+          <Typography variant="h4" sx={{ fontWeight: 900, mb: 1.5 }}>Additional web resources</Typography>
+          <CardGrid items={downloadCards} />
+        </Box>
+      </Box>
     </>
   );
 }
@@ -3308,6 +3975,14 @@ function CardGrid({ items }: { items: Array<{ icon: ElementType; title: string; 
 }
 
 function SupportPage({ onOpenRequest }: { onOpenRequest: (requestType: RequestType) => void }) {
+  const [query, setQuery] = useState('');
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredFaqs = supportFaqs.filter((faq) =>
+    !normalizedQuery || `${faq.category} ${faq.question} ${faq.answer}`.toLowerCase().includes(normalizedQuery),
+  );
+  const filteredTroubleshooting = implementationTroubleshooting.filter((item) =>
+    !normalizedQuery || `${item.symptom} ${item.likelyCause} ${item.resolution.join(' ')} ${item.escalateWhen}`.toLowerCase().includes(normalizedQuery),
+  );
   return (
     <>
       <SimpleHero kicker="Support" title="Support for access, rollout, and route operations" body="Get help without a fake ticket system. Route your question to access support, implementation, sales, or security review." />
@@ -3322,7 +3997,52 @@ function SupportPage({ onOpenRequest }: { onOpenRequest: (requestType: RequestTy
           ))}
         </Box>
         <Box sx={{ width: sectionWidth, mx: 'auto', mt: 3, textAlign: 'center' }}>
-          <Button variant="contained" onClick={() => onOpenRequest('Support / login help')}>Request access/support</Button>
+          <Button variant="contained" onClick={() => onOpenRequest('Support')}>Request access/support</Button>
+        </Box>
+        <Box sx={{ width: sectionWidth, mx: 'auto', mt: { xs: 5, md: 7 } }}>
+          <SectionHeader kicker="Knowledge base" title="Common questions, answered clearly" body="Search setup, imports, planning, dispatch, driver, proof, tracking, training, billing, and support guidance." />
+          <TextField
+            fullWidth
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search the Trovan knowledge base"
+            inputProps={{ 'aria-label': 'Search the Trovan knowledge base' }}
+            sx={{ mb: 2, maxWidth: 720 }}
+          />
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1.3 }} aria-live="polite">
+            {filteredFaqs.length} {filteredFaqs.length === 1 ? 'answer' : 'answers'} found
+          </Typography>
+          <Box sx={{ display: 'grid', gap: 1.1 }}>
+            {filteredFaqs.map((faq) => (
+              <Box key={faq.question} component="details" sx={{ p: 2, borderRadius: 1.4, bgcolor: '#FFFFFF', border: `1px solid ${alpha(trovanColors.black[900], 0.1)}`, '& summary': { cursor: 'pointer', fontWeight: 900 } }}>
+                <Box component="summary">
+                  <Typography component="span" sx={{ color: trovanColors.copper[700], fontWeight: 900, mr: 1 }}>{faq.category}</Typography>
+                  <Typography component="span" sx={{ fontWeight: 900 }}>{faq.question}</Typography>
+                </Box>
+                <Typography sx={{ mt: 1.2, color: alpha(trovanColors.black[900], 0.72), lineHeight: 1.65 }}>{faq.answer}</Typography>
+              </Box>
+            ))}
+            {filteredFaqs.length === 0 ? (
+              <Alert severity="info">No matching answer yet. Send the question through support so it can be added to the knowledge base.</Alert>
+            ) : null}
+          </Box>
+          {filteredTroubleshooting.length ? (
+            <Box sx={{ mt: { xs: 4, md: 5 } }}>
+              <SectionHeader kicker="Troubleshooting" title="Start with what went wrong" body="Use the checks in order. Each path says when the customer can fix it and when support needs the record and request IDs." />
+              <Box sx={{ display: 'grid', gap: 1.1 }}>
+                {filteredTroubleshooting.map((item) => (
+                  <Box key={item.symptom} component="details" sx={{ p: 2, borderRadius: 1.4, bgcolor: '#FFFFFF', border: `1px solid ${alpha(trovanColors.black[900], 0.1)}`, '& summary': { cursor: 'pointer', fontWeight: 900 } }}>
+                    <Box component="summary"><Typography component="span" sx={{ fontWeight: 900 }}>{item.symptom}</Typography></Box>
+                    <Typography sx={{ mt: 1.2 }}><strong>Likely cause:</strong> {item.likelyCause}</Typography>
+                    <Box component="ol" sx={{ pl: 2.5, '& li': { mb: 0.6 } }}>
+                      {item.resolution.map((step) => <li key={step}><Typography sx={{ color: alpha(trovanColors.black[900], 0.72) }}>{step}</Typography></li>)}
+                    </Box>
+                    <Alert severity="info"><strong>Escalate when:</strong> {item.escalateWhen}</Alert>
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+          ) : null}
         </Box>
       </Box>
     </>
@@ -3389,7 +4109,7 @@ function CareersPage({ onOpenRequest }: { onOpenRequest: (requestType: RequestTy
           <Typography sx={{ mt: 1.4, color: alpha(trovanColors.black[900], 0.68), fontSize: 18 }}>
             If you have strong experience in delivery operations, dispatch software, mapping, routing, or customer implementation, send a general note.
           </Typography>
-          <Button variant="contained" onClick={() => onOpenRequest('Careers interest')} sx={{ mt: 3 }}>Send general interest</Button>
+          <Button variant="contained" onClick={() => onOpenRequest('Careers')} sx={{ mt: 3 }}>Send general interest</Button>
         </Box>
       </Box>
     </>
@@ -3462,7 +4182,7 @@ export default function PublicSite() {
   useEffect(() => {
     const seo = getPageSeo(pathname);
     document.title = seo.title;
-    upsertMetaDescription(seo.description);
+    updatePublicSeoMetadata(pathname, seo.title, seo.description);
     window.scrollTo(0, 0);
   }, [pathname]);
 

@@ -154,7 +154,7 @@ const normalizeWebhookDelivery = (
   };
 };
 
-const previewApiKeys = (): PlatformApiKeyRecord[] => [
+let previewApiKeyStore: PlatformApiKeyRecord[] = [
   {
     id: 'key-preview-1',
     organizationId: 'preview-org',
@@ -169,7 +169,10 @@ const previewApiKeys = (): PlatformApiKeyRecord[] => [
   },
 ];
 
-const previewWebhooks = (): PlatformWebhookRecord[] => [
+const previewApiKeys = (): PlatformApiKeyRecord[] =>
+  previewApiKeyStore.map((apiKey) => ({ ...apiKey, scopes: [...apiKey.scopes] }));
+
+let previewWebhookStore: PlatformWebhookRecord[] = [
   {
     id: 'webhook-preview-1',
     organizationId: 'preview-org',
@@ -185,7 +188,13 @@ const previewWebhooks = (): PlatformWebhookRecord[] => [
   },
 ];
 
-const previewWebhookDeliveries = (): PlatformWebhookDeliveryRecord[] => [
+const previewWebhooks = (): PlatformWebhookRecord[] =>
+  previewWebhookStore.map((webhook) => ({
+    ...webhook,
+    subscribedEvents: [...webhook.subscribedEvents],
+  }));
+
+let previewWebhookDeliveryStore: PlatformWebhookDeliveryRecord[] = [
   {
     id: 'delivery-preview-1',
     endpointId: 'webhook-preview-1',
@@ -203,13 +212,19 @@ const previewWebhookDeliveries = (): PlatformWebhookDeliveryRecord[] => [
   },
 ];
 
+const previewWebhookDeliveries = (): PlatformWebhookDeliveryRecord[] =>
+  previewWebhookDeliveryStore.map((delivery) => ({
+    ...delivery,
+    payload: { ...delivery.payload },
+  }));
+
 export async function getPlatformOverview(): Promise<PlatformOverviewRecord> {
   if (isPreview()) {
     return {
       generatedAt: new Date().toISOString(),
       authMode: 'preview-local',
-      apiKeysActive: previewApiKeys().length,
-      webhooksActive: previewWebhooks().length,
+      apiKeysActive: previewApiKeys().filter((apiKey) => !apiKey.revokedAt).length,
+      webhooksActive: previewWebhooks().filter((webhook) => webhook.status === 'ACTIVE').length,
       deliveriesLast24Hours: 6,
       failuresLast24Hours: 1,
       controls: {
@@ -244,6 +259,24 @@ export async function createApiKey(payload: {
   name: string;
   scopes?: string[];
 }): Promise<{ apiKey: PlatformApiKeyRecord; secret: string | null }> {
+  if (isPreview()) {
+    const now = new Date().toISOString();
+    const suffix = Math.random().toString(36).slice(2, 10);
+    const apiKey = normalizeApiKey({
+      id: `key-preview-${Date.now()}-${suffix}`,
+      organizationId: 'preview-org',
+      name: payload.name,
+      prefix: `tvp_${suffix.slice(0, 4)}`,
+      scopes: payload.scopes || [],
+      lastUsedAt: null,
+      revokedAt: null,
+      createdByUserId: 'preview-user',
+      createdAt: now,
+      updatedAt: now,
+    });
+    previewApiKeyStore = [apiKey, ...previewApiKeyStore];
+    return { apiKey, secret: `tvp_preview_${suffix}` };
+  }
   const response = await apiFetch('/api/platform/api-keys', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -258,6 +291,16 @@ export async function createApiKey(payload: {
 }
 
 export async function revokeApiKey(apiKeyId: string) {
+  if (isPreview()) {
+    const revokedAt = new Date().toISOString();
+    let revoked: PlatformApiKeyRecord | null = null;
+    previewApiKeyStore = previewApiKeyStore.map((apiKey) => {
+      if (apiKey.id !== apiKeyId) return apiKey;
+      revoked = { ...apiKey, revokedAt, updatedAt: revokedAt };
+      return revoked;
+    });
+    return revoked;
+  }
   const response = await apiFetch(`/api/platform/api-keys/${apiKeyId}`, {
     method: 'DELETE',
   });
@@ -281,6 +324,25 @@ export async function createWebhook(payload: {
   url: string;
   subscribedEvents: string[];
 }): Promise<{ endpoint: PlatformWebhookRecord; signingSecret: string | null }> {
+  if (isPreview()) {
+    const now = new Date().toISOString();
+    const suffix = Math.random().toString(36).slice(2, 10);
+    const endpoint = normalizeWebhook({
+      id: `webhook-preview-${Date.now()}-${suffix}`,
+      organizationId: 'preview-org',
+      name: payload.name,
+      url: payload.url,
+      subscribedEvents: payload.subscribedEvents,
+      status: 'ACTIVE',
+      lastDeliveryAt: null,
+      lastFailure: null,
+      createdByUserId: 'preview-user',
+      createdAt: now,
+      updatedAt: now,
+    });
+    previewWebhookStore = [endpoint, ...previewWebhookStore];
+    return { endpoint, signingSecret: `whsec_preview_${suffix}` };
+  }
   const response = await apiFetch('/api/platform/webhooks', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -304,6 +366,19 @@ export async function updateWebhook(
     status?: 'ACTIVE' | 'PAUSED';
   },
 ) {
+  if (isPreview()) {
+    let updated: PlatformWebhookRecord | null = null;
+    previewWebhookStore = previewWebhookStore.map((webhook) => {
+      if (webhook.id !== webhookId) return webhook;
+      updated = normalizeWebhook({
+        ...webhook,
+        ...payload,
+        updatedAt: new Date().toISOString(),
+      });
+      return updated;
+    });
+    return updated;
+  }
   const response = await apiFetch(`/api/platform/webhooks/${webhookId}`, {
     method: 'PATCH',
     body: JSON.stringify(payload),
@@ -313,6 +388,14 @@ export async function updateWebhook(
 }
 
 export async function rotateWebhookSecret(webhookId: string) {
+  if (isPreview()) {
+    const webhook = previewWebhookStore.find((item) => item.id === webhookId) || null;
+    const suffix = Math.random().toString(36).slice(2, 10);
+    return {
+      webhook: webhook ? { ...webhook, updatedAt: new Date().toISOString() } : null,
+      signingSecret: webhook ? `whsec_preview_${suffix}` : null,
+    };
+  }
   const response = await apiFetch(
     `/api/platform/webhooks/${webhookId}/rotate-secret`,
     {
@@ -355,6 +438,24 @@ export async function getWebhookDeliveries(
 }
 
 export async function replayWebhookDelivery(deliveryId: string) {
+  if (isPreview()) {
+    let replayed: PlatformWebhookDeliveryRecord | null = null;
+    const deliveredAt = new Date().toISOString();
+    previewWebhookDeliveryStore = previewWebhookDeliveryStore.map((delivery) => {
+      if (delivery.id !== deliveryId) return delivery;
+      replayed = {
+        ...delivery,
+        status: 'DELIVERED',
+        attempts: delivery.attempts + 1,
+        responseStatus: 200,
+        failureReason: null,
+        deliveredAt,
+        updatedAt: deliveredAt,
+      };
+      return replayed;
+    });
+    return replayed;
+  }
   const response = await apiFetch(
     `/api/platform/webhook-deliveries/${deliveryId}/replay`,
     {

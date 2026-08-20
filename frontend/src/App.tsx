@@ -1,14 +1,14 @@
-import { Suspense, lazy, useEffect, useState } from 'react';
-import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
+import { Suspense, lazy, useEffect, useState, type ReactNode } from 'react';
 import { Box, CircularProgress } from '@mui/material';
 import Layout from './components/Layout';
+import { Navigate, RouteParamsProvider, matchPath, useLocation } from './router';
 import {
   clearAuthSession,
   getSession,
   isDriverOnlyAuthUser,
   isAuthBypassed,
   isAuthenticated,
-  validateSession,
+  validateSessionState,
 } from './services/api';
 import ErrorBoundary from './components/ui/ErrorBoundary';
 
@@ -21,6 +21,7 @@ const TrackingEnhanced = lazy(() => import('./pages/TrackingEnhanced'));
 const DispatchBoardOpsPage = lazy(() => import('./pages/DispatchBoardOpsPage'));
 const RoutingWorkspacePage = lazy(() => import('./pages/RoutingWorkspacePage'));
 const AnalyticsPage = lazy(() => import('./pages/AnalyticsPage'));
+const ProofOfDeliveryPage = lazy(() => import('./pages/ProofOfDeliveryPage'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const RouteRunDetailPage = lazy(() => import('./pages/RouteRunDetailPage'));
 const ExceptionsQueuePage = lazy(() => import('./pages/ExceptionsQueuePage'));
@@ -30,6 +31,8 @@ const DriverWorkspacePage = lazy(() => import('./pages/DriverWorkspacePage'));
 const DriverRouteRunPage = lazy(() => import('./pages/DriverRouteRunPage'));
 const PublicTrackingPage = lazy(() => import('./pages/PublicTrackingPage'));
 const PublicLaunchPage = lazy(() => import('./pages/PublicLaunchPage'));
+const AcademyPage = lazy(() => import('./pages/AcademyPage'));
+const DriverHelpPage = lazy(() => import('./pages/DriverHelpPage'));
 
 function AuthGate({
   children,
@@ -55,8 +58,8 @@ function AuthGate({
         return;
       }
 
-      const ok = await validateSession();
-      if (ok && redirectDriverOnly) {
+      const sessionState = await validateSessionState();
+      if (sessionState.status === 'valid' && redirectDriverOnly) {
         const session = await getSession().catch(() => null);
         if (!cancelled && isDriverOnlyAuthUser(session?.user)) {
           setRedirectTo('/driver');
@@ -66,7 +69,7 @@ function AuthGate({
         }
       }
       if (!cancelled) {
-        setValid(ok);
+        setValid(sessionState.status !== 'invalid');
         setChecking(false);
       }
     };
@@ -97,14 +100,14 @@ function AuthGate({
   return <>{children}</>;
 }
 
-function ProtectedLayout() {
+function ProtectedLayout({ children }: { children: ReactNode }) {
   return (
     <AuthGate redirectDriverOnly>
       <ErrorBoundary
         title="Workspace Failed To Render"
         message="The operator shell hit a rendering problem. Reload to recover and check the desktop or browser logs if this repeats."
       >
-        <Layout />
+        <Layout>{children}</Layout>
       </ErrorBoundary>
     </AuthGate>
   );
@@ -152,17 +155,92 @@ function LoginRoute() {
   return <LoginPage />;
 }
 
-function DriverLayout() {
+function DriverLayout({ children }: { children: ReactNode }) {
   return (
     <AuthGate>
       <ErrorBoundary
         title="Driver Workspace Failed To Render"
         message="The driver workspace hit a rendering problem. Reload to recover and inspect the current runtime if it repeats."
       >
-        <Outlet />
+        {children}
       </ErrorBoundary>
     </AuthGate>
   );
+}
+
+const publicSitePaths = new Set([
+  '/',
+  '/platform',
+  '/demo',
+  '/pricing',
+  '/testimonials',
+  '/security',
+  '/resources',
+  '/resources/downloads',
+  '/support',
+  '/company',
+  '/mission',
+  '/careers',
+  '/legal/privacy',
+  '/legal/terms',
+  '/legal/cookies',
+  '/legal/exercise-rights',
+]);
+
+function withParams(element: ReactNode, params: Record<string, string> = {}) {
+  return <RouteParamsProvider params={params}>{element}</RouteParamsProvider>;
+}
+
+function AppRoute() {
+  const location = useLocation();
+  const pathname = location.pathname === '/' ? '/' : location.pathname.replace(/\/+$/, '');
+
+  if (pathname === '/login') return <LoginRoute />;
+  if (pathname === '/auth/callback') return <AuthCallbackPage />;
+
+  const trackingParams = matchPath('/track/:token', pathname);
+  if (trackingParams) return withParams(<PublicTrackingPage />, trackingParams);
+
+  if (publicSitePaths.has(pathname) || matchPath('/platform/:workflow', pathname)) {
+    return <PublicLaunchPage />;
+  }
+
+  if (pathname === '/driver') {
+    return <DriverLayout>{withParams(<DriverWorkspacePage />)}</DriverLayout>;
+  }
+  if (pathname === '/driver/help') {
+    return <DriverLayout>{withParams(<DriverHelpPage />)}</DriverLayout>;
+  }
+  const driverRouteParams = matchPath('/driver/route-runs/:id', pathname);
+  if (driverRouteParams) {
+    return <DriverLayout>{withParams(<DriverRouteRunPage />, driverRouteParams)}</DriverLayout>;
+  }
+
+  let protectedPage: ReactNode = null;
+  let params: Record<string, string> = {};
+  if (pathname === '/dashboard') protectedPage = <Dashboard />;
+  else if (pathname === '/loads' || pathname === '/jobs') protectedPage = <JobsPageEnhancedV2 />;
+  else if (pathname === '/routing' || pathname === '/routes' || pathname === '/planning') protectedPage = <RoutingWorkspacePage />;
+  else if (pathname === '/dispatch' || pathname === '/messages') protectedPage = <DispatchBoardOpsPage />;
+  else if (matchPath('/route-runs/:id', pathname)) {
+    params = matchPath('/route-runs/:id', pathname) ?? {};
+    protectedPage = <RouteRunDetailPage />;
+  } else if (pathname === '/exceptions') protectedPage = <ExceptionsQueuePage />;
+  else if (pathname === '/tracking' || pathname === '/depots') protectedPage = <TrackingEnhanced />;
+  else if (pathname === '/drivers') protectedPage = <DriversPage />;
+  else if (pathname === '/vehicles' || pathname === '/assets') protectedPage = <VehiclesPage />;
+  else if (pathname === '/customers') protectedPage = <CustomersPage />;
+  else if (matchPath('/pod/*', pathname)) protectedPage = <ProofOfDeliveryPage />;
+  else if (pathname === '/analytics') protectedPage = <AnalyticsPage />;
+  else if (pathname === '/billing' || pathname === '/settings' || pathname === '/integrations') protectedPage = <SettingsPage />;
+  else if (pathname === '/academy') protectedPage = <AcademyPage />;
+  else if (matchPath('/academy/:moduleKey', pathname)) {
+    params = matchPath('/academy/:moduleKey', pathname) ?? {};
+    protectedPage = <AcademyPage />;
+  }
+
+  if (!protectedPage) return <Navigate to="/dashboard" replace />;
+  return <ProtectedLayout>{withParams(protectedPage, params)}</ProtectedLayout>;
 }
 
 function App() {
@@ -174,48 +252,7 @@ function App() {
 
   return (
     <Suspense fallback={routeFallback}>
-      <Routes>
-        <Route path="/login" element={<LoginRoute />} />
-        <Route path="/auth/callback" element={<AuthCallbackPage />} />
-        <Route path="/track/:token" element={<PublicTrackingPage />} />
-        <Route path="/" element={<PublicLaunchPage />} />
-        <Route path="/platform" element={<PublicLaunchPage />} />
-        <Route path="/platform/:workflow" element={<PublicLaunchPage />} />
-        <Route path="/demo" element={<PublicLaunchPage />} />
-        <Route path="/pricing" element={<PublicLaunchPage />} />
-        <Route path="/testimonials" element={<PublicLaunchPage />} />
-        <Route path="/security" element={<PublicLaunchPage />} />
-        <Route path="/resources" element={<PublicLaunchPage />} />
-        <Route path="/resources/downloads" element={<PublicLaunchPage />} />
-        <Route path="/support" element={<PublicLaunchPage />} />
-        <Route path="/company" element={<PublicLaunchPage />} />
-        <Route path="/mission" element={<PublicLaunchPage />} />
-        <Route path="/careers" element={<PublicLaunchPage />} />
-        <Route path="/legal/privacy" element={<PublicLaunchPage />} />
-        <Route path="/legal/terms" element={<PublicLaunchPage />} />
-        <Route path="/legal/cookies" element={<PublicLaunchPage />} />
-        <Route path="/legal/exercise-rights" element={<PublicLaunchPage />} />
-        <Route path="/driver" element={<DriverLayout />}>
-          <Route index element={<DriverWorkspacePage />} />
-          <Route path="route-runs/:id" element={<DriverRouteRunPage />} />
-        </Route>
-        <Route path="/" element={<ProtectedLayout />}>
-          <Route path="dashboard" element={<Dashboard />} />
-          <Route path="jobs" element={<JobsPageEnhancedV2 />} />
-          <Route path="routing" element={<RoutingWorkspacePage />} />
-          <Route path="planning" element={<RoutingWorkspacePage />} />
-          <Route path="dispatch" element={<DispatchBoardOpsPage />} />
-          <Route path="route-runs/:id" element={<RouteRunDetailPage />} />
-          <Route path="exceptions" element={<ExceptionsQueuePage />} />
-          <Route path="tracking" element={<TrackingEnhanced />} />
-          <Route path="drivers" element={<DriversPage />} />
-          <Route path="vehicles" element={<VehiclesPage />} />
-          <Route path="customers" element={<CustomersPage />} />
-          <Route path="analytics" element={<AnalyticsPage />} />
-          <Route path="settings" element={<SettingsPage />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Route>
-      </Routes>
+      <AppRoute />
     </Suspense>
   );
 }

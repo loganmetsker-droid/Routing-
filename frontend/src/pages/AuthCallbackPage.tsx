@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from '../router';
 import { Alert, Box, Card, CardContent, CircularProgress, Stack, Typography } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import { TopoShellBackground } from '../components/TopoShellBackground';
@@ -31,7 +31,7 @@ export default function AuthCallbackPage() {
       try {
         const session = await completeWorkosCallback(code, invitationToken);
         if (!cancelled) {
-          navigate(isDriverOnlyAuthUser(session.user) ? '/driver' : '/', {
+          navigate(isDriverOnlyAuthUser(session.user) ? '/driver' : '/dashboard', {
             replace: true,
           });
         }

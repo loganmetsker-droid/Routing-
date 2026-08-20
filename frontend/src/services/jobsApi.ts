@@ -1,13 +1,53 @@
-import { unwrapListItems } from '@shared/contracts';
+import {
+  evaluateJobRoutingReadiness,
+  unwrapListItems,
+  type JobRoutingRequirements,
+  type JobRoutingReadiness,
+} from '@shared/contracts';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from './api.session';
-import { isPreview, previewState } from './api.preview';
+import { isPreview, persistPreviewState, previewState } from './api.preview';
 import type { JobRecord } from './api.types';
 import { clonePreview, isRecord } from './api.types';
 import { queryKeys } from './queryKeys';
 
-const sanitizeJob = (job: unknown): JobRecord => {
+const asOptionalNumber = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+};
+
+const asOptionalString = (value: unknown): string | undefined =>
+  typeof value === 'string' ? value : undefined;
+
+export const sanitizeJob = (job: unknown): JobRecord => {
   const value = isRecord(job) ? job : {};
+  const timeWindowStart = asOptionalString(value.timeWindowStart);
+  const timeWindowEnd = asOptionalString(value.timeWindowEnd);
+  const routingRequirements = isRecord(value.routingRequirements)
+    ? (value.routingRequirements as JobRoutingRequirements)
+    : undefined;
+  const estimatedDuration = asOptionalNumber(value.estimatedDuration);
+  const weight = asOptionalNumber(value.weight);
+  const volume = asOptionalNumber(value.volume);
+  const quantity = asOptionalNumber(value.quantity);
+  const routingReadiness = isRecord(value.routingReadiness)
+    ? (value.routingReadiness as JobRoutingReadiness)
+    : evaluateJobRoutingReadiness({
+        deliveryAddress:
+          typeof value.deliveryAddress === 'string' ? value.deliveryAddress : undefined,
+        timeWindowStart,
+        timeWindowEnd,
+        estimatedDuration,
+        weight,
+        volume,
+        quantity,
+        routingRequirements,
+      });
+
   return {
     id: typeof value.id === 'string' ? value.id : `job-${Date.now()}-${Math.random()}`,
     customerId: typeof value.customerId === 'string' ? value.customerId : undefined,
@@ -35,7 +75,19 @@ const sanitizeJob = (job: unknown): JobRecord => {
           start: String(value.timeWindow.start || ''),
           end: String(value.timeWindow.end || ''),
         }
-      : undefined,
+      : timeWindowStart || timeWindowEnd
+        ? { start: timeWindowStart || '', end: timeWindowEnd || '' }
+        : undefined,
+    timeWindowStart,
+    timeWindowEnd,
+    weight,
+    volume,
+    quantity,
+    estimatedDuration,
+    notes: asOptionalString(value.notes),
+    specialInstructions: asOptionalString(value.specialInstructions),
+    routingRequirements,
+    routingReadiness,
     priority: typeof value.priority === 'string' ? value.priority : 'normal',
     status: typeof value.status === 'string' ? value.status : 'pending',
     assignedRouteId:
@@ -65,6 +117,7 @@ export const createJob = async (
       createdAt: new Date().toISOString(),
     });
     previewState.jobs.unshift(nextJob as unknown as (typeof previewState.jobs)[number]);
+    persistPreviewState();
     return { job: nextJob };
   }
 
@@ -109,6 +162,7 @@ export const updateJobStatus = async (
     } else {
       previewState.jobs.unshift(nextJob as unknown as (typeof previewState.jobs)[number]);
     }
+    persistPreviewState();
     return { job: nextJob };
   }
 
@@ -135,6 +189,7 @@ export const updateJob = async (
     } else {
       previewState.jobs.unshift(nextJob as unknown as (typeof previewState.jobs)[number]);
     }
+    persistPreviewState();
     return { job: nextJob };
   }
 

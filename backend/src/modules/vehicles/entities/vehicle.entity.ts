@@ -7,6 +7,8 @@ import {
   DeleteDateColumn,
 } from 'typeorm';
 import { ObjectType, Field, ID, Float, Int } from '@nestjs/graphql';
+import GraphQLJSON from 'graphql-type-json';
+import type { VehicleRoutingProfile } from '@shared/contracts';
 
 type VehicleLocation = {
   lat: number;
@@ -73,6 +75,16 @@ export class Vehicle {
   @Column({ name: 'fuel_type', length: 20, default: 'diesel' })
   @Field()
   fuelType: string;
+
+  @Column({
+    name: 'routing_profile',
+    type: 'jsonb',
+    nullable: true,
+    comment:
+      'Cargo dimensions, pallet positions, features, driver eligibility, and operator-authored vehicle rules',
+  })
+  @Field(() => GraphQLJSON, { nullable: true })
+  routingProfile?: VehicleRoutingProfile;
 
   // Status and tracking
   @Column({ length: 20, default: 'available' })

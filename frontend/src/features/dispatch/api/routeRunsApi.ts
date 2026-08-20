@@ -1,10 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { FleetOperatingRule } from '@shared/contracts';
 import {
   apiFetch,
   apiFetchResponse,
   getApiBaseUrl,
 } from '../../../services/apiClient';
-import { isPreview, nowIso, previewState } from '../../../services/api.preview';
+import {
+  isPreview,
+  nowIso,
+  persistPreviewState,
+  previewState,
+} from '../../../services/api.preview';
 import { getErrorMessage, isRecord } from '../../../services/api.types';
 import { queryKeys } from '../../../services/queryKeys';
 
@@ -17,14 +23,31 @@ export type RouteRunRecord = {
   workflowStatus?: string | null;
   totalDistanceKm?: number | null;
   totalDurationMinutes?: number | null;
+  eta?: string | null;
   plannedStart?: string | null;
   actualStart?: string | null;
+  dispatchedAt?: string | null;
+  dispatchedByUserId?: string | null;
+  dispatchNote?: string | null;
   completedAt?: string | null;
   jobCount?: number | null;
   notes?: string | null;
   routeData?: Record<string, unknown> | null;
   createdAt?: string;
   updatedAt?: string;
+};
+
+export type DispatchReadinessBlockerRecord = {
+  code: string;
+  message: string;
+  severity: 'blocking' | string;
+  routeId: string;
+  exceptionId?: string | null;
+};
+
+export type DispatchReadinessRecord = {
+  ready: boolean;
+  blockers: DispatchReadinessBlockerRecord[];
 };
 
 export type RouteRunStopRecord = {
@@ -47,6 +70,13 @@ export type RouteRunStopRecord = {
     address?: string | null;
     location?: { latitude: number; longitude: number } | null;
     instructions?: string | null;
+    access?: {
+      code?: string | null;
+      codeRequired: boolean;
+      notes?: string | null;
+      gateInstructions?: string | null;
+    } | null;
+    handlingInstructions?: string | null;
     timeWindowStart?: string | null;
     timeWindowEnd?: string | null;
   };
@@ -138,12 +168,14 @@ export type NotificationDeliveryRecord = {
 
 export type RouteRunDetailRecord = {
   routeRun: RouteRunRecord;
+  vehicleOperatingRules?: FleetOperatingRule[];
   stops: RouteRunStopRecord[];
   exceptions: DispatchExceptionRecord[];
   stopEvents: StopEventRecord[];
   proofArtifacts: ProofArtifactRecord[];
   notificationDeliveries: NotificationDeliveryRecord[];
   messages?: RouteRunMessageRecord[];
+  dispatchReadiness?: DispatchReadinessRecord | null;
 };
 
 export type RouteRunShareLinkRecord = {
@@ -158,12 +190,26 @@ export type DispatchMoveStopPayload = {
   targetSequence: number;
 };
 
+export type DispatchRouteRunPayload = {
+  note?: string;
+};
+
 export type CreateExceptionPayload = {
   routeId?: string | null;
   routeRunStopId?: string | null;
   code: string;
   message: string;
   details?: Record<string, unknown>;
+};
+
+const previewScheduleAnchor = Date.now();
+const previewScheduleTime = (minutesFromAnchor: number) =>
+  new Date(previewScheduleAnchor + minutesFromAnchor * 60_000).toISOString();
+
+const previewPlannedStart = (route: (typeof previewState.routes)[number]) => {
+  if (route.status === 'in_progress') return previewScheduleTime(-90);
+  if (route.status === 'assigned') return previewScheduleTime(15);
+  return previewScheduleTime(30);
 };
 
 const previewRouteRuns = (): RouteRunRecord[] =>
@@ -181,8 +227,12 @@ const previewRouteRuns = (): RouteRunRecord[] =>
     workflowStatus: route.workflowStatus || route.status,
     totalDistanceKm: route.totalDistanceKm || null,
     totalDurationMinutes: route.totalDurationMinutes || null,
-    plannedStart: route.createdAt || null,
-    actualStart: route.dispatchedAt || null,
+    eta: null,
+    plannedStart: previewPlannedStart(route),
+    actualStart: route.status === 'in_progress' ? previewScheduleTime(-75) : null,
+    dispatchedAt: route.dispatchedAt || null,
+    dispatchedByUserId: route.dispatchedByUserId || null,
+    dispatchNote: route.dispatchNote || null,
     jobCount: route.jobIds.length,
     notes: route.planningWarnings?.join(' • ') || null,
     routeData: isRecord(route.routeData) ? route.routeData : null,
@@ -205,9 +255,12 @@ const buildPreviewRouteRunStops = (): RouteRunStopRecord[] =>
             ? 'ARRIVED'
             : 'PENDING'
           : 'PENDING',
-      plannedArrival: route.createdAt || null,
+      plannedArrival:
+        route.status === 'in_progress'
+          ? previewScheduleTime(-25 + index * 20)
+          : previewScheduleTime((route.status === 'assigned' ? 45 : 60) + index * 20),
       actualArrival:
-        route.status === 'in_progress' && index === 0 ? route.dispatchedAt || null : null,
+        route.status === 'in_progress' && index === 0 ? previewScheduleTime(-7) : null,
       actualDeparture: null,
       proofRequired: index === route.jobIds.length - 1,
       notes: null,
@@ -222,6 +275,21 @@ const buildPreviewRouteRunStops = (): RouteRunStopRecord[] =>
           'Address pending',
         location: null,
         instructions: index === 0 ? 'Use the loading dock entrance.' : null,
+        access: (() => {
+          const site = previewState.jobs.find((job) => job.id === jobId)
+            ?.routingRequirements?.site;
+          return site?.accessCode || site?.accessNotes || site?.gateInstructions
+            ? {
+                code: site.accessCode || null,
+                codeRequired: Boolean(site.accessCodeRequired),
+                notes: site.accessNotes || null,
+                gateInstructions: site.gateInstructions || null,
+              }
+            : null;
+        })(),
+        handlingInstructions:
+          previewState.jobs.find((job) => job.id === jobId)?.routingRequirements
+            ?.handlingRequirement || null,
         timeWindowStart: null,
         timeWindowEnd: null,
       },
@@ -248,6 +316,40 @@ const buildPreviewRouteRunStops = (): RouteRunStopRecord[] =>
 const previewRouteRunStops = (): RouteRunStopRecord[] =>
   buildPreviewRouteRunStops().map(mergePreviewStopState);
 
+const previewStopEvents = (routeRunId: string): StopEventRecord[] =>
+  previewRouteRunStops()
+    .filter((stop) => stop.routeId === routeRunId)
+    .flatMap((stop) => [
+      stop.actualArrival
+        ? normalizeStopEvent({
+            id: `preview-event-${stop.id}-arrived`,
+            routeRunStopId: stop.id,
+            eventType: 'ARRIVED',
+            happenedAt: stop.actualArrival,
+          })
+        : null,
+      stop.actualDeparture
+        ? normalizeStopEvent({
+            id: `preview-event-${stop.id}-serviced`,
+            routeRunStopId: stop.id,
+            eventType: 'SERVICED',
+            payload: {
+              completionLocationEvidence: {
+                status: 'within_range',
+                thresholdMeters: 250,
+                varianceMeters: 82,
+                targetLocation: null,
+                completionLocation: null,
+                telemetryAt: stop.actualDeparture,
+                reason: null,
+              },
+            },
+            happenedAt: stop.actualDeparture,
+          })
+        : null,
+    ])
+    .filter((event): event is StopEventRecord => Boolean(event));
+
 const buildPreviewSeedExceptions = (): DispatchExceptionRecord[] =>
   previewState.routes
     .filter((route) => route.status === 'in_progress' || route.planningWarnings?.length)
@@ -271,6 +373,7 @@ const previewExceptionStore: DispatchExceptionRecord[] = buildPreviewSeedExcepti
 const previewMessageStore: RouteRunMessageRecord[] = [];
 const previewStopOverrides = new Map<string, Partial<RouteRunStopRecord>>();
 const previewProofStore: ProofArtifactRecord[] = [];
+const previewProofFileStore = new Map<string, Blob>();
 
 const defaultProofRequirements = (proofRequired?: boolean) => ({
   signature: proofRequired ? 'required' : 'not_required',
@@ -458,6 +561,88 @@ const previewRouteEditable = (routeId: string) => {
   return !['in_progress', 'completed', 'cancelled'].includes(status);
 };
 
+const getMutablePreviewRoute = (routeId: string) => {
+  const route = previewState.routes.find((item) => item.id === routeId);
+  if (!route) {
+    throw new Error(`Preview route ${routeId} not found.`);
+  }
+  return route;
+};
+
+const previewRouteRunResult = (routeId: string) => ({
+  ok: true,
+  routeRun: previewRouteRuns().find((route) => route.id === routeId) || null,
+});
+
+const dispatchPreviewRouteRun = async (
+  routeId: string,
+  payload: DispatchRouteRunPayload = {},
+) => {
+  const route = getMutablePreviewRoute(routeId);
+  const timestamp = nowIso();
+  route.status = 'assigned';
+  route.workflowStatus = 'ready_for_dispatch';
+  route.dispatchedAt = route.dispatchedAt || timestamp;
+  route.dispatchedByUserId = 'preview-user';
+  route.dispatchNote = payload.note?.trim() || null;
+  if (route.dispatchNote) {
+    previewMessageStore.push(
+      normalizeRouteRunMessage({
+        id: `preview-dispatch-message-${Date.now()}`,
+        organizationId: 'preview-org',
+        routeId,
+        senderRole: 'DISPATCH',
+        body: route.dispatchNote,
+        readByDispatchAt: timestamp,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      }),
+    );
+  }
+  persistPreviewState();
+  return previewRouteRunResult(routeId);
+};
+
+const startPreviewRouteRun = async (routeId: string) => {
+  const route = getMutablePreviewRoute(routeId);
+  const timestamp = nowIso();
+  route.status = 'in_progress';
+  route.workflowStatus = 'in_progress';
+  route.dispatchedAt = route.dispatchedAt || timestamp;
+  persistPreviewState();
+  return previewRouteRunResult(routeId);
+};
+
+const completePreviewRouteRun = async (routeId: string) => {
+  const route = getMutablePreviewRoute(routeId);
+  const timestamp = nowIso();
+  route.status = 'completed';
+  route.workflowStatus = 'completed';
+  route.completedAt = route.completedAt || timestamp;
+  persistPreviewState();
+  return previewRouteRunResult(routeId);
+};
+
+const reassignPreviewRouteRun = async (
+  routeId: string,
+  payload: { driverId?: string; vehicleId?: string; reason?: string },
+) => {
+  const route = getMutablePreviewRoute(routeId);
+  if ('driverId' in payload) {
+    route.driverId = payload.driverId || undefined;
+    if (!payload.vehicleId && route.driverId) {
+      const driver = previewState.drivers.find((item) => item.id === route.driverId);
+      route.vehicleId = driver?.currentVehicleId || driver?.assignedVehicleId || route.vehicleId;
+    }
+  }
+  if (typeof payload.vehicleId === 'string' && payload.vehicleId) {
+    route.vehicleId = payload.vehicleId;
+  }
+  route.updatedAt = nowIso();
+  persistPreviewState();
+  return previewRouteRunResult(routeId);
+};
+
 const unwrapApiPayload = (value: unknown): unknown => {
   if (!isRecord(value)) {
     return value;
@@ -500,10 +685,17 @@ const normalizeRouteRun = (value: unknown): RouteRunRecord => {
       typeof record.totalDurationMinutes === 'number'
         ? record.totalDurationMinutes
         : null,
+    eta: typeof record.eta === 'string' ? record.eta : null,
     plannedStart:
       typeof record.plannedStart === 'string' ? record.plannedStart : null,
     actualStart:
       typeof record.actualStart === 'string' ? record.actualStart : null,
+    dispatchedAt:
+      typeof record.dispatchedAt === 'string' ? record.dispatchedAt : null,
+    dispatchedByUserId:
+      typeof record.dispatchedByUserId === 'string' ? record.dispatchedByUserId : null,
+    dispatchNote:
+      typeof record.dispatchNote === 'string' ? record.dispatchNote : null,
     completedAt:
       typeof record.completedAt === 'string' ? record.completedAt : null,
     jobCount: typeof record.jobCount === 'number' ? record.jobCount : null,
@@ -518,6 +710,7 @@ const normalizeRouteRunStop = (value: unknown): RouteRunStopRecord => {
   const record = isRecord(value) ? value : {};
   const presentation = isRecord(record.presentation) ? record.presentation : {};
   const location = isRecord(presentation.location) ? presentation.location : null;
+  const access = isRecord(presentation.access) ? presentation.access : null;
   const proofRequirements = isRecord(record.proofRequirements)
     ? record.proofRequirements
     : {};
@@ -593,6 +786,21 @@ const normalizeRouteRunStop = (value: unknown): RouteRunStopRecord => {
       instructions:
         typeof presentation.instructions === 'string'
           ? presentation.instructions
+          : null,
+      access: access
+        ? {
+            code: typeof access.code === 'string' ? access.code : null,
+            codeRequired: Boolean(access.codeRequired),
+            notes: typeof access.notes === 'string' ? access.notes : null,
+            gateInstructions:
+              typeof access.gateInstructions === 'string'
+                ? access.gateInstructions
+                : null,
+          }
+        : null,
+      handlingInstructions:
+        typeof presentation.handlingInstructions === 'string'
+          ? presentation.handlingInstructions
           : null,
       timeWindowStart:
         typeof presentation.timeWindowStart === 'string'
@@ -757,16 +965,44 @@ const normalizeNotificationDelivery = (
   };
 };
 
+const normalizeDispatchReadiness = (value: unknown): DispatchReadinessRecord | null => {
+  const record = isRecord(value) ? value : null;
+  if (!record) return null;
+  const blockers = Array.isArray(record.blockers)
+    ? record.blockers
+        .filter(isRecord)
+        .map((blocker) => ({
+          code: typeof blocker.code === 'string' ? blocker.code : 'UNKNOWN',
+          message:
+            typeof blocker.message === 'string'
+              ? blocker.message
+              : 'Dispatch blocker requires review.',
+          severity:
+            typeof blocker.severity === 'string' ? blocker.severity : 'blocking',
+          routeId: typeof blocker.routeId === 'string' ? blocker.routeId : '',
+          exceptionId:
+            typeof blocker.exceptionId === 'string' ? blocker.exceptionId : null,
+        }))
+    : [];
+
+  return {
+    ready: Boolean(record.ready) && blockers.length === 0,
+    blockers,
+  };
+};
+
 export async function getDispatchBoardV2(): Promise<{
   routeRuns: RouteRunRecord[];
   routeRunStops: RouteRunStopRecord[];
   exceptions: DispatchExceptionRecord[];
+  dispatchReadiness: Record<string, DispatchReadinessRecord>;
 }> {
   if (isPreview()) {
     return {
       routeRuns: previewRouteRuns(),
       routeRunStops: previewRouteRunStops(),
       exceptions: previewExceptions(),
+      dispatchReadiness: {},
     };
   }
   const data = toRecord(
@@ -782,6 +1018,18 @@ export async function getDispatchBoardV2(): Promise<{
     exceptions: Array.isArray(data.exceptions)
       ? data.exceptions.map(normalizeDispatchException)
       : [],
+    dispatchReadiness: isRecord(data.dispatchReadiness)
+      ? Object.fromEntries(
+          Object.entries(data.dispatchReadiness)
+            .map(([routeId, readiness]) => [
+              routeId,
+              normalizeDispatchReadiness(readiness),
+            ])
+            .filter((entry): entry is [string, DispatchReadinessRecord] =>
+              Boolean(entry[1]),
+            ),
+        )
+      : {},
   };
 }
 
@@ -805,7 +1053,7 @@ export async function getRouteRunDetail(
         previewRouteRuns()[0],
       stops: previewRouteRunStops().filter((stop) => stop.routeId === routeRunId),
       exceptions: previewExceptions().filter((item) => item.routeId === routeRunId),
-      stopEvents: [],
+      stopEvents: previewStopEvents(routeRunId),
       proofArtifacts: previewProofStore.filter((proof) =>
         previewRouteRunStops().some(
           (stop) => stop.routeId === routeRunId && stop.id === proof.routeRunStopId,
@@ -813,6 +1061,14 @@ export async function getRouteRunDetail(
       ),
       notificationDeliveries: [],
       messages: previewRouteRunMessages(routeRunId),
+      vehicleOperatingRules: (() => {
+        const route = previewState.routes.find((item) => item.id === routeRunId);
+        const vehicle = previewState.vehicles.find((item) => item.id === route?.vehicleId);
+        return (vehicle?.routingProfile?.operatingRules || []).filter(
+          (rule) => rule.active !== false,
+        );
+      })(),
+      dispatchReadiness: null,
     };
   }
   const data = toRecord(
@@ -836,6 +1092,16 @@ export async function getRouteRunDetail(
     messages: Array.isArray(data.messages)
       ? data.messages.map(normalizeRouteRunMessage)
       : [],
+    vehicleOperatingRules: Array.isArray(data.vehicleOperatingRules)
+      ? data.vehicleOperatingRules.filter(
+          (rule): rule is FleetOperatingRule =>
+            isRecord(rule) &&
+            typeof rule.id === 'string' &&
+            typeof rule.label === 'string' &&
+            typeof rule.instruction === 'string',
+        )
+      : [],
+    dispatchReadiness: normalizeDispatchReadiness(data.dispatchReadiness),
   };
 }
 
@@ -856,6 +1122,7 @@ const reorderPreviewDispatchStops = async (
   }
   route.jobIds = newJobOrder.slice();
   syncPreviewRouteAssignments();
+  persistPreviewState();
   return {
     route: normalizeRouteRun({
       ...route,
@@ -888,6 +1155,7 @@ const movePreviewDispatchStop = async (
   targetOrder.splice(Math.max(0, payload.targetSequence - 1), 0, payload.jobId);
   targetRoute.jobIds = targetOrder;
   syncPreviewRouteAssignments();
+  persistPreviewState();
 
   return {
     sourceRoute: normalizeRouteRun(sourceRoute),
@@ -933,13 +1201,45 @@ const updatePreviewException = async (
   return { ok: true, exception };
 };
 
-export const dispatchRouteRun = async (routeRunId: string) => apiFetch(`/api/route-runs/${routeRunId}/dispatch`, { method: 'POST' });
-export const startRouteRun = async (routeRunId: string) => apiFetch(`/api/route-runs/${routeRunId}/start`, { method: 'POST' });
-export const completeRouteRun = async (routeRunId: string) => apiFetch(`/api/route-runs/${routeRunId}/complete`, { method: 'POST' });
-export const reassignRouteRun = async (routeRunId: string, payload: { driverId?: string; vehicleId?: string; reason?: string }) => apiFetch(`/api/route-runs/${routeRunId}/reassign`, {
-  method: 'POST',
-  body: JSON.stringify(payload),
-});
+export const dispatchRouteRun = async (
+  routeRunId: string,
+  payload: DispatchRouteRunPayload = {},
+) => {
+  if (isPreview()) {
+    return dispatchPreviewRouteRun(routeRunId, payload);
+  }
+  return apiFetch(`/api/route-runs/${routeRunId}/dispatch`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+};
+
+export const startRouteRun = async (routeRunId: string) => {
+  if (isPreview()) {
+    return startPreviewRouteRun(routeRunId);
+  }
+  return apiFetch(`/api/route-runs/${routeRunId}/start`, { method: 'POST' });
+};
+
+export const completeRouteRun = async (routeRunId: string) => {
+  if (isPreview()) {
+    return completePreviewRouteRun(routeRunId);
+  }
+  return apiFetch(`/api/route-runs/${routeRunId}/complete`, { method: 'POST' });
+};
+
+export const reassignRouteRun = async (
+  routeRunId: string,
+  payload: { driverId?: string; vehicleId?: string; reason?: string },
+) => {
+  if (isPreview()) {
+    return reassignPreviewRouteRun(routeRunId, payload);
+  }
+  return apiFetch(`/api/route-runs/${routeRunId}/reassign`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+};
 
 export const markRouteRunStopArrived = async (stopId: string) => {
   if (isPreview()) {
@@ -1080,6 +1380,7 @@ export const addRouteRunStopProofFile = async (
       createdAt: nowIso(),
     });
     previewProofStore.push(proof);
+    previewProofFileStore.set(proof.id, payload.file);
     updatePreviewStop(stopId, {});
     return { ok: true, proof };
   }
@@ -1149,6 +1450,28 @@ export const getProofArtifactDownloadUrl = (proofId: string) =>
   `${getApiBaseUrl()}/api/proof-artifacts/${proofId}/download`;
 
 export const fetchProofArtifactBlob = async (proofId: string) => {
+  if (isPreview()) {
+    const proof = previewProofStore.find((item) => item.id === proofId);
+    if (!proof) {
+      throw new Error(`Preview proof ${proofId} not found.`);
+    }
+    const storedFile = previewProofFileStore.get(proofId);
+    if (storedFile) {
+      return {
+        blob: storedFile,
+        contentType: storedFile.type || 'application/octet-stream',
+        filename:
+          typeof proof.metadata?.originalName === 'string'
+            ? proof.metadata.originalName
+            : `proof-${proofId}`,
+      };
+    }
+    return {
+      blob: new Blob([proof.uri || 'Proof captured in preview mode.'], { type: 'text/plain' }),
+      contentType: 'text/plain',
+      filename: `proof-${proofId}.txt`,
+    };
+  }
   const response = await apiFetchResponse(`/api/proof-artifacts/${proofId}/download`);
   return {
     blob: await response.blob(),
@@ -1206,7 +1529,7 @@ export const createRouteRunMessage = async (
       id: `preview-message-${Date.now()}`,
       routeId: routeRunId,
       routeRunStopId: payload.routeRunStopId || null,
-      senderRole: 'DRIVER',
+      senderRole: 'DISPATCH',
       body: payload.body,
       readByDriverAt: nowIso(),
       createdAt: nowIso(),
@@ -1259,22 +1582,9 @@ export const getRouteRunStopTimeline = async (stopId: string): Promise<{ stop: R
       throw new Error(`Preview stop ${stopId} not found.`);
     }
     const events: StopEventRecord[] = [
-      stop.actualArrival
-        ? normalizeStopEvent({
-            id: `preview-event-${stopId}-arrived`,
-            routeRunStopId: stopId,
-            eventType: 'ARRIVED',
-            happenedAt: stop.actualArrival,
-          })
-        : null,
-      stop.actualDeparture
-        ? normalizeStopEvent({
-            id: `preview-event-${stopId}-departed`,
-            routeRunStopId: stopId,
-            eventType: 'SERVICED',
-            happenedAt: stop.actualDeparture,
-          })
-        : null,
+      ...previewStopEvents(stop.routeId).filter(
+        (event) => event.routeRunStopId === stopId,
+      ),
       ...previewProofStore
         .filter((proof) => proof.routeRunStopId === stopId)
         .map((proof) =>
@@ -1336,6 +1646,15 @@ export const listExceptionsV2 = async (): Promise<DispatchExceptionRecord[]> => 
 export const createRouteRunShareLink = async (
   routeRunId: string,
 ): Promise<RouteRunShareLinkRecord> => {
+  if (isPreview()) {
+    const token = `preview-${routeRunId}`;
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    return {
+      token,
+      url: `${origin}/track/${encodeURIComponent(token)}`,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    };
+  }
   const data = toRecord(
     unwrapApiPayload(
       await apiFetch<unknown>(`/api/route-runs/${routeRunId}/share-link`, {
@@ -1404,10 +1723,11 @@ export const moveDispatchStopV2 = async (
   });
 };
 
-export const useDispatchBoardQuery = () =>
+export const useDispatchBoardQuery = (refetchInterval: number | false = false) =>
   useQuery({
     queryKey: queryKeys.dispatchBoard,
     queryFn: getDispatchBoardV2,
+    refetchInterval,
   });
 
 export const useRouteRunsQuery = () =>
@@ -1448,9 +1768,23 @@ const invalidateRouteRunQueries = async (queryClient: ReturnType<typeof useQuery
 export const useDispatchRouteRunMutation = () => {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: dispatchRouteRun,
-    onSuccess: async () => {
+    mutationFn: (
+      variables:
+        | string
+        | { routeRunId: string; payload?: DispatchRouteRunPayload },
+    ) =>
+      typeof variables === 'string'
+        ? dispatchRouteRun(variables)
+        : dispatchRouteRun(variables.routeRunId, variables.payload),
+    onSuccess: async (_result, variables) => {
       await invalidateRouteRunQueries(queryClient);
+      const routeRunId = typeof variables === 'string' ? variables : variables.routeRunId;
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.routeRunMessages(routeRunId),
+      });
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.routeRunDetail(routeRunId),
+      });
     },
   });
 };
@@ -1585,7 +1919,17 @@ export const useCreateRouteRunMessageMutation = () => {
       routeRunId: string;
       payload: { body: string; routeRunStopId?: string | null };
     }) => createRouteRunMessage(routeRunId, payload),
-    onSuccess: async (_result, variables) => {
+    onSuccess: async (result, variables) => {
+      queryClient.setQueryData<{ messages: RouteRunMessageRecord[]; unreadCount: number }>(
+        queryKeys.routeRunMessages(variables.routeRunId),
+        (current) => ({
+          messages: [
+            ...(current?.messages || []).filter((message) => message.id !== result.id),
+            result,
+          ],
+          unreadCount: current?.unreadCount || 0,
+        }),
+      );
       await queryClient.invalidateQueries({
         queryKey: queryKeys.routeRunMessages(variables.routeRunId),
       });
@@ -1630,8 +1974,13 @@ export const useCreateExceptionMutation = () => {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: createExceptionV2,
-    onSuccess: async () => {
+    onSuccess: async (_result, variables) => {
       await invalidateRouteRunQueries(queryClient);
+      if (variables.routeId) {
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.routeRunDetail(variables.routeId),
+        });
+      }
     },
   });
 };

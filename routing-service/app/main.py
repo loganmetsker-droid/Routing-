@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from hmac import compare_digest
-from datetime import datetime
 from typing import Dict, List
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -15,6 +16,7 @@ from geoalchemy2.shape import to_shape
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.matrix import MatrixProviderError, validate_matrix_config
 from app.models import Job, Vehicle
 from app.schemas import OptimizeRequest, OptimizeResponse
 from app.solver import solve_optimize_request
@@ -22,14 +24,9 @@ from app.solver import solve_optimize_request
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 logger = logging.getLogger(__name__)
 
-app = FastAPI(
-    title="Routing Optimization Service",
-    description="Google OR-Tools based route optimization microservice",
-    version="2.0.0",
-)
-
 INTERNAL_AUTH_HEADER = "x-routing-service-token"
 HOSTED_ENVIRONMENTS = {"staging", "production", "prod"}
+DEFAULT_MAX_BODY_BYTES = 1_048_576
 
 
 def is_hosted_environment() -> bool:
@@ -45,6 +42,24 @@ def validate_security_config() -> None:
         raise RuntimeError(
             "ROUTING_SERVICE_INTERNAL_TOKEN is required in hosted routing-service environments"
         )
+    try:
+        validate_matrix_config()
+    except MatrixProviderError as exc:
+        raise RuntimeError(str(exc)) from exc
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    validate_security_config()
+    yield
+
+
+app = FastAPI(
+    title="Routing Optimization Service",
+    description="Google OR-Tools based route optimization microservice",
+    version="2.0.0",
+    lifespan=lifespan,
+)
 
 
 async def require_internal_auth(
@@ -68,21 +83,32 @@ async def require_internal_auth(
         raise HTTPException(status_code=401, detail="routing service authentication required")
 
 
-@app.on_event("startup")
-async def startup_security_check() -> None:
-    validate_security_config()
-
-
 @app.middleware("http")
 async def enforce_optimizer_body_limit(request: Request, call_next):
     if request.method == "POST" and request.url.path in {"/optimize", "/route", "/route/global"}:
-        max_bytes = int(os.getenv("ROUTING_SERVICE_MAX_BODY_BYTES", "1048576"))
-        content_length = request.headers.get("content-length")
-        if content_length and int(content_length) > max_bytes:
-            return JSONResponse(
-                status_code=413,
-                content={"detail": "routing service request body is too large"},
+        raw_max_bytes = os.getenv("ROUTING_SERVICE_MAX_BODY_BYTES", str(DEFAULT_MAX_BODY_BYTES))
+        try:
+            max_bytes = max(1, int(raw_max_bytes))
+        except ValueError:
+            logger.error(
+                "Invalid ROUTING_SERVICE_MAX_BODY_BYTES=%r; using the safe default",
+                raw_max_bytes,
             )
+            max_bytes = DEFAULT_MAX_BODY_BYTES
+        content_length = request.headers.get("content-length")
+        if content_length:
+            try:
+                body_bytes = int(content_length)
+            except ValueError:
+                return JSONResponse(
+                    status_code=400,
+                    content={"detail": "invalid content-length header"},
+                )
+            if body_bytes > max_bytes:
+                return JSONResponse(
+                    status_code=413,
+                    content={"detail": "routing service request body is too large"},
+                )
     return await call_next(request)
 
 
@@ -113,9 +139,13 @@ async def root():
 
 @app.get("/health")
 async def health_check():
+    matrix_provider = os.getenv("ROUTING_MATRIX_PROVIDER", "estimated").strip().lower()
     return {
         "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "releaseSha": os.getenv("RENDER_GIT_COMMIT") or os.getenv("GIT_SHA") or "unknown",
+        "matrixProvider": matrix_provider,
+        "matrixMode": "road_network" if matrix_provider == "osrm" else "estimated",
     }
 
 
@@ -131,7 +161,7 @@ async def optimize(request: OptimizeRequest):
         return solve_optimize_request(request)
     except Exception as exc:  # pragma: no cover - defensive
         logger.error("Optimizer failure: %s", exc, exc_info=True)
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(status_code=500, detail="route optimization failed") from exc
 
 
 def _priority_to_number(priority: str | None) -> int:
@@ -243,7 +273,10 @@ async def optimize_route(request: Dict[str, List[str] | str], db: Session = Depe
             "dropped_jobs": result.unassigned_stop_ids,
             "data_quality": "degraded",
             "optimization_status": "failed",
-            "planner_diagnostics": {"objective_used": result.objective_used},
+            "planner_diagnostics": {
+                "objective_used": result.objective_used,
+                "provenance": result.provenance.model_dump(),
+            },
         }
 
     jobs_by_id = {str(job.id): job for job in jobs}
@@ -261,7 +294,10 @@ async def optimize_route(request: Dict[str, List[str] | str], db: Session = Depe
         "dropped_jobs": result.unassigned_stop_ids,
         "data_quality": "live",
         "optimization_status": "optimized",
-        "planner_diagnostics": {"objective_used": result.objective_used},
+        "planner_diagnostics": {
+            "objective_used": result.objective_used,
+            "provenance": result.provenance.model_dump(),
+        },
     }
 
 
@@ -314,7 +350,10 @@ async def optimize_global_route(
             "optimization_status": "optimized",
             "warnings": result.warnings,
             "dropped_jobs": result.unassigned_stop_ids,
-            "planner_diagnostics": {"objective_used": result.objective_used},
+            "planner_diagnostics": {
+                "objective_used": result.objective_used,
+                "provenance": result.provenance.model_dump(),
+            },
             "vehicle_label": getattr(vehicle, "license_plate", None),
         }
 
@@ -325,5 +364,8 @@ async def optimize_global_route(
         "warnings": result.warnings,
         "data_quality": "live",
         "optimization_status": "optimized",
-        "planner_diagnostics": {"objective_used": result.objective_used},
+        "planner_diagnostics": {
+            "objective_used": result.objective_used,
+            "provenance": result.provenance.model_dump(),
+        },
     }

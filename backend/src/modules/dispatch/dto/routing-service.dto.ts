@@ -108,6 +108,8 @@ export class OptimizeVehicleInput {
   end_lng?: number;
   capacity_weight: number;
   capacity_volume: number;
+  capacity_pallet_positions?: number;
+  driver_id?: string | null;
   max_route_minutes: number;
 }
 
@@ -122,6 +124,9 @@ export class OptimizeStopInput {
   weight: number;
   volume: number;
   locked_vehicle_id?: string | null;
+  allowed_vehicle_ids?: string[] | null;
+  pallet_positions?: number;
+  sequence_constraint?: 'any' | 'first' | 'last';
 }
 
 export class OptimizeRequest {
@@ -150,4 +155,15 @@ export class OptimizeResponse {
   objective_used: OptimizationObjective;
   unassigned_stop_ids: string[];
   warnings: string[];
+  unassigned_reasons?: Record<string, string[]>;
+  provenance: {
+    solver: string;
+    solver_version: string;
+    matrix_provider: string;
+    matrix_mode: 'road_network' | 'estimated';
+    fallback_used: boolean;
+    solve_duration_ms: number;
+    coordinate_coverage_percent: number;
+    location_count: number;
+  };
 }

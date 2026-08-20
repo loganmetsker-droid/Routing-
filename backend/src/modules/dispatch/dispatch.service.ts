@@ -8,11 +8,13 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import {
+  evaluateVehicleLoadFit,
+  estimateJobLoad,
   getOptimizationObjectiveLabel,
   normalizeOptimizationObjective,
   type OptimizationObjective,
@@ -653,24 +655,50 @@ export class DispatchService {
     vehicles: Vehicle[],
     jobs: Job[],
     objective?: string | null,
+    drivers: Driver[] = [],
   ): OptimizeRequest {
     const objectiveUsed = this.resolveOptimizationObjective(objective);
+    const driverByVehicleId = new Map(
+      drivers
+        .filter((driver) => driver.currentVehicleId)
+        .map((driver) => [driver.currentVehicleId as string, driver]),
+    );
     return {
       plan_date: new Date().toISOString(),
       objective: objectiveUsed,
       vehicles: vehicles.map((vehicle) => {
         const start = this.getVehicleCoordinates(vehicle);
+        const driver = driverByVehicleId.get(vehicle.id) || null;
+        const emptyFit = evaluateVehicleLoadFit({ vehicle, driver, jobs: [] });
         return {
           id: vehicle.id,
           start_lat: start.lat,
           start_lng: start.lng,
           capacity_weight: Number(vehicle.capacityWeightKg || 999999),
           capacity_volume: Number(vehicle.capacityVolumeM3 || 999999),
+          capacity_pallet_positions: emptyFit.limits.palletPositions || 0,
+          driver_id: driver?.id || null,
           max_route_minutes: Number(vehicle.metadata?.maxRouteMinutes || 480),
         };
       }),
       stops: jobs.map((job) => {
         const location = this.getJobCoordinates(job);
+        const demand = estimateJobLoad({
+          weight: job.weight,
+          volume: job.volume,
+          quantity: job.quantity,
+          routingRequirements: job.routingRequirements,
+        });
+        const eligibleFits = vehicles
+          .map((vehicle) => ({
+            vehicle,
+            fit: evaluateVehicleLoadFit({
+              vehicle,
+              driver: driverByVehicleId.get(vehicle.id) || null,
+              jobs: [job],
+            }),
+          }))
+          .filter(({ fit }) => fit.fits);
         return {
           id: job.id,
           lat: location.lat,
@@ -679,12 +707,19 @@ export class DispatchService {
           tw_start: job.timeWindowStart?.toISOString(),
           tw_end: job.timeWindowEnd?.toISOString(),
           priority: this.mapJobPriority(job.priority),
-          weight: Number(job.weight || 0),
-          volume: Number(job.volume || 0),
+          weight: Number(demand.totalWeightKg || 0),
+          volume: Number(demand.totalVolumeM3 || 0),
           locked_vehicle_id:
             typeof job.assignedRouteId === 'string' && job.assignedRouteId.length > 0
               ? null
               : null,
+          allowed_vehicle_ids: eligibleFits.map(({ vehicle }) => vehicle.id),
+          pallet_positions: eligibleFits.length
+            ? Math.min(
+                ...eligibleFits.map(({ fit }) => fit.totals.floorPositionsNeeded),
+              )
+            : 0,
+          sequence_constraint: job.routingRequirements?.sequence?.position || 'any',
         };
       }),
     };
@@ -697,6 +732,7 @@ export class DispatchService {
     warnings: string[],
     droppedJobIds: string[],
     objectiveUsed: OptimizationObjective,
+    provenance: OptimizeResponse['provenance'],
   ): RouteInfo {
     const start = this.getVehicleCoordinates(vehicle);
     return {
@@ -726,13 +762,14 @@ export class DispatchService {
         latitude: start.lat,
         longitude: start.lng,
       },
-      data_quality: 'live',
-      optimization_status: 'optimized',
+      data_quality: provenance.fallback_used ? 'degraded' : 'live',
+      optimization_status: provenance.fallback_used ? 'degraded' : 'optimized',
       warnings,
       dropped_jobs: droppedJobIds,
       planner_diagnostics: {
         objective_used: objectiveUsed,
         objective_label: getOptimizationObjectiveLabel(objectiveUsed),
+        provenance,
       },
     };
   }
@@ -795,8 +832,14 @@ export class DispatchService {
         throw new BadRequestException('ROUTING_SERVICE_ERROR: Some jobs were not found');
       }
 
+      const drivers = await this.driverRepository.find({
+        where: {
+          currentVehicleId: vehicle.id,
+          ...(vehicle.organizationId ? { organizationId: vehicle.organizationId } : {}),
+        },
+      });
       const optimizeResponse = await this.callOptimizerV2(
-        this.buildOptimizeRequest([vehicle], jobs, objectiveUsed),
+        this.buildOptimizeRequest([vehicle], jobs, objectiveUsed, drivers),
       );
       const optimizedRoute = optimizeResponse.routes.find(
         (route) => route.vehicle_id === vehicleId,
@@ -816,6 +859,7 @@ export class DispatchService {
         optimizeResponse.warnings || [],
         optimizeResponse.unassigned_stop_ids || [],
         optimizeResponse.objective_used || objectiveUsed,
+        optimizeResponse.provenance,
       );
 
       return {
@@ -825,8 +869,8 @@ export class DispatchService {
         total_duration_minutes: mapped.total_duration_minutes,
         num_jobs: mapped.num_jobs,
         vehicle_start_location: mapped.vehicle_start_location,
-        optimization_status: 'optimized',
-        data_quality: 'live',
+        optimization_status: mapped.optimization_status,
+        data_quality: mapped.data_quality,
         warnings: mapped.warnings,
         dropped_jobs: mapped.dropped_jobs,
         planner_diagnostics: mapped.planner_diagnostics,
@@ -885,8 +929,16 @@ export class DispatchService {
         throw new BadRequestException('ROUTING_SERVICE_ERROR: Some jobs were not found');
       }
 
+      const assignedDrivers = await this.driverRepository.find({
+        where: {
+          currentVehicleId: In(vehicles.map((vehicle) => vehicle.id)),
+          ...(vehicles[0]?.organizationId
+            ? { organizationId: vehicles[0].organizationId }
+            : {}),
+        },
+      });
       const optimizeResponse = await this.callOptimizerV2(
-        this.buildOptimizeRequest(vehicles, jobs, objectiveUsed),
+        this.buildOptimizeRequest(vehicles, jobs, objectiveUsed, assignedDrivers),
       );
       const jobsById = new Map(jobs.map((job) => [job.id, job]));
       const vehiclesById = new Map(vehicles.map((vehicle) => [vehicle.id, vehicle]));
@@ -902,6 +954,7 @@ export class DispatchService {
           optimizeResponse.warnings || [],
           optimizeResponse.unassigned_stop_ids || [],
           optimizeResponse.objective_used || objectiveUsed,
+          optimizeResponse.provenance,
         );
       }
 
@@ -909,14 +962,20 @@ export class DispatchService {
         success: true,
         routes,
         unassigned_jobs: optimizeResponse.unassigned_stop_ids || [],
-        optimization_status: 'optimized',
-        data_quality: 'live',
+        optimization_status: optimizeResponse.provenance.fallback_used
+          ? 'degraded'
+          : 'optimized',
+        data_quality: optimizeResponse.provenance.fallback_used
+          ? 'degraded'
+          : 'live',
         warnings: optimizeResponse.warnings || [],
         planner_diagnostics: {
           objective_used: optimizeResponse.objective_used || objectiveUsed,
           objective_label: getOptimizationObjectiveLabel(
             optimizeResponse.objective_used || objectiveUsed,
           ),
+          unassigned_reasons: optimizeResponse.unassigned_reasons || {},
+          provenance: optimizeResponse.provenance,
         },
       };
     } catch (error) {

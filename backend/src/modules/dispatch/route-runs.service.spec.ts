@@ -119,6 +119,159 @@ describe('RouteRunsService', () => {
     }));
   });
 
+  it('sends one timed on-the-way notification only for the next eligible stop', async () => {
+    const now = new Date('2026-08-04T14:00:00.000Z');
+    const routes = createRepo([{
+      id: 'route-1',
+      organizationId: 'org-1',
+      driverId: 'driver-1',
+      vehicleId: 'vehicle-1',
+      status: 'in_progress',
+      workflowStatus: 'in_progress',
+      jobIds: ['job-1', 'job-2'],
+    }]);
+    const routeRunStops = createRepo([
+      { id: 'stop-1', organizationId: 'org-1', routeId: 'route-1', jobId: 'job-1', jobStopId: 'job-stop-1', status: 'PENDING', stopSequence: 1, plannedArrival: new Date(now.getTime() + 10 * 60_000) },
+      { id: 'stop-2', organizationId: 'org-1', routeId: 'route-1', jobId: 'job-2', jobStopId: 'job-stop-2', status: 'PENDING', stopSequence: 2, plannedArrival: new Date(now.getTime() + 20 * 60_000) },
+    ]);
+    const notifications = {
+      getCustomerNotificationPolicy: jest.fn(async () => ({
+        onTheWayEnabled: true,
+        onTheWayMinutesBefore: 30,
+        onTheWayRequirePreviousCompletion: true,
+        completionVarianceThresholdMeters: 250,
+      })),
+      notifyCustomer: jest.fn(async () => []),
+    } as any;
+    const jwtService = { signAsync: jest.fn(async () => 'tracking-token') } as any;
+    const service = new RouteRunsService(
+      routes,
+      routeRunStops,
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      audit,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      jwtService,
+      notifications,
+    );
+
+    const result = await service.processTimedCustomerNotifications(now);
+
+    expect(result).toEqual({ processedRoutes: 1, eligibleStops: 1 });
+    expect(notifications.notifyCustomer).toHaveBeenCalledTimes(1);
+    expect(notifications.notifyCustomer).toHaveBeenCalledWith(expect.objectContaining({
+      organizationId: 'org-1',
+      routeId: 'route-1',
+      routeRunStopId: 'stop-1',
+      jobId: 'job-1',
+      eventType: 'en_route',
+      eta: new Date(now.getTime() + 10 * 60_000).toISOString(),
+    }));
+  });
+
+  it('records completion-location variance and opens an exception outside the configured radius', async () => {
+    const telemetryAt = new Date();
+    const routes = createRepo([{
+      id: 'route-1',
+      organizationId: 'org-1',
+      driverId: 'driver-1',
+      vehicleId: 'vehicle-1',
+      status: 'in_progress',
+      workflowStatus: 'in_progress',
+      jobIds: ['job-1'],
+    }]);
+    const routeRunStops = createRepo([{
+      id: 'stop-1',
+      organizationId: 'org-1',
+      routeId: 'route-1',
+      jobId: 'job-1',
+      jobStopId: 'job-stop-1',
+      status: 'ARRIVED',
+      stopSequence: 1,
+      proofRequired: false,
+    }]);
+    const events = createRepo();
+    const exceptions = createRepo();
+    const telemetry = createRepo([{
+      id: 'telemetry-1',
+      vehicleId: 'vehicle-1',
+      vehicle: { organizationId: 'org-1' },
+      location: { lat: 41.891, lng: -87.631 },
+      timestamp: telemetryAt,
+    }]);
+    const jobStops = createRepo([{
+      id: 'job-stop-1',
+      organizationId: 'org-1',
+      jobId: 'job-1',
+      location: { lat: 41.881, lng: -87.631 },
+    }]);
+    const drivers = createRepo([{
+      id: 'driver-1',
+      organizationId: 'org-1',
+      email: 'driver@trovan.test',
+    }]);
+    const notifications = {
+      getCustomerNotificationPolicy: jest.fn(async () => ({
+        onTheWayEnabled: true,
+        onTheWayMinutesBefore: 30,
+        onTheWayRequirePreviousCompletion: true,
+        completionVarianceThresholdMeters: 250,
+      })),
+      notifyCustomer: jest.fn(async () => []),
+      list: jest.fn(async () => []),
+    } as any;
+    const jwtService = { signAsync: jest.fn(async () => 'tracking-token') } as any;
+    const service = new RouteRunsService(
+      routes,
+      routeRunStops,
+      createRepo(),
+      events,
+      exceptions,
+      createRepo(),
+      audit,
+      drivers,
+      undefined,
+      telemetry,
+      undefined,
+      jwtService,
+      notifications,
+      undefined,
+      undefined,
+      undefined,
+      jobStops,
+    );
+
+    const result = await service.markServiced('stop-1', {
+      userId: 'driver-1',
+      email: 'driver@trovan.test',
+      organizationId: 'org-1',
+      roles: ['DRIVER'],
+    });
+    const timeline = await service.getStopTimeline('stop-1', {
+      userId: 'driver-1',
+      email: 'driver@trovan.test',
+      organizationId: 'org-1',
+      roles: ['DRIVER'],
+    });
+    const listedExceptions = await exceptions.find();
+
+    expect(result.stop.status).toBe('SERVICED');
+    expect(timeline.events[0].payload.completionLocationEvidence).toMatchObject({
+      status: 'attention',
+      thresholdMeters: 250,
+    });
+    expect(timeline.events[0].payload.completionLocationEvidence.varianceMeters).toBeGreaterThan(1000);
+    expect(listedExceptions).toContainEqual(expect.objectContaining({
+      code: 'COMPLETION_LOCATION_VARIANCE',
+      status: 'OPEN',
+    }));
+  });
+
   it('creates manual exceptions for either a route or a stop and keeps them open in the queue', async () => {
     audit.record.mockClear();
     const routes = createRepo([{ id: 'route-1', organizationId: 'org-1', status: 'assigned', workflowStatus: 'ready_for_dispatch' }]);
@@ -158,6 +311,230 @@ describe('RouteRunsService', () => {
       entityType: 'exception',
       action: 'exception.created',
     }));
+  });
+
+  it('blocks dispatch when the route is missing critical readiness fields', async () => {
+    const routeRunStops = createRepo([
+      {
+        id: 'stop-1',
+        organizationId: 'org-1',
+        routeId: 'route-missing-driver',
+        jobId: 'job-1',
+        jobStopId: 'job-stop-1',
+        status: 'PENDING',
+        stopSequence: 1,
+      },
+      {
+        id: 'stop-2',
+        organizationId: 'org-1',
+        routeId: 'route-missing-vehicle',
+        jobId: 'job-2',
+        jobStopId: 'job-stop-2',
+        status: 'PENDING',
+        stopSequence: 1,
+      },
+    ]);
+    const routes = createRepo([
+      {
+        id: 'route-missing-driver',
+        organizationId: 'org-1',
+        vehicleId: 'vehicle-1',
+        driverId: null,
+        status: 'planned',
+        workflowStatus: 'planned',
+      },
+      {
+        id: 'route-missing-vehicle',
+        organizationId: 'org-1',
+        vehicleId: null,
+        driverId: 'driver-1',
+        status: 'planned',
+        workflowStatus: 'planned',
+      },
+      {
+        id: 'route-no-stops',
+        organizationId: 'org-1',
+        vehicleId: 'vehicle-1',
+        driverId: 'driver-1',
+        status: 'planned',
+        workflowStatus: 'planned',
+      },
+    ]);
+    const service = new RouteRunsService(
+      routes,
+      routeRunStops,
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      audit,
+    );
+    const actor = { userId: 'dispatcher-1', organizationId: 'org-1', roles: ['DISPATCHER'] };
+
+    await expect(service.dispatchRoute('route-missing-driver', {}, actor)).rejects.toThrow(
+      'Route is not ready to dispatch',
+    );
+    await expect(service.dispatchRoute('route-missing-vehicle', {}, actor)).rejects.toThrow(
+      'Route is not ready to dispatch',
+    );
+    await expect(service.dispatchRoute('route-no-stops', {}, actor)).rejects.toThrow(
+      'Route is not ready to dispatch',
+    );
+  });
+
+  it('blocks dispatch while a route has an open exception', async () => {
+    const routes = createRepo([
+      {
+        id: 'route-1',
+        organizationId: 'org-1',
+        vehicleId: 'vehicle-1',
+        driverId: 'driver-1',
+        status: 'planned',
+        workflowStatus: 'planned',
+      },
+    ]);
+    const routeRunStops = createRepo([
+      {
+        id: 'stop-1',
+        organizationId: 'org-1',
+        routeId: 'route-1',
+        jobId: 'job-1',
+        jobStopId: 'job-stop-1',
+        status: 'PENDING',
+        stopSequence: 1,
+      },
+    ]);
+    const exceptions = createRepo([
+      {
+        id: 'exception-1',
+        organizationId: 'org-1',
+        routeId: 'route-1',
+        status: 'OPEN',
+        code: 'ACCESS_ISSUE',
+        message: 'Dock is blocked',
+      },
+    ]);
+    const service = new RouteRunsService(
+      routes,
+      routeRunStops,
+      createRepo(),
+      createRepo(),
+      exceptions,
+      createRepo(),
+      audit,
+    );
+
+    await expect(
+      service.dispatchRoute('route-1', {}, {
+        userId: 'dispatcher-1',
+        organizationId: 'org-1',
+        roles: ['DISPATCHER'],
+      }),
+    ).rejects.toThrow('Route is not ready to dispatch');
+  });
+
+  it('marks a route as sent to driver without starting it and records an optional note', async () => {
+    const routes = createRepo([
+      {
+        id: 'route-1',
+        organizationId: 'org-1',
+        vehicleId: 'vehicle-1',
+        driverId: 'driver-1',
+        status: 'planned',
+        workflowStatus: 'planned',
+        actualStart: null,
+      },
+    ]);
+    const routeRunStops = createRepo([
+      {
+        id: 'stop-1',
+        organizationId: 'org-1',
+        routeId: 'route-1',
+        jobId: 'job-1',
+        jobStopId: 'job-stop-1',
+        status: 'PENDING',
+        stopSequence: 1,
+      },
+    ]);
+    const messages = createRepo();
+    const service = new RouteRunsService(
+      routes,
+      routeRunStops,
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      audit,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      messages,
+    );
+
+    const result = await service.dispatchRoute(
+      'route-1',
+      { note: 'Check in before backing into dock B.' },
+      { userId: 'dispatcher-1', organizationId: 'org-1', roles: ['DISPATCHER'] },
+    );
+    const savedMessages = await messages.find();
+
+    expect(result.routeRun.status).toBe('assigned');
+    expect(result.routeRun.workflowStatus).toBe('ready_for_dispatch');
+    expect(result.routeRun.actualStart).toBeNull();
+    expect(result.routeRun.dispatchedAt).toBeInstanceOf(Date);
+    expect(result.routeRun.dispatchedByUserId).toBe('dispatcher-1');
+    expect(result.routeRun.dispatchNote).toBe('Check in before backing into dock B.');
+    expect(savedMessages).toHaveLength(1);
+    expect(savedMessages[0]).toEqual(
+      expect.objectContaining({
+        routeId: 'route-1',
+        senderRole: 'DISPATCH',
+        body: 'Check in before backing into dock B.',
+      }),
+    );
+  });
+
+  it('auto-applies a driver current vehicle during dispatch reassignment', async () => {
+    const routes = createRepo([
+      {
+        id: 'route-1',
+        organizationId: 'org-1',
+        vehicleId: null,
+        driverId: null,
+        status: 'planned',
+        workflowStatus: 'planned',
+      },
+    ]);
+    const drivers = createRepo([
+      {
+        id: 'driver-1',
+        organizationId: 'org-1',
+        currentVehicleId: 'vehicle-1',
+      },
+    ]);
+    const service = new RouteRunsService(
+      routes,
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      createRepo(),
+      audit,
+      drivers,
+    );
+
+    const result = await service.reassign(
+      'route-1',
+      { driverId: 'driver-1', reason: 'dispatch card assignment' },
+      { userId: 'dispatcher-1', organizationId: 'org-1', roles: ['DISPATCHER'] },
+    );
+
+    expect(result.routeRun.driverId).toBe('driver-1');
+    expect(result.routeRun.vehicleId).toBe('vehicle-1');
   });
 
   it('creates branded public tracking links and scopes driver manifests to the authenticated driver', async () => {
@@ -249,6 +626,34 @@ describe('RouteRunsService', () => {
         },
       },
     ]);
+    const jobs = createRepo([
+      {
+        id: 'job-1',
+        organizationId: 'org-1',
+        customerName: 'Northside Receiving',
+        routingRequirements: {
+          site: {
+            accessCodeConfigured: true,
+            accessCodeEncrypted: { version: 1, algorithm: 'aes-256-gcm' },
+          },
+        },
+      },
+      { id: 'job-2', organizationId: 'org-1' },
+    ]);
+    const jobStops = createRepo([
+      {
+        id: 'job-stop-1',
+        jobId: 'job-1',
+        organizationId: 'org-1',
+        address: '100 Secure Dock Way',
+      },
+      { id: 'job-stop-2', jobId: 'job-2', organizationId: 'org-1' },
+    ]);
+    const accessCodes = {
+      reveal: jest.fn((requirements: any) =>
+        requirements?.site?.accessCodeEncrypted ? '4821' : null,
+      ),
+    } as any;
     const jwtService = {
       signAsync: jest.fn(async () => 'signed-token'),
       verifyAsync: jest.fn(async () => ({
@@ -272,6 +677,13 @@ describe('RouteRunsService', () => {
       telemetry,
       organizations,
       jwtService,
+      undefined,
+      undefined,
+      undefined,
+      jobs,
+      jobStops,
+      undefined,
+      accessCodes,
     );
 
     const shareLink = await service.createPublicTrackingLink('route-1', {
@@ -300,6 +712,8 @@ describe('RouteRunsService', () => {
     expect(JSON.stringify(publicTracking)).not.toContain('Internal');
     expect(manifest.routes).toHaveLength(1);
     expect(manifest.routes[0].routeRun.id).toBe('route-1');
+    expect(manifest.routes[0].stops[0].presentation.access.code).toBe('4821');
+    expect(accessCodes.reveal).toHaveBeenCalled();
     await expect(
       service.detail('route-2', {
         userId: 'user-1',
