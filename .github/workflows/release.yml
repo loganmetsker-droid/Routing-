@@ -75,7 +75,7 @@ jobs:
           fi
 
       - name: Checkout exact release SHA
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ env.RELEASE_SHA }}
 
@@ -96,7 +96,7 @@ jobs:
           npm run release:verify-launch-evidence -- release-evidence/launch-gate-evidence.json "$RELEASE_SHA"
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm

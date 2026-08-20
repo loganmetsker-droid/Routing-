@@ -87,11 +87,24 @@ export function validateReleaseEnvironment(target, environment = process.env) {
   };
 }
 
+export function formatGitHubError(result) {
+  if (result.ok) return '';
+  const detail = result.missing.length
+    ? `Missing names: ${result.missing.join(', ')}`
+    : result.issues.join('; ');
+  return `::error title=Release environment preflight failed::${detail}`;
+}
+
 function main() {
   const target = process.argv[2] || process.env.DEPLOY_TARGET || '';
   const result = validateReleaseEnvironment(target);
   console.log(JSON.stringify(result, null, 2));
-  if (!result.ok) process.exitCode = 1;
+  if (!result.ok) {
+    if (process.env.GITHUB_ACTIONS === 'true') {
+      console.error(formatGitHubError(result));
+    }
+    process.exitCode = 1;
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

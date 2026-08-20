@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   commonReleaseEnvironmentNames,
+  formatGitHubError,
   productionReleaseEnvironmentNames,
   stagingReleaseEnvironmentNames,
   validateReleaseEnvironment,
@@ -68,4 +69,15 @@ test('rejects an unknown release target', () => {
     missing: [],
     issues: ['DEPLOY_TARGET must be staging or production'],
   });
+});
+
+test('formats a GitHub annotation with names but no configured values', () => {
+  const result = validateReleaseEnvironment('staging', {
+    CLOUDFLARE_API_TOKEN: 'never-print-this-secret',
+  });
+  const annotation = formatGitHubError(result);
+
+  assert.match(annotation, /^::error title=Release environment preflight failed::Missing names: /);
+  assert.match(annotation, /BACKEND_URL/);
+  assert.doesNotMatch(annotation, /never-print-this-secret/);
 });
