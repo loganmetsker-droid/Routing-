@@ -26,6 +26,7 @@ const publicMarketingRoutes = [
   { path: '/pricing', heading: /Pricing built around route volume/i },
   { path: '/testimonials', heading: /Operator scenarios/i },
   { path: '/security', heading: /Security and control for route operations/i },
+  { path: '/accessibility', heading: /Accessibility Statement/i },
   { path: '/resources', heading: /Resources/i },
   { path: '/support', heading: /Support/i },
   { path: '/company', heading: /Built for the route day operators/i },
@@ -50,6 +51,7 @@ const primaryRoutes = [
   { slug: 'public-pricing', path: '/pricing' },
   { slug: 'public-testimonials', path: '/testimonials' },
   { slug: 'public-security', path: '/security' },
+  { slug: 'public-accessibility', path: '/accessibility' },
   { slug: 'public-resources', path: '/resources' },
   { slug: 'public-support', path: '/support' },
   { slug: 'public-company', path: '/company' },
@@ -99,6 +101,7 @@ const interactiveSelector = [
 const destructiveControl = /\b(delete|revoke|rotate|logout|archive|remove|discard)\b/i;
 const lifecycleControl =
   /\b(assign|reassign|save driver|dispatch|start|complete|cancel|fail|reschedule|proof|resolve|route exception|replay|publish|location)\b/i;
+const loginWorkflowControl = /^(show password|hide password|sign in with email)$/i;
 
 type AuditIssue = {
   scope: string;
@@ -374,6 +377,14 @@ async function clickAuditableControls(page: Page, routePath: string) {
     }
     if (destructiveControl.test(label)) {
       clicked.push({ ...item, result: 'skipped', reason: 'destructive control' });
+      continue;
+    }
+    if (routePath === '/login' && loginWorkflowControl.test(label)) {
+      clicked.push({
+        ...item,
+        result: 'skipped',
+        reason: 'covered by workflow-specific route tests',
+      });
       continue;
     }
     if (lifecycleControl.test(label)) {
@@ -920,7 +931,14 @@ test.describe('launch UI audit', () => {
     const sitemapBody = await sitemap.text();
     expect(sitemapBody).toContain('<loc>https://trytrovan.com/</loc>');
     expect(sitemapBody).toContain('<loc>https://trytrovan.com/demo</loc>');
+    expect(sitemapBody).toContain('<loc>https://trytrovan.com/accessibility</loc>');
     expect(sitemapBody).not.toContain('/dashboard');
+
+    const securityTxt = await page.request.get('/.well-known/security.txt');
+    expect(securityTxt.ok()).toBe(true);
+    const securityTxtBody = await securityTxt.text();
+    expect(securityTxtBody).toContain('Canonical: https://trytrovan.com/.well-known/security.txt');
+    expect(securityTxtBody).toContain('Policy: https://trytrovan.com/security');
   });
 
   test('homepage and demo defer the product tour until playback begins', async ({ page }) => {

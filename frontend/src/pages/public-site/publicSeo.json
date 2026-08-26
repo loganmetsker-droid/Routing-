@@ -43,6 +43,10 @@
     "title": "TryTrovan Security | RBAC, audit logs, and route data controls",
     "description": "Review Trovan security posture for route operations, including RBAC, audit logs, request IDs, redaction, and vendor-review paths."
   },
+  "/accessibility": {
+    "title": "TryTrovan Accessibility | Access and support",
+    "description": "Review Trovan’s accessibility target, current approach, known limitations, and path for reporting an accessibility barrier."
+  },
   "/resources": {
     "title": "TryTrovan Resources | Route audit, buyer guide, and rollout tools",
     "description": "Use route audit, dispatch readiness, buyer guide, implementation, pricing ROI, security, and support resources."

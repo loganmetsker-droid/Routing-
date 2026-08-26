@@ -1,0 +1,21 @@
+{
+  "releaseSha": "replace-with-the-exact-40-character-staging-sha",
+  "generatedAt": "2026-08-06T00:00:00.000Z",
+  "stagingEvidenceUrl": "https://github.com/owner/repository/actions/runs/replace-me",
+  "exercises": {
+    "postgresRestore": { "passed": true, "operator": "Name", "completedAt": "2026-08-06T00:00:00.000Z", "evidenceUrl": "https://evidence.example/restore" },
+    "r2Recovery": { "passed": true, "operator": "Name", "completedAt": "2026-08-06T00:00:00.000Z", "evidenceUrl": "https://evidence.example/r2" },
+    "rollback": { "passed": true, "operator": "Name", "completedAt": "2026-08-06T00:00:00.000Z", "evidenceUrl": "https://evidence.example/rollback" },
+    "alertAcknowledgement": { "passed": true, "operator": "Name", "completedAt": "2026-08-06T00:00:00.000Z", "evidenceUrl": "https://evidence.example/alert" },
+    "incident": { "passed": true, "operator": "Name", "completedAt": "2026-08-06T00:00:00.000Z", "evidenceUrl": "https://evidence.example/incident" },
+    "stripeBilling": { "passed": true, "operator": "Name", "completedAt": "2026-08-06T00:00:00.000Z", "evidenceUrl": "https://evidence.example/stripe" },
+    "postmarkDeliveryBounce": { "passed": true, "operator": "Name", "completedAt": "2026-08-06T00:00:00.000Z", "evidenceUrl": "https://evidence.example/postmark" }
+  },
+  "approvals": {
+    "repositorySecurity": { "approved": true, "approver": "Name", "approvedAt": "2026-08-06T00:00:00.000Z", "evidenceUrl": "https://evidence.example/security" },
+    "privacyRetention": { "approved": true, "approver": "Name", "approvedAt": "2026-08-06T00:00:00.000Z", "evidenceUrl": "https://evidence.example/privacy" },
+    "subprocessors": { "approved": true, "approver": "Name", "approvedAt": "2026-08-06T00:00:00.000Z", "evidenceUrl": "https://evidence.example/subprocessors" },
+    "pilotAgreement": { "approved": true, "approver": "Name", "approvedAt": "2026-08-06T00:00:00.000Z", "evidenceUrl": "https://evidence.example/pilot-agreement" },
+    "launchOwner": { "approved": true, "approver": "Name", "approvedAt": "2026-08-06T00:00:00.000Z", "evidenceUrl": "https://evidence.example/launch-owner" }
+  }
+}

@@ -193,6 +193,10 @@ jobs:
             grep -Eiq '^content-type: (application|text)/xml'
           curl --fail --show-error --silent "$FRONTEND_URL/sitemap.xml" |
             grep -q '<urlset'
+          curl --fail --show-error --silent --head "$FRONTEND_URL/.well-known/security.txt" |
+            grep -Eiq '^content-type: text/plain'
+          curl --fail --show-error --silent "$FRONTEND_URL/.well-known/security.txt" |
+            grep -q 'Canonical: https://trytrovan.com/.well-known/security.txt'
 
       - name: Verify every deployed surface reports the exact SHA
         env:

@@ -1000,7 +1000,7 @@ function ProductFrameHeader({
           T
         </Box>
         <Typography sx={{ color: '#FFF8ED', fontSize: 12.5, fontWeight: 900, whiteSpace: 'nowrap' }}>
-          Current Trovan workspace
+          Live Trovan workspace
         </Typography>
       </Stack>
       <Typography
@@ -3965,6 +3965,7 @@ function renderPage({
   if (pathname === '/pricing') return <><PricingSection onOpenRequest={(requestType) => onOpenRequest(requestType)} titleComponent="h1" /><FinalCta onOpenRequest={(requestType) => onOpenRequest(requestType)} title="Talk through the right package" /></>;
   if (pathname === '/testimonials') return <TestimonialsPage />;
   if (pathname === '/security') return <SecurityPage onOpenRequest={(requestType) => onOpenRequest(requestType)} />;
+  if (pathname === '/accessibility') return <LegalPage kind="accessibility" onCookiePreferences={onCookiePreferences} />;
   if (pathname === '/resources') return <ResourcesPage />;
   if (pathname === '/resources/downloads') return <DownloadsPage />;
   if (pathname === '/support') return <SupportPage onOpenRequest={(requestType) => onOpenRequest(requestType)} />;

@@ -1,0 +1,5 @@
+Contact: https://trytrovan.com/support
+Expires: 2027-08-25T23:59:59Z
+Canonical: https://trytrovan.com/.well-known/security.txt
+Policy: https://trytrovan.com/security
+Preferred-Languages: en

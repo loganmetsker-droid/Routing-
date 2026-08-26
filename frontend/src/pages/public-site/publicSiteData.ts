@@ -96,6 +96,7 @@ export const publicMarketingRoutes: PublicRoute[] = [
   { path: '/pricing', label: 'Pricing' },
   { path: '/testimonials', label: 'Testimonials' },
   { path: '/security', label: 'Security' },
+  { path: '/accessibility', label: 'Accessibility' },
   { path: '/resources', label: 'Resources' },
   { path: '/support', label: 'Support' },
   { path: '/company', label: 'Company' },
@@ -331,6 +332,17 @@ export const supportTopics = [
 ];
 
 export const legalPages = {
+  accessibility: {
+    heading: 'Accessibility Statement',
+    body: 'Trovan is working toward a usable experience for dispatchers, drivers, customers, and buyers with different access needs. This statement describes the current target and how to report a barrier; it is not a claim of certified conformance.',
+    sections: [
+      ['Our target', 'Trovan uses WCAG 2.2 Level AA as the accessibility target for the public website and core product workflows. Automated checks support that work, but they do not replace keyboard, screen-reader, zoom, contrast, mobile, and assistive-technology review.'],
+      ['Current approach', 'The product work includes semantic headings, labeled controls, visible keyboard focus, responsive layouts, reduced-motion support where relevant, clear form feedback, and text alternatives for meaningful product imagery. These controls are rechecked as the interface changes.'],
+      ['Known limitations', 'Trovan does not claim formal WCAG conformance or third-party accessibility certification for the current assisted-pilot release. Some complex maps, route-planning interactions, and third-party authentication or payment experiences may require an alternate support path while testing continues.'],
+      ['Request help or report a barrier', 'Use the Support page and select Support. Include the page, task, browser or assistive technology, what you expected, and what prevented completion. Do not include passwords, access codes, tokens, or private customer data.'],
+      ['Response and accommodation', 'Trovan will acknowledge accessibility requests through the assisted support process and work with the requester on a practical alternate path while the underlying issue is reviewed. The current support target is a best-effort initial response within one business day.'],
+    ],
+  },
   privacy: {
     heading: 'Privacy Policy',
     body: 'Trovan handles route, driver, customer, and operational data for last-mile planning, dispatch, tracking, and proof workflows. Counsel review is recommended before launch; this page is written for product-specific buyer diligence.',
@@ -422,6 +434,7 @@ export const footerGroups = [
       { label: 'Downloads', href: '/resources/downloads' },
       { label: 'Support', href: '/support' },
       { label: 'Security', href: '/security' },
+      { label: 'Accessibility', href: '/accessibility' },
     ],
   },
   {

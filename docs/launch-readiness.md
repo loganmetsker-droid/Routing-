@@ -1,6 +1,6 @@
 # Assisted-Pilot Launch Readiness
 
-Date: 2026-07-24
+Date: 2026-08-26
 
 Scope: publicly marketed, manually approved paid pilots
 
@@ -30,6 +30,9 @@ Trovan is not being prepared for self-serve general availability. Launch is $399
 - Publishing a route plan now creates the canonical published route-version snapshot before dispatch handoff, preserving the audit and rollback chain.
 - Customer notifications reserve a durable idempotency key before delivery, retry only confirmed transient provider responses within a three-attempt bound, and surface ambiguous outcomes for operator review.
 - Sitemap, robots, canonical, Open Graph, and Twitter metadata ship from the same frontend build; the sitemap has an explicit XML content type.
+- The public site includes an accessibility statement and a standards-based
+  `/.well-known/security.txt`; release and production-monitor workflows verify
+  their deployed content rather than relying on source presence alone.
 - SMS is globally disabled unless explicitly enabled after the pilot.
 - React Router 6 remains for this pilot. Controlled navigation and the moderate advisory are accepted only for authenticated, application-controlled destinations; migrate to Router 7 before self-serve GA.
 
@@ -39,9 +42,9 @@ Trovan is not being prepared for self-serve general availability. Launch is $399
 
 - [x] Reproducible `npm ci` and workspace production build.
 - [x] Frontend lint with zero warnings.
-- [x] Backend: 292 tests; frontend: 58 tests; routing service: 13 tests.
+- [x] Backend: 292 tests; frontend: 59 tests; routing service: 13 tests.
 - [x] Driver workflow: three consecutive isolated runs, two tests per run.
-- [x] Complete Chromium Playwright suite: 151 passed, one hosted-only persistence test skipped, zero failures.
+- [x] Complete Chromium Playwright suite: 158 passed, one hosted-only persistence test skipped, zero failures.
 - [x] Full and production dependency audits: zero critical/high findings. Two accepted React Router 6 moderate advisories remain documented for the pilot.
 - [x] Full-history Gitleaks scan: zero unadjudicated findings. Exact fake
   test/example fixtures are narrowly allowlisted by both path and match.
