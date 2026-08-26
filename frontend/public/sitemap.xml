@@ -11,6 +11,7 @@
   <url><loc>https://trytrovan.com/pricing</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
   <url><loc>https://trytrovan.com/testimonials</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
   <url><loc>https://trytrovan.com/security</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://trytrovan.com/accessibility</loc><changefreq>yearly</changefreq><priority>0.5</priority></url>
   <url><loc>https://trytrovan.com/resources</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://trytrovan.com/resources/downloads</loc><changefreq>monthly</changefreq><priority>0.6</priority></url>
   <url><loc>https://trytrovan.com/support</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>

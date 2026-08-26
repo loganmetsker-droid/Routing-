@@ -85,6 +85,7 @@ export const publicMarketingRoutes: PublicRoute[] = [
   { path: '/pricing', label: 'Pricing' },
   { path: '/testimonials', label: 'Testimonials' },
   { path: '/security', label: 'Security' },
+  { path: '/accessibility', label: 'Accessibility' },
   { path: '/resources', label: 'Resources' },
   { path: '/support', label: 'Support' },
   { path: '/company', label: 'Company' },
@@ -339,6 +340,16 @@ export const supportFaqs = [
 ] as const;
 
 export const legalPages = {
+  accessibility: {
+    heading: 'Accessibility Statement',
+    body: 'Trovan is working toward an accessible public website and product experience. Our current target is WCAG 2.2 Level AA; this statement does not claim formal certification or complete conformance.',
+    sections: [
+      ['Our approach', 'We include keyboard access, visible focus, semantic structure, readable contrast, responsive layouts, and automated accessibility checks in the release process.'],
+      ['Known limitations', 'Some complex maps, route-planning controls, and third-party services may still need additional accessibility work. We review these areas as the product and hosted integrations mature.'],
+      ['Request help or report a barrier', 'Use the Support page and choose Support / login help. Include the page, task, assistive technology or browser when relevant, and the barrier you encountered. Do not include passwords, tokens, access codes, or customer secrets.'],
+      ['Response target', 'Accessibility reports follow the pilot support process: best effort with a one-business-day initial-response target, without a contractual service-level agreement.'],
+    ],
+  },
   privacy: {
     heading: 'Privacy Policy',
     body: 'Trovan handles route, driver, customer, and operational data for last-mile planning, dispatch, tracking, and proof workflows. Counsel review is recommended before launch; this page is written for product-specific buyer diligence.',
@@ -439,6 +450,7 @@ export const footerGroups = [
       { label: 'Terms of Service', href: '/legal/terms' },
       { label: 'Cookie Policy', href: '/legal/cookies' },
       { label: 'Privacy Rights Request', href: '/legal/exercise-rights' },
+      { label: 'Accessibility', href: '/accessibility' },
     ],
   },
 ];

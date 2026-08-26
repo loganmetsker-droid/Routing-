@@ -20,6 +20,7 @@ const requiredRoutes = [
   '/pricing',
   '/testimonials',
   '/security',
+  '/accessibility',
   '/resources',
   '/support',
   '/company',
@@ -71,5 +72,16 @@ describe('public site content guardrails', () => {
     const resourceText = resourceCards.map((card) => `${card.title} ${card.body}`).join(' ');
 
     expect(`${legalText} ${resourceText}`).not.toMatch(/draft|should be reviewed|formal legal publication|launch review/i);
+  });
+
+  it('publishes an accessibility target without claiming certification', () => {
+    const accessibilityText = [
+      legalPages.accessibility.heading,
+      legalPages.accessibility.body,
+      ...legalPages.accessibility.sections.flatMap(([title, body]) => [title, body]),
+    ].join(' ');
+
+    expect(accessibilityText).toMatch(/WCAG 2\.2 Level AA|keyboard|report a barrier/i);
+    expect(accessibilityText).toMatch(/does not claim formal certification/i);
   });
 });

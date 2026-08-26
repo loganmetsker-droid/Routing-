@@ -96,6 +96,12 @@ jobs:
       - name: Build workspace
         run: npm run build
 
+      - name: Verify route-specific public metadata
+        run: npm run verify:site-build
+
+      - name: Verify release marketing media
+        run: npm run verify:launch-media
+
       - name: Lint frontend
         run: npm run lint --workspace=frontend
 

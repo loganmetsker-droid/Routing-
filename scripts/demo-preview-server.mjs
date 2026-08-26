@@ -11,9 +11,11 @@ const indexPath = join(distDir, 'index.html');
 const port = parsePort(process.env.DEMO_PREVIEW_PORT || process.env.PORT || '5186');
 const host = process.env.DEMO_PREVIEW_HOST || process.env.HOST || '127.0.0.1';
 const allowNetworkBind = process.env.DEMO_PREVIEW_ALLOW_NETWORK === '1';
-const previewRole = process.env.DEMO_PREVIEW_ROLE === 'dispatcher' ? 'dispatcher' : 'driver';
-const previewAuthUser = previewRole === 'dispatcher'
-  ? {
+const requestedPreviewRole = process.env.DEMO_PREVIEW_ROLE?.trim().toLowerCase();
+const forcedPreviewRole = ['dispatcher', 'driver'].includes(requestedPreviewRole)
+  ? requestedPreviewRole
+  : null;
+const dispatcherPreviewUser = {
       id: 'preview-user',
       email: 'preview@trovan.local',
       role: 'dispatcher',
@@ -21,8 +23,8 @@ const previewAuthUser = previewRole === 'dispatcher'
       authProvider: 'local-config',
       organizationId: 'preview-org',
       sessionId: 'preview-session',
-    }
-  : {
+    };
+const driverPreviewUser = {
       id: 'preview-driver-user',
       email: 'anna.quinn@trovan.local',
       role: 'driver',
@@ -31,7 +33,9 @@ const previewAuthUser = previewRole === 'dispatcher'
       organizationId: 'preview-org',
       sessionId: 'preview-session',
     };
-const previewAuthUserLiteral = JSON.stringify(JSON.stringify(previewAuthUser));
+const forcedPreviewRoleLiteral = JSON.stringify(forcedPreviewRole);
+const dispatcherPreviewUserLiteral = JSON.stringify(JSON.stringify(dispatcherPreviewUser));
+const driverPreviewUserLiteral = JSON.stringify(JSON.stringify(driverPreviewUser));
 
 if (!isLoopbackHost(host) && !allowNetworkBind) {
   console.error(
@@ -62,7 +66,13 @@ const previewBootstrap = String.raw`
       if (!window.localStorage.getItem('authToken')) {
         window.localStorage.setItem('authToken', 'preview-auth-bypass');
       }
-      window.localStorage.setItem('trovan-preview-auth-user', ${previewAuthUserLiteral});
+      var driverRoute = window.location.pathname === '/driver' ||
+        window.location.pathname.indexOf('/driver/') === 0;
+      var forcedRole = ${forcedPreviewRoleLiteral};
+      var previewUser = forcedRole === 'driver' || (!forcedRole && driverRoute)
+        ? ${driverPreviewUserLiteral}
+        : ${dispatcherPreviewUserLiteral};
+      window.localStorage.setItem('trovan-preview-auth-user', previewUser);
       window.__TROVAN_LOCAL_DEMO_PREVIEW__ = true;
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations()

@@ -171,6 +171,12 @@ jobs:
           VITE_RELEASE_SHA: ${{ env.RELEASE_SHA }}
         run: npm run build --workspace=frontend
 
+      - name: Verify route-specific public metadata
+        run: npm run verify:site-build
+
+      - name: Verify release marketing media
+        run: npm run verify:launch-media
+
       - name: Capture current provider versions
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -235,6 +241,10 @@ jobs:
             grep -Eiq '^content-type: (application|text)/xml'
           curl --fail --show-error --silent "$FRONTEND_URL/sitemap.xml" |
             grep -q '<urlset'
+          curl --fail --show-error --silent --head "$FRONTEND_URL/.well-known/security.txt" |
+            grep -Eiq '^content-type: text/plain'
+          curl --fail --show-error --silent "$FRONTEND_URL/.well-known/security.txt" |
+            grep -q 'Canonical: https://trytrovan.com/.well-known/security.txt'
 
       - name: Prove exact SHA on every deployed surface
         env:

@@ -73,6 +73,7 @@ import {
   supportFaqs,
   workflowPages,
 } from './publicSiteData';
+import publicSeo from './publicSeo.json';
 
 type RequestFormState = {
   name: string;
@@ -107,6 +108,9 @@ function normalizePathname(pathname: string) {
 }
 
 function getPageSeo(pathname: string) {
+  const catalogEntry = publicSeo[pathname as keyof typeof publicSeo];
+  if (catalogEntry) return catalogEntry;
+
   const workflow = getWorkflowByPath(pathname);
   if (workflow) {
     return {
@@ -139,6 +143,10 @@ function getPageSeo(pathname: string) {
     '/security': {
       title: 'TryTrovan Security | RBAC, audit logs, and route data controls',
       description: 'Review Trovan security posture for route operations, including RBAC, audit logs, request IDs, redaction, and vendor-review paths.',
+    },
+    '/accessibility': {
+      title: 'TryTrovan Accessibility | Accessibility statement and support',
+      description: 'Review Trovan accessibility practices, current WCAG 2.2 AA target, known limitations, and how to report a barrier.',
     },
     '/resources': {
       title: 'TryTrovan Resources | Route audit, buyer guide, and rollout tools',
@@ -4156,6 +4164,7 @@ function renderPage({
   if (pathname === '/pricing') return <><PricingSection onOpenRequest={(requestType) => onOpenRequest(requestType)} titleComponent="h1" /><FinalCta onOpenRequest={(requestType) => onOpenRequest(requestType)} title="Talk through the right package" /></>;
   if (pathname === '/testimonials') return <TestimonialsPage />;
   if (pathname === '/security') return <SecurityPage onOpenRequest={(requestType) => onOpenRequest(requestType)} />;
+  if (pathname === '/accessibility') return <LegalPage kind="accessibility" onCookiePreferences={onCookiePreferences} />;
   if (pathname === '/resources') return <ResourcesPage />;
   if (pathname === '/resources/downloads') return <DownloadsPage />;
   if (pathname === '/support') return <SupportPage onOpenRequest={(requestType) => onOpenRequest(requestType)} />;

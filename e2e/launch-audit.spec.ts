@@ -31,6 +31,7 @@ const publicMarketingRoutes = [
   { path: '/pricing', heading: /Pricing built around route volume/i },
   { path: '/testimonials', heading: /Operator scenarios/i },
   { path: '/security', heading: /Security and control for route operations/i },
+  { path: '/accessibility', heading: /Accessibility Statement/i },
   { path: '/resources', heading: /Resources/i },
   { path: '/support', heading: /Support/i },
   { path: '/company', heading: /Built for the route day operators/i },
@@ -58,6 +59,7 @@ const primaryRoutes = [
   { slug: 'public-pricing', path: '/pricing' },
   { slug: 'public-testimonials', path: '/testimonials' },
   { slug: 'public-security', path: '/security' },
+  { slug: 'public-accessibility', path: '/accessibility' },
   { slug: 'public-resources', path: '/resources' },
   { slug: 'public-support', path: '/support' },
   { slug: 'public-company', path: '/company' },
@@ -1000,7 +1002,15 @@ test.describe('launch UI audit', () => {
     const sitemapBody = await sitemap.text();
     expect(sitemapBody).toContain('<loc>https://trytrovan.com/</loc>');
     expect(sitemapBody).toContain('<loc>https://trytrovan.com/demo</loc>');
+    expect(sitemapBody).toContain('<loc>https://trytrovan.com/accessibility</loc>');
     expect(sitemapBody).not.toContain('/dashboard');
+
+    const securityPolicy = await page.request.get('/.well-known/security.txt');
+    expect(securityPolicy.ok()).toBe(true);
+    expect(securityPolicy.headers()['content-type']).toContain('text/plain');
+    expect(await securityPolicy.text()).toContain(
+      'Canonical: https://trytrovan.com/.well-known/security.txt',
+    );
   });
 
   test('homepage defers the full product-tour download until the recording approaches the viewport', async ({ page }) => {
