@@ -1,0 +1,356 @@
+{
+  "schemaVersion": 1,
+  "sourceSha": "83c87ae221a423b98671e873bde709b0c3c40a65",
+  "sourceDirty": false,
+  "dataProvenance": "illustrative-preview-data",
+  "sanitizations": [
+    "Removed the local-only data-mode banner that is not rendered in production."
+  ],
+  "desktopViewport": {
+    "width": 1440,
+    "height": 900
+  },
+  "mobileViewport": {
+    "width": 390,
+    "height": 844
+  },
+  "screenshots": [
+    {
+      "route": "/dashboard",
+      "filename": "product-dashboard.png"
+    },
+    {
+      "route": "/routing",
+      "filename": "product-routing.png"
+    },
+    {
+      "route": "/dispatch",
+      "filename": "product-dispatch.png"
+    },
+    {
+      "route": "/jobs",
+      "filename": "product-jobs.png"
+    },
+    {
+      "route": "/exceptions",
+      "filename": "product-exceptions.png"
+    },
+    {
+      "route": "/route-runs/route-alpha-001",
+      "filename": "product-route-run.png"
+    },
+    {
+      "route": "/tracking",
+      "filename": "product-tracking.png"
+    },
+    {
+      "route": "/pod",
+      "filename": "product-proof.png"
+    },
+    {
+      "route": "/driver/route-runs/route-alpha-001",
+      "filename": "product-driver-mobile.png"
+    },
+    {
+      "route": "/track/demo-token",
+      "filename": "product-customer-tracking-mobile.png"
+    }
+  ],
+  "video": {
+    "filename": "trovan-product-tour.mp4",
+    "captions": "trovan-product-tour.vtt",
+    "poster": "trovan-product-tour-poster.webp"
+  },
+  "artifacts": [
+    {
+      "filename": "product-customer-tracking-mobile-640.webp",
+      "bytes": 23714,
+      "sha256": "e94e392adaa1d2e57dbfd8f6ec7077191e40fda2767762c8b7eb00115af55a30"
+    },
+    {
+      "filename": "product-customer-tracking-mobile-768.webp",
+      "bytes": 23714,
+      "sha256": "e94e392adaa1d2e57dbfd8f6ec7077191e40fda2767762c8b7eb00115af55a30"
+    },
+    {
+      "filename": "product-customer-tracking-mobile.png",
+      "bytes": 118974,
+      "sha256": "8d29dbc8fea39e5366e5fb983b8e74e5197fd832f2d4222a2433e805e5cfa32d"
+    },
+    {
+      "filename": "product-customer-tracking-mobile.webp",
+      "bytes": 23714,
+      "sha256": "e94e392adaa1d2e57dbfd8f6ec7077191e40fda2767762c8b7eb00115af55a30"
+    },
+    {
+      "filename": "product-dashboard-640.webp",
+      "bytes": 18536,
+      "sha256": "46a9e508b30ad792c7eb8d463a45faafc94a0e86c296e6db63c9df04ee0fe931"
+    },
+    {
+      "filename": "product-dashboard-768.webp",
+      "bytes": 25268,
+      "sha256": "5ac9fb3addb8296aa1d71ff6f48be5c7bf4735f5ed8e49e1c3e9a9964209ccdc"
+    },
+    {
+      "filename": "product-dashboard.png",
+      "bytes": 201207,
+      "sha256": "bf79a4fee18b4801a9a4dce0fd7c15bffa33408c2dc9fc5b44d84baa42411e91"
+    },
+    {
+      "filename": "product-dashboard.webp",
+      "bytes": 62128,
+      "sha256": "f3ca236f7240edd15229fa4701a8ab08990ba7fa19297faaaa8696e79364b466"
+    },
+    {
+      "filename": "product-dispatch-640.webp",
+      "bytes": 30498,
+      "sha256": "100962ebdf6abeb15c9c05212111dbda5d19db9b21d3f8d26f9ff6b9ce0a2bba"
+    },
+    {
+      "filename": "product-dispatch-768.webp",
+      "bytes": 41240,
+      "sha256": "90aa355e214ef6c1b2bd8283fa67095efde6981e98aefc62fea2c18da9a199bc"
+    },
+    {
+      "filename": "product-dispatch.png",
+      "bytes": 523256,
+      "sha256": "f5c3c097f15f1e6b3012c1859662df59156db6381a09f70cdebdecdea626a95a"
+    },
+    {
+      "filename": "product-dispatch.webp",
+      "bytes": 108040,
+      "sha256": "a8a30b363404ca10eec666217ff133ce410518d5cbcd021ba7f5dc49bd9c319e"
+    },
+    {
+      "filename": "product-driver-mobile-640.webp",
+      "bytes": 22974,
+      "sha256": "fc21943ded12dafbff5740b265f7bef1cdadbfed93291c4fbd0e54fb319b178b"
+    },
+    {
+      "filename": "product-driver-mobile-768.webp",
+      "bytes": 22974,
+      "sha256": "fc21943ded12dafbff5740b265f7bef1cdadbfed93291c4fbd0e54fb319b178b"
+    },
+    {
+      "filename": "product-driver-mobile.png",
+      "bytes": 101268,
+      "sha256": "7e6d2bed3ac5cde2eabd5fadfeda34171c7be0864866b828ac496b6977a17268"
+    },
+    {
+      "filename": "product-driver-mobile.webp",
+      "bytes": 22974,
+      "sha256": "fc21943ded12dafbff5740b265f7bef1cdadbfed93291c4fbd0e54fb319b178b"
+    },
+    {
+      "filename": "product-exceptions-640.webp",
+      "bytes": 16258,
+      "sha256": "b080fc6eab90d20d9ee7348d20a7f727e1b807af627066e4d6749ec69e77401e"
+    },
+    {
+      "filename": "product-exceptions-768.webp",
+      "bytes": 21008,
+      "sha256": "b0ef1e82ca5178f7fa078885c0a0a32dd707a025b2fc740acd9bc7084bb9d74d"
+    },
+    {
+      "filename": "product-exceptions.png",
+      "bytes": 177441,
+      "sha256": "a9566aee8342c63e682ca43d9719cde14a0a064acf7f1843dccef7cab515dc2e"
+    },
+    {
+      "filename": "product-exceptions.webp",
+      "bytes": 52440,
+      "sha256": "d097d569ed406e2b67ca3a0a75bf637c6540d305616376732c4215074bee66d4"
+    },
+    {
+      "filename": "product-jobs-640.webp",
+      "bytes": 31910,
+      "sha256": "3891f9f8157b8d1ef531b95a3bd7357d3fd0c3aa1e6613f930d49c8bbcb29802"
+    },
+    {
+      "filename": "product-jobs-768.webp",
+      "bytes": 42136,
+      "sha256": "9797c50d7e9ca6cff27f5d8c05fb3d797bb68dfe2d4b75519625339dbd52878f"
+    },
+    {
+      "filename": "product-jobs.png",
+      "bytes": 392683,
+      "sha256": "cdcb68859c0b7af854ede07fdfa77a90f5d3dacfecabb97576c94e6b2b9f4cf7"
+    },
+    {
+      "filename": "product-jobs.webp",
+      "bytes": 110966,
+      "sha256": "0db63b20eab2e4fdbe39ab7fb2ed0698094392236750ca03fa77a949b9f5de2c"
+    },
+    {
+      "filename": "product-proof-640.webp",
+      "bytes": 18816,
+      "sha256": "8bf0d6af59cb4e4141389c5c0f8db8d37b21350d7d42de4bd0da62bc0ad137df"
+    },
+    {
+      "filename": "product-proof-768.webp",
+      "bytes": 23854,
+      "sha256": "20b16f432bf5115fe39f7dd1b9615fc9177dee4f3035f8bf1212f910d35a752c"
+    },
+    {
+      "filename": "product-proof.png",
+      "bytes": 190212,
+      "sha256": "1255764a2d1e395879d12f71557be4710581ad4dbe92912c94b0dfe305a6cc64"
+    },
+    {
+      "filename": "product-proof.webp",
+      "bytes": 58966,
+      "sha256": "7f5310548712e2d3213a14778864f46b38ba35ade87091c84b42e8e91e234421"
+    },
+    {
+      "filename": "product-route-run-640.webp",
+      "bytes": 13280,
+      "sha256": "c96dc724254a7f2d796791497f05c90ef23d406d594fde27fb349bb20fc29f80"
+    },
+    {
+      "filename": "product-route-run-768.webp",
+      "bytes": 17408,
+      "sha256": "7b997e7a2ca727055dc8c1097cd987a08fc74d4181809be9776ffe429f57ad73"
+    },
+    {
+      "filename": "product-route-run.png",
+      "bytes": 145148,
+      "sha256": "c028b7a256924b089ef87bcc36473a3ca507a8f164915eefd621e260ee265f68"
+    },
+    {
+      "filename": "product-route-run.webp",
+      "bytes": 42970,
+      "sha256": "7651cc401e4d49a1acde62aa770210e2090026dd3b5e9dad894a517fcf63a0f6"
+    },
+    {
+      "filename": "product-routing-640.webp",
+      "bytes": 36900,
+      "sha256": "56ad7c7b378d85998245deb11b36f95ad70b729a843da06d0a1ecb7c7e506546"
+    },
+    {
+      "filename": "product-routing-768.webp",
+      "bytes": 48912,
+      "sha256": "ad5994322ff47f09e7af1eb7b5cfd06763373c86043e9e2f9be9ca015e940f8b"
+    },
+    {
+      "filename": "product-routing-all-routes-640.webp",
+      "bytes": 37222,
+      "sha256": "52d08f92951197306591964347720667fc2c8d40317fcda50b3c88a2a16f6b86"
+    },
+    {
+      "filename": "product-routing-all-routes-768.webp",
+      "bytes": 49278,
+      "sha256": "68f97db0f20a750d65a19716663082ba67bca96c725d3f093834b9126d27e19c"
+    },
+    {
+      "filename": "product-routing-all-routes.png",
+      "bytes": 577720,
+      "sha256": "e16c90d2cbaad0faefd278299663156b8e63816ca0e839c9fd43f4608685d691"
+    },
+    {
+      "filename": "product-routing-all-routes.webp",
+      "bytes": 134314,
+      "sha256": "8674bd8ea8a58064eef197a8f791a35628e3229f2bdeea616dae0a77fc92b0ec"
+    },
+    {
+      "filename": "product-routing-density-640.webp",
+      "bytes": 37024,
+      "sha256": "6a0159144cd12a63a485c7bdfa25685e53ab6bf7916abfb2676899510410a7a9"
+    },
+    {
+      "filename": "product-routing-density-768.webp",
+      "bytes": 48852,
+      "sha256": "289fef2235b79f22bf634408ce4ed079d30a42f134fdccc0e93c7b93bc934e2c"
+    },
+    {
+      "filename": "product-routing-density.png",
+      "bytes": 578921,
+      "sha256": "207bfc0367370460a12ef08638f31fbef20dffb8121a50a914217784e969ec90"
+    },
+    {
+      "filename": "product-routing-density.webp",
+      "bytes": 134440,
+      "sha256": "54073ad5bccf74287a95d3a4c445c1886c32afde62c6bf5fa62bba8151d58af3"
+    },
+    {
+      "filename": "product-routing-exceptions-640.webp",
+      "bytes": 35674,
+      "sha256": "1c19e64c8e694e4f82aaef64dc764920f2319285bcb00ad5c4e4f37fb18f27bf"
+    },
+    {
+      "filename": "product-routing-exceptions-768.webp",
+      "bytes": 47326,
+      "sha256": "8d05017b030b5c7db050c80cc1f23d079cd69a3c1424f78c79bb685e0a042483"
+    },
+    {
+      "filename": "product-routing-exceptions.png",
+      "bytes": 588542,
+      "sha256": "cbd9b6a89bafbc85a21cddaf1156f467d517becc10997b97102b097434a67578"
+    },
+    {
+      "filename": "product-routing-exceptions.webp",
+      "bytes": 128676,
+      "sha256": "3d79b37951979f76312894e0cb857f86fef51bac7927636005c2de55d32c01a8"
+    },
+    {
+      "filename": "product-routing.png",
+      "bytes": 579079,
+      "sha256": "72ca34dee659008cef1bdba93aa3ada613144fe37334936369ae0494c4c7a634"
+    },
+    {
+      "filename": "product-routing.webp",
+      "bytes": 134384,
+      "sha256": "65e02fbbf86f45fef650348ce797deafe7f15192f7efd7d93789758917a9bddf"
+    },
+    {
+      "filename": "product-tracking-640.webp",
+      "bytes": 19260,
+      "sha256": "862f67f150e6eccab76aaeaafcb9a2c3d39c42f38d06dbc6972f236ffb88e649"
+    },
+    {
+      "filename": "product-tracking-768.webp",
+      "bytes": 26110,
+      "sha256": "bc3dbc2186775c20463d60ee5d0e3318f7980ae536979d2c51183ac16fa42097"
+    },
+    {
+      "filename": "product-tracking.png",
+      "bytes": 373500,
+      "sha256": "3cb9f75107b6f06c48987dc3891876a57d2819120f83b6b64cd3e9a4e9254526"
+    },
+    {
+      "filename": "product-tracking.webp",
+      "bytes": 67610,
+      "sha256": "6690f87fb3c071ccaca4815d21cdcca970efe0fe0022ddad66a33778b4eb2609"
+    },
+    {
+      "filename": "trovan-product-tour-poster-640.webp",
+      "bytes": 18536,
+      "sha256": "46a9e508b30ad792c7eb8d463a45faafc94a0e86c296e6db63c9df04ee0fe931"
+    },
+    {
+      "filename": "trovan-product-tour-poster-768.webp",
+      "bytes": 25268,
+      "sha256": "5ac9fb3addb8296aa1d71ff6f48be5c7bf4735f5ed8e49e1c3e9a9964209ccdc"
+    },
+    {
+      "filename": "trovan-product-tour-poster.png",
+      "bytes": 201207,
+      "sha256": "bf79a4fee18b4801a9a4dce0fd7c15bffa33408c2dc9fc5b44d84baa42411e91"
+    },
+    {
+      "filename": "trovan-product-tour-poster.webp",
+      "bytes": 62128,
+      "sha256": "f3ca236f7240edd15229fa4701a8ab08990ba7fa19297faaaa8696e79364b466"
+    },
+    {
+      "filename": "trovan-product-tour.mp4",
+      "bytes": 1555657,
+      "sha256": "619f020cf825621af75ec10e2d198664d930b83f02a1e996d8c5f5c2a75f79af"
+    },
+    {
+      "filename": "trovan-product-tour.vtt",
+      "bytes": 565,
+      "sha256": "279ef67678e30b774852d34ccd4028451b83d8b966b36a3b38f1a186b9198dba"
+    }
+  ]
+}
