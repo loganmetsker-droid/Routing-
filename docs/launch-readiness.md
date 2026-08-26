@@ -1,6 +1,6 @@
 # Assisted-Pilot Launch Readiness
 
-Date: 2026-08-20
+Date: 2026-08-26
 
 Scope: publicly marketed, manually approved paid pilots
 
@@ -20,6 +20,9 @@ Trovan is not being prepared for self-serve general availability. Launch is $399
 - CI runs build, lint, backend/frontend/routing tests, empty-database migrations, dependency audit, and Playwright.
 - Promotion uses an immutable SHA, protected staging/production environments, Cloudflare frontend deployment, Render service deployment, and captured rollback versions.
 - Sitemap, robots, canonical, Open Graph, and Twitter metadata ship from the same frontend build; the sitemap has an explicit XML content type.
+- The production build generates and verifies 23 route-specific HTML metadata shells, including a no-index login shell.
+- The public site includes an accessibility statement and a standards-based `/.well-known/security.txt`; release and production-monitor workflows verify both deployed content and content type.
+- Product screenshots and the captioned tour are captured from a clean immutable source commit and byte-verified against a committed manifest.
 - SMS is globally disabled unless explicitly enabled after the pilot.
 - The vulnerable React Router dependency has been removed. A small project-owned browser router now covers Trovan's fixed route table, navigation, parameters, and search parameters without the affected package.
 - Hosted optimization requires a contracted OSRM-compatible road-network matrix, emits solver/provider provenance, and refuses to publish estimated-fallback routes.
@@ -38,12 +41,12 @@ Trovan is not being prepared for self-serve general availability. Launch is $399
 
 - [x] Reproducible `npm ci` and workspace production build.
 - [x] Frontend lint with zero warnings.
-- [x] Backend: 281 tests; frontend: 98 tests; routing service: 20 tests.
+- [x] Backend: 281 tests; frontend: 99 tests; routing service: 20 tests.
 - [x] Driver workflow: three consecutive isolated runs, two tests per run.
-- [x] Complete installed-Chrome Playwright suite: 133 passed, two hosted-only tests skipped, zero failures (2026-08-20).
-- [x] Full installed dependency audit and production-only audit both report zero vulnerabilities on 2026-08-20.
+- [x] Complete installed-Chrome Playwright suite: 134 passed, two hosted-only tests skipped, zero failures (2026-08-26).
+- [x] Full installed dependency audit and production-only audit both report zero vulnerabilities on 2026-08-26.
 - [x] Database migrations applied successfully.
-- [x] A recoverable local safety snapshot and a clean isolated candidate were produced; `release:check-scope --directory <candidate>` passed. Rebuild and re-run this check after the final source change.
+- [x] A recoverable local safety snapshot and a clean isolated candidate were produced; `release:check-scope -- origin/main` passed with generated QA/audit artifacts excluded.
 
 ### Hosted staging
 
