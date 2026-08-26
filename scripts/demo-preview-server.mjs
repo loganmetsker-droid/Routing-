@@ -307,7 +307,7 @@ server.on('error', (error) => {
 
 server.listen(port, host, () => {
   console.log(`Trovan demo preview serving frontend/dist at http://${host}:${port}`);
-  console.log(`Preview identity: ${previewRole}`);
+  console.log(`Preview identity: ${forcedPreviewRole || 'automatic by route'}`);
   console.log(`SPA deep links are available, for example http://${host}:${port}/routing`);
 });
 
