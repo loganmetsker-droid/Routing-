@@ -41,11 +41,13 @@ const previewBootstrap = String.raw`
       if (!window.localStorage.getItem('authToken')) {
         window.localStorage.setItem('authToken', 'preview-auth-bypass');
       }
+      var driverRoute = window.location.pathname === '/driver' ||
+        window.location.pathname.indexOf('/driver/') === 0;
       window.localStorage.setItem('trovan-preview-auth-user', JSON.stringify({
-        id: 'preview-driver-user',
-        email: 'anna.quinn@trovan.local',
-        role: 'driver',
-        roles: ['DRIVER'],
+        id: driverRoute ? 'preview-driver-user' : 'preview-user',
+        email: driverRoute ? 'anna.quinn@trovan.local' : 'preview@trovan.local',
+        role: driverRoute ? 'driver' : 'dispatcher',
+        roles: [driverRoute ? 'DRIVER' : 'DISPATCHER'],
         authProvider: 'local-config',
         organizationId: 'preview-org',
         sessionId: 'preview-session'
