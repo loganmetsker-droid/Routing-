@@ -1,13 +1,36 @@
 name = "trytrovan"
 compatibility_date = "2026-05-14"
+main = "./workers/site.mjs"
 
 [assets]
 directory = "./frontend/dist"
+binding = "ASSETS"
 not_found_handling = "single-page-application"
+
+[vars]
+LEAD_INTAKE_FROM_EMAIL = "sales@trytrovan.com"
+LEAD_INTAKE_EMAIL = "sales@trytrovan.com"
+
+[[d1_databases]]
+binding = "LEADS_DB"
+database_name = "trovan-leads"
+database_id = "31602386-cfb8-406d-a562-74223ea67776"
+migrations_dir = "workers/migrations"
 
 [env.staging]
 name = "trytrovan-staging"
 
 [env.staging.assets]
 directory = "./frontend/dist"
+binding = "ASSETS"
 not_found_handling = "single-page-application"
+
+[env.staging.vars]
+LEAD_INTAKE_FROM_EMAIL = "sales@trytrovan.com"
+LEAD_INTAKE_EMAIL = "sales@trytrovan.com"
+
+[[env.staging.d1_databases]]
+binding = "LEADS_DB"
+database_name = "trovan-leads-staging"
+database_id = "5e4e4c7b-5782-429f-bd9e-d3f9fd2b5998"
+migrations_dir = "workers/migrations"

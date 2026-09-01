@@ -263,8 +263,13 @@ function getLeadIntakeUrl() {
   if (webhookUrl) return webhookUrl;
 
   const apiUrl = (import.meta.env.VITE_REST_API_URL || import.meta.env.VITE_API_URL)?.trim();
-  if (!apiUrl) return '';
-  return `${apiUrl.replace(/\/+$/, '').replace(/\/api$/, '')}/api/marketing-leads`;
+  if (apiUrl) {
+    return `${apiUrl.replace(/\/+$/, '').replace(/\/api$/, '')}/api/marketing-leads`;
+  }
+
+  // Production marketing intake is hosted by the same Cloudflare Worker as
+  // the public site, so it remains available without the application backend.
+  return import.meta.env.PROD ? '/api/marketing-leads' : '';
 }
 
 function readCookiePreferences(): CookiePreferences {
