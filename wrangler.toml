@@ -1,6 +1,8 @@
 name = "trytrovan"
 compatibility_date = "2026-05-14"
 main = "./workers/site.mjs"
+workers_dev = false
+preview_urls = false
 
 [[routes]]
 pattern = "trytrovan.com"
@@ -27,6 +29,9 @@ migrations_dir = "workers/migrations"
 
 [env.staging]
 name = "trytrovan-staging"
+workers_dev = true
+preview_urls = false
+routes = []
 
 [env.staging.assets]
 directory = "./frontend/dist"
