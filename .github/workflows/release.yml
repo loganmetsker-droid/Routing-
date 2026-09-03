@@ -1,11 +1,6 @@
-name: Promote Trovan Release
+name: Promote Trovan Website
 
 on:
-  workflow_run:
-    workflows:
-      - Trovan Release Gate
-    types:
-      - completed
   workflow_dispatch:
     inputs:
       target:
@@ -22,27 +17,18 @@ on:
 
 permissions:
   contents: read
-  deployments: read
 
 env:
-  NODE_VERSION: '24'
+  NODE_VERSION: "24"
+  RELEASE_SHA: ${{ inputs.release_sha }}
+  DEPLOY_TARGET: ${{ inputs.target }}
 
 jobs:
   promote:
-    name: Promote Immutable SHA
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.head_branch == 'main')
+    name: Promote Immutable Website SHA
     runs-on: ubuntu-latest
-    # Promotion includes provider deploys, strict integration smoke, and the
-    # same exhaustive hosted browser gate as CI. Keep the job bounded without
-    # terminating a healthy slow-runner execution before evidence is uploaded.
-    timeout-minutes: 90
-    environment: ${{ github.event_name == 'workflow_run' && 'staging' || inputs.target }}
-    env:
-      DEPLOY_TARGET: ${{ github.event_name == 'workflow_run' && 'staging' || inputs.target }}
-      RELEASE_SHA: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || inputs.release_sha }}
+    timeout-minutes: 30
+    environment: ${{ inputs.target }}
 
     steps:
       - name: Validate full SHA input
@@ -52,25 +38,16 @@ jobs:
             exit 1
           fi
 
-      - name: Require successful staging deployment for production
-        if: env.DEPLOY_TARGET == 'production'
+      - name: Require successful release gate
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          deployment_id="$(
-            gh api "repos/${GITHUB_REPOSITORY}/deployments?environment=staging&ref=${RELEASE_SHA}" \
-              --jq '.[0].id // empty'
+          conclusion="$(
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs?head_sha=${RELEASE_SHA}&event=push" \
+              --jq '[.workflow_runs[] | select(.name == "Trovan Release Gate")][0].conclusion // empty'
           )"
-          if [ -z "$deployment_id" ]; then
-            echo "No staging deployment exists for $RELEASE_SHA"
-            exit 1
-          fi
-          state="$(
-            gh api "repos/${GITHUB_REPOSITORY}/deployments/${deployment_id}/statuses" \
-              --jq '.[0].state // empty'
-          )"
-          if [ "$state" != "success" ]; then
-            echo "Staging deployment $deployment_id is not successful: $state"
+          if [ "$conclusion" != "success" ]; then
+            echo "Trovan Release Gate has not succeeded for $RELEASE_SHA"
             exit 1
           fi
 
@@ -82,275 +59,65 @@ jobs:
       - name: Confirm checked-out SHA
         run: test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
 
-      - name: Require current operations and approval evidence
-        if: env.DEPLOY_TARGET == 'production'
-        env:
-          LAUNCH_GATE_EVIDENCE_JSON: ${{ secrets.LAUNCH_GATE_EVIDENCE_JSON }}
-        run: |
-          if [ -z "$LAUNCH_GATE_EVIDENCE_JSON" ]; then
-            echo "LAUNCH_GATE_EVIDENCE_JSON is required for production promotion"
-            exit 1
-          fi
-          mkdir -p release-evidence
-          printf '%s' "$LAUNCH_GATE_EVIDENCE_JSON" > release-evidence/launch-gate-evidence.json
-          npm run release:verify-launch-evidence -- release-evidence/launch-gate-evidence.json "$RELEASE_SHA"
-
       - name: Setup Node.js
         uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Validate protected release environment
-        env:
-          BACKEND_URL: ${{ vars.BACKEND_URL }}
-          FRONTEND_URL: ${{ vars.FRONTEND_URL }}
-          ROUTING_SERVICE_URL: ${{ vars.ROUTING_SERVICE_URL }}
-          WEBSOCKET_URL: ${{ vars.WEBSOCKET_URL }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-          RENDER_BACKEND_SERVICE_ID: ${{ secrets.RENDER_BACKEND_SERVICE_ID }}
-          RENDER_ROUTING_SERVICE_ID: ${{ secrets.RENDER_ROUTING_SERVICE_ID }}
-          STAGING_AUTH_TOKEN: ${{ secrets.STAGING_AUTH_TOKEN }}
-          STAGING_SECOND_ORG_AUTH_TOKEN: ${{ secrets.STAGING_SECOND_ORG_AUTH_TOKEN }}
-          STAGING_DRIVER_AUTH_TOKEN: ${{ secrets.STAGING_DRIVER_AUTH_TOKEN }}
-          STAGING_EXPIRED_AUTH_TOKEN: ${{ secrets.STAGING_EXPIRED_AUTH_TOKEN }}
-          METRICS_TOKEN: ${{ secrets.METRICS_TOKEN }}
-          ROUTING_SERVICE_INTERNAL_TOKEN: ${{ secrets.ROUTING_SERVICE_INTERNAL_TOKEN }}
-          WORKOS_TEST_EMAIL: ${{ secrets.WORKOS_TEST_EMAIL }}
-          WORKOS_TEST_PASSWORD: ${{ secrets.WORKOS_TEST_PASSWORD }}
-          WORKOS_CLIENT_ID: ${{ secrets.WORKOS_CLIENT_ID }}
-          WORKOS_API_KEY: ${{ secrets.WORKOS_API_KEY }}
-          WORKOS_REDIRECT_URI: ${{ vars.WORKOS_REDIRECT_URI }}
-          WORKOS_LOGOUT_REDIRECT_URI: ${{ vars.WORKOS_LOGOUT_REDIRECT_URI }}
-          ROUTING_MATRIX_BASE_URL: ${{ secrets.ROUTING_MATRIX_BASE_URL }}
-          ROUTING_MATRIX_PROVIDER_LABEL: ${{ vars.ROUTING_MATRIX_PROVIDER_LABEL }}
-          ROUTING_MATRIX_TOKEN: ${{ secrets.ROUTING_MATRIX_TOKEN }}
-          TROVAN_SOLVER_VERSION: ${{ vars.TROVAN_SOLVER_VERSION }}
-          GEOCODING_API_KEY: ${{ secrets.GEOCODING_API_KEY }}
-          ERROR_MONITORING_WEBHOOK_URL: ${{ secrets.ERROR_MONITORING_WEBHOOK_URL }}
-          ERROR_MONITORING_WEBHOOK_TOKEN: ${{ secrets.ERROR_MONITORING_WEBHOOK_TOKEN }}
-          ERROR_MONITORING_TEST_READBACK_URL: ${{ secrets.ERROR_MONITORING_TEST_READBACK_URL }}
-          ERROR_MONITORING_TEST_ACK_URL: ${{ secrets.ERROR_MONITORING_TEST_ACK_URL }}
-          ACCESS_CODE_ENCRYPTION_KEY: ${{ secrets.ACCESS_CODE_ENCRYPTION_KEY }}
-          ACCESS_CODE_KEY_VERSION: ${{ vars.ACCESS_CODE_KEY_VERSION }}
-          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
-          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-          STRIPE_PRICE_LAUNCH: ${{ secrets.STRIPE_PRICE_LAUNCH }}
-          STRIPE_PRICE_SCALE: ${{ secrets.STRIPE_PRICE_SCALE }}
-          STAGING_WEBHOOK_RECEIVER_URL: ${{ secrets.STAGING_WEBHOOK_RECEIVER_URL }}
-          POSTMARK_SERVER_TOKEN: ${{ secrets.POSTMARK_SERVER_TOKEN }}
-          POSTMARK_FROM_EMAIL: ${{ vars.POSTMARK_FROM_EMAIL }}
-          LEAD_INTAKE_EMAIL: ${{ vars.LEAD_INTAKE_EMAIL }}
-          LEAD_INTAKE_FROM_EMAIL: ${{ vars.LEAD_INTAKE_FROM_EMAIL }}
-          POSTMARK_BOUNCE_WEBHOOK_URL: ${{ secrets.POSTMARK_BOUNCE_WEBHOOK_URL }}
-          POSTMARK_WEBHOOK_USERNAME: ${{ secrets.POSTMARK_WEBHOOK_USERNAME }}
-          POSTMARK_WEBHOOK_PASSWORD: ${{ secrets.POSTMARK_WEBHOOK_PASSWORD }}
-          POSTMARK_BOUNCE_HASH_KEY: ${{ secrets.POSTMARK_BOUNCE_HASH_KEY }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
-          LAUNCH_GATE_EVIDENCE_JSON: ${{ secrets.LAUNCH_GATE_EVIDENCE_JSON }}
-        run: npm run release:verify-environment -- "$DEPLOY_TARGET"
-
       - name: Install dependencies
         run: npm ci
 
-      - name: Recheck production dependency gate
+      - name: Require zero high or critical advisories
         run: npm audit --audit-level=high
 
-      - name: Build exact frontend
+      - name: Build exact website
         env:
-          VITE_REST_API_URL: ${{ vars.BACKEND_URL }}
-          VITE_API_URL: ${{ vars.BACKEND_URL }}
-          VITE_WS_URL: ${{ vars.WEBSOCKET_URL }}
-          VITE_ENABLE_SOCKETS: 'true'
-          VITE_API_TIMEOUT_MS: '8000'
           VITE_RELEASE_SHA: ${{ env.RELEASE_SHA }}
         run: npm run build --workspace=frontend
 
-      - name: Verify route-specific public metadata
-        run: npm run verify:site-build
+      - name: Verify website build and launch media
+        run: |
+          npm run verify:site-build
+          npm run verify:launch-media
 
-      - name: Verify release marketing media
-        run: npm run verify:launch-media
-
-      - name: Capture current provider versions
+      - name: Deploy exact SHA to Cloudflare staging
+        if: env.DEPLOY_TARGET == 'staging'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-          RENDER_BACKEND_SERVICE_ID: ${{ secrets.RENDER_BACKEND_SERVICE_ID }}
-          RENDER_ROUTING_SERVICE_ID: ${{ secrets.RENDER_ROUTING_SERVICE_ID }}
-        run: |
-          mkdir -p release-evidence
-          if [ "$DEPLOY_TARGET" = "staging" ]; then
-            npx wrangler@4.114.0 deployments list --env staging > release-evidence/cloudflare-before.txt
-          else
-            npx wrangler@4.114.0 deployments list > release-evidence/cloudflare-before.txt
-          fi
-          curl -fsS \
-            -H "Authorization: Bearer $RENDER_API_KEY" \
-            "https://api.render.com/v1/services/$RENDER_BACKEND_SERVICE_ID/deploys?limit=5" \
-            > release-evidence/render-backend-before.json
-          curl -fsS \
-            -H "Authorization: Bearer $RENDER_API_KEY" \
-            "https://api.render.com/v1/services/$RENDER_ROUTING_SERVICE_ID/deploys?limit=5" \
-            > release-evidence/render-routing-before.json
+        run: npx wrangler@4.128.0 deploy --env staging
 
-      - name: Deploy Render services at exact SHA
-        env:
-          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-          RENDER_BACKEND_SERVICE_ID: ${{ secrets.RENDER_BACKEND_SERVICE_ID }}
-          RENDER_ROUTING_SERVICE_ID: ${{ secrets.RENDER_ROUTING_SERVICE_ID }}
-        run: |
-          for service_id in "$RENDER_ROUTING_SERVICE_ID" "$RENDER_BACKEND_SERVICE_ID"; do
-            curl -fsS -X POST \
-              -H "Authorization: Bearer $RENDER_API_KEY" \
-              -H "Content-Type: application/json" \
-              -d "{\"commitId\":\"$RELEASE_SHA\",\"clearCache\":\"do_not_clear\"}" \
-              "https://api.render.com/v1/services/$service_id/deploys"
-          done
-
-      - name: Deploy Cloudflare assets
+      - name: Deploy exact SHA to Cloudflare production
+        if: env.DEPLOY_TARGET == 'production'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          if [ "$DEPLOY_TARGET" = "staging" ]; then
-            npx wrangler@4.114.0 deploy --env staging
-          else
-            npx wrangler@4.114.0 deploy
-          fi
+        run: npx wrangler@4.128.0 deploy --env=""
 
-      - name: Wait for immutable release health
+      - name: Verify deployed website
         env:
-          BACKEND_URL: ${{ vars.BACKEND_URL }}
           FRONTEND_URL: ${{ vars.FRONTEND_URL }}
-          ROUTING_SERVICE_URL: ${{ vars.ROUTING_SERVICE_URL }}
         run: |
-          curl --fail --show-error --silent --retry 24 --retry-delay 10 --retry-all-errors \
-            "$BACKEND_URL/health/readiness"
-          curl --fail --show-error --silent --retry 12 --retry-delay 5 --retry-all-errors \
-            "$ROUTING_SERVICE_URL/health"
-          curl --fail --show-error --silent --retry 12 --retry-delay 5 --retry-all-errors \
-            "$FRONTEND_URL"
-          curl --fail --show-error --silent --head "$FRONTEND_URL/sitemap.xml" |
+          site_url="$FRONTEND_URL"
+          if [ -z "$site_url" ]; then
+            if [ "$DEPLOY_TARGET" = "production" ]; then
+              site_url="https://trytrovan.com"
+            else
+              site_url="https://trytrovan-staging.loganmetsker.workers.dev"
+            fi
+          fi
+
+          curl -fsS --retry 12 --retry-delay 5 --retry-all-errors "$site_url" > /dev/null
+          curl -fsS --retry 12 --retry-delay 5 --retry-all-errors \
+            "$site_url/api/marketing-leads/health" |
+            jq -e '.status == "ready"' > /dev/null
+          curl -fsSI "$site_url/sitemap.xml" |
+            tr -d '\r' |
             grep -Eiq '^content-type: (application|text)/xml'
-          curl --fail --show-error --silent "$FRONTEND_URL/sitemap.xml" |
-            grep -q '<urlset'
-          curl --fail --show-error --silent --head "$FRONTEND_URL/.well-known/security.txt" |
+          curl -fsS "$site_url/sitemap.xml" | grep -q '<urlset'
+          curl -fsSI "$site_url/.well-known/security.txt" |
+            tr -d '\r' |
             grep -Eiq '^content-type: text/plain'
-          curl --fail --show-error --silent "$FRONTEND_URL/.well-known/security.txt" |
+          curl -fsS "$site_url/.well-known/security.txt" |
             grep -q 'Canonical: https://trytrovan.com/.well-known/security.txt'
-
-      - name: Prove exact SHA on every deployed surface
-        env:
-          BACKEND_URL: ${{ vars.BACKEND_URL }}
-          FRONTEND_URL: ${{ vars.FRONTEND_URL }}
-          ROUTING_SERVICE_URL: ${{ vars.ROUTING_SERVICE_URL }}
-        run: npm run release:verify-identity
-
-      - name: Run strict staging smoke
-        if: env.DEPLOY_TARGET == 'staging'
-        env:
-          STAGING_FRONTEND_URL: ${{ vars.FRONTEND_URL }}
-          STAGING_BACKEND_URL: ${{ vars.BACKEND_URL }}
-          STAGING_ROUTING_SERVICE_URL: ${{ vars.ROUTING_SERVICE_URL }}
-          STAGING_AUTH_TOKEN: ${{ secrets.STAGING_AUTH_TOKEN }}
-          STAGING_SECOND_ORG_AUTH_TOKEN: ${{ secrets.STAGING_SECOND_ORG_AUTH_TOKEN }}
-          STAGING_DRIVER_AUTH_TOKEN: ${{ secrets.STAGING_DRIVER_AUTH_TOKEN }}
-          STAGING_EXPIRED_AUTH_TOKEN: ${{ secrets.STAGING_EXPIRED_AUTH_TOKEN }}
-          METRICS_TOKEN: ${{ secrets.METRICS_TOKEN }}
-          ROUTING_SERVICE_INTERNAL_TOKEN: ${{ secrets.ROUTING_SERVICE_INTERNAL_TOKEN }}
-          WORKOS_TEST_EMAIL: ${{ secrets.WORKOS_TEST_EMAIL }}
-          WORKOS_TEST_PASSWORD: ${{ secrets.WORKOS_TEST_PASSWORD }}
-          WORKOS_CLIENT_ID: ${{ secrets.WORKOS_CLIENT_ID }}
-          WORKOS_API_KEY: ${{ secrets.WORKOS_API_KEY }}
-          WORKOS_REDIRECT_URI: ${{ vars.WORKOS_REDIRECT_URI }}
-          WORKOS_LOGOUT_REDIRECT_URI: ${{ vars.WORKOS_LOGOUT_REDIRECT_URI }}
-          ROUTING_MATRIX_PROVIDER: osrm
-          ROUTING_MATRIX_BASE_URL: ${{ secrets.ROUTING_MATRIX_BASE_URL }}
-          ROUTING_MATRIX_PROVIDER_LABEL: ${{ vars.ROUTING_MATRIX_PROVIDER_LABEL }}
-          ROUTING_MATRIX_TOKEN: ${{ secrets.ROUTING_MATRIX_TOKEN }}
-          ROUTING_MATRIX_ALLOW_FALLBACK: 'false'
-          TROVAN_SOLVER_VERSION: ${{ vars.TROVAN_SOLVER_VERSION }}
-          GEOCODING_PROVIDER: mapbox
-          GEOCODING_API_KEY: ${{ secrets.GEOCODING_API_KEY }}
-          ERROR_MONITORING_WEBHOOK_URL: ${{ secrets.ERROR_MONITORING_WEBHOOK_URL }}
-          ERROR_MONITORING_WEBHOOK_TOKEN: ${{ secrets.ERROR_MONITORING_WEBHOOK_TOKEN }}
-          ERROR_MONITORING_TEST_READBACK_URL: ${{ secrets.ERROR_MONITORING_TEST_READBACK_URL }}
-          ERROR_MONITORING_TEST_ACK_URL: ${{ secrets.ERROR_MONITORING_TEST_ACK_URL }}
-          ACCESS_CODE_ENCRYPTION_KEY: ${{ secrets.ACCESS_CODE_ENCRYPTION_KEY }}
-          ACCESS_CODE_KEY_VERSION: ${{ vars.ACCESS_CODE_KEY_VERSION }}
-          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
-          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
-          STRIPE_PRICE_LAUNCH: ${{ secrets.STRIPE_PRICE_LAUNCH }}
-          STRIPE_PRICE_SCALE: ${{ secrets.STRIPE_PRICE_SCALE }}
-          STRIPE_ALLOW_TEST_EXERCISE: 'true'
-          STAGING_WEBHOOK_RECEIVER_URL: ${{ secrets.STAGING_WEBHOOK_RECEIVER_URL }}
-          POSTMARK_SERVER_TOKEN: ${{ secrets.POSTMARK_SERVER_TOKEN }}
-          POSTMARK_FROM_EMAIL: ${{ vars.POSTMARK_FROM_EMAIL }}
-          LEAD_INTAKE_EMAIL: ${{ vars.LEAD_INTAKE_EMAIL }}
-          LEAD_INTAKE_FROM_EMAIL: ${{ vars.LEAD_INTAKE_FROM_EMAIL }}
-          POSTMARK_BOUNCE_WEBHOOK_URL: ${{ secrets.POSTMARK_BOUNCE_WEBHOOK_URL }}
-          POSTMARK_WEBHOOK_USERNAME: ${{ secrets.POSTMARK_WEBHOOK_USERNAME }}
-          POSTMARK_WEBHOOK_PASSWORD: ${{ secrets.POSTMARK_WEBHOOK_PASSWORD }}
-          POSTMARK_BOUNCE_HASH_KEY: ${{ secrets.POSTMARK_BOUNCE_HASH_KEY }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
-        run: npm run staging:smoke
-
-      - name: Install hosted browser
-        if: env.DEPLOY_TARGET == 'staging'
-        run: npx playwright install --with-deps chromium
-
-      - name: Run authenticated hosted Playwright gate
-        if: env.DEPLOY_TARGET == 'staging'
-        env:
-          PLAYWRIGHT_BASE_URL: ${{ vars.FRONTEND_URL }}
-          PLAYWRIGHT_SKIP_WEBSERVER: 'true'
-          LAUNCH_AUDIT_API_URL: ${{ vars.BACKEND_URL }}
-          LAUNCH_AUDIT_AUTH_TOKEN: ${{ secrets.STAGING_AUTH_TOKEN }}
-          STAGING_DRIVER_AUTH_TOKEN: ${{ secrets.STAGING_DRIVER_AUTH_TOKEN }}
-          STAGING_EXPIRED_AUTH_TOKEN: ${{ secrets.STAGING_EXPIRED_AUTH_TOKEN }}
-          WORKOS_TEST_EMAIL: ${{ secrets.WORKOS_TEST_EMAIL }}
-          WORKOS_TEST_PASSWORD: ${{ secrets.WORKOS_TEST_PASSWORD }}
-          LAUNCH_AUDIT_STRICT_OPTIMIZER: 'true'
-          LAUNCH_AUDIT_DIR: .tmp/launch-audit/hosted-playwright
-          PLAYWRIGHT_OUTPUT_DIR: .tmp/launch-audit/hosted-results
-        run: npm run test:e2e -- --project=chromium
-
-      - name: Save deployed evidence
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
-          RENDER_BACKEND_SERVICE_ID: ${{ secrets.RENDER_BACKEND_SERVICE_ID }}
-          RENDER_ROUTING_SERVICE_ID: ${{ secrets.RENDER_ROUTING_SERVICE_ID }}
-        run: |
-          if [ "$DEPLOY_TARGET" = "staging" ]; then
-            npx wrangler@4.114.0 deployments list --env staging > release-evidence/cloudflare-after.txt
-          else
-            npx wrangler@4.114.0 deployments list > release-evidence/cloudflare-after.txt
-          fi
-          curl -fsS \
-            -H "Authorization: Bearer $RENDER_API_KEY" \
-            "https://api.render.com/v1/services/$RENDER_BACKEND_SERVICE_ID/deploys?limit=5" \
-            > release-evidence/render-backend-after.json
-          curl -fsS \
-            -H "Authorization: Bearer $RENDER_API_KEY" \
-            "https://api.render.com/v1/services/$RENDER_ROUTING_SERVICE_ID/deploys?limit=5" \
-            > release-evidence/render-routing-after.json
-          printf '%s\n' "$RELEASE_SHA" > release-evidence/release-sha.txt
-
-      - name: Upload release evidence
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.DEPLOY_TARGET }}-release-${{ env.RELEASE_SHA }}
-          path: release-evidence/
-          retention-days: 90
