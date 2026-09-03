@@ -19,6 +19,8 @@ services:
         value: production
       - key: STRICT_ENV_VALIDATION
         value: "true"
+      - key: REQUIRE_COMPLETE_PILOT_CONFIG
+        value: "true"
       - key: PORT
         value: "10000"
       - key: AUTH_PROVIDER

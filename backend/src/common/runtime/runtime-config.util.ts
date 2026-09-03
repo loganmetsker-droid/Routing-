@@ -25,7 +25,7 @@ export function hasQueueConfig(env: NodeJS.ProcessEnv = process.env) {
   return Boolean(env.REDIS_URL || env.REDIS_HOST);
 }
 
-export function getMissingRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
+export function getMissingCoreRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
   const missing: string[] = [];
   if (!env.JWT_SECRET) {
     missing.push('JWT_SECRET');
@@ -56,6 +56,14 @@ export function getMissingRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
   ) {
     missing.push('ROUTING_SERVICE_INTERNAL_TOKEN');
   }
+
+  return missing;
+}
+
+export function getMissingPilotIntegrationConfig(
+  env: NodeJS.ProcessEnv = process.env,
+) {
+  const missing: string[] = [];
   if (
     ['production', 'staging'].includes(env.NODE_ENV || '') &&
     !String(env.ERROR_MONITORING_WEBHOOK_URL || '').trim()
@@ -90,4 +98,18 @@ export function getMissingRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
   missing.push(...getMissingGeocodingConfig(env));
 
   return missing;
+}
+
+export function getMissingRuntimeConfig(env: NodeJS.ProcessEnv = process.env) {
+  return [
+    ...getMissingCoreRuntimeConfig(env),
+    ...getMissingPilotIntegrationConfig(env),
+  ];
+}
+
+export function requiresCompletePilotConfig(
+  env: Partial<Pick<NodeJS.ProcessEnv, 'REQUIRE_COMPLETE_PILOT_CONFIG'>> =
+    process.env,
+) {
+  return String(env.REQUIRE_COMPLETE_PILOT_CONFIG || 'false') === 'true';
 }

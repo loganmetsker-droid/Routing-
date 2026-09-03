@@ -16,10 +16,13 @@ import { createCorsOriginValidator } from './common/http/cors-origin.util';
 import { configureTrustProxy } from './common/http/trust-proxy.util';
 import { isSwaggerEnabled } from './common/http/swagger-enabled.util';
 import {
+  getMissingCoreRuntimeConfig,
+  getMissingPilotIntegrationConfig,
   getMissingRuntimeConfig,
   hasDatabaseConfig,
   hasQueueConfig,
   isStrictRuntime,
+  requiresCompletePilotConfig,
 } from './common/runtime/runtime-config.util';
 import { isGraphqlEnabled } from './config/graphql.config';
 
@@ -90,16 +93,31 @@ function getConfigSummary() {
 
 function validateRuntimeConfig(logger: Logger) {
   const strict = isStrictRuntime();
+  const missingCore = getMissingCoreRuntimeConfig();
+  const missingIntegrations = getMissingPilotIntegrationConfig();
   const missing = getMissingRuntimeConfig();
 
-  if (missing.length > 0) {
-    const message = `Missing required runtime config: ${missing.join(', ')}`;
-    if (strict) {
+  if (missingCore.length > 0) {
+    const message = `Missing required core runtime config: ${missingCore.join(', ')}`;
+    if (strict || requiresCompletePilotConfig()) {
       throw new Error(message);
     }
     logger.warn(message);
   }
 
+  if (missingIntegrations.length > 0) {
+    const message = `Missing pilot integration config: ${missingIntegrations.join(', ')}`;
+    if (requiresCompletePilotConfig()) {
+      throw new Error(message);
+    }
+    logger.warn(
+      `${message}. The API will start so authentication and diagnostics remain available; /health/readiness will remain unavailable until launch-critical integrations are configured.`,
+    );
+  }
+
+  if (missing.length === 0) {
+    logger.log('Runtime configuration is complete.');
+  }
 }
 
 async function bootstrap() {

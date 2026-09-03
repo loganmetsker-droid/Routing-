@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { getMissingRuntimeConfig } from './runtime-config.util';
+import {
+  getMissingCoreRuntimeConfig,
+  getMissingPilotIntegrationConfig,
+  getMissingRuntimeConfig,
+  requiresCompletePilotConfig,
+} from './runtime-config.util';
 
 const baseHostedEnv = {
   NODE_ENV: 'staging',
@@ -21,6 +26,29 @@ const baseHostedEnv = {
 };
 
 describe('runtime config launch gates', () => {
+  it('keeps optional pilot integrations out of the core startup gate', () => {
+    const env = {
+      NODE_ENV: 'production',
+      JWT_SECRET: 'configured',
+      FRONTEND_URL: 'https://trytrovan.com',
+      DATABASE_URL: 'postgres://example.invalid/app',
+      METRICS_TOKEN: 'configured',
+      ROUTING_SERVICE_INTERNAL_TOKEN: 'configured',
+    } as NodeJS.ProcessEnv;
+
+    expect(getMissingCoreRuntimeConfig(env)).toEqual([]);
+    expect(getMissingPilotIntegrationConfig(env)).toContain(
+      'POSTMARK_SERVER_TOKEN',
+    );
+  });
+
+  it('requires explicit opt-in to make incomplete pilot integrations fatal', () => {
+    expect(requiresCompletePilotConfig({})).toBe(false);
+    expect(
+      requiresCompletePilotConfig({ REQUIRE_COMPLETE_PILOT_CONFIG: 'true' }),
+    ).toBe(true);
+  });
+
   it('requires METRICS_TOKEN in staging', () => {
     expect(getMissingRuntimeConfig(baseHostedEnv as NodeJS.ProcessEnv)).toContain(
       'METRICS_TOKEN',
