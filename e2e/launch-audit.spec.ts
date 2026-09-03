@@ -880,6 +880,23 @@ test.describe('launch UI audit', () => {
   test('public header exposes Fleetio-inspired mega menus', async ({ page }) => {
     await gotoReady(page, '/');
 
+    const headerLogo = page
+      .getByRole('banner')
+      .getByRole('link', { name: 'Trovan home' })
+      .locator('img');
+    await expect(headerLogo).toHaveAttribute(
+      'src',
+      '/brand/assets/trovan-primary-lockup-crop.png',
+    );
+    await expect(page.getByTestId('public-footer').locator('img').first()).toHaveAttribute(
+      'src',
+      '/brand/assets/trovan-primary-lockup-crop.png',
+    );
+    await expect(page.locator('link[rel="icon"]')).toHaveAttribute(
+      'href',
+      '/brand/assets/trovan-standalone-icon-crop.png',
+    );
+
     await page.getByRole('button', { name: /^Product$/i }).click();
     await expect(page.getByRole('heading', { name: /Route day workflows/i })).toBeVisible();
     await expect(page.getByText(/Plan, dispatch, driver execution, tracking, and proof/i)).toBeVisible();
