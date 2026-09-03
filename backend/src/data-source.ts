@@ -1,6 +1,7 @@
 import { DataSource } from 'typeorm';
 import { join } from 'path';
 import * as dotenv from 'dotenv';
+import { resolveDatabaseSsl } from './config/database-ssl.util';
 
 // Load environment variables
 dotenv.config();
@@ -18,5 +19,10 @@ export const AppDataSource = new DataSource({
   synchronize: false,
   migrationsRun: false,
   logging: process.env.NODE_ENV === 'development',
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl: resolveDatabaseSsl({
+    allowSelfSigned: process.env.DB_SSL_ALLOW_SELF_SIGNED === 'true',
+    caPath: process.env.DB_SSL_CA_PATH,
+    databaseUrl: process.env.DATABASE_URL,
+    nodeEnv: process.env.NODE_ENV,
+  }),
 });

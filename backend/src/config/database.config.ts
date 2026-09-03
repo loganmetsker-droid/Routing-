@@ -2,6 +2,7 @@ import { ConfigService } from '@nestjs/config';
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { join } from 'path';
 import { Logger } from '@nestjs/common';
+import { resolveDatabaseSsl } from './database-ssl.util';
 
 const logger = new Logger('DatabaseConfig');
 
@@ -54,11 +55,12 @@ export const databaseConfig = (
   if (databaseUrl) {
     // Determine if we should use SSL
     // Most cloud providers (Railway, Render, Supabase) require SSL for external connections
-    const useSSL = isProduction ||
-      databaseUrl.includes('railway.app') ||
-      databaseUrl.includes('rlwy.net') ||
-      databaseUrl.includes('render.com') ||
-      databaseUrl.includes('supabase.co');
+    const ssl = resolveDatabaseSsl({
+      allowSelfSigned: allowSelfSignedSsl,
+      caPath: configService.get<string>('DB_SSL_CA_PATH'),
+      databaseUrl,
+      nodeEnv,
+    });
 
     const config: TypeOrmModuleOptions = {
       type: 'postgres',
@@ -70,9 +72,9 @@ export const databaseConfig = (
       logging: !isProduction ? ['error', 'warn', 'schema', 'migration'] : ['error'],
       logger: 'advanced-console',
       // SSL required for Render/Railway hosted PostgreSQL
-      ssl: useSSL ? { rejectUnauthorized: !allowSelfSignedSsl } : false,
+      ssl,
       extra: {
-        ssl: useSSL ? { rejectUnauthorized: !allowSelfSignedSsl } : false,
+        ssl,
         max: isProduction ? 3 : configService.get<number>('DB_POOL_SIZE', 5),
         min: 0,
         connectionTimeoutMillis: 30000,
@@ -88,9 +90,9 @@ export const databaseConfig = (
     };
 
     // Use console.log to ensure output in Render logs even if Nest logger isn't ready
-    if (useSSL) {
+    if (ssl) {
       console.log(
-        `  [DB] SSL Connection Enabled (rejectUnauthorized=${allowSelfSignedSsl ? 'false' : 'true'})`,
+        `  [DB] SSL Connection Enabled (rejectUnauthorized=${ssl.rejectUnauthorized ? 'true' : 'false'}, customCA=${ssl.ca ? 'true' : 'false'})`,
       );
     }
     console.log(`  [DB] Pool Size: ${config.extra?.max}, Retries: ${config.retryAttempts}`);

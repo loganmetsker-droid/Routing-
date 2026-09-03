@@ -44,6 +44,39 @@ function isProductionDatabase(databaseUrl = '') {
   );
 }
 
+function databaseSslOptions(databaseUrl = '') {
+  if (!isProductionDatabase(databaseUrl)) return false;
+  if (process.env.DB_SSL_ALLOW_SELF_SIGNED === 'true') {
+    return { rejectUnauthorized: false };
+  }
+
+  let host = '';
+  try {
+    host = new URL(databaseUrl).hostname.toLowerCase();
+  } catch {
+    // TypeORM will report malformed connection URLs with full context.
+  }
+
+  const configuredCaPath = String(process.env.DB_SSL_CA_PATH || '').trim();
+  const bundledSupabaseCa = path.join(
+    __dirname,
+    'certs',
+    'supabase-prod-ca-2021.crt',
+  );
+  const caPath = configuredCaPath
+    ? path.resolve(configuredCaPath)
+    : host.endsWith('.pooler.supabase.com') || host.endsWith('.supabase.co')
+      ? bundledSupabaseCa
+      : '';
+
+  return {
+    rejectUnauthorized: true,
+    ...(caPath && fs.existsSync(caPath)
+      ? { ca: fs.readFileSync(caPath, 'utf8') }
+      : {}),
+  };
+}
+
 function createTypeOrmDataSource() {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) {
@@ -70,7 +103,7 @@ function createTypeOrmDataSource() {
     ],
     synchronize: false,
     logging: ['error', 'warn', 'migration'],
-    ssl: isProductionDatabase(databaseUrl) ? { rejectUnauthorized: false } : false,
+    ssl: databaseSslOptions(databaseUrl),
   });
 }
 
@@ -146,7 +179,7 @@ async function runMigrations() {
 
   const client = new Client({
     connectionString: databaseUrl,
-    ssl: isProductionDatabase(databaseUrl) ? { rejectUnauthorized: false } : false,
+    ssl: databaseSslOptions(databaseUrl),
   });
 
   const dataSource = createTypeOrmDataSource();
