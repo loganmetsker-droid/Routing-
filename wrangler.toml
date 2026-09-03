@@ -2,6 +2,14 @@ name = "trytrovan"
 compatibility_date = "2026-05-14"
 main = "./workers/site.mjs"
 
+[[routes]]
+pattern = "trytrovan.com"
+custom_domain = true
+
+[[routes]]
+pattern = "www.trytrovan.com"
+custom_domain = true
+
 [assets]
 directory = "./frontend/dist"
 binding = "ASSETS"
